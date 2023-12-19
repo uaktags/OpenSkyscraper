@@ -2,6 +2,7 @@
 !/build/default.tower
 build
 Build
+build-rocket
 .*
 *~
 !.gitignore
