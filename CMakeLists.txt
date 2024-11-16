@@ -109,6 +109,10 @@ if (APPLE)
 	# install(DIRECTORY ${SFML_LIBRARIES} DESTINATION ${CMAKE_BINARY_DIR}/${EXECUTABLE_NAME}.app/Contents/Frameworks)
 endif ()
 
+# TGUI
+set(TGUI_STATIC_LIBRARIES FALSE)
+find_package(TGUI 1 REQUIRED)
+target_link_libraries(${EXECUTABLE_NAME} PRIVATE TGUI::TGUI)
 
 if (WIN32)
 	set(FREETYPE_DIR "" CACHE PATH "freetype directory")

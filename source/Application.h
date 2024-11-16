@@ -13,6 +13,9 @@
 #include "State.h"
 #include "SoundManager.h"
 
+#include <TGUI/TGUI.hpp>
+#include <TGUI/Backend/SFML-Graphics.hpp>
+
 #if defined(_MSC_VER)
 #include "stdint.h"
 #include <direct.h>
@@ -42,8 +45,7 @@ namespace OT
 		sf::VideoMode videoMode;
 
 		DataManager   data;
-		//GUIManager    gui;
-		//GUI *         rootGUI;
+		tgui::Gui     gui;
 		BitmapManager bitmaps;
 		FontManager   fonts;
 		SoundManager  sounds;

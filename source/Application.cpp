@@ -141,6 +141,7 @@ void Application::init()
 	window.create(videoMode, "OpenSkyscraper SFML");
 	window.setVerticalSyncEnabled(true);
 
+	gui.setWindow(window);
 	// if (!gui.init(&window)) {
 	// 	LOG(ERROR, "unable to initialize gui");
 	// 	exitCode = 1;
@@ -170,6 +171,11 @@ void Application::init()
 	Rocket::Core::FontDatabase::LoadFontFace(rocket.down("Delicious-BoldItalic.otf").c_str());
 	Rocket::Core::FontDatabase::LoadFontFace(rocket.down("Delicious-Italic.otf").c_str());
 	Rocket::Core::FontDatabase::LoadFontFace(rocket.down("Delicious-Roman.otf").c_str());*/
+
+	auto button = tgui::Button::create("Button!");
+    button->setSize({"50%", "16.67%"});
+    button->setPosition({"25%", "70%"});
+    gui.add(button);
 
 	Game * game = new Game(*this);
 	pushState(game);
@@ -241,7 +247,7 @@ void Application::loop()
 // 				}
 // #endif
 			}
-			//rootGUI->handleEvent(event);
+			gui.handleEvent(event);
 			if (!states.empty()) {
 				if (states.top()->handleEvent(event))
 					continue;
@@ -265,7 +271,7 @@ void Application::loop()
 			glEnable(GL_TEXTURE_2D);
 			//states.top()->gui.draw();
 		}
-		// rootGUI->draw();
+		gui.draw();
 
 		window.resetGLStates();
 		// Draw the debugging overlays.

@@ -15,7 +15,7 @@ namespace OT
 		char debugString[512];
 		State(std::string name);
 		
-		//sGUI gui;
+		//GUI gui;
 		
 		virtual void activate();
 		virtual bool handleEvent(sf::Event & event) { return false; }
