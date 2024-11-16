@@ -9,6 +9,8 @@
 #include <cassert>
 #include <fstream>
 #include <sys/stat.h>
+#include <cstring>
+#include <stdarg.h>
 
 //Use libmspack if available to decompress SIMTOWER.EX_
 #ifdef MSPACK

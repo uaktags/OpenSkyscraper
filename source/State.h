@@ -3,7 +3,6 @@
 #include <SFML/Window.hpp>
 #include <string>
 
-#include "GUI.h"
 
 namespace OT
 {
@@ -16,7 +15,7 @@ namespace OT
 		char debugString[512];
 		State(std::string name);
 		
-		GUI gui;
+		//sGUI gui;
 		
 		virtual void activate();
 		virtual bool handleEvent(sf::Event & event) { return false; }

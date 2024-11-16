@@ -94,7 +94,7 @@ void Cinema::advance(double dt)
 	if ((game->time.checkHour(15) || game->time.checkHour(21)) && open) {
 		playing = true;
 		spriteNeedsUpdate = true;
-		game->timeWindow.showMessage("Movie starts at the Movie Theatre");
+		//game->timeWindow.showMessage("Movie starts at the Movie Theatre");
 	}
 
 	//Close

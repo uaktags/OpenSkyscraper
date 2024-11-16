@@ -15,8 +15,6 @@
 #include "Sprite.h"
 #include "State.h"
 #include "Time.h"
-#include "TimeWindow.h"
-#include "ToolboxWindow.h"
 #include "Decorations.h"
 
 namespace OT {
@@ -66,8 +64,8 @@ namespace OT {
 		void setPopulation(int p);
 		void ratingMayIncrease();
 
-		ToolboxWindow toolboxWindow;
-		TimeWindow    timeWindow;
+		//ToolboxWindow toolboxWindow;
+		//TimeWindow    timeWindow;
 
 		Time time;
 		int speedMode;
@@ -111,7 +109,7 @@ namespace OT {
 		double zoom;
 		double2 poi;
 
-		Rocket::Core::ElementDocument * mapWindow;
+		//Rocket::Core::ElementDocument * mapWindow;
 
 		void reloadGUI();
 

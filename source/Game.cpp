@@ -15,12 +15,12 @@ Game::Game(Application & app)
 :	State("game"),
 	app(app),
 	itemFactory(this),
-	toolboxWindow(this),
-	timeWindow(this),
+	// toolboxWindow(this),
+	// timeWindow(this),
 	sky(this),
 	decorations(this)
 {
-	mapWindow     = NULL;
+	//mapWindow     = NULL;
 
 	funds  = 4000000;
 	rating = 0;
@@ -125,20 +125,20 @@ bool Game::handleEvent(sf::Event & event)
 
 		case sf::Event::MouseButtonPressed: {
 			float2 mousePoint(event.mouseButton.x, event.mouseButton.y);
-			rectf toolboxWindowRect(float2(toolboxWindow.window->GetAbsoluteLeft(), toolboxWindow.window->GetAbsoluteTop()), float2(toolboxWindow.window->GetClientWidth(), toolboxWindow.window->GetClientHeight()));
-			rectf timeWindowRect(float2(timeWindow.window->GetAbsoluteLeft(), timeWindow.window->GetAbsoluteTop()), float2(timeWindow.window->GetClientWidth(), timeWindow.window->GetClientHeight()));
-			rectf mapWindowRect(float2(mapWindow->GetAbsoluteLeft(), mapWindow->GetAbsoluteTop()), float2(mapWindow->GetClientWidth(), mapWindow->GetClientHeight()));
+			// rectf toolboxWindowRect(float2(toolboxWindow.window->GetAbsoluteLeft(), toolboxWindow.window->GetAbsoluteTop()), float2(toolboxWindow.window->GetClientWidth(), toolboxWindow.window->GetClientHeight()));
+			// rectf timeWindowRect(float2(timeWindow.window->GetAbsoluteLeft(), timeWindow.window->GetAbsoluteTop()), float2(timeWindow.window->GetClientWidth(), timeWindow.window->GetClientHeight()));
+			// rectf mapWindowRect(float2(mapWindow->GetAbsoluteLeft(), mapWindow->GetAbsoluteTop()), float2(mapWindow->GetClientWidth(), mapWindow->GetClientHeight()));
 
 			// Prevent construction or triggering of tool if mouse cursor within toolboxWindow
-			if (toolboxWindowRect.containsPoint(mousePoint)) break;
+			// if (toolboxWindowRect.containsPoint(mousePoint)) break;
 
 			// Prevent construction or triggering of tool if mouse cursor within timeWindow
-			if (timeWindowRect.containsPoint(mousePoint)) break;
+			// if (timeWindowRect.containsPoint(mousePoint)) break;
 
 			// Prevent construction or triggering of tool if mouse cursor within mapWindow
-			if (mapWindowRect.containsPoint(mousePoint)) {
-				break;	// Break for now, may add code to handle viewport shift in future
-			}
+			// if (mapWindowRect.containsPoint(mousePoint)) {
+			// 	break;	// Break for now, may add code to handle viewport shift in future
+			// }
 
 			if (toolPrototype) {
 				bool handled = false;
@@ -385,7 +385,7 @@ bool Game::handleEvent(sf::Event & event)
 					} else {
 						LOG(DEBUG, "cannot construct %s at %ix%i, size %ix%i", toolPrototype->id.c_str(), toolPosition.x, toolPosition.y, toolPrototype->size.x, toolPrototype->size.y);
 						playOnce("simtower/construction/impossible");
-						timeWindow.showMessage("Cannot place item there. " + blockReason + ".");
+						//timeWindow.showMessage("Cannot place item there. " + blockReason + ".");
 					}
 				}
 			}
@@ -393,7 +393,7 @@ bool Game::handleEvent(sf::Event & event)
 				if (selectedTool == "bulldozer") {
 					if (itemBelowCursor->prototype->icon == ICON_LOBBY || itemBelowCursor->prototype->icon == ICON_FLOOR || itemBelowCursor->prototype->icon == ICON_METRO) {
 						playOnce("simtower/construction/impossible");
-						timeWindow.showMessage("Cannot bulldoze " + itemBelowCursor->prototype->name);
+						//timeWindow.showMessage("Cannot bulldoze " + itemBelowCursor->prototype->name);
 						break;
 					}
 					LOG(DEBUG, "destroy %s", itemBelowCursor->desc().c_str());
@@ -440,7 +440,7 @@ bool Game::handleEvent(sf::Event & event)
 					visualizeRoute = itemBelowCursor->lobbyRoute;
 					char c[128];
 					snprintf(c, 128, "route score = %i", visualizeRoute.score());
-					timeWindow.showMessage(c);
+					//timeWindow.showMessage(c);
 				}
 			}
 		} break;
@@ -484,9 +484,9 @@ void Game::advance(double dt)
 
 	//Advance time.
 	time.advance(dt);
-	timeWindow.updateTime();
+	//timeWindow.updateTime();
 
-	timeWindow.advance(dt);
+	//timeWindow.advance(dt);
 	sky.advance(dt);
 
 	for (ItemSet::iterator i = items.begin(); i != items.end(); i++) {
@@ -544,7 +544,7 @@ void Game::advance(double dt)
 		toolPrototype = NULL;
 		toolPosition = int2(floor(mp.x/8), floor(mp.y/36));
 	}
-	if (previousPrototype != toolPrototype) timeWindow.updateTooltip();
+	// if (previousPrototype != toolPrototype) timeWindow.updateTooltip();
 
 	//Draw the sky and decorations.
 	win.draw(sky);
@@ -589,7 +589,7 @@ void Game::advance(double dt)
 		win.draw(s);
 		drawnSprites++;
 		if (previousItemBelowCursor != itemBelowCursor) {
-			timeWindow.showMessage(itemBelowCursor->prototype->name);
+			//timeWindow.showMessage(itemBelowCursor->prototype->name);
 		}
 	}
 
@@ -656,17 +656,17 @@ void Game::advance(double dt)
 
 void Game::reloadGUI()
 {
-	if (mapWindow) {
-		mapWindow->RemoveReference();
-		mapWindow->Close();
-	}
+	// if (mapWindow) {
+	// 	mapWindow->RemoveReference();
+	// 	mapWindow->Close();
+	// }
 
-	mapWindow     = gui.loadDocument("map.rml");
+	// //mapWindow     = gui.loadDocument("map.rml");
 
-	if (mapWindow)     mapWindow    ->Show();
+	// if (mapWindow)     mapWindow    ->Show();
 
-	toolboxWindow.reload();
-	timeWindow.reload();
+	// toolboxWindow.reload();
+	// timeWindow.reload();
 }
 
 void Game::addItem(Item::Item * item)
@@ -866,7 +866,7 @@ void Game::transferFunds(int f, std::string message)
 	if (!message.empty()) {
 		char c[32];
 		snprintf(c, 32, ": $%i", f);
-		timeWindow.showMessage(message + c);
+		//timeWindow.showMessage(message + c);
 	}
 }
 
@@ -874,7 +874,7 @@ void Game::setFunds(int f)
 {
 	if (funds != f) {
 		funds = f;
-		timeWindow.updateFunds();
+		//timeWindow.updateFunds();
 	}
 }
 
@@ -888,7 +888,7 @@ void Game::setRating(int r)
 			LOG(IMPORTANT, "rating increased to %i", rating);
 			playOnce("simtower/rating/increased");
 		}
-		timeWindow.updateRating();
+		//timeWindow.updateRating();
 	}
 }
 
@@ -897,7 +897,7 @@ void Game::setPopulation(int p)
 	if (population != p) {
 		population = p;
 		ratingMayIncrease();
-		timeWindow.updatePopulation();
+		//timeWindow.updatePopulation();
 	}
 }
 
@@ -912,7 +912,7 @@ void Game::ratingMayIncrease()
 		case 1: {
 			if (population >= 1000) {
 				//TODO: check for security center presence.
-				timeWindow.showMessage("Your tower needs security.");
+				//timeWindow.showMessage("Your tower needs security.");
 			}
 		} break;
 	}
@@ -931,7 +931,7 @@ void Game::setSpeedMode(int sm)
 			case 3: speed = 4; break;
 		}
 		time.speed = speed;
-		toolboxWindow.updateSpeed();
+		//toolboxWindow.updateSpeed();
 	}
 }
 
@@ -940,8 +940,8 @@ void Game::selectTool(const char * tool)
 	if (!tool) return;
 	if (selectedTool != tool) {
 		selectedTool = tool;
-		toolboxWindow.updateTool();
-		timeWindow.updateTooltip();
+		// toolboxWindow.updateTool();
+		// timeWindow.updateTooltip();
 	}
 }
 

@@ -8,7 +8,6 @@
 #include "BitmapManager.h"
 #include "DataManager.h"
 #include "FontManager.h"
-#include "GUIManager.h"
 #include "Logger.h"
 #include "Path.h"
 #include "State.h"
@@ -43,8 +42,8 @@ namespace OT
 		sf::VideoMode videoMode;
 
 		DataManager   data;
-		GUIManager    gui;
-		GUI *         rootGUI;
+		//GUIManager    gui;
+		//GUI *         rootGUI;
 		BitmapManager bitmaps;
 		FontManager   fonts;
 		SoundManager  sounds;

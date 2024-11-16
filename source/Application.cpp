@@ -5,12 +5,10 @@
 #include <cstring>
 #include <ctime>
 #include <iostream>
-#include <Rocket/Debugger.h>
 
 #include "Application.h"
 #include "Game.h"
 #include "SimTowerLoader.h"
-#include "TimeWindowWatch.h"
 #include "OpenGL.h"
 
 using namespace OT;
@@ -143,28 +141,28 @@ void Application::init()
 	window.create(videoMode, "OpenSkyscraper SFML");
 	window.setVerticalSyncEnabled(true);
 
-	if (!gui.init(&window)) {
-		LOG(ERROR, "unable to initialize gui");
-		exitCode = 1;
-		return;
-	}
-	rootGUI = new GUI("root", &gui);
-#ifdef BUILD_DEBUG
-	Rocket::Debugger::Initialise(rootGUI->context);
-#endif
+	// if (!gui.init(&window)) {
+	// 	LOG(ERROR, "unable to initialize gui");
+	// 	exitCode = 1;
+	// 	return;
+	// }
+	//rootGUI = new GUI("root", &gui);
+//#ifdef BUILD_DEBUG
+//	Rocket::Debugger::Initialise(rootGUI->context);
+//#endif
 
 	//Additional GUI stuff.
-	Rocket::Core::DecoratorInstancer * instancer = new TimeWindowWatchInstancer;
-	Rocket::Core::Factory::RegisterDecoratorInstancer("watch", instancer);
-	instancer->RemoveReference();
+	//Rocket::Core::DecoratorInstancer * instancer = new TimeWindowWatchInstancer;
+	//Rocket::Core::Factory::RegisterDecoratorInstancer("watch", instancer);
+	//instancer->RemoveReference();
 
 	//Load GUI fonts.
-	fonts.loadIntoRocket("Jura-Regular.ttf");
-	fonts.loadIntoRocket("Jura-Medium.ttf");
-	fonts.loadIntoRocket("Jura-Light.ttf");
-	fonts.loadIntoRocket("Jura-DemiBold.ttf");
-	fonts.loadIntoRocket("Play-Regular.ttf");
-	fonts.loadIntoRocket("Play-Bold.ttf");
+	// fonts.loadIntoRocket("Jura-Regular.ttf");
+	// fonts.loadIntoRocket("Jura-Medium.ttf");
+	// fonts.loadIntoRocket("Jura-Light.ttf");
+	// fonts.loadIntoRocket("Jura-DemiBold.ttf");
+	// fonts.loadIntoRocket("Play-Regular.ttf");
+	// fonts.loadIntoRocket("Play-Bold.ttf");
 
 	//DEBUG: load some GUI
 	/*Path rocket = data.paths("debug/rocket").front();
@@ -235,20 +233,20 @@ void Application::loop()
 					pushState(game);
 					continue;
 				}
-#ifdef BUILD_DEBUG
-				if (event.key.code == sf::Keyboard::F8) {
-					bool visible = !Rocket::Debugger::IsVisible();
-					LOG(DEBUG, "Rocket::Debugger %s", (visible ? "on" : "off"));
-					Rocket::Debugger::SetVisible(visible);
-				}
-#endif
+// #ifdef BUILD_DEBUG
+// 				if (event.key.code == sf::Keyboard::F8) {
+// 					bool visible = !Rocket::Debugger::IsVisible();
+// 					LOG(DEBUG, "Rocket::Debugger %s", (visible ? "on" : "off"));
+// 					Rocket::Debugger::SetVisible(visible);
+// 				}
+// #endif
 			}
-			rootGUI->handleEvent(event);
+			//rootGUI->handleEvent(event);
 			if (!states.empty()) {
 				if (states.top()->handleEvent(event))
 					continue;
-				if (states.top()->gui.handleEvent(event))
-					continue;
+				// if (states.top()->gui.handleEvent(event))
+				// 	continue;
 			}
 			if (event.type == sf::Event::Closed) {
 				LOG(WARNING, "current state did not handle sf::Event::Closed");
@@ -265,9 +263,9 @@ void Application::loop()
 			states.top()->advance(dt);
 			window.resetGLStates();
 			glEnable(GL_TEXTURE_2D);
-			states.top()->gui.draw();
+			//states.top()->gui.draw();
 		}
-		rootGUI->draw();
+		// rootGUI->draw();
 
 		window.resetGLStates();
 		// Draw the debugging overlays.

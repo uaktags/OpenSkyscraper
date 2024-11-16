@@ -6,6 +6,7 @@
 #include <SFML/Window.hpp>
 #include <string>
 
+using namespace std;
 namespace OT
 {
 	class Application;

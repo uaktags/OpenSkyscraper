@@ -30,7 +30,7 @@ void Sky::advance(double dt)
 	if (game->time.checkHour(5)) {
 		rainyDay = ((rand() % 3) == 0); //Statistically, every 3rd day will be rainy.
 		rainAnimation = 0;
-		game->timeWindow.showMessage(rainyDay ? "I've heard we're in for some bad weather..." : "Weather's going to be good today!");
+		//game->timeWindow.showMessage(rainyDay ? "I've heard we're in for some bad weather..." : "Weather's going to be good today!");
 	}
 
 	/* Decide what sky color to use based on the current time of day. The drawing code will
