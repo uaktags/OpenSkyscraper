@@ -15,8 +15,8 @@ Game::Game(Application & app)
 :	State("game"),
 	app(app),
 	itemFactory(this),
-	// toolboxWindow(this),
-	// timeWindow(this),
+	toolboxWindow(this),
+	timeWindow(this),
 	sky(this),
 	decorations(this)
 {

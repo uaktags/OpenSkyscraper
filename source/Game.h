@@ -16,6 +16,8 @@
 #include "State.h"
 #include "Time.h"
 #include "Decorations.h"
+#include "ToolboxWindow.h"
+#include "TimeWindow.h"
 
 namespace OT {
 	namespace Item { class AbstractPrototype; }
@@ -64,8 +66,8 @@ namespace OT {
 		void setPopulation(int p);
 		void ratingMayIncrease();
 
-		//ToolboxWindow toolboxWindow;
-		//TimeWindow    timeWindow;
+		ToolboxWindow toolboxWindow;
+		TimeWindow    timeWindow;
 
 		Time time;
 		int speedMode;
