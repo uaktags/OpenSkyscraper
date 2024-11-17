@@ -3,6 +3,7 @@
 
 #include <SFML/Graphics.hpp>
 #include <SFML/Window.hpp>
+#include <TGUI/Widgets/MenuBar.hpp>
 #include <stack>
 
 #include "BitmapManager.h"
@@ -43,9 +44,11 @@ namespace OT
 
 		sf::RenderWindow window;
 		sf::VideoMode videoMode;
+		
+		tgui::Gui     gui;
+		tgui::MenuBar	menu;
 
 		DataManager   data;
-		tgui::Gui     gui;
 		BitmapManager bitmaps;
 		FontManager   fonts;
 		SoundManager  sounds;
@@ -62,6 +65,8 @@ namespace OT
 		void init();
 		void loop();
 		void cleanup();
+
+		void makeMenu();
 
 		std::stack<State *> states;
 		void pushState(State * state);

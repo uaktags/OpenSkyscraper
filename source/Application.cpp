@@ -1,4 +1,5 @@
 /* Copyright (c) 2012-2015 Fabian Schuiki */
+#include <TGUI/Widgets/MenuBar.hpp>
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>
@@ -105,6 +106,22 @@ int Application::run()
 	return exitCode;
 }
 
+void Application::makeMenu() {
+	auto menu = tgui::MenuBar::create();
+	//menu->setRenderer(std::shared_ptr<RendererData> rendererData)
+	menu->setHeight(22.f);
+	menu->addMenu("File");
+	menu->addMenuItem("Load");
+	menu->addMenuItem("Save");
+	menu->addMenuItem("Exit");
+
+	menu->addMenu("Options");
+
+	menu->addMenu("Windows");
+	menu->addMenu("Help");
+	gui.add(menu);
+}
+
 void Application::init()
 {
 	data.init();
@@ -142,6 +159,7 @@ void Application::init()
 	window.setVerticalSyncEnabled(true);
 
 	gui.setWindow(window);
+	makeMenu();
 	// if (!gui.init(&window)) {
 	// 	LOG(ERROR, "unable to initialize gui");
 	// 	exitCode = 1;
@@ -171,11 +189,6 @@ void Application::init()
 	Rocket::Core::FontDatabase::LoadFontFace(rocket.down("Delicious-BoldItalic.otf").c_str());
 	Rocket::Core::FontDatabase::LoadFontFace(rocket.down("Delicious-Italic.otf").c_str());
 	Rocket::Core::FontDatabase::LoadFontFace(rocket.down("Delicious-Roman.otf").c_str());*/
-
-	auto button = tgui::Button::create("Button!");
-    button->setSize({"50%", "16.67%"});
-    button->setPosition({"25%", "70%"});
-    gui.add(button);
 
 	Game * game = new Game(*this);
 	pushState(game);
