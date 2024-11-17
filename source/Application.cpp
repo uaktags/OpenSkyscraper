@@ -111,8 +111,11 @@ void Application::makeMenu() {
 	//menu->setRenderer(std::shared_ptr<RendererData> rendererData)
 	menu->setHeight(22.f);
 	menu->addMenu("File");
+	menu->addMenuItem("New");
 	menu->addMenuItem("Load");
 	menu->addMenuItem("Save");
+	menu->addMenuItem("Save as...");
+	menu->addMenuItem("-");
 	menu->addMenuItem("Exit");
 
 	menu->addMenu("Options");
