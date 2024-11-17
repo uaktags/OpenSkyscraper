@@ -665,7 +665,7 @@ void Game::reloadGUI()
 
 	// if (mapWindow)     mapWindow    ->Show();
 
-	// toolboxWindow.reload();
+	toolboxWindow.reload();
 	// timeWindow.reload();
 }
 
