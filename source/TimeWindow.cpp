@@ -4,14 +4,14 @@
 #include <TGUI/Texture.hpp>
 #include <TGUI/Widgets/BitmapButton.hpp>
 #include <TGUI/Widgets/ChildWindow.hpp>
+#include <TGUI/Widgets/Picture.hpp>
 #include "Application.h"
 
 using namespace OT;
 
 TimeWindow::TimeWindow(Game * game) : GameObject(game) {
-    auto window = tgui::ChildWindow::create();
-    auto renderer = window->getRenderer();
-    renderer->setTitleBarHeight(10);
+    window = tgui::ChildWindow::create();
+    window->getRenderer()->setTitleBarHeight(10);
     
     window->setClientSize({431, 41});
     window->setPosition({200, 22});
@@ -19,8 +19,11 @@ TimeWindow::TimeWindow(Game * game) : GameObject(game) {
     
     
     tgui::Texture image = tgui::Texture();
-    image.load(app->bitmaps["simtower/ui/toolbox/tools"], tgui::UIntRect(0,0,21,21), tgui::UIntRect(0,0,21,21));
+    image.load(app->bitmaps["simtower/ui/time/bg"]);
     
+   auto picture = tgui::Picture::create(image);
+   picture->setSize("100%", "100%");
+   window->add(picture);
    
     
     

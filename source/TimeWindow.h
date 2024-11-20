@@ -9,6 +9,8 @@ namespace OT {
             TimeWindow(Game * game);
             //~TimeWindow() { close(); }
 
+            tgui::ChildWindow::Ptr window = NULL;
+
             void close();
 
             //tgui::ChildWindow * window;           
