@@ -304,8 +304,8 @@ void Application::loop()
 		sf::RectangleShape bg = sf::RectangleShape(sf::Vector2f(r.width, r.height));
 		bg.setFillColor(sf::Color(0, 0, 0, 0.25*255));
 		bg.setPosition(sf::Vector2f(r.left, r.top));
-		window.draw(bg);
-		window.draw(rateIndicator);
+		// window.draw(bg);
+		// window.draw(rateIndicator);
 
 		sf::Vector2i mp = sf::Mouse::getPosition(window);
 		glColor3f(1,0,0);
