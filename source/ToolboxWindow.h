@@ -14,11 +14,13 @@ namespace OT {
             void close();
             void reload();
 
+            void onToolButtonPress(const char * tool);
+
             tgui::BitmapButton::Ptr makeButton(int size, sf::Texture textureMap, int index);
 
             tgui::ChildWindow::Ptr window = NULL;
 
-            typedef std::set<tgui::Widget *> WidgetSet;
+            typedef std::set<tgui::Widget::Ptr> WidgetSet;
             WidgetSet buttons;
             
     };
