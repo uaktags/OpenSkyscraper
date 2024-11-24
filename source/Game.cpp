@@ -484,9 +484,9 @@ void Game::advance(double dt)
 
 	//Advance time.
 	time.advance(dt);
-	//timeWindow.updateTime();
+	timeWindow.updateTime();
 
-	//timeWindow.advance(dt);
+	timeWindow.advance(dt);
 	sky.advance(dt);
 
 	for (ItemSet::iterator i = items.begin(); i != items.end(); i++) {
@@ -544,7 +544,7 @@ void Game::advance(double dt)
 		toolPrototype = NULL;
 		toolPosition = int2(floor(mp.x/8), floor(mp.y/36));
 	}
-	// if (previousPrototype != toolPrototype) timeWindow.updateTooltip();
+	if (previousPrototype != toolPrototype) timeWindow.updateTooltip();
 
 	//Draw the sky and decorations.
 	win.draw(sky);
@@ -666,7 +666,7 @@ void Game::reloadGUI()
 	// if (mapWindow)     mapWindow    ->Show();
 
 	toolboxWindow.reload();
-	// timeWindow.reload();
+	timeWindow.reload();
 }
 
 void Game::addItem(Item::Item * item)
@@ -941,7 +941,7 @@ void Game::selectTool(const char * tool)
 	if (selectedTool != tool) {
 		selectedTool = tool;
 		// toolboxWindow.updateTool();
-		// timeWindow.updateTooltip();
+		timeWindow.updateTooltip();
 	}
 }
 
