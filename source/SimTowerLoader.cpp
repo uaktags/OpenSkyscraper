@@ -556,6 +556,9 @@ void SimTowerLoader::loadBitmaps()
 	rating.createMaskFromColor(sf::Color(0x99, 0x99, 0x99));
 	rating.createMaskFromColor(sf::Color::White);
 
+	// menu bg image
+	loadBitmap(0x8100, images["simtower/ui/menubg"]);
+
 	sf::Image skies[11];
 	for (int i = 0; i < 11; i++) {
 		loadSky(0x8351+i, skies[i]);

@@ -9,6 +9,7 @@
 
 #include "Application.h"
 #include "Game.h"
+#include "MainMenu.h"
 #include "SimTowerLoader.h"
 #include "OpenGL.h"
 
@@ -193,8 +194,11 @@ void Application::init()
 	Rocket::Core::FontDatabase::LoadFontFace(rocket.down("Delicious-Italic.otf").c_str());
 	Rocket::Core::FontDatabase::LoadFontFace(rocket.down("Delicious-Roman.otf").c_str());*/
 
-	Game * game = new Game(*this);
-	pushState(game);
+	MainMenu * mainmenu = new MainMenu(*this);
+	pushState(mainmenu);
+
+	//Game * game = new Game(*this);
+	//pushState(game);
 }
 
 void Application::loop()
@@ -278,7 +282,7 @@ void Application::loop()
 		}
 
 		//Make the current state do its work.
-		glClearColor(0,0,1,0);
+		glClearColor(0,0,0,0);
 		glClear(GL_COLOR_BUFFER_BIT);
 		window.resetGLStates();
 		if (!states.empty()) {
