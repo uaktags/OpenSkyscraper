@@ -164,36 +164,6 @@ void Application::init()
 
 	gui.setWindow(window);
 	makeMenu();
-	// if (!gui.init(&window)) {
-	// 	LOG(ERROR, "unable to initialize gui");
-	// 	exitCode = 1;
-	// 	return;
-	// }
-	//rootGUI = new GUI("root", &gui);
-//#ifdef BUILD_DEBUG
-//	Rocket::Debugger::Initialise(rootGUI->context);
-//#endif
-
-	//Additional GUI stuff.
-	//Rocket::Core::DecoratorInstancer * instancer = new TimeWindowWatchInstancer;
-	//Rocket::Core::Factory::RegisterDecoratorInstancer("watch", instancer);
-	//instancer->RemoveReference();
-
-	//Load GUI fonts.
-	// fonts.loadIntoRocket("Jura-Regular.ttf");
-	// fonts.loadIntoRocket("Jura-Medium.ttf");
-	// fonts.loadIntoRocket("Jura-Light.ttf");
-	// fonts.loadIntoRocket("Jura-DemiBold.ttf");
-	// fonts.loadIntoRocket("Play-Regular.ttf");
-	// fonts.loadIntoRocket("Play-Bold.ttf");
-
-	//DEBUG: load some GUI
-	/*Path rocket = data.paths("debug/rocket").front();
-	Rocket::Core::FontDatabase::LoadFontFace(rocket.down("Delicious-Bold.otf").c_str());
-	Rocket::Core::FontDatabase::LoadFontFace(rocket.down("Delicious-BoldItalic.otf").c_str());
-	Rocket::Core::FontDatabase::LoadFontFace(rocket.down("Delicious-Italic.otf").c_str());
-	Rocket::Core::FontDatabase::LoadFontFace(rocket.down("Delicious-Roman.otf").c_str());*/
-
 	MainMenu * mainmenu = new MainMenu(*this);
 	pushState(mainmenu);
 
