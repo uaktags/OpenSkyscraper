@@ -166,9 +166,6 @@ void Application::init()
 	makeMenu();
 	MainMenu * mainmenu = new MainMenu(*this);
 	pushState(mainmenu);
-
-	//Game * game = new Game(*this);
-	//pushState(game);
 }
 
 void Application::loop()

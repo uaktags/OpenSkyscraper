@@ -13,6 +13,7 @@ namespace OT {
             bool handleEvent(sf::Event & event);
             void advance(double dt);
             void deactivate();
+            void onNewGamePress();
 
         private:
             Application & app;
@@ -21,5 +22,6 @@ namespace OT {
             tgui::Button::Ptr newButton = NULL;
             tgui::Button::Ptr loadButton = NULL;
             tgui::Button::Ptr quitButton = NULL;
+            tgui::Picture::Ptr bgPicture = NULL;
     };
 }

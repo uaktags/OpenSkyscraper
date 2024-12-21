@@ -1,4 +1,5 @@
 #include "MainMenu.h"
+#include "Game.h"
 
 using namespace OT;
 
@@ -11,7 +12,7 @@ MainMenu::MainMenu(Application & app)
     
     tgui::Texture bgTx = tgui::Texture();
     bgTx.load(app.bitmaps["simtower/ui/menubg"]);
-    auto bgPicture = tgui::Picture::create(bgTx);
+    bgPicture = tgui::Picture::create(bgTx);
     bgPicture->setPosition({(windowSize.x / 2) - (bgTx.getImageSize().x / 2), (windowSize.y / 2) - (bgTx.getImageSize().y / 2)});
     app.gui.add(bgPicture);
 
@@ -24,6 +25,7 @@ MainMenu::MainMenu(Application & app)
     newButton = tgui::Button::create("New Tower");
     newButton->setSize({280, 20});
     newButton->setPosition({10, 5});
+    newButton->onPress(&MainMenu::onNewGamePress, this);
     panel->add(newButton);
 
     loadButton = tgui::Button::create("Load Saved Tower");
@@ -35,7 +37,6 @@ MainMenu::MainMenu(Application & app)
     quitButton->setSize({280, 20});
     quitButton->setPosition({10, 75});
     panel->add(quitButton);
-
 }
 
 void MainMenu::activate() {
@@ -44,6 +45,9 @@ void MainMenu::activate() {
 
 void MainMenu::deactivate() {
     State::deactivate();
+    panel->removeAllWidgets();
+    app.gui.remove(bgPicture);
+    app.gui.remove(panel);
 }
 
 bool MainMenu::handleEvent(sf::Event & event) {
@@ -51,5 +55,10 @@ bool MainMenu::handleEvent(sf::Event & event) {
 }
 
 void MainMenu::advance(double dt) {
+}
 
+void MainMenu::onNewGamePress() {
+    Game * game = new Game(app);
+    app.popState();
+	app.pushState(game);
 }

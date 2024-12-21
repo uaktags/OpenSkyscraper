@@ -53,6 +53,8 @@ namespace OT
 		FontManager   fonts;
 		SoundManager  sounds;
 
+		void pushState(State * state);
+		void popState();
 		int run();
 
 	private:
@@ -69,8 +71,6 @@ namespace OT
 		void makeMenu();
 
 		std::stack<State *> states;
-		void pushState(State * state);
-		void popState();
 
 		bool dumpResources;
 		Path dumpResourcesPath;
