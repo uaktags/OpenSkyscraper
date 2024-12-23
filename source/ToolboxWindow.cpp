@@ -29,22 +29,30 @@ void ToolboxWindow::close() {
 void ToolboxWindow::reload() {
     window->removeAllWidgets();
 
-    
+    auto topLayout = tgui::VerticalLayout::create();
+    window->add(topLayout);
+    topLayout->setSize("100%", "100%");
 
     //speed buttons
 
     // tool buttons
+    auto toolsLayout = tgui::HorizontalLayout::create();
+    topLayout->add(toolsLayout);
+    toolsLayout->setSize(106, 21);
+
+    toolsLayout->addSpace(0.6f);
     auto bulldozeButton = makeButton(21, app->bitmaps["simtower/ui/toolbox/tools"], 0);
-    bulldozeButton->setPosition({10, 10});
-    window->add(bulldozeButton);
+    toolsLayout->add(bulldozeButton);
 
     auto fingerButton = makeButton(21, app->bitmaps["simtower/ui/toolbox/tools"], 1);
     fingerButton->setPosition({31, 10});
-    window->add(fingerButton);
+    toolsLayout->add(fingerButton);
 
     auto inspectButton = makeButton(21, app->bitmaps["simtower/ui/toolbox/tools"], 2);
     inspectButton->setPosition({52, 10});
-    window->add(inspectButton);
+    toolsLayout->add(inspectButton);
+
+    toolsLayout->addSpace(0.6f);
 
     // item buttons
     int row = 0;
