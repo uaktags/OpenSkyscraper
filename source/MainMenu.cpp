@@ -7,7 +7,7 @@ MainMenu::MainMenu(Application & app)
 :   State("menu"),
     app(app)
 {
-    sf::Vector2 panelSize {300, 105};
+    sf::Vector2 panelSize {300, 120};
     sf::Vector2u windowSize = app.window.getSize();
     
     tgui::Texture bgTx = tgui::Texture();
@@ -22,21 +22,25 @@ MainMenu::MainMenu(Application & app)
     panel->getRenderer()->setBorders(tgui::Outline(2));
     app.gui.add(panel);
 
+    auto layout = tgui::VerticalLayout::create();
+    layout->setOrigin(.5f, .5f);
+    layout->setPosition("50%", "50%");
+    panel->add(layout);
+    layout->setSize("95%", "95%");
+
     newButton = tgui::Button::create("New Tower");
-    newButton->setSize({280, 20});
-    newButton->setPosition({10, 5});
     newButton->onPress(&MainMenu::onNewGamePress, this);
-    panel->add(newButton);
+    layout->add(newButton);
+
+    layout->addSpace(0.4f);
 
     loadButton = tgui::Button::create("Load Saved Tower");
-    loadButton->setSize({280, 20});
-    loadButton->setPosition({10, 40});
-    panel->add(loadButton);
+    layout->add(loadButton);
+
+    layout->addSpace(0.4f);
 
     quitButton = tgui::Button::create("Quit");
-    quitButton->setSize({280, 20});
-    quitButton->setPosition({10, 75});
-    panel->add(quitButton);
+    layout->add(quitButton);
 }
 
 void MainMenu::activate() {

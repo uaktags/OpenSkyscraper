@@ -28,6 +28,9 @@ void ToolboxWindow::close() {
 
 void ToolboxWindow::reload() {
     window->removeAllWidgets();
+
+    
+
     //speed buttons
 
     // tool buttons
