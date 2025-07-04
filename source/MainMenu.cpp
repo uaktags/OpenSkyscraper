@@ -73,6 +73,8 @@ void MainMenu::advance(double dt) {
 
 void MainMenu::onNewGamePress() {
     Game * game = new Game(app);
+    game->saveFilename = "";
+    game->isDirty = false;
     app.popState();
-	app.pushState(game);
+    app.pushState(game);
 }

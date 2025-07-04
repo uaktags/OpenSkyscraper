@@ -117,5 +117,9 @@ namespace OT {
 		double2 poi;
 
 		//Rocket::Core::ElementDocument * mapWindow;
+
+	public:
+		std::string saveFilename;
+		bool isDirty;
 	};
 }

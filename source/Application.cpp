@@ -187,6 +187,8 @@ void Application::saveGameToFile(const std::string& filename) {
     tinyxml2::XMLPrinter xml(f);
     game->encodeXML(xml);
     fclose(f);
+    game->saveFilename = filename;
+    game->isDirty = false;
     LOG(IMPORTANT, "Game saved to %s", outPath.c_str());
 }
 
@@ -219,6 +221,8 @@ void Application::loadGameFromFile(const std::string& filename) {
         if (xml.LoadFile(path.c_str()) == 0) {
             game->decodeXML(xml);
             game->reloadGUI();
+            game->saveFilename = filename;
+            game->isDirty = false;
             LOG(IMPORTANT, "Game loaded from %s", path.c_str());
             return;
         }
@@ -267,15 +271,21 @@ void Application::showFilenameDialog(const std::string& title, const std::string
 
 void Application::saveGame() {
     if (states.empty()) return;
-    showFilenameDialog("Save Game As", "default.tower", [this](const std::string& filename) {
-        saveGameToFile(filename);
-    });
+    Game* game = dynamic_cast<Game*>(states.top());
+    if (!game) return;
+    if (!game->saveFilename.empty()) {
+        saveGameToFile(game->saveFilename);
+    } else {
+        saveGameAs();
+    }
 }
 
-void Application::loadGame() {
+void Application::saveGameAs() {
     if (states.empty()) return;
-    showFilenameDialog("Load Game", "default.tower", [this](const std::string& filename) {
-        loadGameFromFile(filename);
+    Game* game = dynamic_cast<Game*>(states.top());
+    if (!game) return;
+    showFilenameDialog("Save Tower As", "default.tower", [this, game](const std::string& filename) {
+        saveGameToFile(filename);
     });
 }
 
@@ -308,6 +318,8 @@ void Application::makeMenu() {
             saveGame();
         } else if (item == "Load") {
             loadGame();
+        } else if (item == "Save as...") {
+            saveGameAs();
         }
     });
     gui.add(menu);
@@ -554,4 +566,11 @@ void Application::popState()
 	if (!states.empty()) {
 		states.top()->activate();
 	}
+}
+
+void Application::loadGame() {
+    if (states.empty()) return;
+    showFilenameDialog("Load Game", "default.tower", [this](const std::string& filename) {
+        loadGameFromFile(filename);
+    });
 }
