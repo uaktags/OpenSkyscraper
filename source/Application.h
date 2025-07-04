@@ -57,6 +57,11 @@ namespace OT
 		void pushState(State * state);
 		void popState();
 		int run();
+		void saveGame();
+		void loadGame();
+		void saveGameToFile(const std::string& filename);
+		void loadGameFromFile(const std::string& filename);
+		void showFilenameDialog(const std::string& title, const std::string& defaultName, std::function<void(const std::string&)> onOk);
 
 	private:
 		Path path;

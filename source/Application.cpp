@@ -1,17 +1,29 @@
 /* Copyright (c) 2012-2015 Fabian Schuiki */
 #include <TGUI/Widgets/MenuBar.hpp>
+#include <TGUI/Widgets/ChildWindow.hpp>
+#include <TGUI/Widgets/EditBox.hpp>
+#include <TGUI/Widgets/Button.hpp>
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
 #include <iostream>
+#include <sys/stat.h>
+#include <sys/types.h>
+#ifdef _WIN32
+#include <windows.h>
+#include <shlobj.h>
+#endif
+#include <vector>
+#include <sstream>
 
 #include "Application.h"
 #include "Game.h"
 #include "MainMenu.h"
 #include "SimTowerLoader.h"
 #include "OpenGL.h"
+#include "tinyxml2.h"
 
 using namespace OT;
 using namespace std;
@@ -118,6 +130,155 @@ int Application::run()
 	return exitCode;
 }
 
+// Helper to get user data directory cross-platform
+static std::string getUserDataDir() {
+#ifdef _WIN32
+    char path[MAX_PATH];
+    if (SUCCEEDED(SHGetFolderPathA(NULL, CSIDL_APPDATA, NULL, 0, path))) {
+        std::string dir = std::string(path) + "\\OpenSkyscraper";
+        return dir;
+    }
+    return ".";
+#elif defined(__APPLE__)
+    const char* home = getenv("HOME");
+    if (home) {
+        return std::string(home) + "/Library/Application Support/OpenSkyscraper";
+    }
+    return ".";
+#else // Linux/Unix
+    const char* home = getenv("HOME");
+    if (home) {
+        return std::string(home) + "/.openskyscraper";
+    }
+    return ".";
+#endif
+}
+
+// Helper to ensure directory exists
+static void ensureDirExists(const std::string& dir) {
+#ifdef _WIN32
+    CreateDirectoryA(dir.c_str(), NULL);
+#else
+    mkdir(dir.c_str(), 0755);
+#endif
+}
+
+void Application::saveGameToFile(const std::string& filename) {
+    if (states.empty()) return;
+    Game* game = dynamic_cast<Game*>(states.top());
+    if (!game) return;
+    std::string outPath = filename;
+    // If filename is not absolute, save in user data dir
+    if (filename.find('/') == std::string::npos && filename.find('\\') == std::string::npos) {
+        std::string userDir = getUserDataDir();
+        ensureDirExists(userDir);
+#ifdef _WIN32
+        outPath = userDir + "\\" + filename;
+#else
+        outPath = userDir + "/" + filename;
+#endif
+    }
+    LOG(DEBUG, "Saving to %s", outPath.c_str());
+    FILE* f = fopen(outPath.c_str(), "w");
+    if (!f) {
+        LOG(ERROR, "Could not open %s for writing", outPath.c_str());
+        return;
+    }
+    tinyxml2::XMLPrinter xml(f);
+    game->encodeXML(xml);
+    fclose(f);
+    LOG(IMPORTANT, "Game saved to %s", outPath.c_str());
+}
+
+void Application::loadGameFromFile(const std::string& filename) {
+    if (states.empty()) return;
+    Game* game = dynamic_cast<Game*>(states.top());
+    bool createdNewGame = false;
+    if (!game) {
+        // Not in-game: create a new Game state and pop the menu
+        game = new Game(*this);
+        popState();
+        pushState(game);
+        createdNewGame = true;
+    }
+    tinyxml2::XMLDocument xml;
+    std::vector<std::string> tryPaths;
+    std::string userDir = getUserDataDir();
+#ifdef _WIN32
+    tryPaths.push_back(userDir + "\\" + filename);
+#else
+    tryPaths.push_back(userDir + "/" + filename);
+#endif
+    tryPaths.push_back(filename); // as given (could be absolute or relative)
+    char pwd[512];
+    getcwd(pwd, sizeof(pwd));
+    LOG(DEBUG, "Current working directory: %s", pwd);
+    LOG(DEBUG, "Trying to load: %s", filename.c_str());
+    for (const auto& path : tryPaths) {
+        LOG(DEBUG, "Trying path: %s", path.c_str());
+        if (xml.LoadFile(path.c_str()) == 0) {
+            game->decodeXML(xml);
+            game->reloadGUI();
+            LOG(IMPORTANT, "Game loaded from %s", path.c_str());
+            return;
+        }
+    }
+    LOG(ERROR, "Could not load %s from any known location", filename.c_str());
+    if (createdNewGame) {
+        // If loading failed, return to main menu
+        popState();
+    }
+}
+
+void Application::showFilenameDialog(const std::string& title, const std::string& defaultName, std::function<void(const std::string&)> callback) {
+    auto dialog = tgui::ChildWindow::create(title);
+    dialog->setSize(300 * uiScale, 120 * uiScale);
+    dialog->setPosition((window.getSize().x - dialog->getSize().x) / 2, (window.getSize().y - dialog->getSize().y) / 2);
+    dialog->setResizable(false);
+    dialog->setTitleButtons(tgui::ChildWindow::TitleButton::None);
+
+    auto editBox = tgui::EditBox::create();
+    editBox->setSize(260 * uiScale, 28 * uiScale);
+    editBox->setPosition(20 * uiScale, 20 * uiScale);
+    editBox->setText(defaultName);
+    dialog->add(editBox);
+
+    auto okButton = tgui::Button::create("OK");
+    okButton->setSize(80 * uiScale, 28 * uiScale);
+    okButton->setPosition(40 * uiScale, 70 * uiScale);
+    dialog->add(okButton);
+
+    auto cancelButton = tgui::Button::create("Cancel");
+    cancelButton->setSize(80 * uiScale, 28 * uiScale);
+    cancelButton->setPosition(180 * uiScale, 70 * uiScale);
+    dialog->add(cancelButton);
+
+    okButton->onPress([=]() {
+        std::string filename = editBox->getText().toStdString();
+        gui.remove(dialog);
+        if (!filename.empty())
+            callback(filename);
+    });
+    cancelButton->onPress([=]() {
+        gui.remove(dialog);
+    });
+    gui.add(dialog);
+}
+
+void Application::saveGame() {
+    if (states.empty()) return;
+    showFilenameDialog("Save Game As", "default.tower", [this](const std::string& filename) {
+        saveGameToFile(filename);
+    });
+}
+
+void Application::loadGame() {
+    if (states.empty()) return;
+    showFilenameDialog("Load Game", "default.tower", [this](const std::string& filename) {
+        loadGameFromFile(filename);
+    });
+}
+
 void Application::makeMenu() {
     auto menu = tgui::MenuBar::create();
     menu->setHeight(22.f * uiScale);
@@ -143,8 +304,11 @@ void Application::makeMenu() {
             Game * game = new Game(*this);
             popState();
             pushState(game);
+        } else if (item == "Save") {
+            saveGame();
+        } else if (item == "Load") {
+            loadGame();
         }
-        // TODO: Add Save/Load handling here
     });
     gui.add(menu);
 }
@@ -189,6 +353,44 @@ void Application::init()
 	makeMenu();
 	MainMenu * mainmenu = new MainMenu(*this);
 	pushState(mainmenu);
+
+    // Prefill user data dir with default.tower if missing
+    std::string userDir = getUserDataDir();
+    ensureDirExists(userDir);
+#ifdef _WIN32
+    std::string userDefault = userDir + "\\default.tower";
+#else
+    std::string userDefault = userDir + "/default.tower";
+#endif
+    struct stat st;
+    if (stat(userDefault.c_str(), &st) != 0) {
+        // Only copy if it doesn't exist
+        DataManager::Paths srcPaths = data.paths("default.tower");
+        bool copied = false;
+        for (auto& src : srcPaths) {
+            FILE* in = fopen(src.c_str(), "rb");
+            if (in) {
+                FILE* out = fopen(userDefault.c_str(), "wb");
+                if (out) {
+                    char buf[4096];
+                    size_t n;
+                    while ((n = fread(buf, 1, sizeof(buf), in)) > 0) {
+                        fwrite(buf, 1, n, out);
+                    }
+                    LOG(IMPORTANT, "Copied %s to %s", src.c_str(), userDefault.c_str());
+                    fclose(out);
+                    copied = true;
+                } else {
+                    LOG(WARNING, "Could not open %s for writing", userDefault.c_str());
+                }
+                fclose(in);
+                break;
+            }
+        }
+        if (!copied) {
+            LOG(WARNING, "Could not prefill default.tower: no source found in data.paths");
+        }
+    }
 }
 
 void Application::loop()

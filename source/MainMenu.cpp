@@ -11,7 +11,8 @@ MainMenu::MainMenu(Application & app)
     sf::Vector2u windowSize = app.window.getSize();
     
     tgui::Texture bgTx = tgui::Texture();
-    //bgTx.load(app.bitmaps["simtower/ui/menubg"]);
+    bgTx.load(app.bitmaps["simtower/ui/menubg"]);
+    //bgTx.load(app.bitmaps["menubg.png"]);
     bgPicture = tgui::Picture::create(bgTx);
     bgPicture->setPosition({(windowSize.x / 2) - (bgTx.getImageSize().x / 2) * app.uiScale, (windowSize.y / 2) - (bgTx.getImageSize().y / 2) * app.uiScale});
     app.gui.add(bgPicture);
@@ -37,6 +38,9 @@ MainMenu::MainMenu(Application & app)
 
     loadButton = tgui::Button::create("Load Saved Tower");
     loadButton->setTextSize(18 * app.uiScale);
+    loadButton->onPress([this, &app](){
+        app.loadGame();
+    });
     layout->add(loadButton);
 
     layout->addSpace(0.4f);
