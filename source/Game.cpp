@@ -33,7 +33,7 @@ Game::Game(Application & app)
 	itemBelowCursor = NULL;
 	toolPrototype = NULL;
 
-	zoom = 1;
+	zoom = app.uiScale;
 	poi.y = 200;
 	poi.x = 0;
 
@@ -64,14 +64,6 @@ Game::Game(Application & app)
 	bellsSound.setBuffer(app.sounds["simtower/bells"]);
 	eveningSound.setBuffer(app.sounds["simtower/birds/evening"]);
 
-	//DEBUG: load from disk.
-	// tinyxml2::XMLDocument xml;
-	// DataManager::Paths p = app.data.paths("default.tower");
-	// for (DataManager::Paths::iterator ip = p.begin(); ip != p.end(); ip++) {
-	// 	LOG(DEBUG, "trying %s", (*ip).c_str());
-	// 	if (xml.LoadFile(*ip) == 0) break;
-	// }
-	// decodeXML(xml);
 }
 
 Game::~Game()
@@ -125,12 +117,12 @@ bool Game::handleEvent(sf::Event & event)
 
 		case sf::Event::MouseButtonPressed: {
 			float2 mousePoint(event.mouseButton.x, event.mouseButton.y);
-			// rectf toolboxWindowRect(float2(toolboxWindow.window->GetAbsoluteLeft(), toolboxWindow.window->GetAbsoluteTop()), float2(toolboxWindow.window->GetClientWidth(), toolboxWindow.window->GetClientHeight()));
+			//rectf toolboxWindowRect(float2(toolboxWindow.window->getAbsolutePosition().x, toolboxWindow.window->getAbsolutePosition().y), float2(toolboxWindow.window->GetClientWidth(), toolboxWindow.window->GetClientHeight()));
 			// rectf timeWindowRect(float2(timeWindow.window->GetAbsoluteLeft(), timeWindow.window->GetAbsoluteTop()), float2(timeWindow.window->GetClientWidth(), timeWindow.window->GetClientHeight()));
 			// rectf mapWindowRect(float2(mapWindow->GetAbsoluteLeft(), mapWindow->GetAbsoluteTop()), float2(mapWindow->GetClientWidth(), mapWindow->GetClientHeight()));
 
 			// Prevent construction or triggering of tool if mouse cursor within toolboxWindow
-			// if (toolboxWindowRect.containsPoint(mousePoint)) break;
+			//if (toolboxWindowRect.containsPoint(mousePoint)) break;
 
 			// Prevent construction or triggering of tool if mouse cursor within timeWindow
 			// if (timeWindowRect.containsPoint(mousePoint)) break;
@@ -140,7 +132,8 @@ bool Game::handleEvent(sf::Event & event)
 			// 	break;	// Break for now, may add code to handle viewport shift in future
 			// }
 
-			if (toolPrototype) {
+			if (selectedTool.find("item-") == 0 && toolPrototype) {
+				// Construction logic for item tools only
 				bool handled = false;
 				recti toolBoundary = recti(toolPosition, toolPrototype->size);
 				if (toolPrototype->id.find("elevator") == 0) {
@@ -393,7 +386,7 @@ bool Game::handleEvent(sf::Event & event)
 				if (selectedTool == "bulldozer") {
 					if (itemBelowCursor->prototype->icon == ICON_LOBBY || itemBelowCursor->prototype->icon == ICON_FLOOR || itemBelowCursor->prototype->icon == ICON_METRO) {
 						playOnce("simtower/construction/impossible");
-						//timeWindow.showMessage("Cannot bulldoze " + itemBelowCursor->prototype->name);
+						timeWindow.showMessage("Cannot bulldoze " + itemBelowCursor->prototype->name);
 						break;
 					}
 					LOG(DEBUG, "destroy %s", itemBelowCursor->desc().c_str());
@@ -940,7 +933,7 @@ void Game::selectTool(const char * tool)
 	if (!tool) return;
 	if (selectedTool != tool) {
 		selectedTool = tool;
-		// toolboxWindow.updateTool();
+		//toolboxWindow.updateTool();
 		timeWindow.updateTooltip();
 	}
 }

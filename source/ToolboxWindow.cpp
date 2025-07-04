@@ -42,12 +42,15 @@ void ToolboxWindow::reload() {
     toolsLayout->addSpace(0.6f);
     auto bulldozeButton = makeButton(21, app->bitmaps["simtower/ui/toolbox/tools"], 0);
     toolsLayout->add(bulldozeButton);
+    bulldozeButton->onPress([this]{ game->selectTool("bulldozer"); });
 
     auto fingerButton = makeButton(21, app->bitmaps["simtower/ui/toolbox/tools"], 1);
     toolsLayout->add(fingerButton);
+    fingerButton->onPress([this]{ game->selectTool("finger"); });
 
     auto inspectButton = makeButton(21, app->bitmaps["simtower/ui/toolbox/tools"], 2);
     toolsLayout->add(inspectButton);
+    inspectButton->onPress([this]{game->selectTool("inspector");});
     toolsLayout->addSpace(0.6f);
 
     // item buttons
