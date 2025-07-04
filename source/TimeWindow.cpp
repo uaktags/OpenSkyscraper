@@ -79,11 +79,29 @@ void TimeWindow::reload() {
     lblDate->setTextSize(13 * app->uiScale);
     window->add(lblDate);
 
-    // star rating
-    rating_tx.load(app->bitmaps["simtower/ui/time/rating"], rating_rect, tgui::UIntRect(0,0,108,22));
+    // star rating (scaled)
+    // Extract and scale the correct region from the rating spritesheet
+    int ratingSrcW = 108, ratingSrcH = 22;
+    int scaledW = ratingSrcW * app->uiScale;
+    int scaledH = ratingSrcH * app->uiScale;
+    sf::Image ratingSheet = app->bitmaps["simtower/ui/time/rating"].copyToImage();
+    sf::Image ratingSub;
+    ratingSub.create(ratingSrcW, ratingSrcH);
+    ratingSub.copy(ratingSheet, 0, 0, sf::IntRect(0, 0, ratingSrcW, ratingSrcH), false);
+    sf::Image ratingScaled;
+    ratingScaled.create(scaledW, scaledH);
+    for (int y = 0; y < scaledH; ++y) {
+        for (int x = 0; x < scaledW; ++x) {
+            int srcX = x * ratingSrcW / scaledW;
+            int srcY = y * ratingSrcH / scaledH;
+            ratingScaled.setPixel(x, y, ratingSub.getPixel(srcX, srcY));
+        }
+    }
+    tgui::Texture rating_tx;
+    rating_tx.loadFromPixelData({scaledW, scaledH}, ratingScaled.getPixelsPtr());
     rating = tgui::Picture::create(rating_tx);
     rating->setPosition(42 * app->uiScale, 2 * app->uiScale);
-    rating->setSize(108 * app->uiScale, 22 * app->uiScale);
+    rating->setSize(scaledW, scaledH);
     window->add(rating);
 
     // watch canvas

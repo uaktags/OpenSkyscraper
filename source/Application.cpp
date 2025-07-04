@@ -119,22 +119,21 @@ int Application::run()
 }
 
 void Application::makeMenu() {
-	auto menu = tgui::MenuBar::create();
-	//menu->setRenderer(std::shared_ptr<RendererData> rendererData)
-	menu->setHeight(22.f);
-	menu->addMenu("File");
-	menu->addMenuItem("New");
-	menu->addMenuItem("Load");
-	menu->addMenuItem("Save");
-	menu->addMenuItem("Save as...");
-	menu->addMenuItem("-");
-	menu->addMenuItem("Exit");
+    auto menu = tgui::MenuBar::create();
+    menu->setHeight(22.f * uiScale);
+    menu->getRenderer()->setTextSize(14 * uiScale); // scale text size as well
+    menu->addMenu("File");
+    menu->addMenuItem("New");
+    menu->addMenuItem("Load");
+    menu->addMenuItem("Save");
+    menu->addMenuItem("Save as...");
+    menu->addMenuItem("-");
+    menu->addMenuItem("Exit");
 
-	menu->addMenu("Options");
-
-	menu->addMenu("Windows");
-	menu->addMenu("Help");
-	gui.add(menu);
+    menu->addMenu("Options");
+    menu->addMenu("Windows");
+    menu->addMenu("Help");
+    gui.add(menu);
 }
 
 void Application::init()
