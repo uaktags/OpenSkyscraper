@@ -11,8 +11,7 @@ MainMenu::MainMenu(Application & app)
     sf::Vector2u windowSize = app.window.getSize();
     
     tgui::Texture bgTx = tgui::Texture();
-    bgTx.load(app.bitmaps["simtower/ui/menubg"]);
-    //bgTx.load(app.bitmaps["menubg.png"]);
+    bgTx.load(app.bitmaps["menubg.png"]);
     bgPicture = tgui::Picture::create(bgTx);
     // Scale background to fill window
     bgPicture->setSize({static_cast<float>(windowSize.x), static_cast<float>(windowSize.y)});
