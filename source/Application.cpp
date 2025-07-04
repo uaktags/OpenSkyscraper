@@ -26,6 +26,7 @@ Application::Application(int argc, char * argv[])
 {
 	assert(App == NULL && "Application initialized multiple times");
 	App = this;
+	uiScale = 1.0f;
 
 	assert(argc >= 1 && "argv[0] is required");
 	dumpResources = false;
@@ -77,6 +78,16 @@ Application::Application(int argc, char * argv[])
 			assert(i+1 < argc && "--dump-resources is missing path");
 			dumpResources = true;
 			dumpResourcesPath = argv[i+1];
+		}
+		if (strcmp(argv[i], "--ui-scale") == 0){
+			assert(i+1 < argc && "--ui-scale is missing value");
+			uiScale = atof(argv[++i]);
+			if (uiScale < 1.0f || uiScale > 2.0f) {
+				LOG(ERROR, "invalid ui scale %f", uiScale);
+				exitCode = 1;
+				return;
+			}
+			LOG(INFO, "ui scale set to %f", uiScale);
 		}
 	}
 
@@ -170,62 +181,62 @@ void Application::init()
 
 void Application::loop()
 {
-	sf::Clock clock;
-	sf::Text rateIndicator("<not available>", fonts["UbuntuMono-Regular.ttf"], 16);
-	double rateIndicatorTimer = 0;
-	double rateDamped = 0;
-	double rateDampFactor = 0;
-	double dt_max = 0, dt_min = 0;
-	int dt_maxmin_resetTimer = 0;
+    sf::Clock clock;
+    sf::Text rateIndicator("<not available>", fonts["UbuntuMono-Regular.ttf"], 16 * uiScale);
+    double rateIndicatorTimer = 0;
+    double rateDamped = 0;
+    double rateDampFactor = 0;
+    double dt_max = 0, dt_min = 0;
+    int dt_maxmin_resetTimer = 0;
 
-	while (window.isOpen() && exitCode == 0 && !states.empty()) {
-		double dt_real = clock.getElapsedTime().asSeconds();
-		//dt_max = (dt_max + dt_real * dt_real * 0.5) / (1 + dt_real * 0.5);
-		//dt_min = (dt_min + dt_real * dt_real * 0.5) / (1 + dt_real * 0.5);
-		if (dt_real > dt_max) {
-			dt_max = dt_real;
-			dt_maxmin_resetTimer = 0;
-		}
-		if (dt_real < dt_min) {
-			dt_min = dt_real;
-			dt_maxmin_resetTimer = 0;
-		}
-		double dt = std::min<double>(dt_real, 0.1); //avoids FPS dropping below 10 Hz
-		clock.restart();
+    while (window.isOpen() && exitCode == 0 && !states.empty()) {
+        double dt_real = clock.getElapsedTime().asSeconds();
+        //dt_max = (dt_max + dt_real * dt_real * 0.5) / (1 + dt_real * 0.5);
+        //dt_min = (dt_min + dt_real * dt_real * 0.5) / (1 + dt_real * 0.5);
+        if (dt_real > dt_max) {
+            dt_max = dt_real;
+            dt_maxmin_resetTimer = 0;
+        }
+        if (dt_real < dt_min) {
+            dt_min = dt_real;
+            dt_maxmin_resetTimer = 0;
+        }
+        double dt = std::min<double>(dt_real, 0.1); //avoids FPS dropping below 10 Hz
+        clock.restart();
 
-		//Update the rate indicator.
-		rateDampFactor = (dt_real * 1);
-		rateDamped = (rateDamped + dt_real * rateDampFactor) / (1 + rateDampFactor);
-		if ((rateIndicatorTimer += dt_real) > 0.5) {
-			rateIndicatorTimer -= 0.5;
-			if (++dt_maxmin_resetTimer >= 2*3) {
-				dt_maxmin_resetTimer = 0;
-				dt_max = dt_real;
-				dt_min = dt_real;
-			}
-		}
+        //Update the rate indicator.
+        rateDampFactor = (dt_real * 1);
+        rateDamped = (rateDamped + dt_real * rateDampFactor) / (1 + rateDampFactor);
+        if ((rateIndicatorTimer += dt_real) > 0.5) {
+            rateIndicatorTimer -= 0.5;
+            if (++dt_maxmin_resetTimer >= 2*3) {
+                dt_maxmin_resetTimer = 0;
+                dt_max = dt_real;
+                dt_min = dt_real;
+            }
+        }
 
-		//Handle events.
-		sf::Event event;
-		while (window.pollEvent(event)) {
-			if (event.type == sf::Event::Resized) {
-				LOG(INFO, "resized (%i, %i)", window.getSize().x, window.getSize().y);
-				window.setView(sf::View(sf::FloatRect(0, 0, window.getSize().x, window.getSize().y)));
-			}
-			if (event.type == sf::Event::KeyPressed) {
-				if (event.key.code == sf::Keyboard::Escape) {
-					exitCode = 1;
-					continue;
-				}
-				if (event.key.code == sf::Keyboard::R && event.key.control) {
-					LOG(IMPORTANT, "reinitializing game");
-					Game * old = (Game *)states.top();
-					popState();
-					delete old;
-					Game * game = new Game(*this);
-					pushState(game);
-					continue;
-				}
+        //Handle events.
+        sf::Event event;
+        while (window.pollEvent(event)) {
+            if (event.type == sf::Event::Resized) {
+                LOG(INFO, "resized (%i, %i)", window.getSize().x, window.getSize().y);
+                window.setView(sf::View(sf::FloatRect(0, 0, window.getSize().x, window.getSize().y)));
+            }
+            if (event.type == sf::Event::KeyPressed) {
+                if (event.key.code == sf::Keyboard::Escape) {
+                    exitCode = 1;
+                    continue;
+                }
+                if (event.key.code == sf::Keyboard::R && event.key.control) {
+                    LOG(IMPORTANT, "reinitializing game");
+                    Game * old = (Game *)states.top();
+                    popState();
+                    delete old;
+                    Game * game = new Game(*this);
+                    pushState(game);
+                    continue;
+                }
 // #ifdef BUILD_DEBUG
 // 				if (event.key.code == sf::Keyboard::F8) {
 // 					bool visible = !Rocket::Debugger::IsVisible();
@@ -233,68 +244,68 @@ void Application::loop()
 // 					Rocket::Debugger::SetVisible(visible);
 // 				}
 // #endif
-			}
-			gui.handleEvent(event);
-			if (!states.empty()) {
-				if (states.top()->handleEvent(event))
-					continue;
-				// if (states.top()->gui.handleEvent(event))
-				// 	continue;
-			}
-			if (event.type == sf::Event::Closed) {
-				LOG(WARNING, "current state did not handle sf::Event::Closed");
-				exitCode = 1;
-				continue;
-			}
-		}
+            }
+            gui.handleEvent(event);
+            if (!states.empty()) {
+                if (states.top()->handleEvent(event))
+                    continue;
+                // if (states.top()->gui.handleEvent(event))
+                // 	continue;
+            }
+            if (event.type == sf::Event::Closed) {
+                LOG(WARNING, "current state did not handle sf::Event::Closed");
+                exitCode = 1;
+                continue;
+            }
+        }
 
-		//Make the current state do its work.
-		glClearColor(0,0,0,0);
-		glClear(GL_COLOR_BUFFER_BIT);
-		window.resetGLStates();
-		if (!states.empty()) {
-			states.top()->advance(dt);
-			window.resetGLStates();
-			glEnable(GL_TEXTURE_2D);
-			//states.top()->gui.draw();
-		}
-		gui.draw();
+        //Make the current state do its work.
+        glClearColor(0,0,0,0);
+        glClear(GL_COLOR_BUFFER_BIT);
+        window.resetGLStates();
+        if (!states.empty()) {
+            states.top()->advance(dt);
+            window.resetGLStates();
+            glEnable(GL_TEXTURE_2D);
+            //states.top()->gui.draw();
+        }
+        gui.draw();
 
-		window.resetGLStates();
-		// Draw the debugging overlays.
-		char dbg[1024];
-		snprintf(dbg, 32, "%.0fHz [%.0f..%.0f]", 1.0/rateDamped, 1.0/dt_max, 1.0/dt_min);
-		if (!states.empty()) {
-			strcat(dbg, "\n");
-			strcat(dbg, states.top()->debugString);
-		}
-		rateIndicator.setString(dbg);
+        window.resetGLStates();
+        // Draw the debugging overlays.
+        char dbg[1024];
+        snprintf(dbg, 32, "%.0fHz [%.0f..%.0f]", 1.0/rateDamped, 1.0/dt_max, 1.0/dt_min);
+        if (!states.empty()) {
+            strcat(dbg, "\n");
+            strcat(dbg, states.top()->debugString);
+        }
+        rateIndicator.setString(dbg);
 
-		window.setView(window.getDefaultView());
-		sf::FloatRect r = rateIndicator.getLocalBounds();
-		sf::RectangleShape bg = sf::RectangleShape(sf::Vector2f(r.width, r.height));
-		bg.setFillColor(sf::Color(0, 0, 0, 0.25*255));
-		bg.setPosition(sf::Vector2f(r.left, r.top));
-		// window.draw(bg);
-		// window.draw(rateIndicator);
+        window.setView(window.getDefaultView());
+        sf::FloatRect r = rateIndicator.getLocalBounds();
+        sf::RectangleShape bg = sf::RectangleShape(sf::Vector2f(r.width, r.height));
+        bg.setFillColor(sf::Color(0, 0, 0, 0.25*255));
+        bg.setPosition(sf::Vector2f(r.left, r.top));
+        // window.draw(bg);
+        // window.draw(rateIndicator);
 
 
-		// cursor crosshair - TODO: replace by sfml cursor
-		/*
-		sf::Vector2i mp = sf::Mouse::getPosition(window);
-		glColor3f(1,0,0);
-		glBegin(GL_LINES);
-		glVertex2f(mp.x-10,mp.y);
-		glVertex2f(mp.x+10,mp.y);
-		glVertex2f(mp.x,mp.y-10);
-		glVertex2f(mp.x,mp.y+10);
-		glEnd();
-		glColor3f(1,1,1);
-		*/
+        // cursor crosshair - TODO: replace by sfml cursor
+        /*
+        sf::Vector2i mp = sf::Mouse::getPosition(window);
+        glColor3f(1,0,0);
+        glBegin(GL_LINES);
+        glVertex2f(mp.x-10,mp.y);
+        glVertex2f(mp.x+10,mp.y);
+        glVertex2f(mp.x,mp.y-10);
+        glVertex2f(mp.x,mp.y+10);
+        glEnd();
+        glColor3f(1,1,1);
+        */
 
-		//Swap buffers.
-		window.display();
-	}
+        //Swap buffers.
+        window.display();
+    }
 }
 
 void Application::cleanup()

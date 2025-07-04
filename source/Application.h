@@ -47,6 +47,7 @@ namespace OT
 		
 		tgui::Gui     gui;
 		tgui::MenuBar	menu;
+		float uiScale;
 
 		DataManager   data;
 		BitmapManager bitmaps;
