@@ -107,15 +107,19 @@ namespace OT {
 		PathFinder pathFinder;
 		Decorations decorations;
 
+	public:
+		void encodeXML(tinyxml2::XMLPrinter & xml);
+		void decodeXML(tinyxml2::XMLDocument & xml);
+		void reloadGUI();
+
 	private:
 		double zoom;
 		double2 poi;
 
 		//Rocket::Core::ElementDocument * mapWindow;
 
-		void reloadGUI();
-
-		void encodeXML(tinyxml2::XMLPrinter & xml);
-		void decodeXML(tinyxml2::XMLDocument & xml);
+	public:
+		std::string saveFilename;
+		bool isDirty;
 	};
 }

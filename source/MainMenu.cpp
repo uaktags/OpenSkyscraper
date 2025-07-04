@@ -7,19 +7,21 @@ MainMenu::MainMenu(Application & app)
 :   State("menu"),
     app(app)
 {
-    sf::Vector2 panelSize {300, 120};
+    sf::Vector2 panelSize {300 * app.uiScale, 120 * app.uiScale};
     sf::Vector2u windowSize = app.window.getSize();
     
     tgui::Texture bgTx = tgui::Texture();
-    bgTx.load(app.bitmaps["simtower/ui/menubg"]);
+    bgTx.load(app.bitmaps["menubg.png"]);
     bgPicture = tgui::Picture::create(bgTx);
-    bgPicture->setPosition({(windowSize.x / 2) - (bgTx.getImageSize().x / 2), (windowSize.y / 2) - (bgTx.getImageSize().y / 2)});
+    // Scale background to fill window
+    bgPicture->setSize({static_cast<float>(windowSize.x), static_cast<float>(windowSize.y)});
+    bgPicture->setPosition({0, 0});
     app.gui.add(bgPicture);
 
     panel = tgui::Panel::create({panelSize.x, panelSize.y});
     
     panel->setPosition({(windowSize.x / 2) - (panelSize.x / 2), (windowSize.y / 2) - (panelSize.y / 2)});
-    panel->getRenderer()->setBorders(tgui::Outline(2));
+    panel->getRenderer()->setBorders(tgui::Outline(2 * app.uiScale));
     app.gui.add(panel);
 
     auto layout = tgui::VerticalLayout::create();
@@ -29,17 +31,26 @@ MainMenu::MainMenu(Application & app)
     layout->setSize("95%", "95%");
 
     newButton = tgui::Button::create("New Tower");
+    newButton->setTextSize(18 * app.uiScale);
     newButton->onPress(&MainMenu::onNewGamePress, this);
     layout->add(newButton);
 
     layout->addSpace(0.4f);
 
     loadButton = tgui::Button::create("Load Saved Tower");
+    loadButton->setTextSize(18 * app.uiScale);
+    loadButton->onPress([this, &app](){
+        app.loadGame();
+    });
     layout->add(loadButton);
 
     layout->addSpace(0.4f);
 
     quitButton = tgui::Button::create("Quit");
+    quitButton->setTextSize(18 * app.uiScale);
+    quitButton->onPress([this, &app](){
+        app.window.close();
+    });
     layout->add(quitButton);
 }
 
@@ -63,6 +74,8 @@ void MainMenu::advance(double dt) {
 
 void MainMenu::onNewGamePress() {
     Game * game = new Game(app);
+    game->saveFilename = "";
+    game->isDirty = false;
     app.popState();
-	app.pushState(game);
+    app.pushState(game);
 }

@@ -22,10 +22,10 @@ using namespace OT;
 
 TimeWindow::TimeWindow(Game * game) : GameObject(game) {
     window = tgui::ChildWindow::create();
-    window->getRenderer()->setTitleBarHeight(10);
+    window->getRenderer()->setTitleBarHeight(10 * app->uiScale);
     
-    window->setClientSize({431, 41});
-    window->setPosition({200, 22});
+    window->setClientSize({431 * app->uiScale, 41 * app->uiScale});
+    window->setPosition({200 * app->uiScale, 22 * app->uiScale});
 
     rating_rect = tgui::UIntRect(0,0,108,22);
     messageTimer = 0;
@@ -52,42 +52,61 @@ void TimeWindow::reload() {
     // Funds
     lblFunds = tgui::Label::create();
     lblFunds->setHorizontalAlignment(tgui::HorizontalAlignment::Right);
-    lblFunds->setTextSize(13);
-    lblFunds->setSize(80,13);
-    lblFunds->setPosition(345, 5);
+    lblFunds->setTextSize(13 * app->uiScale);
+    lblFunds->setSize(80 * app->uiScale, 13 * app->uiScale);
+    lblFunds->setPosition(345 * app->uiScale, 5 * app->uiScale);
     lblFunds->setScrollbarPolicy(tgui::Scrollbar::Policy::Never);
     window->add(lblFunds);
 
     // Pops
     lblPopulation = tgui::Label::create();
     lblPopulation->setHorizontalAlignment(tgui::HorizontalAlignment::Right);
-    lblPopulation->setTextSize(13);
-    lblPopulation->setSize(80,13);
-    lblPopulation->setPosition(345, 22);
+    lblPopulation->setTextSize(13 * app->uiScale);
+    lblPopulation->setSize(80 * app->uiScale, 13 * app->uiScale);
+    lblPopulation->setPosition(345 * app->uiScale, 22 * app->uiScale);
     lblPopulation->setScrollbarPolicy(tgui::Scrollbar::Policy::Never);
     window->add(lblPopulation);
 
     // message
     lblTooltip = tgui::Label::create();
-    lblTooltip->setPosition(42, 25);
-    lblTooltip->setTextSize(11);
+    lblTooltip->setPosition(42 * app->uiScale, 25 * app->uiScale);
+    lblTooltip->setTextSize(11 * app->uiScale);
     window->add(lblTooltip);
 
     // date, Time
     lblDate = tgui::Label::create();
-    lblDate->setPosition(160, 3);
+    lblDate->setPosition(160 * app->uiScale, 3 * app->uiScale);
+    lblDate->setTextSize(13 * app->uiScale);
     window->add(lblDate);
 
-    // star rating
-    rating_tx.load(app->bitmaps["simtower/ui/time/rating"], rating_rect, tgui::UIntRect(0,0,108,22));
+    // star rating (scaled)
+    // Extract and scale the correct region from the rating spritesheet
+    int ratingSrcW = 108, ratingSrcH = 22;
+    int scaledW = ratingSrcW * app->uiScale;
+    int scaledH = ratingSrcH * app->uiScale;
+    sf::Image ratingSheet = app->bitmaps["simtower/ui/time/rating"].copyToImage();
+    sf::Image ratingSub;
+    ratingSub.create(ratingSrcW, ratingSrcH);
+    ratingSub.copy(ratingSheet, 0, 0, sf::IntRect(0, 0, ratingSrcW, ratingSrcH), false);
+    sf::Image ratingScaled;
+    ratingScaled.create(scaledW, scaledH);
+    for (int y = 0; y < scaledH; ++y) {
+        for (int x = 0; x < scaledW; ++x) {
+            int srcX = x * ratingSrcW / scaledW;
+            int srcY = y * ratingSrcH / scaledH;
+            ratingScaled.setPixel(x, y, ratingSub.getPixel(srcX, srcY));
+        }
+    }
+    tgui::Texture rating_tx;
+    rating_tx.loadFromPixelData({scaledW, scaledH}, ratingScaled.getPixelsPtr());
     rating = tgui::Picture::create(rating_tx);
-    rating->setPosition(42, 2);
-    rating->setSize(108, 22);
+    rating->setPosition(42 * app->uiScale, 2 * app->uiScale);
+    rating->setSize(scaledW, scaledH);
     window->add(rating);
 
     // watch canvas
-    watch = tgui::CanvasSFML::create({29, 29});
-    watch->setPosition(5,5);
+    watch = tgui::CanvasSFML::create({29 * app->uiScale, 29 * app->uiScale});
+    watch->setPosition(5 * app->uiScale, 5 * app->uiScale);
     window->add(watch);
 
     updateRating();
