@@ -1,6 +1,7 @@
 #pragma once
 #include <stlastar.h>
 #include "MapSearchNode.h"
+#include "../Route.h"
 
 namespace OT {
 	namespace Item { class Item; }

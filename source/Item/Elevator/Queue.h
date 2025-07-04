@@ -3,6 +3,7 @@
 #include <SFML/Graphics/Drawable.hpp>
 #include "../../GameObject.h"
 #include "../../Math/Rect.h"
+#include "Elevator.h"
 
 namespace OT {
 	class Person;

@@ -1,6 +1,8 @@
 #pragma once
 #include "../Sprite.h"
 #include "Item.h"
+#include <list>
+#include <queue>
 
 namespace OT {
 	namespace Item {

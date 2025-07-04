@@ -15,9 +15,9 @@
 #include "Sprite.h"
 #include "State.h"
 #include "Time.h"
-#include "TimeWindow.h"
-#include "ToolboxWindow.h"
 #include "Decorations.h"
+#include "ToolboxWindow.h"
+#include "TimeWindow.h"
 
 namespace OT {
 	namespace Item { class AbstractPrototype; }
@@ -111,7 +111,7 @@ namespace OT {
 		double zoom;
 		double2 poi;
 
-		Rocket::Core::ElementDocument * mapWindow;
+		//Rocket::Core::ElementDocument * mapWindow;
 
 		void reloadGUI();
 

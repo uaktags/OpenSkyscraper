@@ -3,16 +3,19 @@
 
 #include <SFML/Graphics.hpp>
 #include <SFML/Window.hpp>
+#include <TGUI/Widgets/MenuBar.hpp>
 #include <stack>
 
 #include "BitmapManager.h"
 #include "DataManager.h"
 #include "FontManager.h"
-#include "GUIManager.h"
 #include "Logger.h"
 #include "Path.h"
 #include "State.h"
 #include "SoundManager.h"
+
+#include <TGUI/TGUI.hpp>
+#include <TGUI/Backend/SFML-Graphics.hpp>
 
 #if defined(_MSC_VER)
 #include "stdint.h"
@@ -41,14 +44,17 @@ namespace OT
 
 		sf::RenderWindow window;
 		sf::VideoMode videoMode;
+		
+		tgui::Gui     gui;
+		tgui::MenuBar	menu;
 
 		DataManager   data;
-		GUIManager    gui;
-		GUI *         rootGUI;
 		BitmapManager bitmaps;
 		FontManager   fonts;
 		SoundManager  sounds;
 
+		void pushState(State * state);
+		void popState();
 		int run();
 
 	private:
@@ -62,9 +68,9 @@ namespace OT
 		void loop();
 		void cleanup();
 
+		void makeMenu();
+
 		std::stack<State *> states;
-		void pushState(State * state);
-		void popState();
 
 		bool dumpResources;
 		Path dumpResourcesPath;

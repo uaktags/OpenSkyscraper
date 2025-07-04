@@ -1,16 +1,16 @@
 /* Copyright (c) 2012-2015 Fabian Schuiki */
+#include <TGUI/Widgets/MenuBar.hpp>
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
 #include <iostream>
-#include <Rocket/Debugger.h>
 
 #include "Application.h"
 #include "Game.h"
+#include "MainMenu.h"
 #include "SimTowerLoader.h"
-#include "TimeWindowWatch.h"
 #include "OpenGL.h"
 
 using namespace OT;
@@ -107,6 +107,25 @@ int Application::run()
 	return exitCode;
 }
 
+void Application::makeMenu() {
+	auto menu = tgui::MenuBar::create();
+	//menu->setRenderer(std::shared_ptr<RendererData> rendererData)
+	menu->setHeight(22.f);
+	menu->addMenu("File");
+	menu->addMenuItem("New");
+	menu->addMenuItem("Load");
+	menu->addMenuItem("Save");
+	menu->addMenuItem("Save as...");
+	menu->addMenuItem("-");
+	menu->addMenuItem("Exit");
+
+	menu->addMenu("Options");
+
+	menu->addMenu("Windows");
+	menu->addMenu("Help");
+	gui.add(menu);
+}
+
 void Application::init()
 {
 	data.init();
@@ -143,38 +162,10 @@ void Application::init()
 	window.create(videoMode, "OpenSkyscraper SFML");
 	window.setVerticalSyncEnabled(true);
 
-	if (!gui.init(&window)) {
-		LOG(ERROR, "unable to initialize gui");
-		exitCode = 1;
-		return;
-	}
-	rootGUI = new GUI("root", &gui);
-#ifdef BUILD_DEBUG
-	Rocket::Debugger::Initialise(rootGUI->context);
-#endif
-
-	//Additional GUI stuff.
-	Rocket::Core::DecoratorInstancer * instancer = new TimeWindowWatchInstancer;
-	Rocket::Core::Factory::RegisterDecoratorInstancer("watch", instancer);
-	instancer->RemoveReference();
-
-	//Load GUI fonts.
-	fonts.loadIntoRocket("Jura-Regular.ttf");
-	fonts.loadIntoRocket("Jura-Medium.ttf");
-	fonts.loadIntoRocket("Jura-Light.ttf");
-	fonts.loadIntoRocket("Jura-DemiBold.ttf");
-	fonts.loadIntoRocket("Play-Regular.ttf");
-	fonts.loadIntoRocket("Play-Bold.ttf");
-
-	//DEBUG: load some GUI
-	/*Path rocket = data.paths("debug/rocket").front();
-	Rocket::Core::FontDatabase::LoadFontFace(rocket.down("Delicious-Bold.otf").c_str());
-	Rocket::Core::FontDatabase::LoadFontFace(rocket.down("Delicious-BoldItalic.otf").c_str());
-	Rocket::Core::FontDatabase::LoadFontFace(rocket.down("Delicious-Italic.otf").c_str());
-	Rocket::Core::FontDatabase::LoadFontFace(rocket.down("Delicious-Roman.otf").c_str());*/
-
-	Game * game = new Game(*this);
-	pushState(game);
+	gui.setWindow(window);
+	makeMenu();
+	MainMenu * mainmenu = new MainMenu(*this);
+	pushState(mainmenu);
 }
 
 void Application::loop()
@@ -235,20 +226,20 @@ void Application::loop()
 					pushState(game);
 					continue;
 				}
-#ifdef BUILD_DEBUG
-				if (event.key.code == sf::Keyboard::F8) {
-					bool visible = !Rocket::Debugger::IsVisible();
-					LOG(DEBUG, "Rocket::Debugger %s", (visible ? "on" : "off"));
-					Rocket::Debugger::SetVisible(visible);
-				}
-#endif
+// #ifdef BUILD_DEBUG
+// 				if (event.key.code == sf::Keyboard::F8) {
+// 					bool visible = !Rocket::Debugger::IsVisible();
+// 					LOG(DEBUG, "Rocket::Debugger %s", (visible ? "on" : "off"));
+// 					Rocket::Debugger::SetVisible(visible);
+// 				}
+// #endif
 			}
-			rootGUI->handleEvent(event);
+			gui.handleEvent(event);
 			if (!states.empty()) {
 				if (states.top()->handleEvent(event))
 					continue;
-				if (states.top()->gui.handleEvent(event))
-					continue;
+				// if (states.top()->gui.handleEvent(event))
+				// 	continue;
 			}
 			if (event.type == sf::Event::Closed) {
 				LOG(WARNING, "current state did not handle sf::Event::Closed");
@@ -258,16 +249,16 @@ void Application::loop()
 		}
 
 		//Make the current state do its work.
-		glClearColor(0,0,1,0);
+		glClearColor(0,0,0,0);
 		glClear(GL_COLOR_BUFFER_BIT);
 		window.resetGLStates();
 		if (!states.empty()) {
 			states.top()->advance(dt);
 			window.resetGLStates();
 			glEnable(GL_TEXTURE_2D);
-			states.top()->gui.draw();
+			//states.top()->gui.draw();
 		}
-		rootGUI->draw();
+		gui.draw();
 
 		window.resetGLStates();
 		// Draw the debugging overlays.
@@ -284,9 +275,12 @@ void Application::loop()
 		sf::RectangleShape bg = sf::RectangleShape(sf::Vector2f(r.width, r.height));
 		bg.setFillColor(sf::Color(0, 0, 0, 0.25*255));
 		bg.setPosition(sf::Vector2f(r.left, r.top));
-		window.draw(bg);
-		window.draw(rateIndicator);
+		// window.draw(bg);
+		// window.draw(rateIndicator);
 
+
+		// cursor crosshair - TODO: replace by sfml cursor
+		/*
 		sf::Vector2i mp = sf::Mouse::getPosition(window);
 		glColor3f(1,0,0);
 		glBegin(GL_LINES);
@@ -296,6 +290,7 @@ void Application::loop()
 		glVertex2f(mp.x,mp.y+10);
 		glEnd();
 		glColor3f(1,1,1);
+		*/
 
 		//Swap buffers.
 		window.display();

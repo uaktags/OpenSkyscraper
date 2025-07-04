@@ -9,6 +9,8 @@
 #include <cassert>
 #include <fstream>
 #include <sys/stat.h>
+#include <cstring>
+#include <stdarg.h>
 
 //Use libmspack if available to decompress SIMTOWER.EX_
 #ifdef MSPACK
@@ -553,6 +555,9 @@ void SimTowerLoader::loadBitmaps()
 	rating.copy(starTower, 0, 22*5);
 	rating.createMaskFromColor(sf::Color(0x99, 0x99, 0x99));
 	rating.createMaskFromColor(sf::Color::White);
+
+	// menu bg image
+	loadBitmap(0x8100, images["simtower/ui/menubg"]);
 
 	sf::Image skies[11];
 	for (int i = 0; i < 11; i++) {

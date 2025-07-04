@@ -25,12 +25,12 @@ bool FontManager::load(Path name, sf::Font & dst)
 	return success;
 }
 
-bool FontManager::loadIntoRocket(Path name)
-{
-	DataManager::Paths paths = app->data.paths(Path("fonts") + name);
-	for (DataManager::Paths::iterator p = paths.begin(); p != paths.end(); p++) {
-		if (Rocket::Core::FontDatabase::LoadFontFace((*p).c_str())) return true;
-	}
-	LOG(WARNING, "unable to find font '&s'", name.c_str());
-	return false;
-}
+// bool FontManager::loadIntoRocket(Path name)
+// {
+// 	DataManager::Paths paths = app->data.paths(Path("fonts") + name);
+// 	for (DataManager::Paths::iterator p = paths.begin(); p != paths.end(); p++) {
+// 		if (Rocket::Core::FontDatabase::LoadFontFace((*p).c_str())) return true;
+// 	}
+// 	LOG(WARNING, "unable to find font '&s'", name.c_str());
+// 	return false;
+// }
