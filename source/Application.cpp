@@ -133,6 +133,19 @@ void Application::makeMenu() {
     menu->addMenu("Options");
     menu->addMenu("Windows");
     menu->addMenu("Help");
+    
+    // Fix: Use correct lambda signature for TGUI version
+    menu->onMenuItemClick.connect([this](const tgui::String& item){
+        if (item == "Exit") {
+            window.close();
+        } else if (item == "New") {
+            // Start a new game (same as MainMenu New Tower)
+            Game * game = new Game(*this);
+            popState();
+            pushState(game);
+        }
+        // TODO: Add Save/Load handling here
+    });
     gui.add(menu);
 }
 

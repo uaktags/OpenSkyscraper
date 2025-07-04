@@ -11,7 +11,7 @@ MainMenu::MainMenu(Application & app)
     sf::Vector2u windowSize = app.window.getSize();
     
     tgui::Texture bgTx = tgui::Texture();
-    bgTx.load(app.bitmaps["simtower/ui/menubg"]);
+    //bgTx.load(app.bitmaps["simtower/ui/menubg"]);
     bgPicture = tgui::Picture::create(bgTx);
     bgPicture->setPosition({(windowSize.x / 2) - (bgTx.getImageSize().x / 2) * app.uiScale, (windowSize.y / 2) - (bgTx.getImageSize().y / 2) * app.uiScale});
     app.gui.add(bgPicture);
@@ -43,6 +43,9 @@ MainMenu::MainMenu(Application & app)
 
     quitButton = tgui::Button::create("Quit");
     quitButton->setTextSize(18 * app.uiScale);
+    quitButton->onPress([this, &app](){
+        app.window.close();
+    });
     layout->add(quitButton);
 }
 

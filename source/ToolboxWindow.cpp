@@ -52,16 +52,25 @@ void ToolboxWindow::reload() {
     // item buttons
     int row = 0;
     for (int i = 0; i < game->itemFactory.prototypes.size(); i++) {
-		Item::AbstractPrototype * prototype = game->itemFactory.prototypes[i];
+        Item::AbstractPrototype * prototype = game->itemFactory.prototypes[i];
 
-		char toolname[128];
-		snprintf(toolname, 128, "item-%s", prototype->id.c_str());
+        char toolname[128];
+        snprintf(toolname, 128, "item-%s", prototype->id.c_str());
 
-		char style[512];
-		snprintf(style, 512, "button#%s { background-image-s: %ipx %ipx; }", toolname, prototype->icon*32, prototype->icon*32+32);
-		LOG(DEBUG, "style for %s: %s", prototype->name.c_str(), style);
+        char style[512];
+        snprintf(style, 512, "button#%s { background-image-s: %ipx %ipx; }", toolname, prototype->icon*32, prototype->icon*32+32);
+        LOG(DEBUG, "style for %s: %s", prototype->name.c_str(), style);
+        LOG(DEBUG, "prototype->icon for %s: %d", prototype->name.c_str(), prototype->icon);
 
-        auto button = makeButton(32, app->bitmaps["simtower/ui/toolbox/items"], prototype->icon);
+        // Choose spritesheet based on uiScale
+        sf::Texture itemTexture;
+        //if (app->uiScale == 1.0f) {
+            itemTexture = app->bitmaps["simtower/ui/toolbox/items"];
+        //} else {
+        //    itemTexture = app->bitmaps["toolbox/grey.png"];
+        //}
+
+        auto button = makeButton(32, itemTexture, prototype->icon);
         int xpos = 5 + (32 * (i % 3)) * app->uiScale;
         int ypos = 45 + row * 32 * app->uiScale;
 
@@ -71,7 +80,7 @@ void ToolboxWindow::reload() {
         button->onPress(&ToolboxWindow::onToolButtonPress, this, toolname);
         if (i % 3 >= 2)
             row++;
-	}
+    }
 }
 
 void ToolboxWindow::onToolButtonPress(const char * tool) {
