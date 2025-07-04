@@ -14,7 +14,9 @@ MainMenu::MainMenu(Application & app)
     bgTx.load(app.bitmaps["simtower/ui/menubg"]);
     //bgTx.load(app.bitmaps["menubg.png"]);
     bgPicture = tgui::Picture::create(bgTx);
-    bgPicture->setPosition({(windowSize.x / 2) - (bgTx.getImageSize().x / 2) * app.uiScale, (windowSize.y / 2) - (bgTx.getImageSize().y / 2) * app.uiScale});
+    // Scale background to fill window
+    bgPicture->setSize({static_cast<float>(windowSize.x), static_cast<float>(windowSize.y)});
+    bgPicture->setPosition({0, 0});
     app.gui.add(bgPicture);
 
     panel = tgui::Panel::create({panelSize.x, panelSize.y});

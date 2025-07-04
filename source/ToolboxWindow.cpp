@@ -16,7 +16,8 @@ ToolboxWindow::ToolboxWindow(Game * game) : GameObject(game) {
     window = tgui::ChildWindow::create();
     window->getRenderer()->setTitleBarHeight(10 * app->uiScale);
     window->setClientSize({106 * app->uiScale, app->uiScale * 220});
-    window->setPosition({0, 330 * app->uiScale});
+    // Move toolbox window up to just below the menu bar (22px * uiScale)
+    window->setPosition({0, 24 * app->uiScale});
     
     reload();
     app->gui.add(window);
