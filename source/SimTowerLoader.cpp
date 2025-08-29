@@ -128,7 +128,11 @@ bool SimTowerLoader::load()
 	prepareBitmaps();
 
 	loadBitmaps();
-	loadSounds();
+	if (app && app->soundEnabled) {
+		loadSounds();
+	} else {
+		LOG(INFO, "Skipping sound loading: sound is disabled or no device present");
+	}
 
 	return true;
 }
@@ -1041,6 +1045,10 @@ void SimTowerLoader::loadAnimatedBitmap(int id, sf::Image img[3])
 
 void SimTowerLoader::loadSounds()
 {
+	if (!app || !app->soundEnabled) {
+		LOG(INFO, "loadSounds: sound is disabled, skipping sound loading");
+		return;
+	}
 	LOG(INFO, "Loading Sounds");
 	const static struct { int id; Path name; } namedSounds[] = {
 		{0x9b58, "construction/normal"},		//sound for placing facilities and transport
@@ -1109,6 +1117,10 @@ void SimTowerLoader::loadSounds()
 
 void SimTowerLoader::loadSound(int id, sf::SoundBuffer & snd)
 {
+	if (!app || !app->soundEnabled) {
+		LOG(INFO, "loadSound: sound is disabled, skipping sound buffer creation");
+		return;
+	}
 	WindowsNEExecutable::Resource & data = exe.resources[0xFF0A][id];
 	if (!snd.loadFromMemory(data.data, data.length)) {
 		LOG(ERROR, "unable to load sound 0x%x from memory", id);

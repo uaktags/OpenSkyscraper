@@ -59,10 +59,10 @@ Game::Game(Application & app)
 
 	reloadGUI();
 
-	cockSound.setBuffer(app.sounds["simtower/cock"]);
-	morningSound.setBuffer(app.sounds["simtower/birds/morning"]);
-	bellsSound.setBuffer(app.sounds["simtower/bells"]);
-	eveningSound.setBuffer(app.sounds["simtower/birds/evening"]);
+	//cockSound.setBuffer(app.sounds["simtower/cock"]);
+	//morningSound.setBuffer(app.sounds["simtower/birds/morning"]);
+	//bellsSound.setBuffer(app.sounds["simtower/bells"]);
+	//eveningSound.setBuffer(app.sounds["simtower/birds/evening"]);
 
 	//DEBUG: load from disk.
 	// tinyxml2::XMLDocument xml;
@@ -139,6 +139,7 @@ bool Game::handleEvent(sf::Event & event)
 			if (mapWindowRect.containsPoint(mousePoint)) {
 				break;	// Break for now, may add code to handle viewport shift in future
 			}
+
 
 			if (toolPrototype) {
 				bool handled = false;
@@ -502,13 +503,14 @@ void Game::advance(double dt)
 		setPopulation(p);
 	}
 
+	if(app.soundEnabled) {
 	//Play sounds.
 	if (time.checkHour(5))  cockSound.Play(this);
 	if (time.checkHour(6))  morningSound.Play(this);
 	if (time.checkHour(9))  bellsSound.Play(this);
 	if (time.checkHour(18)) eveningSound.Play(this);
-	morningSound.setLoop(time.hour < 8);
-
+	morningSound.setLoop(time.hour < 8, this);
+	}
 	//Constrain the POI.
 	double2 halfsize((win.getView().getSize().x)*0.5*zoom, (win.getView().getSize().y)*0.5*zoom);
 	poi.y = std::max<double>(std::min<double>(poi.y, 360*12 - halfsize.y), -360 + halfsize.y);
@@ -949,6 +951,7 @@ void Game::selectTool(const char * tool)
  *  internally. */
 void Game::playOnce(Path sound)
 {
+	if (!app.soundEnabled) return;
 	//Make sure we don't play sounds to frequently.
 	if (soundPlayTimes.count(sound)) {
 		if (soundPlayTimes[sound] > time.absolute - 0.25 * Time::kBaseSpeed) {

@@ -86,6 +86,7 @@ Application::Application(int argc, char * argv[])
 		path.str().c_str()
 	);
 	LOG(IMPORTANT, "ready");
+	soundEnabled = true;
 }
 
 /** Runs the application. */
@@ -172,6 +173,17 @@ void Application::init()
 	Rocket::Core::FontDatabase::LoadFontFace(rocket.down("Delicious-BoldItalic.otf").c_str());
 	Rocket::Core::FontDatabase::LoadFontFace(rocket.down("Delicious-Italic.otf").c_str());
 	Rocket::Core::FontDatabase::LoadFontFace(rocket.down("Delicious-Roman.otf").c_str());*/
+
+	// Check for sound device availability.
+	// If we can't even create a sound object, disable all sound.
+	sf::Sound testSound;
+	if (testSound.getStatus() == sf::Sound::Stopped) {
+        	LOG(INFO, "Audio device found. Sound enabled.");
+        	soundEnabled = true;
+    	} else {
+        	LOG(WARNING, "No audio device available. Disabling sound.");
+        	soundEnabled = false;
+    	}
 
 	Game * game = new Game(*this);
 	pushState(game);

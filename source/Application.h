@@ -49,6 +49,8 @@ namespace OT
 		FontManager   fonts;
 		SoundManager  sounds;
 
+		bool soundEnabled;
+
 		int run();
 
 	private:

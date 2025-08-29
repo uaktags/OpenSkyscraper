@@ -9,8 +9,9 @@ namespace OT {
 	public:
 		Sound();
 		Game * playingInGame;
-		virtual void Play(Game * game);
-		virtual void Stop();
+	virtual void Play(Game * game);
+	virtual void Stop();
+	void setLoop(bool loop, Game * game);
 		double getDurationDouble();
 	};
 }

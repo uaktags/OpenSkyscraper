@@ -18,7 +18,7 @@ Sky::Sky(Game * game) : GameObject(game) {
 	thunderOverlay = 0;
 
 	rainSound.setBuffer(app->sounds["simtower/rain"]);
-	rainSound.setLoop(true);
+	rainSound.setLoop(true, game);
 	thunderSound.setBuffer(app->sounds["simtower/thunder"]);
 	birdsSound.setBuffer(app->sounds["simtower/birds/day"]);
 	cricketsSound.setBuffer(app->sounds["simtower/crickets"]);
