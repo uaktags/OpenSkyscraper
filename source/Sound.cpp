@@ -10,13 +10,13 @@ namespace OT {
 void Sound::setLoop(bool loop, Game * game)
 {
 	if (!game || !game->app.soundEnabled) {
-		if (game && game->app.logger.getLevel() <= Logger::DEBUG)
-			LOG(DEBUG, "Sound::setLoop called but sound is disabled");
+		//if (game && game->app.logger.getLevel() <= Logger::DEBUG)
+			//LOG(DEBUG, "Sound::setLoop called but sound is disabled");
 		return;
 	}
 	if (!getBuffer()) {
-		if (game->app.logger.getLevel() <= Logger::DEBUG)
-			LOG(DEBUG, "Sound::setLoop called but no buffer is set");
+		//if (game->app.logger.getLevel() <= Logger::DEBUG)
+			//LOG(DEBUG, "Sound::setLoop called but no buffer is set");
 		return;
 	}
 	sf::Sound::setLoop(loop);
@@ -32,13 +32,13 @@ void Sound::Play(Game * game)
 {
 	assert(game);
 	if (!game->app.soundEnabled) {
-		if (game->app.logger.getLevel() <= Logger::DEBUG)
-			LOG(DEBUG, "Sound::Play called but sound is disabled");
+		//if (game->app.logger.getLevel() <= Logger::DEBUG)
+			//LOG(DEBUG, "Sound::Play called but sound is disabled");
 		return;
 	}
 	if (!getBuffer()) {
-		if (game->app.logger.getLevel() <= Logger::DEBUG)
-			LOG(DEBUG, "Sound::Play called but no buffer is set");
+		//if (game->app.logger.getLevel() <= Logger::DEBUG)
+			//LOG(DEBUG, "Sound::Play called but no buffer is set");
 		return;
 	}
 	playingInGame = game;
