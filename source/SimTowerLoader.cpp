@@ -6,9 +6,11 @@
  *    - the item's states (lit, dark, awake, asleep, etc.) are lined up horizontally
  *    - the item's variants (pub, burger, etc.) are lined up vertically
  */
+
 #include <cassert>
 #include <fstream>
 #include <sys/stat.h>
+#include <dirent.h>
 
 //Use libmspack if available to decompress SIMTOWER.EX_
 #ifdef MSPACK
@@ -51,6 +53,27 @@ bool makeDirectory(Path dir)
 bool SimTowerLoader::load()
 {
 	LOG(DEBUG, "loading SimTower resources");
+
+	// List of required bitmap keys
+	std::vector<std::string> requiredBitmaps = {
+		"condo", "office", "fastfood", "restaurant", "single", "double", "suite", "partyhall", "cinema", "metro", "security", "medicalcenter", "recycling", "ui/map/buttons", "ui/map/sky", "ui/map/ground", "ui/toolbox/tools", "ui/toolbox/items", "ui/time/rating", "ui/time/bg"
+	};
+	Path bitmapDir = Path("../data/bitmaps");
+	bool allCached = true;
+	for (const auto& key : requiredBitmaps) {
+		Path p = bitmapDir.down(key + ".png");
+		sf::Image img;
+		if (fileExists(p) && img.loadFromFile(p.str())) {
+			images["simtower/" + key] = img;
+			LOG(INFO, "Loaded cached bitmap: %s", p.str().c_str());
+		} else {
+			allCached = false;
+		}
+	}
+	if (allCached) {
+		LOG(INFO, "All required bitmaps loaded from cache");
+		return true;
+	}
 
 	//Find the possible paths to the SimTower executable and use the first that works.
 	DataManager::Paths paths = app->data.paths("SIMTOWER.EXE");
@@ -134,6 +157,9 @@ bool SimTowerLoader::load()
 		LOG(INFO, "Skipping sound loading: sound is disabled or no device present");
 	}
 
+	// Save bitmaps to cache for future runs
+	saveBitmapsToCache();
+
 	return true;
 }
 
@@ -154,7 +180,7 @@ void SimTowerLoader::dump(Path path)
 	}
 
 
-	Path bitmapsDir = path.down("bitmaps");
+	Path bitmapsDir = Path("../data/bitmaps");
 	if (stat(bitmapsDir, &st) != 0) {
 		if (mkdir(bitmapsDir, 0777) != 0) {
 			LOG(ERROR, "unable to make directory %s", (const char *)bitmapsDir);
@@ -221,6 +247,36 @@ void SimTowerLoader::dump(Path path)
 		ofstream f(p.c_str());
 		f.write(b->second.data, b->second.length);
 		f.close();
+	}
+}
+
+/** Saves loaded bitmaps to cache for faster future loading. */
+void SimTowerLoader::saveBitmapsToCache()
+{
+	Path bitmapsDir = Path("../data/bitmaps");
+	struct stat st;
+	char temp[16];
+
+	if (stat(bitmapsDir, &st) != 0) {
+		if (mkdir(bitmapsDir, 0777) != 0) {
+			LOG(ERROR, "unable to create bitmaps cache directory %s", (const char *)bitmapsDir);
+			return;
+		}
+	}
+
+	LOG(INFO, "Saving bitmaps to cache: %s", (const char *)bitmapsDir);
+	for (Images::const_iterator i = images.begin(); i != images.end(); i++) {
+		Path p = bitmapsDir.down(i->first.str().substr(9));
+		Path d = p.up();
+		if (!makeDirectory(d))
+			continue;
+		if (fileExists(p)) {
+			LOG(INFO, "Skipping save of existing cached bitmap: %s", p.str().c_str());
+			continue;
+		}
+		if (!i->second.saveToFile(p.str() + ".png")) {
+			LOG(WARNING, "Failed to save bitmap: %s", p.str().c_str());
+		}
 	}
 }
 
@@ -368,11 +424,13 @@ void SimTowerLoader::loadBitmaps()
 
 	//Fast Foods
 	sf::Image & fastfoods   = images["simtower/fastfood"];
-	fastfoods.create(4*128, 5*24);
-	for (int i = 0; i < 5; i++) {
-		sf::Image fastfood;
-		loadFood(0x86E8 + i*2, fastfood);
-		fastfoods.copy(fastfood, 0, i*24);
+	if (fastfoods.getSize().x != 4*128 || fastfoods.getSize().y < 5*24) {
+		fastfoods.create(4*128, 5*24);
+		for (int i = 0; i < 5; i++) {
+			sf::Image fastfood;
+			loadFood(0x86E8 + i*2, fastfood);
+			fastfoods.copy(fastfood, 0, i*24);
+		}
 	}
 
 	//Restaurants

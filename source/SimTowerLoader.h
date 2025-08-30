@@ -68,6 +68,8 @@ namespace OT
 		void loadSounds();
 		void loadSound(int id, sf::SoundBuffer & snd);
 
+		void saveBitmapsToCache();
+
 		Images images;
 	};
 }
