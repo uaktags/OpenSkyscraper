@@ -15,7 +15,9 @@ void FastFood::init()
 {
 	Item::init();
 
-	variant = rand() % 5;
+	sf::Vector2u size = App->bitmaps["simtower/fastfood"].getSize();
+	int numVariants = size.y / 24;
+	variant = rand() % numVariants; // Randomly select one of the available fast food variants
 	open = false;
 
 	sprite.SetImage(App->bitmaps["simtower/fastfood"]);
