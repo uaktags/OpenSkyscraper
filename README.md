@@ -21,6 +21,19 @@ If you instead wish to use the SIMTOWER.EX_ compressed from the disk, you must b
 dependency of libmspack. As long as you have it installed in your system when you run "cmake .." then
 it should be picked up.
 
+Compile and run with Ubuntu 20.04 under WSL2
+--------------------------------------------
+* Install dependencies with `sudo apt install build-essential cmake doxygen graphviz libsfml-dev libfreetype-dev libmspack-dev`
+* Clone https://github.com/libRocket/libRocket
+* Build libRocket with `cd libRocket/Build && cmake . && make && sudo make install`
+* Clone OpenSkyscraper repository
+* Run `git submodule update --init .`
+* Build OpenSkyscraper with `mkdir build && cd build && cmake .. && make`
+* Run game with `./OpenSkyscraper`
+
+Build with docs
+---------------
+* Replace the cmake step above with `cmake -DBUILD_WITH_DOCS=ON ..`
 
 What is being tested?
 ---------------------

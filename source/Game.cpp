@@ -620,7 +620,7 @@ void Game::advance(double dt)
 	//Play background sounds at a regular interval.
 	const double backgroundSoundPeriod = 0.5 * Time::kBaseSpeed;
 	if (floor(time.absolute / backgroundSoundPeriod) != floor((time.absolute - time.dta) / backgroundSoundPeriod)) {
-		playRandomBackgroundSound();
+		// playRandomBackgroundSound();
 	}
 
 	//Adjust pitch of playing sounds.
