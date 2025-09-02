@@ -66,12 +66,19 @@ namespace OT {
 		void setPopulation(int p);
 		void ratingMayIncrease();
 
+		// Helpers used by the star rating evaluator
+		int countItemsById(const std::string & id) const;
+		bool checkVIPFavourable() const; // stub, returns false until VIP system exists
+		bool checkRecyclingAndMedical() const;
+
 		ToolboxWindow toolboxWindow;
 		TimeWindow    timeWindow;
 
 		Time time;
 		int speedMode;
 		void setSpeedMode(int sm);
+		void setZoom(double z);
+		double getZoom() const;
 
 		std::string selectedTool;
 		int2 toolPosition;
@@ -106,6 +113,11 @@ namespace OT {
 		GameMap gameMap;
 		PathFinder pathFinder;
 		Decorations decorations;
+
+		// Panning state for trackpad/mouse drag support
+		bool panning;
+		double2 panStartPoi;
+		double2 panAnchorWorld;
 
 	private:
 		double zoom;

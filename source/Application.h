@@ -51,6 +51,10 @@ namespace OT
 
 		bool soundEnabled;
 
+		// Transient on-screen UI for showing current UI scale when changed.
+		std::string uiScaleMessage;
+		double uiScaleMessageTimer; // seconds remaining to display
+
 		int run();
 
 	private:

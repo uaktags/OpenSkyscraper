@@ -87,6 +87,10 @@ Application::Application(int argc, char * argv[])
 	);
 	LOG(IMPORTANT, "ready");
 	soundEnabled = true;
+
+	// UI scale HUD
+	uiScaleMessage = "";
+	uiScaleMessageTimer = 0.0;
 }
 
 /** Runs the application. */
@@ -141,7 +145,10 @@ void Application::init()
 	videoMode.bitsPerPixel = 32;
 
 
-	window.create(videoMode, "OpenSkyscraper SFML");
+	// Create a resizable window. Use sf::Style::Default which includes
+	// the resize border, or explicitly use Resize|Close to allow the
+	// user to resize the window freely in both dimensions.
+	window.create(videoMode, "OpenSkyscraper SFML", sf::Style::Default);
 	window.setVerticalSyncEnabled(true);
 
 	if (!gui.init(&window)) {
@@ -247,6 +254,53 @@ void Application::loop()
 					pushState(game);
 					continue;
 				}
+#if 1
+				// Ctrl + / Ctrl -: step through preset UI scales.
+				if (event.key.control && (event.key.code == sf::Keyboard::Add || event.key.code == sf::Keyboard::Equal || event.key.code == sf::Keyboard::Subtract || event.key.code == sf::Keyboard::Hyphen)) {
+					static const float presets[] = { 1.0f, 1.5f, 2.0f, 2.5f, 3.0f };
+					const int presetCount = sizeof(presets)/sizeof(presets[0]);
+					float cur = rootGUI->getUIScale();
+					// Find nearest preset index
+					int idx = 0;
+					for (int i = 0; i < presetCount; ++i) {
+						if (std::fabs(cur - presets[i]) < std::fabs(cur - presets[idx])) idx = i;
+					}
+					if (event.key.code == sf::Keyboard::Add || event.key.code == sf::Keyboard::Equal) {
+						if (idx < presetCount - 1) ++idx;
+					} else {
+						if (idx > 0) --idx;
+					}
+					float s = presets[idx];
+					rootGUI->setUIScale(s);
+					// Propagate scale to game world so images/sprites visually scale
+					if (!states.empty()) {
+						State *st = states.top();
+						Game *g = dynamic_cast<Game *>(st);
+						if (g) {
+							// Because Game::advance multiplies view size by zoom, a smaller
+							// zoom value makes world objects appear larger. Use inverse mapping.
+							g->setZoom(1.0 / s);
+						}
+					}
+					LOG(INFO, "UI scale set to %.2f", s);
+					// Resize the main window to match the selected scale relative to
+					// the initial video mode, clamped to desktop resolution.
+					{
+						sf::VideoMode desktop = sf::VideoMode::getDesktopMode();
+						unsigned new_w = (unsigned)std::min<unsigned>((unsigned)std::round(videoMode.width * s), desktop.width);
+						unsigned new_h = (unsigned)std::min<unsigned>((unsigned)std::round(videoMode.height * s), desktop.height);
+						window.setSize(sf::Vector2u(new_w, new_h));
+						// Also update the view to the new size so rendering area matches.
+						window.setView(sf::View(sf::FloatRect(0, 0, new_w, new_h)));
+					}
+					// Show transient on-screen message
+					char buf[64];
+					snprintf(buf, sizeof(buf), "UI scale: %.2fx", s);
+					uiScaleMessage = buf;
+					uiScaleMessageTimer = 1.5; // show for 1.5 seconds
+					continue;
+				}
+#endif
 #ifdef BUILD_DEBUG
 				if (event.key.code == sf::Keyboard::F8) {
 					bool visible = !Rocket::Debugger::IsVisible();
@@ -298,6 +352,25 @@ void Application::loop()
 		bg.setPosition(sf::Vector2f(r.left, r.top));
 		window.draw(bg);
 		window.draw(rateIndicator);
+
+		// Draw transient UI scale message if active.
+		if (uiScaleMessageTimer > 0.0) {
+			uiScaleMessageTimer -= dt;
+			if (uiScaleMessageTimer > 0.0 && !uiScaleMessage.empty()) {
+				sf::Text scaleText(uiScaleMessage, fonts["UbuntuMono-Regular.ttf"], 18);
+				sf::FloatRect sr = scaleText.getLocalBounds();
+				sf::RectangleShape sbg = sf::RectangleShape(sf::Vector2f(sr.width, sr.height));
+				sbg.setFillColor(sf::Color(0,0,0, 0.5*255));
+				sbg.setPosition(sf::Vector2f(10, 10));
+				scaleText.setPosition(sf::Vector2f(10, 10));
+				scaleText.setFillColor(sf::Color::White);
+				window.draw(sbg);
+				window.draw(scaleText);
+			} else {
+				uiScaleMessageTimer = 0.0;
+				uiScaleMessage.clear();
+			}
+		}
 
 		//Swap buffers.
 		window.display();

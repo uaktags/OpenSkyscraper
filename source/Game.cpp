@@ -1,5 +1,6 @@
 /* Copyright (c) 2012-2015 Fabian Schuiki */
 #include <cassert>
+#include <algorithm>
 #include "Application.h"
 #include "Game.h"
 #include "Item/Lobby.h"
@@ -39,6 +40,10 @@ Game::Game(Application & app)
 
 	draggingElevator = NULL;
 	draggingMotor = 0;
+
+	panning = false;
+	panStartPoi = double2(0,0);
+	panAnchorWorld = double2(0,0);
 
 	mainLobby = NULL;
 	metroStation = NULL;
@@ -95,6 +100,13 @@ void Game::deactivate()
 bool Game::handleEvent(sf::Event & event)
 {
 	switch (event.type) {
+		case sf::Event::Resized: {
+			// When the window is resized, reload GUI documents so layout and
+			// CSS are re-evaluated. This helps keep UI elements and mouse
+			// coordinate mapping in sync when the window size changes.
+			reloadGUI();
+			LOG(INFO, "window resized to %ix%i", event.size.width, event.size.height);
+		} break;
 		case sf::Event::KeyPressed: {
 			switch (event.key.code) {
 				case sf::Keyboard::Left:  poi.x -= 20; return true;
@@ -124,6 +136,16 @@ bool Game::handleEvent(sf::Event & event)
 		} break;
 
 		case sf::Event::MouseButtonPressed: {
+			// Start panning when middle mouse button pressed anywhere on map
+			if (event.mouseButton.button == sf::Mouse::Middle) {
+				panning = true;
+				panStartPoi = poi;
+				sf::Vector2i mp(event.mouseButton.x, event.mouseButton.y);
+				sf::Vector2f world = app.window.mapPixelToCoords(mp);
+				panAnchorWorld.x = world.x;
+				panAnchorWorld.y = -world.y;
+				return true;
+			}
 			float2 mousePoint(event.mouseButton.x, event.mouseButton.y);
 			rectf toolboxWindowRect(float2(toolboxWindow.window->GetAbsoluteLeft(), toolboxWindow.window->GetAbsoluteTop()), float2(toolboxWindow.window->GetClientWidth(), toolboxWindow.window->GetClientHeight()));
 			rectf timeWindowRect(float2(timeWindow.window->GetAbsoluteLeft(), timeWindow.window->GetAbsoluteTop()), float2(timeWindow.window->GetClientWidth(), timeWindow.window->GetClientHeight()));
@@ -447,7 +469,18 @@ bool Game::handleEvent(sf::Event & event)
 		} break;
 
 		case sf::Event::MouseMoved: {
-			if (draggingElevator && draggingElevator->repositionMotor(draggingMotor, toolPosition.y)) {
+			if (panning) {
+				// Compute world coords for mouse position and update poi accordingly
+				sf::Vector2i mousePixels = sf::Mouse::getPosition(app.window);
+				sf::Vector2f world = app.window.mapPixelToCoords(mousePixels);
+				// world.y is inverted in game coordinate system
+				double wx = world.x;
+				double wy = -world.y;
+				// Anchor mapping: when panning started, panAnchorWorld corresponds to panStartPoi
+				poi.x = panStartPoi.x + (panAnchorWorld.x - wx);
+				poi.y = panStartPoi.y + (panAnchorWorld.y - wy);
+				return true;
+			} else if (draggingElevator && draggingElevator->repositionMotor(draggingMotor, toolPosition.y)) {
 				// Construct floors
 				if (draggingElevatorLower) {
 					if (draggingElevatorStart > draggingElevator->position.y) {
@@ -472,7 +505,26 @@ bool Game::handleEvent(sf::Event & event)
 		} break;
 
 		case sf::Event::MouseButtonReleased: {
+			if (event.mouseButton.button == sf::Mouse::Middle) {
+				panning = false;
+				return true;
+			}
 			draggingElevator = NULL;
+		} break;
+
+		case sf::Event::MouseWheelMoved: {
+			// If Ctrl is pressed, change world zoom; otherwise pan vertically a bit.
+			if (event.mouseWheel.delta != 0) {
+				if (sf::Keyboard::isKeyPressed(sf::Keyboard::LControl) || sf::Keyboard::isKeyPressed(sf::Keyboard::RControl)) {
+					double factor = (event.mouseWheel.delta > 0) ? 1.25 : 0.8;
+					setZoom(zoom * factor);
+				} else {
+					// Scroll vertically: move poi by some pixels scaled with zoom
+					double step = 36 * (event.mouseWheel.delta);
+					poi.y += step;
+				}
+				return true;
+			}
 		} break;
 	}
 	return false;
@@ -737,6 +789,9 @@ void Game::addItem(Item::Item * item)
 	gameMap.addNode(MapNode::Point(item->position.x + item->size.x/2, item->position.y), item);
 	decorations.updateCrane();
 	if (item == metroStation) decorations.updateTracks();
+
+	// Recompute rating on adding items that may affect stars
+	ratingMayIncrease();
 }
 
 void Game::removeItem(Item::Item * item)
@@ -771,6 +826,9 @@ void Game::removeItem(Item::Item * item)
 	gameMap.removeNode(MapNode::Point(item->position.x + item->size.x/2, item->position.y), item);
 	decorations.updateCrane();
 	if (item->prototype->icon == ICON_METRO) decorations.updateTracks(); // Technically, this should not happen as Metro Stations are not removable.
+
+	// Recompute rating on removal of items that may affect stars
+	ratingMayIncrease();
 }
 
 void Game::extendFloor(int floor, int minX, int maxX) {
@@ -859,6 +917,9 @@ void Game::decodeXML(tinyxml2::XMLDocument & xml)
 		e = e->NextSiblingElement("item");
 	}
 	updateRoutes();
+
+	// Re-evaluate rating after loading a saved game
+	ratingMayIncrease();
 }
 
 void Game::transferFunds(int f, std::string message)
@@ -889,6 +950,11 @@ void Game::setRating(int r)
 			//TODO: show window
 			LOG(IMPORTANT, "rating increased to %i", rating);
 			playOnce("simtower/rating/increased");
+
+			// Notify the player via the time window
+			char msg[64];
+			snprintf(msg, sizeof(msg), "Your tower rating increased to %i star%s.", rating, rating == 1 ? "" : "s");
+			timeWindow.showMessage(msg);
 		}
 		timeWindow.updateRating();
 	}
@@ -907,17 +973,71 @@ void Game::setPopulation(int p)
  *  population, or an item constructed. */
 void Game::ratingMayIncrease()
 {
-	switch (rating) {
-		case 0: {
-			if (population >= 300) setRating(1);
-		} break;
-		case 1: {
-			if (population >= 1000) {
-				//TODO: check for security center presence.
-				timeWindow.showMessage("Your tower needs security.");
-			}
-		} break;
+	// Advance rating by at most one star per invocation. Check the next-star
+	// requirements based on the current rating and only call setRating once.
+	int r = rating;
+
+	// Next -> 2 stars
+	if (r < 2) {
+		if (population >= 300) { setRating(2); }
+		return;
 	}
+
+	// Next -> 3 stars
+	if (r == 2) {
+		if (population >= 1000) {
+			int security = countItemsById("security");
+			if (security >= 1) setRating(3);
+			else timeWindow.showMessage("Your tower needs security.");
+		}
+		return;
+	}
+
+	// Next -> 4 stars
+	if (r == 3) {
+		if (population >= 5000) {
+			int suites = countItemsById("suite");
+			if (suites >= 2 && checkVIPFavourable() && checkRecyclingAndMedical()) setRating(4);
+		}
+		return;
+	}
+
+	// Next -> 5 stars
+	if (r == 4) {
+		if (population >= 10000) {
+			if (metroStation) setRating(5);
+		}
+		return;
+	}
+
+	// Next -> Tower (6?)
+	if (r == 5) {
+		if (population >= 15000) {
+			int cathedralCount = countItemsById("cathedral");
+			if (cathedralCount >= 1) setRating(6);
+		}
+		return;
+	}
+}
+
+int Game::countItemsById(const std::string & id) const
+{
+    if (itemsByType.count(id) == 0) return 0;
+    return (int)itemsByType.at(id).size();
+}
+
+bool Game::checkVIPFavourable() const
+{
+    // VIP/favourable rating subsystem not implemented yet — return false to be conservative.
+    return false;
+}
+
+bool Game::checkRecyclingAndMedical() const
+{
+    // Check for at least one recycling and one medical center in the tower.
+    int recycling = countItemsById("recycling");
+    int medical = countItemsById("medicalcenter");
+    return (recycling >= 1 && medical >= 1);
 }
 
 void Game::setSpeedMode(int sm)
@@ -936,6 +1056,20 @@ void Game::setSpeedMode(int sm)
 		toolboxWindow.updateSpeed();
 	}
 }
+
+void Game::setZoom(double z)
+{
+	if (z <= 0) return;
+	// clamp zoom to reasonable range
+	double newz = std::max<double>(0.125, std::min<double>(16.0, z));
+	if (std::fabs(zoom - newz) > 1e-9) {
+		zoom = newz;
+		// When zoom changes, the view will be updated in advance() next frame
+		// because advance() computes camera based on zoom and window size.
+	}
+}
+
+double Game::getZoom() const { return zoom; }
 
 void Game::selectTool(const char * tool)
 {
