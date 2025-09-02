@@ -61,12 +61,17 @@ void ToolboxWindow::reload()
 		button->AddEventListener("click", this);
 		window->AppendChild(button);
 		buttons.insert(button);
+		// mark locked buttons initially based on game's rating
+		if (prototype->unlockRating > game->rating) {
+			button->SetClass("locked", true);
+		}
 		
 		button->RemoveReference();
 	}
 	
 	updateSpeed();
 	updateTool();
+	updateAvailability();
 }
 
 void ToolboxWindow::ProcessEvent(Rocket::Core::Event & event)
@@ -74,6 +79,11 @@ void ToolboxWindow::ProcessEvent(Rocket::Core::Event & event)
 	LOG(DEBUG, "%s received", event.GetType().CString());
 	Rocket::Core::Element * element = event.GetCurrentElement();
 	if (buttons.count(element)) {
+		// Prevent selecting locked item buttons
+		if (element->IsClassSet("locked")) {
+			event.StopPropagation();
+			return;
+		}
 		game->selectTool(element->GetId().CString());
 		event.StopPropagation();
 	} else if (element->IsClassSet("speed")) {
@@ -99,5 +109,19 @@ void ToolboxWindow::updateTool()
 {
 	for (ElementSet::iterator b = buttons.begin(); b != buttons.end(); b++) {
 		(*b)->SetClass("selected", (*b)->GetId() == game->selectedTool.c_str());
+	}
+}
+
+void ToolboxWindow::updateAvailability()
+{
+	// Iterate through prototypes and buttons, set 'locked' class if prototype requires higher rating
+	for (int i = 0; i < game->itemFactory.prototypes.size(); i++) {
+		Item::AbstractPrototype * prototype = game->itemFactory.prototypes[i];
+		char id[128];
+		snprintf(id, 128, "item-%s", prototype->id.c_str());
+		Rocket::Core::Element * button = window->GetElementById(id);
+		if (!button) continue;
+		bool locked = (prototype->unlockRating > game->rating);
+		button->SetClass("locked", locked);
 	}
 }

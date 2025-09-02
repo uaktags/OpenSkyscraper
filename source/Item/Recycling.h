@@ -14,7 +14,8 @@ namespace OT {
                 p->name = "Recycling Center";
                 p->price = 100000;
                 p->size = int2(25,2);
-                p->icon = 18;
+                p->icon = 29;
+                p->unlockRating = 4; // unlocked at 4 stars
             }
             virtual ~Recycling();
 

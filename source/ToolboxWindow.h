@@ -15,6 +15,7 @@ namespace OT {
 		
 		void close();
 		void reload();
+		void updateAvailability();
 		
 		Rocket::Core::ElementDocument * window;
 		typedef std::set<Rocket::Core::Element *> ElementSet;

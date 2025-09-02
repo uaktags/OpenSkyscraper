@@ -14,6 +14,7 @@ namespace OT {
 				p->price = 1000000;
 				p->size  = int2(30,3);
 				p->icon  = 19;
+				p->unlockRating = 5; // unlocked at 5 stars
 				p->entrance_offset = 2;
 				p->exit_offset = 2;
 			}

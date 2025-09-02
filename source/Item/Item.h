@@ -76,14 +76,16 @@ namespace OT {
 	}
 }
 
-#define OT_ITEM_PROTOTYPE(cls)\
-	static AbstractPrototype * makePrototype() {\
-		AbstractPrototype * p = new Prototype<cls>;\
-		p->entrance_offset = 0;\
-		p->exit_offset = 0;\
-		initPrototype(p);\
-		return p;\
-	}\
+// Macro to declare the prototype factory function for an Item subclass
+#define OT_ITEM_PROTOTYPE(cls) \
+	static AbstractPrototype * makePrototype() { \
+		AbstractPrototype * p = new Prototype<cls>; \
+		p->entrance_offset = 0; \
+		p->exit_offset = 0; \
+		p->unlockRating = 0; /* default: available from start */ \
+		initPrototype(p); \
+		return p; \
+	} \
 	static void initPrototype(AbstractPrototype * p)
 
 #define OT_ITEM_CONSTRUCTOR(cls) cls(Game * game, AbstractPrototype * prototype) : Item(game, prototype) {}

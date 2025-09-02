@@ -21,6 +21,9 @@ namespace OT {
 			std::string name;
 			int price;
 			int2 size;
+			// Minimum star rating required to unlock this prototype in the toolbox.
+			// 0 means available from the start.
+			int unlockRating;
 			int icon;
 			int entrance_offset;
 			int exit_offset;
@@ -40,7 +43,7 @@ namespace OT {
 		{
 			friend class Factory;
 		protected:
-			Item * make(Game * game) { return new T(game, this); }
+				Item * make(Game * game) { return new T(game, this); }
 		};
 	}
 }

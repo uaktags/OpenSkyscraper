@@ -980,6 +980,8 @@ void Game::setRating(int r)
 			timeWindow.showMessage(msg);
 		}
 		timeWindow.updateRating();
+		// Update toolbox availability based on new rating
+		toolboxWindow.updateAvailability();
 	}
 }
 
