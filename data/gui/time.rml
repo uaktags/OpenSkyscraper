@@ -65,6 +65,7 @@
 				height: 20px;
 				padding-left: 42px;
 				padding-right: 130px;
+				color: #000;
 			}
 
 			div.date {
