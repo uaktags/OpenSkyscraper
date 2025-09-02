@@ -80,6 +80,9 @@ namespace OT {
 		void setZoom(double z);
 		double getZoom() const;
 
+		// Force reloading of GUI documents (map/toolbox/time) to reflow with current UI scale.
+		void reloadGUI();
+
 		std::string selectedTool;
 		int2 toolPosition;
 		Item::AbstractPrototype * toolPrototype;
@@ -124,8 +127,6 @@ namespace OT {
 		double2 poi;
 
 		Rocket::Core::ElementDocument * mapWindow;
-
-		void reloadGUI();
 
 		void encodeXML(tinyxml2::XMLPrinter & xml);
 		void decodeXML(tinyxml2::XMLDocument & xml);

@@ -95,11 +95,16 @@ void GUI::draw()
 	// view was changed (e.g. zoom or camera adjustments).
 	unsigned width = manager->window->getSize().x;
 	unsigned height = manager->window->getSize().y;
-	// Apply UI scale by scaling the projection. We render Rocket at a
-	// scaled size so that elements appear larger/smaller while keeping
-	// input coordinates consistent with the scaled layout.
+	// Apply UI scale by scaling the modelview. The Rocket context is created
+	// at a logical size of (window_size / uiScale) so Rocket will emit
+	// geometry in those logical coordinates. To map those logical
+	// coordinates to window pixels with a single scaling factor, use the
+	// full window pixel extents in the projection and apply a single
+	// glScalef(uiScale) in the modelview. This avoids a double-scaling
+	// effect that would occur if both the projection and the modelview
+	// were scaled.
 	float s = uiScale;
-	glOrtho(0.0, width / s, height / s, 0.0, -1.0, 1.0);
+	glOrtho(0.0, (double)width, (double)height, 0.0, -1.0, 1.0);
 	glMatrixMode(GL_MODELVIEW);
 	glPushMatrix();
 	glLoadIdentity();

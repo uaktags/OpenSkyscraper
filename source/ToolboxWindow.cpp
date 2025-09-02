@@ -1,4 +1,5 @@
 #include <cassert>
+#include <cmath>
 #include <Rocket/Core/Element.h>
 #include "Game.h"
 #include "ToolboxWindow.h"
@@ -39,8 +40,10 @@ void ToolboxWindow::reload()
 		char id[128];
 		snprintf(id, 128, "item-%s", prototype->id.c_str());
 		
-		char style[512];
-		snprintf(style, 512, "button#%s { background-image-s: %ipx %ipx; }", id, prototype->icon*32, prototype->icon*32+32);
+	char style[512];
+	int start_px = prototype->icon * 32;
+	int end_px = prototype->icon * 32 + 32;
+	snprintf(style, 512, "button#%s { background-image-s: %ipx %ipx; }", id, start_px, end_px);
 		LOG(DEBUG, "style for %s: %s", prototype->name.c_str(), style);
 		
 		Rocket::Core::StyleSheet * sheet = Rocket::Core::Factory::InstanceStyleSheetString(style);

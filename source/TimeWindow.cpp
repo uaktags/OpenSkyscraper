@@ -33,7 +33,9 @@ void TimeWindow::reload()
 	std::string style;
 	for (int i = 0; i < 6; i++) {
 		char c[128];
-		snprintf(c, 128, "div#rating.r%i { background-image-t: %ipx %ipx; }", i, i*22, i*22+22);
+		int start_px = i * 22;
+		int end_px = i * 22 + 22;
+		snprintf(c, 128, "div#rating.r%i { background-image-t: %ipx %ipx; }", i, start_px, end_px);
 		style += c;
 	}
 	Rocket::Core::StyleSheet * sheet = Rocket::Core::Factory::InstanceStyleSheetString(style.c_str());

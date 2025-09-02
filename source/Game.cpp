@@ -885,6 +885,9 @@ void Game::encodeXML(tinyxml2::XMLPrinter & xml)
 
 	xml.PushAttribute("x", (int)poi.x);
 	xml.PushAttribute("y", (int)poi.y);
+	// Persist UI scale and world zoom so user preferences and view are restored on load.
+	if (app.rootGUI) xml.PushAttribute("ui_scale", (double)app.rootGUI->getUIScale());
+	xml.PushAttribute("zoom", zoom);
 
 	for (ItemSet::iterator i = items.begin(); i != items.end(); i++) {
 		xml.OpenElement("item");
@@ -909,6 +912,26 @@ void Game::decodeXML(tinyxml2::XMLDocument & xml)
 
 	poi.x = root->IntAttribute("x");
 	poi.y = root->IntAttribute("y");
+
+	// Restore UI scale and world zoom if present in the save file.
+	if (root->Attribute("ui_scale")) {
+		double ui_s = root->DoubleAttribute("ui_scale");
+		if (app.rootGUI) app.rootGUI->setUIScale((float)ui_s);
+	}
+	if (root->Attribute("zoom")) {
+		double z = root->DoubleAttribute("zoom");
+		setZoom(z);
+	}
+
+	// Propagate the UI scale to this state's GUI and force a reload so
+	// documents reflow with the restored scale. Game inherits State so
+	// we can access our own `gui` member directly.
+	if (root->Attribute("ui_scale")) {
+		double ui_s = root->DoubleAttribute("ui_scale");
+		this->gui.setUIScale((float)ui_s);
+		// Force reload so documents reflow with the restored scale
+		reloadGUI();
+	}
 
 	tinyxml2::XMLElement * e = root->FirstChildElement("item");
 	while (e) {

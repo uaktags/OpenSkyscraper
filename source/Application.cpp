@@ -275,11 +275,15 @@ void Application::loop()
 					// Propagate scale to game world so images/sprites visually scale
 					if (!states.empty()) {
 						State *st = states.top();
+						// Also set the UI scale on the active state's own GUI context
+						st->gui.setUIScale(s);
 						Game *g = dynamic_cast<Game *>(st);
 						if (g) {
 							// Because Game::advance multiplies view size by zoom, a smaller
 							// zoom value makes world objects appear larger. Use inverse mapping.
 							g->setZoom(1.0 / s);
+							// Force GUI documents to reload so Rocket reflows with the new scale.
+							g->reloadGUI();
 						}
 					}
 					LOG(INFO, "UI scale set to %.2f", s);

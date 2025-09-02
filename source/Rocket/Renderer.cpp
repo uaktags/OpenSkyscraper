@@ -27,6 +27,7 @@
 
 #include <Rocket/Core/Core.h>
 #include "../OpenGL.h"
+#include <cmath>
 
 #include "Renderer.h"
 #include "../Application.h"
@@ -262,7 +263,19 @@ void RocketRenderer::SetScissorRegion(int x, int y, int width, int height)
 {
 	MyWindow->setActive();
 
-	glScissor(x, MyWindow->getSize().x - (y + height), width, height);
+	// Rocket provides scissor in logical coordinates (the same coordinate
+	// space as the Rocket context), but the GL scissor expects window
+	// pixel coordinates. Multiply by the UI scale to convert logical
+	// coordinates into pixels, and flip the Y axis for OpenGL.
+	float s = 1.0f;
+	// Try to read current UI scale from the root GUI if available.
+	if (App && App->rootGUI) s = App->rootGUI->getUIScale();
+	int sx = (int)std::round(x * s);
+	int sy = (int)std::round(y * s);
+	int sw = (int)std::round(width * s);
+	int sh = (int)std::round(height * s);
+	int win_h = MyWindow->getSize().y;
+	glScissor(sx, win_h - (sy + sh), sw, sh);
 }
 
 // Called by Rocket when a texture is required by the library.
