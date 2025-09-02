@@ -299,16 +299,6 @@ void Application::loop()
 		window.draw(bg);
 		window.draw(rateIndicator);
 
-		sf::Vector2i mp = sf::Mouse::getPosition(window);
-		glColor3f(1,0,0);
-		glBegin(GL_LINES);
-		glVertex2f(mp.x-10,mp.y);
-		glVertex2f(mp.x+10,mp.y);
-		glVertex2f(mp.x,mp.y-10);
-		glVertex2f(mp.x,mp.y+10);
-		glEnd();
-		glColor3f(1,1,1);
-
 		//Swap buffers.
 		window.display();
 	}
