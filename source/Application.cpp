@@ -61,7 +61,7 @@ Application::Application(int argc, char * argv[])
 	logger.setLevel(Logger::DEBUG);
 	char logname[128];
 	snprintf(logname, 128, "debug-%li.log", (long int)time(NULL));
-	logger.setOutputPath(/*dir.down(*/logname/*)*/);
+	//logger.setOutputPath(/*dir.down(*/logname/*)*/);
 #endif
 
 	//Parse command line arguments.
@@ -86,7 +86,7 @@ Application::Application(int argc, char * argv[])
 		path.str().c_str()
 	);
 	LOG(IMPORTANT, "ready");
-	soundEnabled = true;
+	soundEnabled = false; //TODO: disabling the sound for now
 
 	// UI scale HUD
 	uiScaleMessage = "";

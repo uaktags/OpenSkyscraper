@@ -311,8 +311,61 @@ void ToolboxWindow::handleMouseUp(Rocket::Core::Event &event) {
 				restoreOriginalLayout();
 				updateTool();
 			} else if (strcmp(eid, "item-escalator") == 0) {
-				// For escalator selection: select and restore layout
+				// User selected Escalator from Stairs context - select escalator and move it to Stairs position (position 3)
 				game->selectTool("item-escalator");
+				
+				// Find the Stairs button (position 3) and change it to Escalator
+				Rocket::Core::Element* itemContainer = window->GetElementById("item-container");
+				if (itemContainer && itemContainer->GetNumChildren() > 2) {
+					Rocket::Core::Element* stairsButton = itemContainer->GetChild(2); // Position 3 (0-indexed as 2)
+					if (stairsButton) {
+						// Find escalator prototype icon
+						Item::AbstractPrototype* escalatorProto = nullptr;
+						for (Item::AbstractPrototype* prototype : game->itemFactory.prototypes) {
+							if (prototype->id == "escalator") { escalatorProto = prototype; break; }
+						}
+						if (escalatorProto) {
+							stairsButton->SetAttribute("id", "item-escalator");
+							char style[512];
+							int start_px = escalatorProto->icon * 32;
+							int end_px = start_px + 32;
+							snprintf(style, 512, "button#item-escalator { height:32px; background-image: /simtower/ui/toolbox/items; background-image-s: %dpx %dpx; background-repeat: no-repeat; background-size: 100%% 100%%; }", start_px, end_px);
+							Rocket::Core::StyleSheet * sheet = Rocket::Core::Factory::InstanceStyleSheetString(style);
+							if (sheet) { window->SetStyleSheet(window->GetStyleSheet()->CombineStyleSheet(sheet)); sheet->RemoveReference(); }
+						}
+					}
+				}
+				
+				// Now restore other transforms (this will restore Office to position 6)
+				restoreOriginalLayout();
+				updateTool();
+			} else if (strcmp(eid, "item-stairs") == 0) {
+				// User selected Stairs (from Escalator's context menu) - select stairs and move it to Stairs position (position 3)
+				game->selectTool("item-stairs");
+				
+				// Find the Stairs button (position 3) and ensure it shows as Stairs
+				Rocket::Core::Element* itemContainer = window->GetElementById("item-container");
+				if (itemContainer && itemContainer->GetNumChildren() > 2) {
+					Rocket::Core::Element* stairsButton = itemContainer->GetChild(2); // Position 3 (0-indexed as 2)
+					if (stairsButton) {
+						// Find stairs prototype icon
+						Item::AbstractPrototype* stairsProto = nullptr;
+						for (Item::AbstractPrototype* prototype : game->itemFactory.prototypes) {
+							if (prototype->id == "stairs") { stairsProto = prototype; break; }
+						}
+						if (stairsProto) {
+							stairsButton->SetAttribute("id", "item-stairs");
+							char style[512];
+							int start_px = stairsProto->icon * 32;
+							int end_px = start_px + 32;
+							snprintf(style, 512, "button#item-stairs { height:32px; background-image: /simtower/ui/toolbox/items; background-image-s: %dpx %dpx; background-repeat: no-repeat; background-size: 100%% 100%%; }", start_px, end_px);
+							Rocket::Core::StyleSheet * sheet = Rocket::Core::Factory::InstanceStyleSheetString(style);
+							if (sheet) { window->SetStyleSheet(window->GetStyleSheet()->CombineStyleSheet(sheet)); sheet->RemoveReference(); }
+						}
+					}
+				}
+				
+				// Now restore other transforms (this will restore Office to position 6)
 				restoreOriginalLayout();
 				updateTool();
 			} else {
@@ -514,8 +567,7 @@ void ToolboxWindow::selectItem(const std::string& id) {
 }
 
 void ToolboxWindow::restoreOriginalLayout() {
-	LOG(DEBUG, "ToolboxWindow: restoreOriginalLayout called");
-	
+	LOG(DEBUG, "ToolboxWindow: restoreOriginalLayout called - clearing context state");
 	// Find the FastFood prototype for restoration
 	Item::AbstractPrototype* fastfoodProto = nullptr;
 	for (Item::AbstractPrototype* prototype : game->itemFactory.prototypes) {
@@ -684,6 +736,35 @@ void ToolboxWindow::triggerLongPress(Rocket::Core::Element* element) {
 				int start_px = escalatorProto->icon * 32;
 				int end_px = start_px + 32;
 				snprintf(style, 512, "button#item-escalator { height:32px; background-image: /simtower/ui/toolbox/items; background-image-s: %dpx %dpx; background-repeat: no-repeat; background-size: 100%% 100%%; }", start_px, end_px);
+				Rocket::Core::StyleSheet * sheet = Rocket::Core::Factory::InstanceStyleSheetString(style);
+				if (sheet) {
+					window->SetStyleSheet(window->GetStyleSheet()->CombineStyleSheet(sheet));
+					sheet->RemoveReference();
+				}
+			}
+		}
+	}
+	else if (strcmp(elementId, "item-escalator") == 0) {
+		// Escalator button was long-pressed - show the original stairs context menu
+		// This happens when Escalator has replaced Stairs and user wants to switch back
+		// Change the Office button to show Stairs instead
+		Rocket::Core::Element* officeButton = window->GetElementById("item-office");
+		if (officeButton) {
+			// Find the stairs prototype to get its icon
+			Item::AbstractPrototype* stairsProto = nullptr;
+			for (Item::AbstractPrototype* prototype : game->itemFactory.prototypes) {
+				if (prototype->id == "stairs") {
+					stairsProto = prototype;
+					break;
+				}
+			}
+			if (stairsProto) {
+				officeButton->SetAttribute("id", "item-stairs");
+				// Update the background image to show stairs icon
+				char style[512];
+				int start_px = stairsProto->icon * 32;
+				int end_px = start_px + 32;
+				snprintf(style, 512, "button#item-stairs { height:32px; background-image: /simtower/ui/toolbox/items; background-image-s: %dpx %dpx; background-repeat: no-repeat; background-size: 100%% 100%%; }", start_px, end_px);
 				Rocket::Core::StyleSheet * sheet = Rocket::Core::Factory::InstanceStyleSheetString(style);
 				if (sheet) {
 					window->SetStyleSheet(window->GetStyleSheet()->CombineStyleSheet(sheet));
