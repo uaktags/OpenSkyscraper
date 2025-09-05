@@ -15,6 +15,8 @@ namespace OT {
 				p->price = 500;
 				p->size  = int2(1,1);
 				p->icon  = 1;
+				p->toolboxCategory = CAT_CONSTRUCTION;
+				p->toolboxOrder = 2;
 			}
 			virtual ~Floor();
 

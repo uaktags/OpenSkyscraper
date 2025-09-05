@@ -15,6 +15,8 @@ namespace OT {
 				p->price = 40000;
 				p->size  = int2(9,1);
 				p->icon  = 7;
+				p->toolboxCategory = CAT_OFFICE;
+				p->toolboxOrder = 1;
 			}
 			virtual ~Office();
 			

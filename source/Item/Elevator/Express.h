@@ -13,6 +13,9 @@ namespace OT {
 					p->price = 1000000;
 					p->size  = int2(6,1);
 					p->icon  = 6;
+					p->unlockRating = 3;
+					p->toolboxCategory = CAT_TRANSPORT;
+					p->toolboxOrder = 12;
 				}
 				
 				virtual void init()

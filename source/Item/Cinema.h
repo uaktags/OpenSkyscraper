@@ -17,6 +17,8 @@ namespace OT {
 				p->icon  = 14;
 				p->entrance_offset = 1;
 				p->unlockRating = 4;
+				p->toolboxCategory = CAT_ENTERTAINMENT;
+				p->toolboxOrder = 2;
 			}
 			virtual ~Cinema();
 			

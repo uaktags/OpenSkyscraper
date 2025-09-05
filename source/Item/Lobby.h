@@ -14,6 +14,8 @@ namespace OT {
 				p->price = 20000;
 				p->size  = int2(4,1);
 				p->icon  = 0;
+				p->toolboxCategory = CAT_CONSTRUCTION;
+				p->toolboxOrder = 1;
 			}
 			virtual ~Lobby();
 

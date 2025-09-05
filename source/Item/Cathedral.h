@@ -13,8 +13,10 @@ namespace OT {
                 p->name = "Cathedral";
                 p->price = 500000; // Dummy price
                 p->size = int2(32, 4); // Dummy size
-                   p->icon = 45; // Dummy icon
-                   p->unlockRating = 6; // tower rating (6)
+                p->icon = 45; // Dummy icon
+                p->unlockRating = 6; // tower rating (6)
+                p->toolboxCategory = CAT_ENTERTAINMENT;
+                p->toolboxOrder = 3;
             }
             virtual ~Cathedral();
 

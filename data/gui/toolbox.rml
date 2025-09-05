@@ -39,19 +39,65 @@
 			button#bulldozer { background-image-s: 0px  21px; }
 			button#finger    { background-image-s: 21px 42px; }
 			button#inspector { background-image-s: 42px 63px; }
+
+			div#item-container {
+				display: block;
+				overflow: auto; /* Contain floated elements */
+			}
 			
 			button.item {
-				display: inline-block;
-				width:  32px;
+				float: left;
+				width: 33.333%;
 				height: 32px;
+				margin: 0;
+				padding: 0;
+				border: 0;
+				box-sizing: border-box;
 				
 				background-decorator: image;
 				background-image: /simtower/ui/toolbox/items;
 				background-image-t: 0px 32px;
+				background-repeat: no-repeat;
+				background-size: 100% 100%;
 			}
 			button.item:active, button.item.selected { background-image-t: 32px 64px; }
 			button.item.locked {
-				visibility: hidden; /* hide items until unlocked by star rating */
+				display: none; /* hide items until unlocked by star rating */
+			}
+			
+			.context-menu {
+				position: absolute;
+				display: none;
+				background: rgba(32,32,32,0.95);
+				border: 1px solid #222;
+				padding: 4px;
+				z-index: 1000;
+				font-family: Play;
+			}
+			.context-menu .context-item {
+				display: block;
+				margin: 2px 0;
+				padding: 4px 8px 4px 40px;
+				font-family: Play;
+				color: white;
+				background-decorator: image;
+				background-image: /simtower/ui/toolbox/items;
+				background-repeat: no-repeat;
+				background-size: 32px 32px;
+				background-position: 4px center;
+				border: none;
+				min-width: 100px;
+				height: 32px;
+			}
+			
+			button#context-lobby-floor {
+				background-image-s: 32px 64px; /* Floor icon */
+				background-image-t: 0px 32px;
+			}
+			
+			button#context-lobby-stairs {
+				background-image-s: 64px 96px; /* Stairs icon */
+				background-image-t: 0px 32px;
 			}
 		</style>
 	</head>
@@ -68,5 +114,13 @@
 			<button id="finger" class="tool"></button>
 			<button id="inspector" class="tool"></button>
 		</div>
+		
+		<div id="item-container"></div>
+		
+		<!-- Context Menus (initially hidden) -->
+		<div id="lobby-context" class="context-menu" style="display:none; position:absolute;">
+			<button id="context-lobby-floor" class="context-item">Floor</button>
+			<button id="context-lobby-stairs" class="context-item">Stairs</button>
+		</div>
 	</body>
-</rml>
+	</rml>

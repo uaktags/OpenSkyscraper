@@ -14,6 +14,17 @@ namespace OT {
 		class Factory;
 		class Item;
 		
+		enum ToolboxCategory {
+			CAT_CONSTRUCTION = 10,
+			CAT_HOUSING = 20,
+			CAT_OFFICE = 30,
+			CAT_HOTEL = 40,
+			CAT_FOOD = 50,
+			CAT_ENTERTAINMENT = 60,
+			CAT_TRANSPORT = 70,
+			CAT_UTILITIES = 80
+		};
+		
 		class AbstractPrototype
 		{
 		public:
@@ -27,6 +38,8 @@ namespace OT {
 			int icon;
 			int entrance_offset;
 			int exit_offset;
+			int toolboxCategory;  // <-- Add this
+			int toolboxOrder;     // <-- Add this
 			
 			virtual Item * make(Game * game) = 0;
 			virtual ~AbstractPrototype() {}

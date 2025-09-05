@@ -16,6 +16,8 @@ namespace OT {
                 p->size = int2(25,2);
                 p->icon = 29;
                 p->unlockRating = 4; // unlocked at 4 stars
+                p->toolboxCategory = CAT_UTILITIES;
+                p->toolboxOrder = 3;
             }
             virtual ~Recycling();
 

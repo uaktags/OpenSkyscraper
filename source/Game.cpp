@@ -538,6 +538,7 @@ void Game::advance(double dt)
 	//Advance time.
 	time.advance(dt);
 	timeWindow.updateTime();
+	toolboxWindow.advance(dt);
 
 	timeWindow.advance(dt);
 	sky.advance(dt);
@@ -1045,6 +1046,57 @@ void Game::ratingMayIncrease()
 	}
 }
 
+bool Game::hasItemCount(const std::string & prototypeId, int minCount) const {
+    int count = countItemsById(prototypeId);
+    return count >= minCount;
+}
+
+int Game::computeStarRating() const {
+    // Canonical evaluator following SimTower rules.
+    // Conservative: if subsystems are missing, conditions cannot be satisfied.
+    if (population < 300)
+        return 1;
+    if (population < 1000)
+        return 2;
+    if (population >= 1000) {
+        if (!hasItemCount("security", 1)) {
+            LOG(DEBUG, "computeStarRating: missing security -> cap at 2 stars");
+            return 2;
+        }
+        if (population < 5000)
+            return 3;
+        if (population >= 5000) {
+            if (hasItemCount("suite", 2) && checkVIPFavourable() && checkRecyclingAndMedical()) {
+                if (population < 10000)
+                    return 4;
+                if (population >= 10000) {
+                    if (metroStation) {
+                        if (population < 15000)
+                            return 5;
+                        if (population >= 15000) {
+                            if (hasItemCount("cathedral", 1))
+                                return 6; // Tower status
+                        }
+                        return 5;
+                    } else {
+                        LOG(DEBUG, "computeStarRating: missing metro -> cap at 4 stars");
+                        return 4;
+                    }
+                }
+            } else {
+                LOG(DEBUG, "computeStarRating: missing suites/VIP/recycling/medical -> cap at 3 stars");
+                return 3;
+            }
+        }
+    }
+    return 1; // Fallback
+}
+
+bool Game::checkDemandsSatisfied() const {
+    // Not implemented yet — always false for now.
+    return false;
+}
+
 int Game::countItemsById(const std::string & id) const
 {
     if (itemsByType.count(id) == 0) return 0;
@@ -1098,11 +1150,16 @@ double Game::getZoom() const { return zoom; }
 
 void Game::selectTool(const char * tool)
 {
+	LOG(DEBUG, "Game::selectTool called with: '%s'", tool ? tool : "NULL");
 	if (!tool) return;
 	if (selectedTool != tool) {
+		LOG(DEBUG, "Game::selectTool changing from '%s' to '%s'", selectedTool.c_str(), tool);
 		selectedTool = tool;
 		toolboxWindow.updateTool();
 		timeWindow.updateTooltip();
+		LOG(DEBUG, "Game::selectTool completed, selectedTool is now: '%s'", selectedTool.c_str());
+	} else {
+		LOG(DEBUG, "Game::selectTool - tool '%s' already selected", tool);
 	}
 }
 

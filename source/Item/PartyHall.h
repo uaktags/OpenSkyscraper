@@ -14,6 +14,9 @@ namespace OT {
 				p->price = 500000;
 				p->size  = int2(24,2);
 				p->icon  = 15;
+				p->unlockRating = 4;
+				p->toolboxCategory = CAT_ENTERTAINMENT;
+				p->toolboxOrder = 1;
 			}
 			virtual ~PartyHall();
 			

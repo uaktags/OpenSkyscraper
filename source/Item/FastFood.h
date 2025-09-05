@@ -14,6 +14,8 @@ namespace OT {
 				p->price = 100000;
 				p->size  = int2(16,1);
 				p->icon  = 11;
+				p->toolboxCategory = CAT_FOOD;
+				p->toolboxOrder = 1;
 			}
 			virtual ~FastFood();
 			

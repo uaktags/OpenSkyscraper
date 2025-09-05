@@ -14,7 +14,9 @@ namespace OT {
 				p->price = 200000;
 				p->size  = int2(16,1);
 				p->icon  = 24;
-				p->unlockRating = 0; // unlocked by default
+				p->unlockRating = 0;
+				p->toolboxCategory = CAT_HOUSING;
+				p->toolboxOrder = 1;
 			}
 			virtual ~Condo();
 

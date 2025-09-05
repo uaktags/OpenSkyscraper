@@ -70,9 +70,14 @@ namespace OT {
 		int countItemsById(const std::string & id) const;
 		bool checkVIPFavourable() const; // stub, returns false until VIP system exists
 		bool checkRecyclingAndMedical() const;
+		
+// New helpers for canonical star evaluator
+bool hasItemCount(const std::string & prototypeId, int minCount) const;
+int computeStarRating() const;
+bool checkDemandsSatisfied() const; // stub until demand subsystem exists
 
-		ToolboxWindow toolboxWindow;
-		TimeWindow    timeWindow;
+ToolboxWindow toolboxWindow;
+TimeWindow    timeWindow;
 
 		Time time;
 		int speedMode;

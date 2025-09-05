@@ -17,6 +17,8 @@ namespace OT {
 				p->unlockRating = 5; // unlocked at 5 stars
 				p->entrance_offset = 2;
 				p->exit_offset = 2;
+				p->toolboxCategory = CAT_TRANSPORT;
+				p->toolboxOrder = 20;
 			}
 			virtual ~Metro();
 			

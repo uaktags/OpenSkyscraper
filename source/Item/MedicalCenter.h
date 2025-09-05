@@ -16,6 +16,8 @@ namespace OT {
                 p->size = int2(32,1);
                 p->icon = 22; //or 23?
                 p->unlockRating = 4; // unlocked at 4 stars
+                p->toolboxCategory = CAT_UTILITIES;
+                p->toolboxOrder = 2;
             }
             virtual ~MedicalCenter();
 
