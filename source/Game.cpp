@@ -50,18 +50,6 @@ Game::Game(Application & app)
 
 	itemFactory.loadPrototypes();
 
-	/*Item::Item * i = itemFactory.prototypes.front()->make(this);
-	addItem(i);
-	i = itemFactory.prototypes.front()->make(this);
-	i->setPosition(int2(20, 0));
-	addItem(i);*/
-	/*Sprite * s = new Sprite;
-	s->SetImage(app.bitmaps["simtower/security"]);
-	s->Resize(384, 24);
-	s->SetCenter(0, 24);
-	s->SetPosition(0, 0);
-	sprites.insert(s);*/
-
 	reloadGUI();
 
 	//cockSound.setBuffer(app.sounds["simtower/cock"]);
@@ -70,13 +58,13 @@ Game::Game(Application & app)
 	//eveningSound.setBuffer(app.sounds["simtower/birds/evening"]);
 
 	//DEBUG: load from disk.
-	// tinyxml2::XMLDocument xml;
-	// DataManager::Paths p = app.data.paths("default.tower");
-	// for (DataManager::Paths::iterator ip = p.begin(); ip != p.end(); ip++) {
-	// 	LOG(DEBUG, "trying %s", (*ip).c_str());
-	// 	if (xml.LoadFile(*ip) == 0) break;
-	// }
-	// decodeXML(xml);
+	 tinyxml2::XMLDocument xml;
+	 DataManager::Paths p = app.data.paths("default.tower");
+	 for (DataManager::Paths::iterator ip = p.begin(); ip != p.end(); ip++) {
+	 	LOG(DEBUG, "trying %s", (*ip).c_str());
+	 	if (xml.LoadFile(*ip) == 0) break;
+	 }
+	 decodeXML(xml);
 }
 
 Game::~Game()
@@ -121,6 +109,17 @@ bool Game::handleEvent(sf::Event & event)
 					encodeXML(xml);
 					fclose(f);
 				} return true;
+					// Ctrl+S to save
+					case sf::Keyboard::S:
+						if (sf::Keyboard::isKeyPressed(sf::Keyboard::LControl) || sf::Keyboard::isKeyPressed(sf::Keyboard::RControl)) {
+							FILE * f = fopen("default.tower", "w");
+							tinyxml2::XMLPrinter xml(f);
+							encodeXML(xml);
+							fclose(f);
+							timeWindow.showMessage("Tower saved.");
+							return true;
+						}
+						break;
 				case sf::Keyboard::PageUp:   zoom /= 2; return true;
 				case sf::Keyboard::PageDown: zoom *= 2; return true;
 			}
