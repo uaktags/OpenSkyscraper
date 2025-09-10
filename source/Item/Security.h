@@ -2,6 +2,7 @@
 #include "../Sprite.h"
 #include "Item.h"
 #include <set>
+#include "Factory.h"
 
 namespace OT {
     namespace Item {
@@ -14,7 +15,7 @@ namespace OT {
                 p->name = "Security";
                 p->price = 100000;
                 p->size = int2(16,1);
-                p->icon = 21;
+                p->icon = ICON_SECURITY;
                 p->unlockRating = 3; // unlocked at 3 stars
                 p->toolboxCategory = CAT_UTILITIES;
                 p->toolboxOrder = 1;

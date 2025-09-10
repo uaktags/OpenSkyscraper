@@ -1,6 +1,7 @@
 /* Copyright © 2013 Fabian Schuiki */
 #pragma once
 #include "Item.h"
+#include "Factory.h"
 #include <set>
 
 namespace OT {
@@ -14,7 +15,7 @@ namespace OT {
 				p->name  = "Office";
 				p->price = 40000;
 				p->size  = int2(9,1);
-				p->icon  = 7;
+				p->icon  = ICON_OFFICE;
 				p->toolboxCategory = CAT_OFFICE;
 				p->toolboxOrder = 1;
 			}

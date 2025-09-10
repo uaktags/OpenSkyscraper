@@ -4,6 +4,7 @@
 #include "Car.h"
 #include "Queue.h"
 #include <cmath>
+#include <algorithm>
 
 using namespace OT;
 using namespace OT::Item::Elevator;
@@ -263,7 +264,25 @@ Queue * Elevator::getQueue(int floor, Direction dir)
 	Queue * q = new Queue(this);
 	q->floor     = floor;
 	q->direction = dir;
-	q->width     = 400;
+	
+	// Calculate available width based on tower boundaries
+	// Tower spans from -24*8 = -192 to 24*8 = 192 pixels
+	const int towerLeft = -24 * 8;
+	const int towerRight = 24 * 8;
+	const int elevatorLeft = getPositionPixels().x;
+	const int elevatorRight = elevatorLeft + size.x * 8;
+	
+	if (dir == kUp) {
+		// Upward queue: space from tower left to elevator left
+		q->width = elevatorLeft - towerLeft;
+	} else {
+		// Downward queue: space from elevator right to tower right
+		q->width = towerRight - elevatorRight;
+	}
+	
+	// Ensure minimum width and reasonable maximum
+	q->width = std::max(32, std::min(q->width, 200));
+	
 	queues.insert(q);
 	return q;
 }

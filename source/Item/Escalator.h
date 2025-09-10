@@ -1,5 +1,6 @@
 #pragma once
 #include "Stairlike.h"
+#include "Factory.h"
 
 namespace OT {
 	namespace Item {
@@ -13,7 +14,7 @@ namespace OT {
 				p->name  = "Escalator";
 				p->price = 20000;
 				p->size  = int2(8,2);
-				p->icon  = 3;
+				p->icon  = ICON_ESCALATOR;
 				p->unlockRating = 3;
 				p->toolboxCategory = CAT_TRANSPORT;
 				p->toolboxOrder = 2;

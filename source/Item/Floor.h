@@ -2,6 +2,7 @@
 #include <set>
 #include "../Sprite.h"
 #include "Item.h"
+#include "Factory.h"
 
 namespace OT {
 	namespace Item {
@@ -14,7 +15,7 @@ namespace OT {
 				p->name  = "Floor";
 				p->price = 500;
 				p->size  = int2(1,1);
-				p->icon  = 1;
+				p->icon  = ICON_FLOOR;
 				p->toolboxCategory = CAT_CONSTRUCTION;
 				p->toolboxOrder = 2;
 			}

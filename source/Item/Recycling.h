@@ -1,6 +1,7 @@
 #pragma once
 #include "../Sprite.h"
 #include "Item.h"
+#include "Factory.h"
 #include <set>
 
 namespace OT {
@@ -14,7 +15,7 @@ namespace OT {
                 p->name = "Recycling Center";
                 p->price = 100000;
                 p->size = int2(25,2);
-                p->icon = 29;
+                p->icon = ICON_RECYCLING_CENTER;
                 p->unlockRating = 4; // unlocked at 4 stars
                 p->toolboxCategory = CAT_UTILITIES;
                 p->toolboxOrder = 3;

@@ -42,21 +42,29 @@ void Person::Journey::set(const Route & r)
 
 void Person::Journey::next()
 {
-	//Remove the person from where he/she is currently at.
+	// Remove the person from where he/she is currently at.
 	if (person->at) person->at->removePerson(person);
-	
-	//Keep the current floor around.
+
+	// Keep the current floor around.
 	fromFloor = toFloor;
-	
-	//Jump to next node.
-	assert(!nodes.empty());
+
+	// Jump to next node.
+	if (nodes.empty()) {
+		// Journey is finished, nothing to do.
+		item = nullptr;
+		return;
+	}
 	nodes.pop();
-	assert(!nodes.empty());
-	
-	//Add the person to the node's item.
+	if (nodes.empty()) {
+		// Journey is finished, nothing to do.
+		item = nullptr;
+		return;
+	}
+
+	// Add the person to the node's item.
 	item    = nodes.front().item;
 	toFloor = nodes.front().toFloor;
-	assert(item);
+	if (!item) return;
 	item->addPerson(person);
 }
 

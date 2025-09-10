@@ -1,5 +1,6 @@
 #pragma once
 #include "Elevator.h"
+#include "../Factory.h"
 
 namespace OT {
 	namespace Item {
@@ -12,7 +13,7 @@ namespace OT {
 					p->name  = "Standard Elevator";
 					p->price = 100000;
 					p->size  = int2(4,1);
-					p->icon  = 4;
+					p->icon  = ICON_ELEVATOR;
 					p->unlockRating = 0;
 					p->toolboxCategory = CAT_TRANSPORT;
 					p->toolboxOrder = 10;
