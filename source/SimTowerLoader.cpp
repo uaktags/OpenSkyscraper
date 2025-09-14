@@ -11,6 +11,7 @@
 #include <fstream>
 #include <sys/stat.h>
 #include <dirent.h>
+#include <cstdarg>
 
 //Use libmspack if available to decompress SIMTOWER.EX_
 #ifdef MSPACK
@@ -56,19 +57,38 @@ bool SimTowerLoader::load()
 
 	// List of required bitmap keys
 	std::vector<std::string> requiredBitmaps = {
-		"condo", "office", "fastfood", "restaurant", "single", "double", "suite", "partyhall", "cinema", "metro", "security", "medicalcenter", "recycling", "ui/map/buttons", "ui/map/sky", "ui/map/ground", "ui/toolbox/tools", "ui/toolbox/items", "ui/time/rating", "ui/time/bg"
+		"condo", "office", "fastfood", "restaurant", "single", "double", "suite", 
+		"partyhall", "cinema", "metro", "security", "medicalcenter", "recycling", "sky", 
+		"ui/map/buttons", "ui/map/sky", "ui/map/ground", "ui/toolbox/tools", 
+		"ui/toolbox/items", "ui/time/rating", "ui/time/bg"
 	};
-	Path bitmapDir = Path("../data/bitmaps");
 	bool allCached = true;
 	for (const auto& key : requiredBitmaps) {
-		Path p = bitmapDir.down(key + ".png");
-		sf::Image img;
-		if (fileExists(p) && img.loadFromFile(p.str())) {
-			images["simtower/" + key] = img;
-			LOG(INFO, "Loaded cached bitmap: %s", p.str().c_str());
-		} else {
+        // Construct the resource path for the DataManager
+		Path resourcePath = Path("bitmaps").down(key + ".png");
+        
+        // Ask DataManager for all possible locations of this resource
+        DataManager::Paths possiblePaths = app->data.paths(resourcePath);
+
+		bool foundThisOne = false;
+		for (const auto& p : possiblePaths) {
+			sf::Image img;
+			if (fileExists(p) && img.loadFromFile(p.str())) {
+				// The key for the manager should be consistent
+				images["simtower/" + key] = img;
+				LOG(INFO, "Loaded cached bitmap: %s", p.c_str());
+				foundThisOne = true;
+				break; // Found it, no need to check other data directories
+			}
+		}
+
+		if (!foundThisOne) {
 			allCached = false;
 		}
+	}
+	// Convert cached bitmaps to textures
+	for (Images::const_iterator it = images.begin(); it != images.end(); ++it) {
+		app->bitmaps[it->first].loadFromImage(it->second);
 	}
 	if (allCached) {
 		LOG(INFO, "All required bitmaps loaded from cache");
@@ -253,29 +273,35 @@ void SimTowerLoader::dump(Path path)
 /** Saves loaded bitmaps to cache for faster future loading. */
 void SimTowerLoader::saveBitmapsToCache()
 {
-	Path bitmapsDir = Path("../data/bitmaps");
-	struct stat st;
-	char temp[16];
-
-	if (stat(bitmapsDir, &st) != 0) {
-		if (mkdir(bitmapsDir, 0777) != 0) {
-			LOG(ERROR, "unable to create bitmaps cache directory %s", (const char *)bitmapsDir);
-			return;
-		}
+    // Get the bitmaps directory from DataManager
+	DataManager::Paths possiblePaths = app->data.paths(Path("bitmaps"));
+	if (possiblePaths.empty()) {
+		LOG(ERROR, "No valid bitmaps directory found for saving cache");
+		return;
 	}
+	Path bitmapsDir = possiblePaths.front();
 
-	LOG(INFO, "Saving bitmaps to cache: %s", (const char *)bitmapsDir);
+	// This function already exists and is fine
+	if (!makeDirectory(bitmapsDir)) {
+        LOG(ERROR, "unable to create bitmaps cache directory %s", bitmapsDir.c_str());
+        return;
+    }
+	
+	LOG(INFO, "Saving bitmaps to cache: %s", bitmapsDir.c_str());
 	for (Images::const_iterator i = images.begin(); i != images.end(); i++) {
+        // The key is like "simtower/condo", we need just "condo"
 		Path p = bitmapsDir.down(i->first.str().substr(9));
 		Path d = p.up();
 		if (!makeDirectory(d))
 			continue;
-		if (fileExists(p)) {
-			LOG(INFO, "Skipping save of existing cached bitmap: %s", p.str().c_str());
+
+		// This check is good, no need to overwrite existing files
+		if (fileExists(p.str() + ".png")) {
+			LOG(DEBUG, "Skipping save of existing cached bitmap: %s", (p.str() + ".png").c_str());
 			continue;
 		}
 		if (!i->second.saveToFile(p.str() + ".png")) {
-			LOG(WARNING, "Failed to save bitmap: %s", p.str().c_str());
+			LOG(WARNING, "Failed to save bitmap: %s", (p.str() + ".png").c_str());
 		}
 	}
 }
@@ -816,6 +842,9 @@ void SimTowerLoader::loadCondo(int id, sf::Image & img)
 		state.createMaskFromColor(sf::Color(0x0C, 0x0C, 0x0C));
 		img.copy(state, i*128, 0);
 	}
+	
+    LOG(DEBUG, "Created condo image with dimensions: %u x %u", img.getSize().x, img.getSize().y);
+	img.saveToFile("debug_condo_temp.png"); 
 }
 
 void SimTowerLoader::loadOffice(int id, sf::Image & img)
@@ -1169,7 +1198,7 @@ void SimTowerLoader::loadSounds()
 	};
 	for (int i = 0; namedSounds[i].id != 0; i++) {
 		sf::SoundBuffer & snd= app->sounds[Path("simtower/") + namedSounds[i].name];
-		loadSound(namedSounds[i].id, snd);
+		//loadSound(namedSounds[i].id, snd);
 	}
 }
 

@@ -1,27 +1,32 @@
 #pragma once
-#include <Rocket/Core/Decorator.h>
-#include <Rocket/Core/DecoratorInstancer.h>
+#include <TGUI/TGUI.hpp>
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
 
 namespace OT {
-	
-	class TimeWindowWatch : public Rocket::Core::Decorator
+
+	class TimeWindowWatch
 	{
 	public:
-		virtual Rocket::Core::DecoratorDataHandle GenerateElementData(Rocket::Core::Element* element) { return 0; };
-		virtual void ReleaseElementData(Rocket::Core::DecoratorDataHandle element_data) {};
-		virtual void RenderElement(Rocket::Core::Element* element, Rocket::Core::DecoratorDataHandle element_data);
+		TimeWindowWatch() {}
+		virtual ~TimeWindowWatch() {}
+
+		// Stub methods for TGUI migration - watch rendering will be reimplemented later
+		void RenderElement(tgui::Widget* widget, float time);
 	};
-	
-	class TimeWindowWatchInstancer : public Rocket::Core::DecoratorInstancer
+
+	class TimeWindowWatchInstancer
 	{
 	public:
-		virtual Rocket::Core::Decorator* InstanceDecorator(const Rocket::Core::String& name, const Rocket::Core::PropertyDictionary& properties) {
+		TimeWindowWatch* InstanceDecorator() {
 			return new TimeWindowWatch();
 		}
-		virtual void ReleaseDecorator(Rocket::Core::Decorator* decorator) { delete decorator; }
-		virtual void Release() { delete this; }
+		void ReleaseDecorator(TimeWindowWatch* decorator) {
+			delete decorator;
+		}
+		void Release() {
+			delete this;
+		}
 	};
 }

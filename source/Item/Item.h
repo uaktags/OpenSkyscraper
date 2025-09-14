@@ -42,6 +42,8 @@ namespace OT {
 			sf::Vector2u getSize() const { return sf::Vector2u(size.x, size.y); }
 			sf::Vector2u getSizePixels() const { return sf::Vector2u(size.x*8, size.y*36); }
 
+			virtual void updateSprite() {}
+
 			virtual rectd getMouseRegion(); //in world pixel
 
 			virtual void encodeXML(tinyxml2::XMLPrinter & xml);

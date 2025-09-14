@@ -14,11 +14,13 @@ void Security::init()
 {
     Item::init();
 
-    sprite.SetImage(App->bitmaps["simtower/security"]);
+    sprite.setTexture(App->bitmaps["simtower/security"]);
     sprite.setOrigin(0, 24);
     sprite.setPosition(getPosition().x * 8, -getPosition().y * 36);
     addSprite(&sprite);
     spriteNeedsUpdate = false;
+
+    LOG(INFO, "Bitmap loaded for %s: simtower/security", prototype->name.c_str());
 
     updateSprite();
 }

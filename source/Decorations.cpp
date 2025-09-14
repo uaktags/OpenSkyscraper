@@ -9,11 +9,11 @@ Decorations::Decorations(Game * game)
 :	GameObject(game)
 {
 	// Initialize the crane sprite.
-	crane.SetImage(App->bitmaps["simtower/deco/crane"]);
+	crane.setTexture(App->bitmaps["simtower/deco/crane"]);
 	crane.setOrigin(20, 36);
 	craneVisible = false;
 
-	track.SetImage(App->bitmaps["simtower/metro/tracks"]);
+	track.setTexture(App->bitmaps["simtower/metro/tracks"]);
 	track.setTextureRect(sf::IntRect(0,0,32,36));
 	track.setOrigin(0, 36);
 	tracksVisible = false;
@@ -40,8 +40,8 @@ void Decorations::updateFloor(int y)
 		bool exists = fireStairs.count(y) == 1;
 		FireStairPair &fsp = fireStairs[y];
 		if (!exists) {
-			fsp.minX.SetImage(App->bitmaps["simtower/deco/fireladder"]);
-			fsp.maxX.SetImage(*fsp.minX.getTexture());
+			fsp.minX.setTexture(App->bitmaps["simtower/deco/fireladder"]);
+			fsp.maxX.setTexture(*fsp.minX.getTexture());
 			fsp.minX.setTextureRect(sf::IntRect(0, 0, 24, 36));
 			fsp.maxX.setTextureRect(sf::IntRect(24, 0, 24, 36));
 			fsp.minX.setOrigin(24, 36);

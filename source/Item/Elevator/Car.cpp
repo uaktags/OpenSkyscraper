@@ -14,7 +14,7 @@ const static double kUnmountPeriod = 0.05; //ditto, but off the elevator
 
 void Car::init()
 {
-	sprite.SetImage(app->bitmaps[elevator->carBitmap]);
+	sprite.setTexture(app->bitmaps[elevator->carBitmap]);
 	sprite.setOrigin(0, 30);
 	updateSprite();
 
@@ -73,7 +73,7 @@ void Car::render(sf::RenderTarget & target) const
 	Person *p = NULL;
 	if (state == kHauling && (p = nextPassengerToUnmount())) {
 		Sprite s;
-		s.SetImage(app->bitmaps["simtower/elevator/people"]);
+		s.setTexture(app->bitmaps["simtower/elevator/people"]);
 		s.setOrigin(direction == Elevator::kUp ? -elevator->shaft.getSize().x : 16, 24);
 
 		//Calculate the texture subrect for the person stepping out of the car.

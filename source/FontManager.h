@@ -1,6 +1,7 @@
 #pragma once
 #include <SFML/Graphics/Font.hpp>
 #include "ResourceManager.h"
+#include "Path.h"
 
 namespace OT
 {
@@ -10,7 +11,8 @@ namespace OT
 	{
 	public:
 		FontManager(Application * app) : ResourceManager<sf::Font>(app) {}
-		bool load(Path name, sf::Font & dst);
-		bool loadIntoRocket(Path name);
+	
+	protected: 
+		bool load(Path name, sf::Font & dst) override;
 	};
 }

@@ -2,8 +2,8 @@
 
 #include <SFML/Window.hpp>
 #include <string>
+#include <SFML/Graphics.hpp>
 
-#include "GUI.h"
 
 namespace OT
 {
@@ -16,11 +16,11 @@ namespace OT
 		char debugString[512];
 		State(std::string name);
 		
-		GUI gui;
 		
 		virtual void activate();
 		virtual bool handleEvent(sf::Event & event) { return false; }
 		virtual void advance(double dt) {}
+		virtual void draw(sf::RenderWindow& window) = 0;
 		virtual void deactivate();
 		
 		bool isActive() { return active; }

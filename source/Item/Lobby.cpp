@@ -18,19 +18,21 @@ void Lobby::init() {
 
 	Path p = (groundLobby ? "simtower/lobby/normal" : "simtower/lobby/sky");
 
-	background.SetImage(App->bitmaps[p]);
+	background.setTexture(App->bitmaps[p]);
 	background.setOrigin(0, 36);
 
-	overlay.SetImage(App->bitmaps[p]);
+	overlay.setTexture(App->bitmaps[p]);
 	overlay.setOrigin(0, 36);
 	// overlay = background;
+
+	LOG(INFO, "Bitmap loaded for %s: %s", prototype->name.c_str(), p.c_str());
 
 	if (groundLobby) {
 		assert(game->mainLobby == NULL);
 		game->mainLobby = this;
 
 		for (int i = 0; i < 2; i++) {
-			entrances[i].SetImage(App->bitmaps["simtower/deco/entrances"]);
+			entrances[i].setTexture(App->bitmaps["simtower/deco/entrances"]);
 			entrances[i].setOrigin(56*(1-i), 36);
 			entrances[i].setTextureRect(sf::IntRect(i*56, 0, 56, 36));
 			addSprite(&entrances[i]);

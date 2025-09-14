@@ -1,33 +1,33 @@
 #pragma once
 
-#include <Rocket/Core.h>
+#include <memory>
 #include <SFML/Graphics/RenderWindow.hpp>
 
-#include "Rocket/Renderer.h"
-#include "Rocket/SystemInterface.h"
+#include "GUI/TGUIBackend.h"
 
 namespace OT
 {
 	class GUI;
-	
+
 	class GUIManager
 	{
 		friend class GUI;
-		
+
 	public:
 		GUIManager();
 		~GUIManager();
-		
+
 		bool init(sf::RenderWindow * window);
-		
-		Rocket::Core::Input::KeyIdentifier translateKey(sf::Keyboard::Key key);
-		int getKeyModifiers();
-		
+
+		IGUIBackend* getBackend();
+
+		float getUIScale() const;
+		void setUIScale(float scale);
+
 	protected:
 		sf::RenderWindow * window;
-		
+
 	private:
-		RocketRenderer renderer;
-		RocketSystemInterface system;
+		std::unique_ptr<TGUIBackend> backend;
 	};
 }

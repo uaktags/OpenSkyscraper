@@ -27,10 +27,12 @@ void Office::init()
 	rent = 10000;
 	rentDeposit = rent;
 
-	sprite.SetImage(App->bitmaps["simtower/office"]);
+	sprite.setTexture(App->bitmaps["simtower/office"]);
 	sprite.setOrigin(0, 24);
 	addSprite(&sprite);
 	spriteNeedsUpdate = false;
+
+	LOG(INFO, "Bitmap loaded for %s: simtower/office", prototype->name.c_str());
 
 	// Create the workers.
 	Person::Type types[] = {

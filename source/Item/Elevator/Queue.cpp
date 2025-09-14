@@ -87,7 +87,7 @@ void Queue::render(sf::RenderTarget & target) const
 	int x = 16;
 
 	Sprite s;
-	s.SetImage(app->bitmaps["simtower/elevator/people"]);
+	s.setTexture(app->bitmaps["simtower/elevator/people"]);
 	s.setOrigin(direction == Elevator::kUp ? 16 : 0, 24);
 
 	for (People::const_iterator ip = people.begin(); ip != people.end(); ip++) {

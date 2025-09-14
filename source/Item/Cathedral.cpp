@@ -27,7 +27,7 @@ void Cathedral::init()
 	rentDeposit = rent;
 
 	// For dummy, just set a basic sprite if available
-	// sprite.SetImage(App->bitmaps["simtower/cathedral"]); // Would need actual bitmap
+	// sprite.setTexture(App->bitmaps["simtower/cathedral"]); // Would need actual bitmap
 	// sprite.setOrigin(0, 24);
 	// addSprite(&sprite);
 	spriteNeedsUpdate = false;

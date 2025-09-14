@@ -39,6 +39,7 @@ namespace OT {
 
 		bool handleEvent(sf::Event & event);
 		void advance(double dt);
+		void draw(sf::RenderWindow& window) override;
 
 		Item::Factory itemFactory;
 
@@ -88,11 +89,17 @@ TimeWindow    timeWindow;
 		// Force reloading of GUI documents (map/toolbox/time) to reflow with current UI scale.
 		void reloadGUI();
 
+		void encodeXML(tinyxml2::XMLPrinter & xml);
+		void decodeXML(tinyxml2::XMLDocument & xml);
+
 		std::string selectedTool;
 		int2 toolPosition;
 		Item::AbstractPrototype * toolPrototype;
 		Item::Item * itemBelowCursor;
 		void selectTool(const char * tool);
+
+		std::string saveFilename;
+		bool isDirty;
 
 		Sky sky;
 
@@ -130,10 +137,11 @@ TimeWindow    timeWindow;
 	private:
 		double zoom;
 		double2 poi;
+		int currentFloor;
+		bool logNextFrame = false;
+		// TODO: Map window functionality disabled during TGUI migration
+		// Originally: Rocket::Core::ElementDocument * mapWindow;
+		void * mapWindow; // Set to nullptr - map window not implemented in TGUI yet
 
-		Rocket::Core::ElementDocument * mapWindow;
-
-		void encodeXML(tinyxml2::XMLPrinter & xml);
-		void decodeXML(tinyxml2::XMLDocument & xml);
 	};
 }

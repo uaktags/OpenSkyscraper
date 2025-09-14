@@ -5,6 +5,8 @@
 #include "Game.h"
 #include "Item/Lobby.h"
 #include "OpenGL.h"
+#include <iostream>
+#include "Logger.h"
 
 #ifdef _WIN32
 #include "Math/Round.h"
@@ -21,7 +23,7 @@ Game::Game(Application & app)
 	sky(this),
 	decorations(this)
 {
-	mapWindow     = NULL;
+	//mapWindow = nullptr;  // Map window disabled during TGUI migration
 
 	funds  = 4000000;
 	rating = 0;
@@ -35,8 +37,9 @@ Game::Game(Application & app)
 	toolPrototype = NULL;
 
 	zoom = 1;
-	poi.y = 200;
+	poi.y = 0;
 	poi.x = 0;
+	currentFloor = 0;
 
 	draggingElevator = NULL;
 	draggingMotor = 0;
@@ -58,13 +61,13 @@ Game::Game(Application & app)
 	//eveningSound.setBuffer(app.sounds["simtower/birds/evening"]);
 
 	//DEBUG: load from disk.
-	 tinyxml2::XMLDocument xml;
+	 /*tinyxml2::XMLDocument xml;
 	 DataManager::Paths p = app.data.paths("default.tower");
 	 for (DataManager::Paths::iterator ip = p.begin(); ip != p.end(); ip++) {
 	 	LOG(DEBUG, "trying %s", (*ip).c_str());
 	 	if (xml.LoadFile(*ip) == 0) break;
 	 }
-	 decodeXML(xml);
+	 decodeXML(xml);*/
 }
 
 Game::~Game()
@@ -97,10 +100,23 @@ bool Game::handleEvent(sf::Event & event)
 		} break;
 		case sf::Event::KeyPressed: {
 			switch (event.key.code) {
-				case sf::Keyboard::Left:  poi.x -= 20; return true;
-				case sf::Keyboard::Right: poi.x += 20; return true;
-				case sf::Keyboard::Up:    poi.y += 20; return true;
-				case sf::Keyboard::Down:  poi.y -= 20; return true;
+				case sf::Keyboard::Left:  poi.x -= 20; logNextFrame = true; return true;
+				case sf::Keyboard::Right: poi.x += 20; logNextFrame = true; return true;
+				case sf::Keyboard::Up: {
+					int maxFloor = floorItems.empty() ? 0 : floorItems.rbegin()->first;
+					if (currentFloor < maxFloor) {
+						currentFloor++;
+					}
+					logNextFrame = true;
+					return true;
+				}
+				case sf::Keyboard::Down: {
+					if (currentFloor > 0) {
+						currentFloor--;
+					}
+					logNextFrame = true;
+					return true;
+				}
 				case sf::Keyboard::F1:    reloadGUI(); return true;
 				case sf::Keyboard::F3:    setRating(1); return true;
 				case sf::Keyboard::F2: {
@@ -146,9 +162,10 @@ bool Game::handleEvent(sf::Event & event)
 				return true;
 			}
 			float2 mousePoint(event.mouseButton.x, event.mouseButton.y);
-			rectf toolboxWindowRect(float2(toolboxWindow.window->GetAbsoluteLeft(), toolboxWindow.window->GetAbsoluteTop()), float2(toolboxWindow.window->GetClientWidth(), toolboxWindow.window->GetClientHeight()));
-			rectf timeWindowRect(float2(timeWindow.window->GetAbsoluteLeft(), timeWindow.window->GetAbsoluteTop()), float2(timeWindow.window->GetClientWidth(), timeWindow.window->GetClientHeight()));
-			rectf mapWindowRect(float2(mapWindow->GetAbsoluteLeft(), mapWindow->GetAbsoluteTop()), float2(mapWindow->GetClientWidth(), mapWindow->GetClientHeight()));
+			rectf toolboxWindowRect(float2(toolboxWindow.window->getAbsolutePosition().x, toolboxWindow.window->getAbsolutePosition().y), float2(toolboxWindow.window->getSize().x, toolboxWindow.window->getSize().y));
+			rectf timeWindowRect(float2(timeWindow.getWindowPosition().x, timeWindow.getWindowPosition().y), float2(timeWindow.getWindowSize().x, timeWindow.getWindowSize().y));
+			// TODO: Map window collision detection disabled during TGUI migration
+			// rectf mapWindowRect(float2(mapWindow->GetAbsoluteLeft(), mapWindow->GetAbsoluteTop()), float2(mapWindow->GetClientWidth(), mapWindow->GetClientHeight()));
 
 			// Prevent construction or triggering of tool if mouse cursor within toolboxWindow
 			if (toolboxWindowRect.containsPoint(mousePoint)) break;
@@ -156,10 +173,11 @@ bool Game::handleEvent(sf::Event & event)
 			// Prevent construction or triggering of tool if mouse cursor within timeWindow
 			if (timeWindowRect.containsPoint(mousePoint)) break;
 
+			// TODO: Map window collision detection disabled during TGUI migration
 			// Prevent construction or triggering of tool if mouse cursor within mapWindow
-			if (mapWindowRect.containsPoint(mousePoint)) {
-				break;	// Break for now, may add code to handle viewport shift in future
-			}
+			// if (mapWindowRect.containsPoint(mousePoint)) {
+			//     break;	// Break for now, may add code to handle viewport shift in future
+			// }
 
 
 			if (toolPrototype) {
@@ -525,6 +543,10 @@ bool Game::handleEvent(sf::Event & event)
 				return true;
 			}
 		} break;
+		case sf::Event::Closed: {
+			app.window.close();
+			return true;
+		} break;
 	}
 	return false;
 }
@@ -537,6 +559,18 @@ void Game::advance(double dt)
 	//Advance time.
 	time.advance(dt);
 	timeWindow.updateTime();
+
+	// Derive floor_height from floor items after load (or default)
+	double floor_height = 36.0;
+	if (!floorItems.empty()) {
+		// Use the pixel height of the first floor item; assume uniform across floors
+		floor_height = floorItems.begin()->second->getSizePixels().y;
+	}
+	poi.y = currentFloor * floor_height + floor_height / 2.0;
+	if (logNextFrame) {
+		std::cout << "Current floor: " << currentFloor << ", poi.y: " << poi.y << ", floor_height: " << floor_height << std::endl;
+		logNextFrame = false;
+	}
 	toolboxWindow.advance(dt);
 
 	timeWindow.advance(dt);
@@ -564,58 +598,107 @@ void Game::advance(double dt)
 	morningSound.setLoop(time.hour < 8, this);
 	}
 	//Constrain the POI.
-	double2 halfsize((win.getView().getSize().x)*0.5*zoom, (win.getView().getSize().y)*0.5*zoom);
+	sf::Vector2u screenSize = win.getSize();
+	float screenWidth = static_cast<float>(screenSize.x);
+	float screenHeight = static_cast<float>(screenSize.y);
+	double2 halfsize(screenWidth * 0.5 * zoom, screenHeight * 0.5 * zoom);
 	poi.y = std::max<double>(std::min<double>(poi.y, 360*12 - halfsize.y), -360 + halfsize.y);
 
-	//Adust the camera.
-	sf::FloatRect view;
-	view.left   = round(poi.x - halfsize.x);
-	view.top    = round(-poi.y - halfsize.y);
-	view.width  = halfsize.x*2;
-	view.height = halfsize.y*2;
-	sf::View cameraView(view);
+	//Adjust the camera using SFML best practices.
+	sf::View cameraView;
+	cameraView.setCenter(sf::Vector2f(static_cast<float>(poi.x), static_cast<float>(-poi.y)));
+	cameraView.setSize(sf::Vector2f(screenWidth * static_cast<float>(zoom), screenHeight * static_cast<float>(zoom)));
 	win.setView(cameraView);
 
 	//Prepare the current tool.
 	sf::Vector2f mp = win.mapPixelToCoords(sf::Mouse::getPosition(win));
 	mp.y = -mp.y;
-	/* [TRICKY]
-	 * The view as defined by SFML's sf::View uses a coordinate system that 
-	 * has the origin in the top right corner and grows down and to the right.
-	 * The rest of this application (that is, the positioning of the sprites)
-	 * uses a coordinate system that has the origin in the bottom right corner
-	 * and grows to the right.
-	 * This was incredibly tricky for me to wrap my head around, but the only
-	 * translation from one to the other that is needed is to negate the "top"
-	 * of the view when doing the conditional drawing of on-screen objects.
-	 */
-	view.top = -view.top;
 	Item::AbstractPrototype * previousPrototype = toolPrototype;
 	if (selectedTool.find("item-") == 0) {
 		toolPrototype = itemFactory.prototypesById[selectedTool.substr(5)];
-		toolPosition = int2(round(mp.x/8-toolPrototype->size.x/2.0), round(mp.y/36-toolPrototype->size.y/2.0));
+		toolPosition = int2(round(mp.x/8-toolPrototype->size.x/2.0), round(mp.y/floor_height-toolPrototype->size.y/2.0));
 	} else {
 		toolPrototype = NULL;
-		toolPosition = int2(floor(mp.x/8), floor(mp.y/36));
+		toolPosition = int2(floor(mp.x/8), floor(mp.y/floor_height));
 	}
 	if (previousPrototype != toolPrototype) timeWindow.updateTooltip();
 
+
+	//Play background sounds at a regular interval.
+	const double backgroundSoundPeriod = 0.5 * Time::kBaseSpeed;
+	if (floor(time.absolute / backgroundSoundPeriod) != floor((time.absolute - time.dta) / backgroundSoundPeriod)) {
+		// playRandomBackgroundSound();
+	}
+
+	//Adjust pitch of playing sounds.
+	/*for (SoundSet::iterator s = playingSounds.begin(); s != playingSounds.end();) {
+		if ((*s)->getStatus() == sf::Sound::Stopped) {
+			playingSounds.erase(s++);
+		} else {
+			(*s)->setPitch(1 + (time.speed_animated-1) * 0.2);
+			s++;
+		}
+	}*/
+
+	//Autorelease sounds.
+	/*for (SoundSet::iterator s = autoreleaseSounds.begin(); s != autoreleaseSounds.end();) {
+		if ((*s)->getStatus() == sf::Sound::Stopped) {
+			delete *s;
+			autoreleaseSounds.erase(s++);
+		} else {
+			s++;
+		}
+	}*/
+
+	//Draw the debug string.
+	snprintf(debugString, 512, "%i sprites", drawnSprites);
+}
+
+void Game::draw(sf::RenderWindow& window)
+{
+	sf::RenderWindow & win = app.window;
+	sf::View cameraView = win.getView();
+	sf::Vector2f center = cameraView.getCenter();
+	sf::Vector2f size = cameraView.getSize();
+	float halfWidth = size.x / 2.0f;
+	float halfHeight = size.y / 2.0f;
+	float viewLeft = center.x - halfWidth;
+	float viewRight = center.x + halfWidth;
+	float viewLower = center.y - halfHeight;
+	float viewUpper = center.y + halfHeight;
+	float game_min = poi.y - halfHeight;
+	float game_max = poi.y + halfHeight;
+	sf::Vector2f mp = win.mapPixelToCoords(sf::Mouse::getPosition(win));
+	mp.y = -mp.y;
+
+	int layer0_shown=0, layer0_hidden=0, layer1_shown=0, layer1_hidden=0, fire_stairs_shown=0;
+
 	//Draw the sky and decorations.
-	win.draw(sky);
+	sky.renderBackground(win);
 	win.draw(decorations);
 
 	//Draw the items that are in view.
 	Item::Item * previousItemBelowCursor = itemBelowCursor;
 	itemBelowCursor = NULL;
 
+		if (logNextFrame) {
+			std::cout << "Game frustum: min=" << game_min << ", max=" << game_max << std::endl;
+		}
+	
+		//Draw floor items first
 	//Draw floor items first
 	for (ItemSet::iterator i = itemsByType["floor"].begin(); i != itemsByType["floor"].end(); i++) {
+		if ((*i)->position.y == 0) continue;  // Don't draw ground floor, as lobby provides background
 		const int2 & vp = (*i)->getPositionPixels();
 		const sf::Vector2u & vs = (*i)->getSizePixels();
-		if ((vp.x+vs.x >= view.left) && (vp.x <= (view.left + view.width)) &&
-			((vp.y + vs.y) >= (view.top - view.height)) && (vp.y <= view.top)) {
+		bool visible = (vp.x+vs.x >= viewLeft) && (vp.x <= viewRight) &&
+			(vp.y <= game_max && (vp.y + vs.y) >= game_min);
+		if (visible) {
 			win.draw(**i);
 			if ((*i)->getMouseRegion().containsPoint(double2(mp.x, mp.y))) itemBelowCursor = *i;
+		}
+		if (logNextFrame) {
+			std::cout << "Floor at y=" << (*i)->position.y << " shown/hidden" << (visible ? " shown" : " hidden") << std::endl;
 		}
 	}
 
@@ -625,12 +708,25 @@ void Game::advance(double dt)
 			if ((*i)->layer != layer) continue;
 			const int2 & vp = (*i)->getPositionPixels();
 			const sf::Vector2u & vs = (*i)->getSizePixels();
-			if ((vp.x+vs.x >= view.left) && (vp.x <= (view.left + view.width)) &&
-				((vp.y + vs.y) >= (view.top - view.height)) && (vp.y <= view.top)) {
+			bool visible = (vp.x+vs.x >= viewLeft) && (vp.x <= viewRight) &&
+				(vp.y <= game_max && (vp.y + vs.y) >= game_min);
+			if (visible) {
+				if (layer == 0) layer0_shown++;
+				else layer1_shown++;
+				if (layer == 1 && (*i)->prototype->id == "stairs") fire_stairs_shown++;
 				win.draw(**i);
 				if ((*i)->getMouseRegion().containsPoint(double2(mp.x, mp.y))) itemBelowCursor = *i;
+			} else {
+				if (layer == 0) layer0_hidden++;
+				else layer1_hidden++;
 			}
 		}
+	}
+	if (logNextFrame) {
+		std::cout << "Layer 0: " << layer0_shown << " shown, " << layer0_hidden << " hidden" << std::endl;
+		std::cout << "Layer 1: " << layer1_shown << " shown, " << layer1_hidden << " hidden" << std::endl;
+		if(fire_stairs_shown > 0) std::cout << "Fire stairs shown: " << fire_stairs_shown << std::endl;
+		logNextFrame = false;
 	}
 
 	//Highlight the item below the cursor.
@@ -677,47 +773,26 @@ void Game::advance(double dt)
 		prevFloor = n.toFloor;
 	}
 	glEnd();
-
-	//Play background sounds at a regular interval.
-	const double backgroundSoundPeriod = 0.5 * Time::kBaseSpeed;
-	if (floor(time.absolute / backgroundSoundPeriod) != floor((time.absolute - time.dta) / backgroundSoundPeriod)) {
-		// playRandomBackgroundSound();
-	}
-
-	//Adjust pitch of playing sounds.
-	for (SoundSet::iterator s = playingSounds.begin(); s != playingSounds.end();) {
-		if ((*s)->getStatus() == sf::Sound::Stopped) {
-			playingSounds.erase(s++);
-		} else {
-			(*s)->setPitch(1 + (time.speed_animated-1) * 0.2);
-			s++;
-		}
-	}
-
-	//Autorelease sounds.
-	for (SoundSet::iterator s = autoreleaseSounds.begin(); s != autoreleaseSounds.end();) {
-		if ((*s)->getStatus() == sf::Sound::Stopped) {
-			delete *s;
-			autoreleaseSounds.erase(s++);
-		} else {
-			s++;
-		}
-	}
-
-	//Draw the debug string.
-	snprintf(debugString, 512, "%i sprites", drawnSprites);
 }
 
 void Game::reloadGUI()
 {
+	// TODO: Map window functionality has been disabled during TGUI migration
+	// The original code tried to load "map.rml" which doesn't exist in TGUI
+	// If a minimap is needed, it should be implemented using TGUI widgets
+	/*
 	if (mapWindow) {
 		mapWindow->RemoveReference();
 		mapWindow->Close();
 	}
 
-	mapWindow     = gui.loadDocument("map.rml");
+	mapWindow = gui.loadDocument("map.rml");
 
-	if (mapWindow)     mapWindow    ->Show();
+	if (mapWindow) mapWindow->Show();
+	*/
+
+	// Set mapWindow to nullptr to disable map window collision detection
+	mapWindow = nullptr;
 
 	toolboxWindow.reload();
 	timeWindow.reload();
@@ -789,6 +864,9 @@ void Game::addItem(Item::Item * item)
 	gameMap.addNode(MapNode::Point(item->position.x + item->size.x/2, item->position.y), item);
 	decorations.updateCrane();
 	if (item == metroStation) decorations.updateTracks();
+
+	// Log added item
+	LOG(INFO, "Added %s on floor %i", item->prototype->name.c_str(), item->position.y);
 
 	// Recompute rating on adding items that may affect stars
 	ratingMayIncrease();
@@ -886,7 +964,7 @@ void Game::encodeXML(tinyxml2::XMLPrinter & xml)
 	xml.PushAttribute("x", (int)poi.x);
 	xml.PushAttribute("y", (int)poi.y);
 	// Persist UI scale and world zoom so user preferences and view are restored on load.
-	if (app.rootGUI) xml.PushAttribute("ui_scale", (double)app.rootGUI->getUIScale());
+	xml.PushAttribute("ui_scale", (double)app.guiManager.getUIScale());
 	xml.PushAttribute("zoom", zoom);
 
 	for (ItemSet::iterator i = items.begin(); i != items.end(); i++) {
@@ -916,7 +994,7 @@ void Game::decodeXML(tinyxml2::XMLDocument & xml)
 	// Restore UI scale and world zoom if present in the save file.
 	if (root->Attribute("ui_scale")) {
 		double ui_s = root->DoubleAttribute("ui_scale");
-		if (app.rootGUI) app.rootGUI->setUIScale((float)ui_s);
+		app.guiManager.setUIScale((float)ui_s);
 	}
 	if (root->Attribute("zoom")) {
 		double z = root->DoubleAttribute("zoom");
@@ -928,7 +1006,6 @@ void Game::decodeXML(tinyxml2::XMLDocument & xml)
 	// we can access our own `gui` member directly.
 	if (root->Attribute("ui_scale")) {
 		double ui_s = root->DoubleAttribute("ui_scale");
-		this->gui.setUIScale((float)ui_s);
 		// Force reload so documents reflow with the restored scale
 		reloadGUI();
 	}
@@ -939,10 +1016,19 @@ void Game::decodeXML(tinyxml2::XMLDocument & xml)
 		addItem(item);
 		e = e->NextSiblingElement("item");
 	}
+	// Refresh item sprites post-load in case bitmaps were unavailable during init
+	for (ItemSet::iterator i = items.begin(); i != items.end(); ++i) {
+		(*i)->updateSprite();
+	}
 	updateRoutes();
 
 	// Re-evaluate rating after loading a saved game
 	ratingMayIncrease();
+
+	if (!floorItems.empty()) {
+		currentFloor = 0;
+		poi.y = (currentFloor + 0.5) * 36.0;
+	}
 }
 
 void Game::transferFunds(int f, std::string message)

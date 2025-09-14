@@ -20,13 +20,15 @@ void Cinema::init()
 	animation = 0;
 	animationFrame = 0;
 
-	hallSprite.SetImage(App->bitmaps["simtower/cinema/hall"]);
+	hallSprite.setTexture(App->bitmaps["simtower/cinema/hall"]);
 	hallSprite.setOrigin(-56, 60);
-	screenSprite.SetImage(App->bitmaps["simtower/cinema/screens"]);
+	screenSprite.setTexture(App->bitmaps["simtower/cinema/screens"]);
 	screenSprite.setOrigin(0, 60);
 	addSprite(&hallSprite);
 	addSprite(&screenSprite);
 	spriteNeedsUpdate = false;
+
+	LOG(INFO, "Bitmap loaded for %s: simtower/cinema/hall and simtower/cinema/screens", prototype->name.c_str());
 
 	updateSprite();
 }

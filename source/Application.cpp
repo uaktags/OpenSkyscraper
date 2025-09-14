@@ -1,22 +1,71 @@
 /* Copyright (c) 2012-2015 Fabian Schuiki */
+#include <TGUI/Widgets/MenuBar.hpp>
+#include <TGUI/Widgets/ChildWindow.hpp>
+#include <TGUI/Widgets/EditBox.hpp>
+#include <TGUI/Widgets/Button.hpp>
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
 #include <iostream>
-#include <Rocket/Debugger.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#ifdef _WIN32
+#include <windows.h>
+#include <shlobj.h>
+#endif
+#include <vector>
+#include <sstream>
 
 #include "Application.h"
 #include "Game.h"
+#include "MainMenu.h"
 #include "SimTowerLoader.h"
-#include "TimeWindowWatch.h"
 #include "OpenGL.h"
+#include "tinyxml2.h"
 
 using namespace OT;
 using namespace std;
 
 Application * OT::App = NULL;
+
+// Forward declarations
+static std::string getUserDataDir();
+static void ensureDirExists(const std::string& dir);
+
+// Helper to get user data directory cross-platform
+static std::string getUserDataDir() {
+#ifdef _WIN32
+    char path[MAX_PATH];
+    if (SUCCEEDED(SHGetFolderPathA(NULL, CSIDL_APPDATA, NULL, 0, path))) {
+        std::string dir = std::string(path) + "\\OpenSkyscraper";
+        return dir;
+    }
+    return ".";
+#elif defined(__APPLE__)
+    const char* home = getenv("HOME");
+    if (home) {
+        return std::string(home) + "/Library/Application Support/OpenSkyscraper";
+    }
+    return ".";
+#else // Linux/Unix
+    const char* home = getenv("HOME");
+    if (home) {
+        return std::string(home) + "/.openskyscraper";
+    }
+    return ".";
+#endif
+}
+
+// Helper to ensure directory exists
+static void ensureDirExists(const std::string& dir) {
+#ifdef _WIN32
+    CreateDirectoryA(dir.c_str(), NULL);
+#else
+    mkdir(dir.c_str(), 0755);
+#endif
+}
 
 Application::Application(int argc, char * argv[])
 :	data(this),
@@ -135,7 +184,7 @@ void Application::init()
 		return;
 	}
 	if (dumpResources) {
-		simtower->dump(dumpResourcesPath);
+		//simtower->dump(dumpResourcesPath);
 	}
 	delete simtower; simtower = NULL;
 	//exitCode = 1;
@@ -144,56 +193,63 @@ void Application::init()
 	videoMode.height       = 768;
 	videoMode.bitsPerPixel = 32;
 
-
-	// Create a resizable window. Use sf::Style::Default which includes
-	// the resize border, or explicitly use Resize|Close to allow the
-	// user to resize the window freely in both dimensions.
-	window.create(videoMode, "OpenSkyscraper SFML", sf::Style::Default);
+	window.create(videoMode, "OpenSkyscraper SFML");
 	window.setVerticalSyncEnabled(true);
 
-	if (!gui.init(&window)) {
+	if (!guiManager.init(&window)) {
 		LOG(ERROR, "unable to initialize gui");
 		exitCode = 1;
 		return;
 	}
-	rootGUI = new GUI("root", &gui);
-#ifdef BUILD_DEBUG
-	Rocket::Debugger::Initialise(rootGUI->context);
-#endif
+	
 
 	//Additional GUI stuff.
-	Rocket::Core::DecoratorInstancer * instancer = new TimeWindowWatchInstancer;
-	Rocket::Core::Factory::RegisterDecoratorInstancer("watch", instancer);
-	instancer->RemoveReference();
+	// TimeWindowWatch decorator registration removed for TGUI migration
+	// TODO: Reimplement watch functionality as TGUI custom widget
+	// Rocket::Core::DecoratorInstancer * instancer = new TimeWindowWatchInstancer;
+	// Rocket::Core::Factory::RegisterDecoratorInstancer("watch", instancer);
+	// instancer->RemoveReference();
 
-	//Load GUI fonts.
-	fonts.loadIntoRocket("Jura-Regular.ttf");
-	fonts.loadIntoRocket("Jura-Medium.ttf");
-	fonts.loadIntoRocket("Jura-Light.ttf");
-	fonts.loadIntoRocket("Jura-DemiBold.ttf");
-	fonts.loadIntoRocket("Play-Regular.ttf");
-	fonts.loadIntoRocket("Play-Bold.ttf");
+	makeMenu(); // Create the top menu bar
+	pushState(new MainMenu(*this)); // Start with the main menu
 
-	//DEBUG: load some GUI
-	/*Path rocket = data.paths("debug/rocket").front();
-	Rocket::Core::FontDatabase::LoadFontFace(rocket.down("Delicious-Bold.otf").c_str());
-	Rocket::Core::FontDatabase::LoadFontFace(rocket.down("Delicious-BoldItalic.otf").c_str());
-	Rocket::Core::FontDatabase::LoadFontFace(rocket.down("Delicious-Italic.otf").c_str());
-	Rocket::Core::FontDatabase::LoadFontFace(rocket.down("Delicious-Roman.otf").c_str());*/
-
-	// Check for sound device availability.
-	// If we can't even create a sound object, disable all sound.
-	sf::Sound testSound;
-	if (testSound.getStatus() == sf::Sound::Stopped) {
-        	LOG(INFO, "Audio device found. Sound enabled.");
-        	soundEnabled = true;
-    	} else {
-        	LOG(WARNING, "No audio device available. Disabling sound.");
-        	soundEnabled = false;
-    	}
-
-	Game * game = new Game(*this);
-	pushState(game);
+	// Prefill user data dir with default.tower if missing
+	std::string userDir = getUserDataDir();
+	ensureDirExists(userDir);
+#ifdef _WIN32
+	std::string userDefault = userDir + "\\default.tower";
+#else
+	std::string userDefault = userDir + "/default.tower";
+#endif
+	struct stat st;
+	if (stat(userDefault.c_str(), &st) != 0) {
+		// Only copy if it doesn't exist
+		DataManager::Paths srcPaths = data.paths("default.tower");
+		bool copied = false;
+		for (auto& src : srcPaths) {
+			FILE* in = fopen(src.c_str(), "rb");
+			if (in) {
+				FILE* out = fopen(userDefault.c_str(), "wb");
+				if (out) {
+					char buf[4096];
+					size_t n;
+					while ((n = fread(buf, 1, sizeof(buf), in)) > 0) {
+						fwrite(buf, 1, n, out);
+					}
+					LOG(IMPORTANT, "Copied %s to %s", src.c_str(), userDefault.c_str());
+					fclose(out);
+					copied = true;
+				} else {
+					LOG(WARNING, "Could not open %s for writing", userDefault.c_str());
+				}
+				fclose(in);
+				break;
+			}
+		}
+		if (!copied) {
+			LOG(WARNING, "Could not prefill default.tower: no source found in data.paths");
+		}
+	}
 }
 
 void Application::loop()
@@ -236,6 +292,17 @@ void Application::loop()
 		//Handle events.
 		sf::Event event;
 		while (window.pollEvent(event)) {
+			// TGUI event handling
+			if (guiManager.getBackend()->handleEvent(event))
+				continue;
+
+			// State event handling
+			if (!states.empty()) {
+				if (states.top()->handleEvent(event))
+					continue;
+			}
+
+			// Application-level event handling
 			if (event.type == sf::Event::Resized) {
 				LOG(INFO, "resized (%i, %i)", window.getSize().x, window.getSize().y);
 				window.setView(sf::View(sf::FloatRect(0, 0, window.getSize().x, window.getSize().y)));
@@ -259,7 +326,7 @@ void Application::loop()
 				if (event.key.control && (event.key.code == sf::Keyboard::Add || event.key.code == sf::Keyboard::Equal || event.key.code == sf::Keyboard::Subtract || event.key.code == sf::Keyboard::Hyphen)) {
 					static const float presets[] = { 1.0f, 1.5f, 2.0f, 2.5f, 3.0f };
 					const int presetCount = sizeof(presets)/sizeof(presets[0]);
-					float cur = rootGUI->getUIScale();
+					float cur = guiManager.getUIScale();
 					// Find nearest preset index
 					int idx = 0;
 					for (int i = 0; i < presetCount; ++i) {
@@ -271,12 +338,11 @@ void Application::loop()
 						if (idx > 0) --idx;
 					}
 					float s = presets[idx];
-					rootGUI->setUIScale(s);
+					guiManager.setUIScale(s);
 					// Propagate scale to game world so images/sprites visually scale
 					if (!states.empty()) {
 						State *st = states.top();
 						// Also set the UI scale on the active state's own GUI context
-						st->gui.setUIScale(s);
 						Game *g = dynamic_cast<Game *>(st);
 						if (g) {
 							// Because Game::advance multiplies view size by zoom, a smaller
@@ -305,20 +371,6 @@ void Application::loop()
 					continue;
 				}
 #endif
-#ifdef BUILD_DEBUG
-				if (event.key.code == sf::Keyboard::F8) {
-					bool visible = !Rocket::Debugger::IsVisible();
-					LOG(DEBUG, "Rocket::Debugger %s", (visible ? "on" : "off"));
-					Rocket::Debugger::SetVisible(visible);
-				}
-#endif
-			}
-			rootGUI->handleEvent(event);
-			if (!states.empty()) {
-				if (states.top()->handleEvent(event))
-					continue;
-				if (states.top()->gui.handleEvent(event))
-					continue;
 			}
 			if (event.type == sf::Event::Closed) {
 				LOG(WARNING, "current state did not handle sf::Event::Closed");
@@ -328,18 +380,12 @@ void Application::loop()
 		}
 
 		//Make the current state do its work.
-		glClearColor(0,0,1,0);
-		glClear(GL_COLOR_BUFFER_BIT);
-		window.resetGLStates();
+		window.clear(sf::Color(135, 206, 235, 255));  // Sky blue background
 		if (!states.empty()) {
 			states.top()->advance(dt);
-			window.resetGLStates();
-			glEnable(GL_TEXTURE_2D);
-			states.top()->gui.draw();
+			states.top()->draw(window);
 		}
-		rootGUI->draw();
-
-		window.resetGLStates();
+		guiManager.getBackend()->render(window);
 		// Draw the debugging overlays.
 		char dbg[1024];
 		snprintf(dbg, 32, "%.0fHz [%.0f..%.0f]", 1.0/rateDamped, 1.0/dt_max, 1.0/dt_min);
@@ -388,6 +434,175 @@ void Application::cleanup()
 	}
 
 	window.close();
+}
+
+void Application::saveGameToFile(const std::string& filename) {
+    if (states.empty()) return;
+    Game* game = dynamic_cast<Game*>(states.top());
+    if (!game) return;
+    std::string outPath = filename;
+    // If filename is not absolute, save in user data dir
+    if (filename.find('/') == std::string::npos && filename.find('\\') == std::string::npos) {
+        std::string userDir = getUserDataDir();
+        ensureDirExists(userDir);
+#ifdef _WIN32
+        outPath = userDir + "\\" + filename;
+#else
+        outPath = userDir + "/" + filename;
+#endif
+    }
+    LOG(DEBUG, "Saving to %s", outPath.c_str());
+    FILE* f = fopen(outPath.c_str(), "w");
+    if (!f) {
+        LOG(ERROR, "Could not open %s for writing", outPath.c_str());
+        return;
+    }
+    tinyxml2::XMLPrinter xml(f);
+    game->encodeXML(xml);
+    fclose(f);
+    game->saveFilename = filename;
+    game->isDirty = false;
+    LOG(IMPORTANT, "Game saved to %s", outPath.c_str());
+}
+
+void Application::loadGameFromFile(const std::string& filename) {
+    if (states.empty()) return;
+    Game* game = dynamic_cast<Game*>(states.top());
+    bool createdNewGame = false;
+    if (!game) {
+        // Not in-game: create a new Game state and pop the menu
+        game = new Game(*this);
+        popState();
+        pushState(game);
+        createdNewGame = true;
+    }
+    tinyxml2::XMLDocument xml;
+    std::vector<std::string> tryPaths;
+    std::string userDir = getUserDataDir();
+#ifdef _WIN32
+    tryPaths.push_back(userDir + "\\" + filename);
+#else
+    tryPaths.push_back(userDir + "/" + filename);
+#endif
+    tryPaths.push_back(filename); // as given (could be absolute or relative)
+    char pwd[512];
+    getcwd(pwd, sizeof(pwd));
+    LOG(DEBUG, "Current working directory: %s", pwd);
+    LOG(DEBUG, "Trying to load: %s", filename.c_str());
+    for (const auto& path : tryPaths) {
+        LOG(DEBUG, "Trying path: %s", path.c_str());
+        if (xml.LoadFile(path.c_str()) == 0) {
+            game->decodeXML(xml);
+            game->reloadGUI();
+            game->saveFilename = filename;
+            game->isDirty = false;
+            LOG(IMPORTANT, "Game loaded from %s", path.c_str());
+            return;
+        }
+    }
+    LOG(ERROR, "Could not load %s from any known location", filename.c_str());
+    if (createdNewGame) {
+        // If loading failed, return to main menu
+        popState();
+    }
+}
+
+void Application::showFilenameDialog(const std::string& title, const std::string& defaultName, std::function<void(const std::string&)> callback) {
+    auto dialog = tgui::ChildWindow::create(title);
+    dialog->setSize(300, 120);
+    dialog->setPosition((window.getSize().x - dialog->getSize().x) / 2, (window.getSize().y - dialog->getSize().y) / 2);
+    dialog->setResizable(false);
+    dialog->setTitleButtons(tgui::ChildWindow::TitleButton::None);
+
+    auto editBox = tgui::EditBox::create();
+    editBox->setSize(260, 28);
+    editBox->setPosition(20, 20);
+    editBox->setText(defaultName);
+    dialog->add(editBox);
+
+    auto okButton = tgui::Button::create("OK");
+    okButton->setSize(80, 28);
+    okButton->setPosition(40, 70);
+    dialog->add(okButton);
+
+    auto cancelButton = tgui::Button::create("Cancel");
+    cancelButton->setSize(80, 28);
+    cancelButton->setPosition(180, 70);
+    dialog->add(cancelButton);
+
+    okButton->onPress([=]() {
+        std::string filename = editBox->getText().toStdString();
+        guiManager.getBackend()->getGui()->remove(dialog);
+        if (!filename.empty())
+            callback(filename);
+    });
+    cancelButton->onPress([=]() {
+        guiManager.getBackend()->getGui()->remove(dialog);
+    });
+    guiManager.getBackend()->getGui()->add(dialog);
+}
+
+void Application::saveGame() {
+    if (states.empty()) return;
+    Game* game = dynamic_cast<Game*>(states.top());
+    if (!game) return;
+    if (!game->saveFilename.empty()) {
+        saveGameToFile(game->saveFilename);
+    } else {
+        saveGameAs();
+    }
+}
+
+void Application::saveGameAs() {
+    if (states.empty()) return;
+    Game* game = dynamic_cast<Game*>(states.top());
+    if (!game) return;
+    showFilenameDialog("Save Tower As", "default.tower", [this, game](const std::string& filename) {
+        saveGameToFile(filename);
+    });
+}
+
+void Application::makeMenu() {
+    auto menu = tgui::MenuBar::create();
+    menu->setHeight(22.f);
+    menu->getRenderer()->setTextSize(14);
+    menu->addMenu("File");
+    menu->addMenuItem("New");
+    menu->addMenuItem("Load");
+    menu->addMenuItem("Save");
+    menu->addMenuItem("Save as...");
+    menu->addMenuItem("-");
+    menu->addMenuItem("Exit");
+
+    menu->addMenu("Options");
+    menu->addMenu("Windows");
+    menu->addMenu("Help");
+    
+    // Fix: Use correct lambda signature for TGUI version
+    menu->onMenuItemClick.connect([this](const tgui::String& item){
+        if (item == "Exit") {
+            window.close();
+        } else if (item == "New") {
+            // Start a new game (same as MainMenu New Tower)
+            Game * game = new Game(*this);
+            popState();
+            pushState(game);
+        } else if (item == "Save") {
+            saveGame();
+        } else if (item == "Load") {
+            loadGame();
+        } else if (item == "Save as...") {
+            saveGameAs();
+        }
+    });
+    guiManager.getBackend()->getGui()->add(menu);
+}
+
+void Application::loadGame() {
+    if (states.empty()) return;
+    showFilenameDialog("Load Game", "default.tower", [this](const std::string& filename) {
+        loadGameFromFile(filename);
+    });
 }
 
 /** Pushes the given State ontop of the state stack, causing it to receive events. */

@@ -19,7 +19,12 @@ namespace OT
 		DataManager(Application * app);
 		
 		void init();
-		
+		Path getPrimaryDataPath() const {
+			if (dirs.empty()) {
+				return Path("."); // Fallback
+			}
+			return dirs.front(); // Return the first, most preferred data directory
+		}
 	private:
 		Paths dirs;
 	};

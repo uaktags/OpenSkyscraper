@@ -1,105 +1,141 @@
-#include <cassert>
-#include <Rocket/Core/Element.h>
-#include <sstream>
-#include "Game.h"
 #include "TimeWindow.h"
+#include "GameObject.h"
+#include <SFML/Graphics/Texture.hpp>
+#include <SFML/Graphics/VertexArray.hpp>
+#include <SFML/System/Vector2.hpp>
+#include <TGUI/Backend/Renderer/OpenGL3/CanvasOpenGL3.hpp>
+#include <TGUI/Layout.hpp>
+#include <TGUI/Rect.hpp>
+#include <TGUI/Texture.hpp>
+#include <TGUI/Widgets/ChildWindow.hpp>
+#include <TGUI/Widgets/Label.hpp>
+#include <TGUI/Widgets/Picture.hpp>
+#include <string>
+#include "Application.h"
+#include "Logger.h"
+#include "OpenGL.h"
+#include "cmath"
+#include "Game.h"
+#include "TGUI/Widgets/Scrollbar.hpp"
 
 using namespace OT;
-using std::string;
 
+TimeWindow::TimeWindow(Game * game) : GameObject(game) {
+    window = tgui::ChildWindow::create();
+    window->getRenderer()->setTitleBarHeight(10 * app->guiManager.getUIScale());
+    
+    window->setClientSize(tgui::Layout2d(431 * app->guiManager.getUIScale(), 41 * app->guiManager.getUIScale()));
+    window->setPosition(tgui::Layout2d(200 * app->guiManager.getUIScale(), 22 * app->guiManager.getUIScale()));
 
-void TimeWindow::close()
-{
-	ratingDiv     = NULL;
-	
-	if (window) {
-		window->RemoveReference();
-		window->Close();
-	}
-	window = NULL;
+    rating_rect = tgui::UIntRect(0,0,108,22);
+    messageTimer = 0;
+
+    reload();
+    
+    app->guiManager.getBackend()->add(window);
 }
 
-void TimeWindow::reload()
-{
-	close();
-	
-	window = game->gui.loadDocument("time.rml");
-	assert(window);
-	window->Show();
-	
-	ratingDiv     = window->GetElementById("rating");
-	assert(ratingDiv);
-	
-	std::string style;
-	for (int i = 0; i < 6; i++) {
-		char c[128];
-		int start_px = i * 22;
-		int end_px = i * 22 + 22;
-		snprintf(c, 128, "div#rating.r%i { background-image-t: %ipx %ipx; }", i, start_px, end_px);
-		style += c;
-	}
-	Rocket::Core::StyleSheet * sheet = Rocket::Core::Factory::InstanceStyleSheetString(style.c_str());
-	window->SetStyleSheet(window->GetStyleSheet()->CombineStyleSheet(sheet));
-	
-	updateRating();
-	updateFunds();
-	updatePopulation();
+void TimeWindow::close() {
+    window->removeAllWidgets();
 }
 
-void TimeWindow::updateTime()
-{
-	Time & t = game->time;
+void TimeWindow::reload() {
+    window->removeAllWidgets();
+
+    // BG
+    tgui::Texture image = tgui::Texture();
+    sf::Texture& bgTexture = app->bitmaps["simtower/ui/time/bg"];
+    image.loadFromPixelData(bgTexture.getSize(), bgTexture.copyToImage().getPixelsPtr());
+    auto picture = tgui::Picture::create(image);
+    picture->setSize("100%", "100%");
+    window->add(picture);
+
+    // Funds
+    lblFunds = tgui::Label::create();
+    lblFunds->setHorizontalAlignment(tgui::HorizontalAlignment::Right);
+    lblFunds->setTextSize(13 * app->guiManager.getUIScale());
+    lblFunds->setSize(80 * app->guiManager.getUIScale(), 13 * app->guiManager.getUIScale());
+    lblFunds->setPosition(345 * app->guiManager.getUIScale(), 5 * app->guiManager.getUIScale());
+    // lblFunds->setScrollbarPolicy(tgui::Scrollbar::Policy::Never);
+    window->add(lblFunds);
+
+    // Pops
+    lblPopulation = tgui::Label::create();
+    lblPopulation->setHorizontalAlignment(tgui::HorizontalAlignment::Right);
+    lblPopulation->setTextSize(13 * app->guiManager.getUIScale());
+    lblPopulation->setSize(80 * app->guiManager.getUIScale(), 13 * app->guiManager.getUIScale());
+    lblPopulation->setPosition(345 * app->guiManager.getUIScale(), 22 * app->guiManager.getUIScale());
+    // lblPopulation->setScrollbarPolicy(tgui::Scrollbar::Policy::Never);
+    window->add(lblPopulation);
+
+    // message
+    lblTooltip = tgui::Label::create();
+    lblTooltip->setPosition(42 * app->guiManager.getUIScale(), 25 * app->guiManager.getUIScale());
+    lblTooltip->setTextSize(11 * app->guiManager.getUIScale());
+    window->add(lblTooltip);
+
+    // date, Time
+    lblDate = tgui::Label::create();
+    lblDate->setPosition(160 * app->guiManager.getUIScale(), 3 * app->guiManager.getUIScale());
+    lblDate->setTextSize(13 * app->guiManager.getUIScale());
+    window->add(lblDate);
+
+    int ratingSrcW = 108, ratingSrcH = 22;
+    int scaledW = ratingSrcW * app->guiManager.getUIScale();
+    int scaledH = ratingSrcH * app->guiManager.getUIScale();
+    sf::Image ratingSheet = app->bitmaps["simtower/ui/time/rating"].copyToImage();
+    sf::Image ratingSub;
+    ratingSub.create(ratingSrcW, ratingSrcH);
+    ratingSub.copy(ratingSheet, 0, 0, sf::IntRect(0, 0, ratingSrcW, ratingSrcH), false);
+    sf::Image ratingScaled;
+    ratingScaled.create(scaledW, scaledH);
+    for (int y = 0; y < scaledH; ++y) {
+        for (int x = 0; x < scaledW; ++x) {
+            int srcX = x * ratingSrcW / scaledW;
+            int srcY = y * ratingSrcH / scaledH;
+            ratingScaled.setPixel(x, y, ratingSub.getPixel(srcX, srcY));
+        }
+    }
+    tgui::Texture rating_tx;
+    rating_tx.loadFromPixelData(sf::Vector2u{(unsigned)scaledW, (unsigned)scaledH}, ratingScaled.getPixelsPtr());
+    rating = tgui::Picture::create(rating_tx);
+    rating->setPosition(42 * app->guiManager.getUIScale(), 2 * app->guiManager.getUIScale());
+    rating->setSize(scaledW, scaledH);
+    window->add(rating);
+
+    // watch canvas
+    watch = tgui::CanvasSFML::create(tgui::Layout2d(29 * app->guiManager.getUIScale(), 29 * app->guiManager.getUIScale()));
+    watch->setPosition(5 * app->guiManager.getUIScale(), 5 * app->guiManager.getUIScale());
+    window->add(watch);
+
+    updateRating();
+    updateFunds();
+    updatePopulation();
+    updateTime();
+}
+
+void TimeWindow::updateTime() {
+    Time & t = game->time;
+		
+	std::string timestring;
+	timestring.append(t.day == 0 ? "1st WD" : "2nd WD");
+	//weekday->SetProperty("display", (t.day == 2 ? "none" : "inline"));
+	//weekend->SetProperty("display", (t.day != 2 ? "none" : "inline"));
 	
-	window->GetElementById("watch")->SetAttribute<float>("time", t.hour);
-	
-	Rocket::Core::Element * weekday = window->GetElementById("date-weekday");
-	Rocket::Core::Element * weekend = window->GetElementById("date-weekend");
-	weekday->SetInnerRML(t.day == 0 ? "1st WD" : "2nd WD");
-	weekday->SetProperty("display", (t.day == 2 ? "none" : "inline"));
-	weekend->SetProperty("display", (t.day != 2 ? "none" : "inline"));
-	
-	char c[128];
-	snprintf(c, 128, "%iQ", t.quarter);
-	window->GetElementById("date-quarter")->SetInnerRML(c);
-	
-	const char * suffix = "th";
+	timestring.append(" / " + std::to_string(t.quarter) + "Q");
+
+	const char * suffix = "th Yr";
 	int yl = (t.year % 10);
-	if (yl == 1) suffix = "st";
-	if (yl == 2) suffix = "nd";
-	if (yl == 3) suffix = "rd";
-	snprintf(c, 128, "%i%s", t.year, suffix);
-	window->GetElementById("date-year")->SetInnerRML(c);
+	if (yl == 1) suffix = "st Yr";
+	if (yl == 2) suffix = "nd Yr";
+	if (yl == 3) suffix = "rd Yr";
+	timestring.append(" / " + std::to_string(t.year) + suffix);
+
+    lblDate->setText(timestring);    
 }
 
-void TimeWindow::updateRating()
-{
-	for (int i = 0; i < 6; i++) {
-		char c[8];
-		snprintf(c, 8, "r%i", i);
-		ratingDiv->SetClass(c, game->rating == i);
-	}
-}
-
-void TimeWindow::updateFunds()
-{
-	Rocket::Core::Element * e = window->GetElementById("funds");
-	assert(e);
-	e->SetInnerRML(formatMoney(game->funds).c_str());
-}
-
-void TimeWindow::updatePopulation()
-{
-	char c[32];
-	snprintf(c, 32, "%i", game->population);
-	
-	Rocket::Core::Element * e = window->GetElementById("population");
-	assert(e);
-	e->SetInnerRML(c);
-}
-
-void TimeWindow::updateTooltip()
-{
-	std::stringstream str;
+void TimeWindow::updateTooltip() {
+    std::stringstream str;
 	if (game->toolPrototype) {
 		str << "Construct ";
 		str << game->toolPrototype->name;
@@ -114,7 +150,9 @@ void TimeWindow::updateTooltip()
 		if (!str.str().empty()) str << "  |  ";
 		str << message;
 	}
-	window->GetElementById("message")->SetInnerRML(str.str().c_str());
+    if (str.str() != "") {
+        lblTooltip->setText(str.str());
+    }
 }
 
 void TimeWindow::showMessage(std::string msg)
@@ -125,9 +163,23 @@ void TimeWindow::showMessage(std::string msg)
 	updateTooltip();
 }
 
-void TimeWindow::advance(double dt)
-{
-	if (messageTimer > 0) {
+void TimeWindow::updateRating() {
+    unsigned int pos = 22 * (game->rating);
+    LOG(IMPORTANT, "%i", pos);
+    // rating_rect = tgui::UIntRect(0, pos, 108, 22);
+    rating_rect.top = pos;
+}
+
+void TimeWindow::updateFunds() {
+    lblFunds->setText(formatMoney(game->funds));
+}
+
+void TimeWindow::updatePopulation() {
+    lblPopulation->setText(std::to_string(game->population));
+}
+
+void TimeWindow::advance(double dt) {
+    if (messageTimer > 0) {
 		messageTimer -= dt;
 		if (messageTimer <= 0) {
 			message.clear();
@@ -135,6 +187,39 @@ void TimeWindow::advance(double dt)
 			updateTooltip();
 		}
 	}
+
+    renderWatch();
+}
+
+void TimeWindow::renderWatch() {
+    sf::Vector2f mid;
+    mid.x = watch->getSize().x / 2;
+    mid.y = watch->getSize().y / 2;
+
+	double radius_m = watch->getSize().y / 2;
+	double radius_h = 0.6 * radius_m;
+
+	//double time    = game->time.getHour();
+	double time    = game->time.getHour();
+
+	double angle_h = 2 * M_PI * time/12;
+	double angle_m = 2 * M_PI * time;
+
+    //LOG(IMPORTANT, "%f, %f, %f, %f", angle_h, angle_m, game->time.getHour()/12, game->time.getHour());
+    watch->clear(tgui::Color::Transparent);
+    
+    sf::VertexArray lines(sf::Lines, 4);
+    lines[0].position = sf::Vector2f(mid.x, mid.y);
+    lines[1].position = sf::Vector2f(mid.x + radius_h * sin(angle_h), mid.x + radius_h * -cos(angle_h));
+    lines[2].position = sf::Vector2f(mid.x, mid.y);
+    lines[3].position = sf::Vector2f(mid.x + radius_m * sin(angle_m), mid.x + radius_m * -cos(angle_m));
+    lines[0].color = sf::Color::Black;
+    lines[1].color = sf::Color::Black;
+    lines[2].color = sf::Color::Black;
+    lines[3].color = sf::Color::Black;
+
+    watch->draw(lines);
+    watch->display();
 }
 
 std::string TimeWindow::formatMoney(int amount)
@@ -144,4 +229,12 @@ std::string TimeWindow::formatMoney(int amount)
 	string fmt(c);
 	for (int i = (int)fmt.length() - 3; i > 1; i -= 3) fmt.insert(i, "'");
 	return fmt;
+}
+
+tgui::Vector2f TimeWindow::getWindowPosition() const {
+    return window->getAbsolutePosition();
+}
+
+tgui::Vector2f TimeWindow::getWindowSize() const {
+    return window->getSize();
 }

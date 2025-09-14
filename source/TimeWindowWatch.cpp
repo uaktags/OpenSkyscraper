@@ -1,41 +1,23 @@
 #include "TimeWindowWatch.h"
-#include <Rocket/Core/Geometry.h>
+#include <TGUI/TGUI.hpp>
 #include "OpenGL.h"
 #include <cmath>
 
 using namespace OT;
-using namespace Rocket::Core;
 
-
-void TimeWindowWatch::RenderElement(Rocket::Core::Element* element, Rocket::Core::DecoratorDataHandle element_data)
+void TimeWindowWatch::RenderElement(tgui::Widget* widget, float time)
 {
-	/*Rocket::Core::Geometry * geometry = new Rocket::Core::Geometry;
+	// TODO: Reimplement watch rendering using TGUI
+	// For now, this is a stub to allow compilation
 
-	std::vector<Rocket::Core::Vertex> & vertices = geometry->GetVertices();
-	std::vector<int> & indices = geometry->GetIndices();
-
-	Rocket::Core::Vertex vertex;
-	vertex.colour = Rocket::Core::Colourb(0, 0, 0);
-
-	vertex.position = Vector2f(0, 0);
-	vertices.insert(vertex);
-	vertex.position = Vector2f(0, 20);
-	vertices.insert(vertex);
-	vertex.position = Vector2f(12, 0);
-	vertices.insert(vertex);
-
-	indices.insert(0);
-	indices.insert(1);
-
-	geometry->render(Rocket::Core::Vector2f());*/
-
+	// Original Rocket code commented out for reference:
+	/*
 	Vector2f offset = element->GetAbsoluteOffset();
 	Vector2f size   = element->GetBox().GetSize() / 2;
 
 	double radius_m = std::min<float>(size.x, size.y);
 	double radius_h = 0.6 * radius_m;
 
-	double time    = element->GetAttribute<float>("time", 0);
 	double angle_h = 2 * M_PI * time/12;
 	double angle_m = 2 * M_PI * time;
 
@@ -49,4 +31,5 @@ void TimeWindowWatch::RenderElement(Rocket::Core::Element* element, Rocket::Core
 	glVertex2f(radius_m * sin(angle_m), -radius_m * cos(angle_m));
 	glEnd();
 	glPopMatrix();
+	*/
 }

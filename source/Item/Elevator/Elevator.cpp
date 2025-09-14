@@ -27,12 +27,14 @@ void Elevator::init()
 	animation = 0;
 	frame = 0;
 
-	shaft.SetImage(app->bitmaps[shaftBitmap]);
+	shaft.setTexture(app->bitmaps[shaftBitmap]);
 	shaft.setTextureRect(sf::IntRect(0, 0, size.x*8, 36));
 	shaft.setOrigin(0, 36);
 
-	topMotor.SetImage(*shaft.getTexture());
-	bottomMotor.SetImage(*shaft.getTexture());
+	LOG(INFO, "Bitmap loaded for %s shaft: %s", prototype->name.c_str(), shaftBitmap.c_str());
+
+	topMotor.setTexture(*shaft.getTexture());
+	bottomMotor.setTexture(*shaft.getTexture());
 
 	addSprite(&topMotor);
 	addSprite(&bottomMotor);
@@ -61,7 +63,7 @@ void Elevator::render(sf::RenderTarget & target) const
 	//Draw the elevator floors.
 	Sprite s = shaft;
 	Sprite d;
-	d.SetImage(app->bitmaps["simtower/elevator/digits"]);
+	d.setTexture(app->bitmaps["simtower/elevator/digits"]);
 	d.setOrigin(0, 17);
 
 	int minY = position.y;

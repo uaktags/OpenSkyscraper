@@ -73,7 +73,7 @@ void Item::render(sf::RenderTarget & target) const
 
 	if (!canHaulPeople() && position.y != 0 && prototype->icon != ICON_FLOOR && lobbyRoute.empty()) {
 		Sprite noroute;
-		noroute.SetImage(app->bitmaps["noroute.png"]);
+		noroute.setTexture(app->bitmaps["noroute.png"]);
 		sf::Vector2u size = noroute.getTexture()->getSize();
 		noroute.setOrigin(size.x/2, size.y/2);
 		size = getSize();

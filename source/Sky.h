@@ -23,6 +23,9 @@ namespace OT {
 		void draw(sf::RenderTarget & target, sf::RenderStates states) const;
 		virtual void render(sf::RenderTarget & target) const;
 
+		void renderBackground(sf::RenderTarget& target) const;
+		void renderOverlays(sf::RenderTarget& target) const;
+
 		static double cloudNoise(double2 p);
 
 		Sound rainSound;

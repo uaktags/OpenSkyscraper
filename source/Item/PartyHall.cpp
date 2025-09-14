@@ -16,10 +16,12 @@ void PartyHall::init()
 
 	open = false;
 
-	sprite.SetImage(App->bitmaps["simtower/partyhall"]);
+	sprite.setTexture(App->bitmaps["simtower/partyhall"]);
 	sprite.setOrigin(0, 60);
 	addSprite(&sprite);
 	spriteNeedsUpdate = false;
+
+	LOG(INFO, "Bitmap loaded for %s: simtower/partyhall", prototype->name.c_str());
 
 	updateSprite();
 }

@@ -14,11 +14,13 @@ void MedicalCenter::init()
 {
     Item::init();
 
-    sprite.SetImage(App->bitmaps["simtower/medicalcenter"]);
+    sprite.setTexture(App->bitmaps["simtower/medicalcenter"]);
     sprite.setOrigin(0, 24);
     sprite.setPosition(getPosition().x * 8, -getPosition().y * 36);
     addSprite(&sprite);
     spriteNeedsUpdate = false;
+
+    LOG(INFO, "Bitmap loaded for %s: simtower/medicalcenter", prototype->name.c_str());
 
     updateSprite();
 }

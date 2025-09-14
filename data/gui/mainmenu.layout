@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Window Type="DefaultWindow" Name="mainmenu">
+    <Property Name="Font" Value="Jura-Book" />
+    <Property Name="TextColour" Value="White" />
+    <Property Name="BackgroundColour" Value="FF2C3E50" />
+
+    <!-- Title -->
+    <Window Type="TaharezLook/StaticText" Name="title">
+        <Property Name="Text" Value="OpenSkyscraper" />
+        <Property Name="Font" Value="Play-Bold" />
+        <Property Name="TextColours" Value="FFECF0F1" />
+        <Property Name="HorzFormatting" Value="Centred" />
+        <Property Name="VertFormatting" Value="Centred" />
+        <Property Name="UnifiedAreaRect" Value="{{0.5, -150},{0.1, -24},{0.5, 150},{0.1, 24}}" />
+    </Window>
+    <!-- Menu Container -->
+    <Window Type="Default" Name="menu-container">
+        <Property Name="UnifiedAreaRect" Value="{{0.5, -160},{0.3, 0},{0.5, 160},{0.7, 0}}" />
+    </Window>
+
+    <!-- New Game Button -->
+    <Window Type="TaharezLook/Button" Name="new-game-btn">
+        <Property Name="Text" Value="New Game" />
+        <Property Name="Font" Value="Play-Bold" />
+        <Property Name="NormalTextColour" Value="White" />
+        <Property Name="UnifiedAreaRect" Value="{{0.5, -150},{0.3, 0},{0.5, 150},{0.3, 60}}" />
+        <Property Name="SizingCursor" Value="LeftRight" />
+    </Window>
+    <!-- Load Game Button -->
+    <Window Type="TaharezLook/Button" Name="load-game-btn">
+        <Property Name="Text" Value="Load Game" />
+        <Property Name="Font" Value="Play-Bold" />
+        <Property Name="NormalTextColour" Value="White" />
+        <Property Name="UnifiedAreaRect" Value="{{0.5, -150},{0.4, 0},{0.5, 150},{0.4, 60}}" />
+        <Property Name="SizingCursor" Value="LeftRight" />
+    </Window>
+
+    <!-- Quit Button -->
+    <Window Type="TaharezLook/Button" Name="quit-btn">
+        <Property Name="Text" Value="Quit" />
+        <Property Name="Font" Value="Play-Bold" />
+        <Property Name="NormalTextColour" Value="White" />
+        <Property Name="UnifiedAreaRect" Value="{{0.5, -150},{0.5, 0},{0.5, 150},{0.5, 60}}" />
+        <Property Name="SizingCursor" Value="LeftRight" />
+    </Window>
+</Window>

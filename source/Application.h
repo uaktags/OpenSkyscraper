@@ -43,8 +43,8 @@ namespace OT
 		sf::VideoMode videoMode;
 
 		DataManager   data;
-		GUIManager    gui;
-		GUI *         rootGUI;
+		GUIManager    guiManager;
+
 		BitmapManager bitmaps;
 		FontManager   fonts;
 		SoundManager  sounds;
@@ -56,6 +56,17 @@ namespace OT
 		double uiScaleMessageTimer; // seconds remaining to display
 
 		int run();
+		void quit() { running = false; }
+
+		void saveGame();
+		void loadGame();
+		void saveGameAs();
+		void saveGameToFile(const std::string& filename);
+		void loadGameFromFile(const std::string& filename);
+		void showFilenameDialog(const std::string& title, const std::string& defaultName, std::function<void(const std::string&)> onOk);
+
+		void pushState(State * state);
+		void popState();
 
 	private:
 		Path path;
@@ -68,9 +79,9 @@ namespace OT
 		void loop();
 		void cleanup();
 
+		void makeMenu();
+
 		std::stack<State *> states;
-		void pushState(State * state);
-		void popState();
 
 		bool dumpResources;
 		Path dumpResourcesPath;

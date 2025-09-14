@@ -18,11 +18,13 @@ void Restaurant::init()
 	variant = rand() % 4;
 	open = false;
 
-	sprite.SetImage(App->bitmaps["simtower/restaurant"]);
+	sprite.setTexture(App->bitmaps["simtower/restaurant"]);
 	sprite.setOrigin(0, 24);
 	sprite.setPosition(getPosition().x * 8, -getPosition().y * 36);
 	addSprite(&sprite);
 	spriteNeedsUpdate = false;
+
+	LOG(INFO, "Bitmap loaded for %s: simtower/restaurant", prototype->name.c_str());
 
 	updateSprite();
 }

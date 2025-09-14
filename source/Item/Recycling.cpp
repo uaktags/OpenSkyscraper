@@ -14,11 +14,13 @@ void Recycling::init()
 {
     Item::init();
 
-    sprite.SetImage(App->bitmaps["simtower/recycling"]);
+    sprite.setTexture(App->bitmaps["simtower/recycling"]);
     sprite.setOrigin(0, 60);
     sprite.setPosition(getPosition().x * 8, -getPosition().y * 36);
     addSprite(&sprite);
     spriteNeedsUpdate = false;
+
+    LOG(INFO, "Bitmap loaded for %s: simtower/recycling", prototype->name.c_str());
 
     updateSprite();
 }

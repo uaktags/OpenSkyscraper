@@ -47,6 +47,9 @@ set(MACOSX_BUNDLE_BUNDLE_VERSION ${VERSION})
 # Gather the source files.
 file(GLOB_RECURSE sources RELATIVE ${PROJECT_SOURCE_DIR} source/*.cpp)
 
+# Remove test files from main executable
+list(REMOVE_ITEM sources "source/GameStarTest.cpp")
+
 # TinyXML2
 include_directories(thirdparty/tinyxml2)
 list(APPEND sources thirdparty/tinyxml2/tinyxml2.cpp)
@@ -109,12 +112,6 @@ if (APPLE)
 	# install(DIRECTORY ${SFML_LIBRARIES} DESTINATION ${CMAKE_BINARY_DIR}/${EXECUTABLE_NAME}.app/Contents/Frameworks)
 endif ()
 
-# libRocket
-find_package(Rocket REQUIRED core controls debugger)
-string(REPLACE "optimized;${ROCKET_DEBUGGER_LIBRARY_RELEASE}" "" ROCKET_LIBRARIES "${ROCKET_LIBRARIES}")
-include_directories(${ROCKET_INCLUDE_DIR})
-target_link_libraries(${EXECUTABLE_NAME} ${ROCKET_LIBRARIES})
-
 if (WIN32)
 	set(FREETYPE_DIR "" CACHE PATH "freetype directory")
 	set(ENV{FREETYPE_DIR} ${FREETYPE_DIR})
@@ -122,9 +119,14 @@ endif ()
 find_package(Freetype REQUIRED)
 target_link_libraries(${EXECUTABLE_NAME} ${FREETYPE_LIBRARIES})
 
-# OpenGL (Needed by Rocket)
+# OpenGL
 find_package(OpenGL REQUIRED)
 target_link_libraries(${EXECUTABLE_NAME} ${OPENGL_gl_LIBRARY})
+
+# TGUI
+set(TGUI_STATIC_LIBRARIES FALSE)
+find_package(TGUI 1 REQUIRED)
+target_link_libraries(${EXECUTABLE_NAME} PRIVATE TGUI::TGUI)
 
 # libmspack for decompressing KWAJ files (SIMTOWER.EX_)
 # http://www.cabextract.org.uk/libmspack/
@@ -139,7 +141,7 @@ endif (MSPACK_FOUND)
 #################################
 # Generate Docs
 #################################
-OPTION(BUILD_WITH_DOCS "Generate Docs" ON)
+OPTION(BUILD_WITH_DOCS "Generate Docs" OFF)
 IF(BUILD_WITH_DOCS)
 find_package(Doxygen)
 if (DOXYGEN_FOUND)

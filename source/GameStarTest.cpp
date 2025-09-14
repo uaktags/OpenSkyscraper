@@ -7,8 +7,15 @@
  * This is not a formal unit test framework, just a simple runner.
  */
 int main() {
-    OT::Application dummyApp; // Requires Application to construct Game.
+    OT::Application dummyApp(0, nullptr); // Requires Application to construct Game.
     OT::Game game(dummyApp);
+
+    struct MinimalPrototype : public OT::Item::AbstractPrototype {
+        std::string id = "security";
+        OT::Item::Item* make(OT::Game* game) override {
+            return new OT::Item::Item(game, this);
+        }
+    };
 
     // Baseline: no population
     game.setPopulation(0);
@@ -27,9 +34,8 @@ int main() {
     std::cout << "Population=1000 => Stars=" << game.computeStarRating() << std::endl;
 
     // Fake-add one security to itemsByType
-    OT::Item::Item* dummyItem = new OT::Item::Item();
-    dummyItem->prototype = new OT::Item::AbstractPrototype();
-    dummyItem->prototype->id = "security";
+    MinimalPrototype* proto = new MinimalPrototype();
+    OT::Item::Item* dummyItem = new OT::Item::Item(&game, proto);
     game.itemsByType["security"].insert(dummyItem);
 
     game.setPopulation(1000);

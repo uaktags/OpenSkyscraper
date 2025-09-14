@@ -20,11 +20,13 @@ void Condo::init()
 	rent = 5000;
 	rentDeposit = rent;
 
-	sprite.SetImage(App->bitmaps["simtower/condo"]);
+	sprite.setTexture(App->bitmaps["simtower/condo"]);
 	sprite.setOrigin(0, 24);
 	sprite.setPosition(getPosition().x * 8, -getPosition().y * 36);
 	addSprite(&sprite);
 	spriteNeedsUpdate = false;
+
+	LOG(INFO, "Bitmap loaded for %s: simtower/condo", prototype->name.c_str());
 
 	updateSprite();
 }

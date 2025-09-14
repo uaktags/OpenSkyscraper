@@ -1,53 +1,48 @@
 #pragma once
-#include <Rocket/Core/ElementDocument.h>
-#include <Rocket/Core/EventListener.h>
+#include <TGUI/TGUI.hpp>
+#include <TGUI/Widgets/BitmapButton.hpp>
 #include "GameObject.h"
 #include <chrono>
+#include <set>
+#include <string>
 namespace OT {
 	
-	class ToolboxWindow : public GameObject, private Rocket::Core::EventListener
+	class ToolboxWindow : public GameObject
 	{
 	public:
-		ToolboxWindow(Game * game) : GameObject(game) {
-			window = NULL;
-		}
+		ToolboxWindow(Game * game);
 		~ToolboxWindow() { close(); }
 		
 		void close();
 		void reload();
-		void updateAvailability();
 		void advance(double dt);
+		void updateAvailability();
 		
-		Rocket::Core::ElementDocument * window;
-		typedef std::set<Rocket::Core::Element *> ElementSet;
-		ElementSet buttons;
-		
-		void ProcessEvent(Rocket::Core::Event & event);
+		tgui::ChildWindow::Ptr window;
+		std::set<tgui::BitmapButton::Ptr> buttons;
 		
 		void updateSpeed();
 		void updateTool();
-
+ 
 	private:
 		// For handling press-and-hold
 		std::chrono::steady_clock::time_point mouseDownTime{};
 		bool longPressTriggered = false;
-		Rocket::Core::Element* pressedElement = nullptr;
-		// When a long-press is released we may handle the selection on mouseup
-		// and need to ignore the subsequent click event. This flag suppresses
-		// the next click when set.
+		tgui::Widget::Ptr pressedElement = nullptr;
 		bool ignoreNextClick = false;
-
-		void handleMouseDown(Rocket::Core::Event &event);
-		void handleMouseUp(Rocket::Core::Event &event);
-		void handleClick(Rocket::Core::Event &event);
-		void handleMouseMove(Rocket::Core::Event &event);
-		void triggerLongPress(Rocket::Core::Element* element);
+ 
+		void handleMouseDown(tgui::Widget::Ptr element);
+		void handleMouseUp(tgui::Widget::Ptr element);
+		void handleClick(tgui::Widget::Ptr element);
+		void handleMouseMove();
+		void triggerLongPress(tgui::Widget::Ptr element);
 		void restoreOriginalLayout();
-		void startLongPressTimer(Rocket::Core::Element* element);
+		void startLongPressTimer(tgui::Widget::Ptr element);
 		void cancelLongPressTimer();
 		bool isContextMenuOpen();
 		void dismissContextMenu();
-		void handleContextMenuClick(Rocket::Core::Element* element);
+		void handleContextMenuClick(tgui::Widget::Ptr element);
 		void selectItem(const std::string& id);
+		tgui::BitmapButton::Ptr makeButton(int size, const sf::Texture& textureMap, int index);
 	};
 }

@@ -1,6 +1,4 @@
 #include <cassert>
-#include <Rocket/Controls.h>
-#include <Rocket/Debugger.h>
 
 #include "Application.h"
 #include "GUIManager.h"
@@ -10,6 +8,7 @@ using namespace OT;
 GUIManager::GUIManager()
 {
 	window = NULL;
+	backend = nullptr;
 }
 
 GUIManager::~GUIManager()
@@ -22,26 +21,22 @@ bool GUIManager::init(sf::RenderWindow * window)
 	assert(window != NULL && "window must not be NULL");
 
 	this->window = window;
-	renderer.SetWindow(window);
-
-	Rocket::Core::SetRenderInterface(&renderer);
-	Rocket::Core::SetSystemInterface(&system);
-
-	if (!Rocket::Core::Initialise()) {
-		LOG(ERROR, "unable to initialize Rocket::Core");
-		return false;
-	}
-	Rocket::Controls::Initialise();
-
+	backend = std::make_unique<TGUIBackend>();
+	backend->init(*window);
 	return true;
 }
 
-Rocket::Core::Input::KeyIdentifier GUIManager::translateKey(sf::Keyboard::Key key)
+IGUIBackend* GUIManager::getBackend()
 {
-	return system.TranslateKey(key);
+	return backend.get();
 }
 
-int GUIManager::getKeyModifiers()
+float GUIManager::getUIScale() const
 {
-	return system.GetKeyModifiers(window);
+	return backend->getUIScale();
+}
+
+void GUIManager::setUIScale(float scale)
+{
+	backend->setUIScale(scale);
 }

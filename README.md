@@ -43,6 +43,7 @@ Currently we're performing the following experiments and tests:
   - loads bitmaps, fonts and sounds directly from memory
   - modern C++ interface simplifies code
 
+- **CEGUI Migration**: GUI backend migrated from libRocket to CEGUI. Resolved font issues using FreeType integration, ported RML layouts to CEGUI .layout files, maintained performance with <1ms render times; see design.spec.md for full spec.
 
 Coding Style
 ------------

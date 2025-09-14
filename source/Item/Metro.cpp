@@ -17,13 +17,15 @@ void Metro::init()
 	open = true;
 	trainPresent = true;
 
-	station.SetImage(App->bitmaps["simtower/metro/station"]);
+	station.setTexture(App->bitmaps["simtower/metro/station"]);
 	station.setOrigin(0, 96);
-	platform.SetImage(App->bitmaps["simtower/metro/station"]);
+	platform.setTexture(App->bitmaps["simtower/metro/station"]);
 	platform.setOrigin(0, 30);
 	addSprite(&station);
 	addSprite(&platform);
 	spriteNeedsUpdate = true;
+
+	LOG(INFO, "Bitmap loaded for %s: simtower/metro/station", prototype->name.c_str());
 
 	assert(game->metroStation == NULL);
 	game->metroStation = this;
