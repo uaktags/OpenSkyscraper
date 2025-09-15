@@ -1,5 +1,10 @@
 #include <fstream>
 #include <sys/stat.h>
+#include <cstdint>
+
+#ifdef _WIN32
+#include <direct.h>
+#endif
 
 #include "Application.h"
 #include "Logger.h"
@@ -10,6 +15,22 @@ using std::ifstream;
 using std::ofstream;
 using std::ios;
 using std::ios_base;
+
+// Endianness handling: Windows NE executables store data in little-endian format.
+// These functions ensure correct reading on both little-endian and big-endian systems.
+
+static bool isLittleEndian() {
+    uint16_t x = 1;
+    return *(uint8_t*)&x == 1;
+}
+
+static uint16_t swapLE16(uint16_t x) {
+    return (x >> 8) | (x << 8);
+}
+
+static uint32_t swapLE32(uint32_t x) {
+    return ((x >> 24) & 0xff) | ((x >> 8) & 0xff00) | ((x << 8) & 0xff0000) | ((x << 24) & 0xff000000);
+}
 
 bool WindowsNEExecutable::load(Path path)
 {	
@@ -23,8 +44,7 @@ bool WindowsNEExecutable::load(Path path)
 	uint32_t off_sh;
 	f.seekg(0x3C, ios::beg);
 	f.read((char *)&off_sh, sizeof(off_sh));
-	//TODO: find some little-endian swapping and do that after each f.read operation.
-	//off_sh = swapLE32(off_sh);
+	if (!isLittleEndian()) off_sh = swapLE32(off_sh);
 	LOG(DEBUG, "header:\n  off_sh = 0x%x", off_sh);
 	if (f.eof())
 		goto unexpected_eof;
@@ -34,8 +54,10 @@ bool WindowsNEExecutable::load(Path path)
 	uint16_t lsa;
 	f.seekg(off_sh + 0x24, ios::beg);
 	f.read((char *)&off_rt, sizeof(off_rt));
+	if (!isLittleEndian()) off_rt = swapLE16(off_rt);
 	f.seekg(off_sh + 0x32, ios::beg);
 	f.read((char *)&lsa, sizeof(lsa));
+	if (!isLittleEndian()) lsa = swapLE16(lsa);
 	LOG(DEBUG, "segmented header:\n  off_rt = 0x%x\n  lsa = %i", off_rt, lsa);
 	if (f.eof())
 		goto unexpected_eof;
@@ -48,7 +70,9 @@ bool WindowsNEExecutable::load(Path path)
 		//Read the type and number of resources this resource list contains.
 		uint16_t type, count;
 		f.read((char *)&type,  sizeof(type));
+		if (!isLittleEndian()) type = swapLE16(type);
 		f.read((char *)&count, sizeof(count));
+		if (!isLittleEndian()) count = swapLE16(count);
 		if (f.eof())
 			goto unexpected_eof;
 		
@@ -65,7 +89,9 @@ bool WindowsNEExecutable::load(Path path)
 			//Read where the resource is located in the file and how long it is.
 			uint16_t offset_aligned, length_aligned;
 			f.read((char *)&offset_aligned, sizeof(offset_aligned));
+			if (!isLittleEndian()) offset_aligned = swapLE16(offset_aligned);
 			f.read((char *)&length_aligned, sizeof(length_aligned));
+			if (!isLittleEndian()) length_aligned = swapLE16(length_aligned);
 			
 			//Apply the logical shift alignment read earlier.
 			int offset = (int)offset_aligned << lsa;
@@ -75,6 +101,7 @@ bool WindowsNEExecutable::load(Path path)
 			uint16_t id;
 			f.seekg(2, ios::cur);
 			f.read((char *)&id, sizeof(id));
+			if (!isLittleEndian()) id = swapLE16(id);
 			
 			//Skip reserved bytes.
 			f.seekg(4, ios::cur);
@@ -108,12 +135,15 @@ void WindowsNEExecutable::dump(Path path)
 {
 	LOG(INFO, "dumping to %s", (const char *)path);
 	
-	//TODO: make sure this also works on windows. or better use FileSystem class once done.
 	struct stat st;
 	
 	if (stat(path, &st) != 0) {
 		LOG(DEBUG, "  creating directory");
+#ifdef _WIN32
+		if (_mkdir(path) != 0) {
+#else
 		if (mkdir(path, 0777) != 0) {
+#endif
 			LOG(ERROR, "unable to make directory %s", (const char *)path);
 			return;
 		}
@@ -125,7 +155,11 @@ void WindowsNEExecutable::dump(Path path)
 		Path dir = path.down(temp);
 		
 		if (stat(dir, &st) != 0) {
+#ifdef _WIN32
+			if (_mkdir(dir) != 0) {
+#else
 			if (mkdir(dir, 0777) != 0) {
+#endif
 				LOG(ERROR, "unable to make directory %s", (const char *)dir);
 				return;
 			}

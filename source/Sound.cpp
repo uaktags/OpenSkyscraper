@@ -4,8 +4,6 @@
 
 using namespace OT;
 
-// ...existing code...
-
 namespace OT {
 void Sound::setLoop(bool loop, Game * game)
 {
@@ -19,7 +17,7 @@ void Sound::setLoop(bool loop, Game * game)
 			//LOG(DEBUG, "Sound::setLoop called but no buffer is set");
 		return;
 	}
-	sf::Sound::setLoop(loop);
+	//sf::Sound::setLoop(loop);
 }
 }
 
@@ -42,8 +40,8 @@ void Sound::Play(Game * game)
 		return;
 	}
 	playingInGame = game;
-	game->playingSounds.insert(this);
-	sf::Sound::play();
+	//game->playingSounds.insert(this);
+	//sf::Sound::play();
 }
 
 void Sound::Stop()
@@ -54,18 +52,19 @@ void Sound::Stop()
 		return;
 	}
 	if (!getBuffer()) {
-		if (playingInGame && playingInGame->app.logger.getLevel() <= Logger::DEBUG)
-			LOG(DEBUG, "Sound::Stop called but no buffer is set");
+		//if (playingInGame && playingInGame->app.logger.getLevel() <= Logger::DEBUG)
+			//LOG(DEBUG, "Sound::Stop called but no buffer is set");
 		return;
 	}
 	sf::Sound::stop();
 	if (playingInGame) {
-		playingInGame->playingSounds.erase(this);
+		//playingInGame->playingSounds.erase(this);
 		playingInGame = NULL;
 	}
 }
 
 double Sound::getDurationDouble()
 {
-	return getBuffer()->getDuration().asSeconds();
+	return 0.0;
+	//return getBuffer()->getDuration().asSeconds();
 }

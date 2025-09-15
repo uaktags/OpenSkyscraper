@@ -13,7 +13,7 @@ GUIManager::GUIManager()
 
 GUIManager::~GUIManager()
 {
-	//TODO: do cleanup here.
+	// Cleanup is handled by unique_ptr RAII
 }
 
 bool GUIManager::init(sf::RenderWindow * window)

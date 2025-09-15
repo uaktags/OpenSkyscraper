@@ -78,6 +78,7 @@ Application::Application(int argc, char * argv[])
 
 	assert(argc >= 1 && "argv[0] is required");
 	dumpResources = false;
+	skipMenu = false;
 
 	// Code to retrieve current working directory
 	// May want to move to Boost library for easier path manipulation
@@ -127,6 +128,9 @@ Application::Application(int argc, char * argv[])
 			dumpResources = true;
 			dumpResourcesPath = argv[i+1];
 		}
+		if (strcmp(argv[i], "--skip-menu") == 0) {
+			skipMenu = true;
+		}
 	}
 
 	LOG(DEBUG,
@@ -135,7 +139,7 @@ Application::Application(int argc, char * argv[])
 		path.str().c_str()
 	);
 	LOG(IMPORTANT, "ready");
-	soundEnabled = false; //TODO: disabling the sound for now
+	soundEnabled = false; // TODO: Sound disabled during development - re-enable when sound system is stable
 
 	// UI scale HUD
 	uiScaleMessage = "";
@@ -174,8 +178,7 @@ void Application::init()
 	if (!success) {
 		LOG(WARNING, "unable to load SimTower executable");
 	}
-	//TODO: make this dependent on a command line switch --dump-simtower <path>.
-	exe.dump("~/SimTower Raw");*/
+	*/
 
 	SimTowerLoader * simtower = new SimTowerLoader(this);
 	if (!simtower->load()) {
@@ -184,7 +187,7 @@ void Application::init()
 		return;
 	}
 	if (dumpResources) {
-		//simtower->dump(dumpResourcesPath);
+		simtower->dump(dumpResourcesPath);
 	}
 	delete simtower; simtower = NULL;
 	//exitCode = 1;
@@ -211,7 +214,11 @@ void Application::init()
 	// instancer->RemoveReference();
 
 	makeMenu(); // Create the top menu bar
-	pushState(new MainMenu(*this)); // Start with the main menu
+	if (skipMenu) {
+		pushState(new Game(*this)); // Start directly in game
+	} else {
+		pushState(new MainMenu(*this)); // Start with the main menu
+	}
 
 	// Prefill user data dir with default.tower if missing
 	std::string userDir = getUserDataDir();

@@ -242,7 +242,10 @@ void Car::advance(double dt)
 
 		//So we're obviously on the destination floor. Quite a few things to do here. First we have
 		//to act according to our current state. So let's do that.
-		//TODO: This needs some heavy documentation!
+		//
+		// This switch handles elevator car behavior when stopped at a floor.
+		// States: kMoving (just arrived), kOpeningDoors, kHauling (loading/unloading passengers), kClosingDoors
+		// The logic manages door timing, passenger transfer, and decides when to depart.
 		switch (state) {
 
 			case kMoving: {

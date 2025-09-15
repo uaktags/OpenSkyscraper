@@ -28,7 +28,6 @@ using namespace OT;
 using std::ofstream;
 using std::string;
 
-//TODO: make this into a FileSystem class or whatever.
 bool fileExists(Path p)
 {
 	struct stat st;
@@ -186,8 +185,6 @@ bool SimTowerLoader::load()
 void SimTowerLoader::dump(Path path)
 {
 	LOG(INFO, "dumping to %s", (const char *)path);
-
-	//TODO: same issues as for SimTowerResources
 	struct stat st;
 	char temp[16];
 
@@ -207,8 +204,6 @@ void SimTowerLoader::dump(Path path)
 			return;
 		}
 	}
-
-	//TODO: don't perform the resource dump here, but rather in Application or alike, triggered by a command line argument.
 	for (Images::const_iterator i = images.begin(); i != images.end(); i++) {
 		Path p = bitmapsDir.down(i->first.str().substr(9));
 		Path d = p.up();
@@ -242,7 +237,6 @@ void SimTowerLoader::dump(Path path)
 		}
 	}
 
-	//TODO: don't perform the resource dump here, but rather in Application or alike, triggered by a command line argument.
 	const SoundManager::Resources & sndres = app->sounds.getResources();
 	for (SoundManager::Resources::const_iterator i = sndres.begin(); i != sndres.end(); i++) {
 		Path p = soundsDir.down(i->first.str().substr(9));
@@ -580,11 +574,11 @@ void SimTowerLoader::loadBitmaps()
 	loadElevators();
 
 	//Toolbox
-	loadMergedByID(images["simtower/ui/toolbox/tools"], 'y', 0x825C, 0x825D, 0x825E, NULL);
+	loadMergedByID(images["simtower/ui/toolbox/tools"], 'x', 0x825C, 0x825D, 0x825E, NULL);
 	sf::Image speed[2];
 	loadMergedByID(speed[0], 'y', 0x8258, 0x8259, NULL);
 	loadMergedByID(speed[1], 'y', 0x825A, 0x825B, NULL);
-	loadMerged(images["simtower/ui/toolbox/speed"], 'x', &speed[0], &speed[1], NULL);
+	loadMerged(images["simtower/ui/speed"], 'x', &speed[0], &speed[1], NULL);
 
 	sf::Image items[3];
 	for (int i = 0; i < 3; i++) {
@@ -594,7 +588,7 @@ void SimTowerLoader::loadBitmaps()
 		for (int n = 0; n < 4; n++)
 			items[i].copy(tmp, n*256, 0, sf::IntRect(0, n*32, 256, n*32+32));
 	}
-	loadMerged(images["simtower/ui/toolbox/items"], 'y', &items[0], &items[1], &items[2], NULL);
+	loadMerged(images["simtower/ui/toolbox/items"], 'x', &items[0], &items[1], &items[2], NULL);
 
 	//Map
 	Blob & mapRaw = rawBitmaps[0x8160];

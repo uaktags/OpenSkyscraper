@@ -6,6 +6,7 @@
 #include "Item/Lobby.h"
 #include "OpenGL.h"
 #include <iostream>
+#include <cstddef>
 #include "Logger.h"
 
 #ifdef _WIN32
@@ -36,7 +37,7 @@ Game::Game(Application & app)
 	itemBelowCursor = NULL;
 	toolPrototype = NULL;
 
-	zoom = 1;
+	zoom = 0.5;
 	poi.y = 0;
 	poi.x = 0;
 	currentFloor = 0;
@@ -164,8 +165,8 @@ bool Game::handleEvent(sf::Event & event)
 			float2 mousePoint(event.mouseButton.x, event.mouseButton.y);
 			rectf toolboxWindowRect(float2(toolboxWindow.window->getAbsolutePosition().x, toolboxWindow.window->getAbsolutePosition().y), float2(toolboxWindow.window->getSize().x, toolboxWindow.window->getSize().y));
 			rectf timeWindowRect(float2(timeWindow.getWindowPosition().x, timeWindow.getWindowPosition().y), float2(timeWindow.getWindowSize().x, timeWindow.getWindowSize().y));
-			// TODO: Map window collision detection disabled during TGUI migration
-			// rectf mapWindowRect(float2(mapWindow->GetAbsoluteLeft(), mapWindow->GetAbsoluteTop()), float2(mapWindow->GetClientWidth(), mapWindow->GetClientHeight()));
+			// TODO: Map window collision detection disabled during TGUI migration - implement map window with TGUI widgets
+			// rectf mapWindowRect(float2(toolboxWindow.window->getAbsolutePosition().x, toolboxWindow.window->getAbsolutePosition().y), float2(toolboxWindow.window->getSize().x, toolboxWindow.window->getSize().y));
 
 			// Prevent construction or triggering of tool if mouse cursor within toolboxWindow
 			if (toolboxWindowRect.containsPoint(mousePoint)) break;
@@ -173,7 +174,7 @@ bool Game::handleEvent(sf::Event & event)
 			// Prevent construction or triggering of tool if mouse cursor within timeWindow
 			if (timeWindowRect.containsPoint(mousePoint)) break;
 
-			// TODO: Map window collision detection disabled during TGUI migration
+			// TODO: Map window collision detection disabled during TGUI migration - implement map window with TGUI widgets
 			// Prevent construction or triggering of tool if mouse cursor within mapWindow
 			// if (mapWindowRect.containsPoint(mousePoint)) {
 			//     break;	// Break for now, may add code to handle viewport shift in future
@@ -533,7 +534,7 @@ bool Game::handleEvent(sf::Event & event)
 			// If Ctrl is pressed, change world zoom; otherwise pan vertically a bit.
 			if (event.mouseWheel.delta != 0) {
 				if (sf::Keyboard::isKeyPressed(sf::Keyboard::LControl) || sf::Keyboard::isKeyPressed(sf::Keyboard::RControl)) {
-					double factor = (event.mouseWheel.delta > 0) ? 1.25 : 0.8;
+					double factor = (event.mouseWheel.delta > 0) ? 0.8 : 1.25;
 					setZoom(zoom * factor);
 				} else {
 					// Scroll vertically: move poi by some pixels scaled with zoom
@@ -777,7 +778,7 @@ void Game::draw(sf::RenderWindow& window)
 
 void Game::reloadGUI()
 {
-	// TODO: Map window functionality has been disabled during TGUI migration
+	// TODO: Map window functionality has been disabled during TGUI migration - implement map window with TGUI widgets
 	// The original code tried to load "map.rml" which doesn't exist in TGUI
 	// If a minimap is needed, it should be implemented using TGUI widgets
 	/*
@@ -1056,7 +1057,7 @@ void Game::setRating(int r)
 		bool improved = (r > rating);
 		rating = r;
 		if (improved) {
-			//TODO: show window
+			//TODO: show rating increase window using TGUI
 			LOG(IMPORTANT, "rating increased to %i", rating);
 			playOnce("simtower/rating/increased");
 

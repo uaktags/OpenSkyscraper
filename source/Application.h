@@ -85,6 +85,8 @@ namespace OT
 
 		bool dumpResources;
 		Path dumpResourcesPath;
+
+		bool skipMenu;
 	};
 
 	extern Application * App;
