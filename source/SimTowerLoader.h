@@ -41,6 +41,11 @@ namespace OT
 		bool load();
 		void dump(Path path);
 
+		// More fine-grained dumping helpers that can be exposed to CLI flags.
+		void dumpExe(Path path);
+		void dumpSprites(Path path);
+		void dumpSounds(Path path);
+
 	private:
 		WindowsNEExecutable exe;
 

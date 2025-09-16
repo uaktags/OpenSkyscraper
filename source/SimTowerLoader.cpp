@@ -12,6 +12,7 @@
 #include <sys/stat.h>
 #include <dirent.h>
 #include <cstdarg>
+#include "Filesystem.h"
 
 //Use libmspack if available to decompress SIMTOWER.EX_
 #ifdef MSPACK
@@ -28,27 +29,10 @@ using namespace OT;
 using std::ofstream;
 using std::string;
 
-bool fileExists(Path p)
-{
-	struct stat st;
-	return stat(p, &st) == 0;
-}
-bool makeDirectory(Path dir)
-{
-	if (fileExists(dir))
-		return true;
-
-	Path parent = dir.up();
-	if (!fileExists(parent))
-		if (!makeDirectory(parent))
-			return false;
-
-	if (mkdir(dir, 0777) != 0) {
-		LOG(ERROR, "unable to make directory %s", (const char *)dir);
-		return false;
-	}
-	return true;
-}
+// TODO: filesystem operations (exists, directory creation, path helpers)
+// were previously TODOs to extract into a dedicated Filesystem class.
+// We now use `Filesystem` for these operations; further cleanup can move
+// any remaining ad-hoc calls here into that class.
 
 bool SimTowerLoader::load()
 {
@@ -72,7 +56,7 @@ bool SimTowerLoader::load()
 		bool foundThisOne = false;
 		for (const auto& p : possiblePaths) {
 			sf::Image img;
-			if (fileExists(p) && img.loadFromFile(p.str())) {
+			if (Filesystem::exists(p) && img.loadFromFile(p.str())) {
 				// The key for the manager should be consistent
 				images["simtower/" + key] = img;
 				LOG(INFO, "Loaded cached bitmap: %s", p.c_str());
@@ -129,7 +113,7 @@ bool SimTowerLoader::load()
 		if (d) {
 			for (int i = 0; i < compressedPaths.size() && !success; i++) {
 				const Path &path = compressedPaths[i];
-				if (!fileExists(path)) continue;
+				if (!Filesystem::exists(path)) continue;
 
 				LOG(INFO, "Decompressing %s to %s", path.c_str(), decompressedPath.c_str());
 				int result = d->decompress(d, path.c_str(), decompressedPath.c_str());
@@ -184,40 +168,36 @@ bool SimTowerLoader::load()
 
 void SimTowerLoader::dump(Path path)
 {
-	LOG(INFO, "dumping to %s", (const char *)path);
-	struct stat st;
-	char temp[16];
+	// Keep backward compatible single-call dump: run all parts.
+	dumpSprites(path);
+	dumpSounds(path);
+	dumpExe(path);
+}
 
-	if (stat(path, &st) != 0) {
-		LOG(DEBUG, "  creating directory");
-		if (mkdir(path, 0777) != 0) {
-			LOG(ERROR, "unable to make directory %s", (const char *)path);
-			return;
-		}
+void SimTowerLoader::dumpSprites(Path path)
+{
+	LOG(INFO, "dumping sprites to %s", (const char *)path);
+	if (!Filesystem::ensureDirectory(path)) {
+		LOG(ERROR, "unable to create dump directory %s", (const char *)path);
+		return;
 	}
-
-
 	Path bitmapsDir = Path("../data/bitmaps");
-	if (stat(bitmapsDir, &st) != 0) {
-		if (mkdir(bitmapsDir, 0777) != 0) {
-			LOG(ERROR, "unable to make directory %s", (const char *)bitmapsDir);
-			return;
-		}
+	if (!Filesystem::ensureDirectory(bitmapsDir)) {
+		LOG(ERROR, "unable to make directory %s", (const char *)bitmapsDir);
+		return;
 	}
+	char temp[16];
 	for (Images::const_iterator i = images.begin(); i != images.end(); i++) {
 		Path p = bitmapsDir.down(i->first.str().substr(9));
 		Path d = p.up();
-		if (!makeDirectory(d))
+		if (!Filesystem::ensureDirectory(d))
 			continue;
 		i->second.saveToFile(p.str() + ".png");
 	}
-
 	Path unhandledBitmapsDir = bitmapsDir.down("unhandled");
-	if (stat(unhandledBitmapsDir, &st) != 0) {
-		if (mkdir(unhandledBitmapsDir, 0777) != 0) {
-			LOG(ERROR, "unable to make directory %s", (const char *)unhandledBitmapsDir);
-			return;
-		}
+	if (!Filesystem::ensureDirectory(unhandledBitmapsDir)) {
+		LOG(ERROR, "unable to make directory %s", (const char *)unhandledBitmapsDir);
+		return;
 	}
 	for (Blobs::iterator b = rawBitmaps.begin(); b != rawBitmaps.end(); b++) {
 		snprintf(temp, 16, "%x.bmp", b->first);
@@ -227,31 +207,33 @@ void SimTowerLoader::dump(Path path)
 		f.write(b->second.data, b->second.length);
 		f.close();
 	}
+}
 
-
-	Path soundsDir = path.down("sounds");
-	if (stat(soundsDir, &st) != 0) {
-		if (mkdir(soundsDir, 0777) != 0) {
-			LOG(ERROR, "unable to make directory %s", (const char *)soundsDir);
-			return;
-		}
+void SimTowerLoader::dumpSounds(Path path)
+{
+	LOG(INFO, "dumping sounds to %s", (const char *)path);
+	if (!Filesystem::ensureDirectory(path)) {
+		LOG(ERROR, "unable to create dump directory %s", (const char *)path);
+		return;
 	}
-
+	char temp[16];
+	Path soundsDir = path.down("sounds");
+	if (!Filesystem::ensureDirectory(soundsDir)) {
+		LOG(ERROR, "unable to make directory %s", (const char *)soundsDir);
+		return;
+	}
 	const SoundManager::Resources & sndres = app->sounds.getResources();
 	for (SoundManager::Resources::const_iterator i = sndres.begin(); i != sndres.end(); i++) {
 		Path p = soundsDir.down(i->first.str().substr(9));
 		Path d = p.up();
-		if (!makeDirectory(d))
+		if (!Filesystem::ensureDirectory(d))
 			continue;
 		i->second.saveToFile(p.str() + ".wav");
 	}
-
 	Path unhandledSoundsDir = soundsDir.down("unhandled");
-	if (stat(unhandledSoundsDir, &st) != 0) {
-		if (mkdir(unhandledSoundsDir, 0777) != 0) {
-			LOG(ERROR, "unable to make directory %s", (const char *)unhandledSoundsDir);
-			return;
-		}
+	if (!Filesystem::ensureDirectory(unhandledSoundsDir)) {
+		LOG(ERROR, "unable to make directory %s", (const char *)unhandledSoundsDir);
+		return;
 	}
 	WindowsNEExecutable::Resources & rawSounds = exe.resources[0xFF0A];
 	for (WindowsNEExecutable::Resources::iterator b = rawSounds.begin(); b != rawSounds.end(); b++) {
@@ -262,6 +244,13 @@ void SimTowerLoader::dump(Path path)
 		f.write(b->second.data, b->second.length);
 		f.close();
 	}
+}
+
+void SimTowerLoader::dumpExe(Path path)
+{
+	// Dumping raw executable resources (if any) could go here. For now, keep
+	// a placeholder that writes known raw resources if present.
+	LOG(INFO, "dumping exe resources to %s (no-op)", (const char *)path);
 }
 
 /** Saves loaded bitmaps to cache for faster future loading. */
@@ -275,22 +264,22 @@ void SimTowerLoader::saveBitmapsToCache()
 	}
 	Path bitmapsDir = possiblePaths.front();
 
-	// This function already exists and is fine
-	if (!makeDirectory(bitmapsDir)) {
-        LOG(ERROR, "unable to create bitmaps cache directory %s", bitmapsDir.c_str());
-        return;
-    }
+	// Ensure the bitmaps cache directory exists
+	if (!Filesystem::ensureDirectory(bitmapsDir)) {
+		LOG(ERROR, "unable to create bitmaps cache directory %s", bitmapsDir.c_str());
+		return;
+	}
 	
 	LOG(INFO, "Saving bitmaps to cache: %s", bitmapsDir.c_str());
 	for (Images::const_iterator i = images.begin(); i != images.end(); i++) {
         // The key is like "simtower/condo", we need just "condo"
 		Path p = bitmapsDir.down(i->first.str().substr(9));
-		Path d = p.up();
-		if (!makeDirectory(d))
+	Path d = p.up();
+	if (!Filesystem::ensureDirectory(d))
 			continue;
 
-		// This check is good, no need to overwrite existing files
-		if (fileExists(p.str() + ".png")) {
+	// This check is good, no need to overwrite existing files
+	if (Filesystem::exists(Path(p.str() + ".png"))) {
 			LOG(DEBUG, "Skipping save of existing cached bitmap: %s", (p.str() + ".png").c_str());
 			continue;
 		}

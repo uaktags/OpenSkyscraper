@@ -86,6 +86,11 @@ namespace OT
 		bool dumpResources;
 		Path dumpResourcesPath;
 
+		// Fine-grained dump flags (set by CLI)
+		bool dumpExe;
+		bool dumpSprites;
+		bool dumpSounds;
+
 		bool skipMenu;
 	};
 

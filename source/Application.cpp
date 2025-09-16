@@ -22,6 +22,7 @@
 #include "Game.h"
 #include "MainMenu.h"
 #include "SimTowerLoader.h"
+#include "Filesystem.h"
 #include "OpenGL.h"
 #include "tinyxml2.h"
 
@@ -30,42 +31,7 @@ using namespace std;
 
 Application * OT::App = NULL;
 
-// Forward declarations
-static std::string getUserDataDir();
-static void ensureDirExists(const std::string& dir);
-
-// Helper to get user data directory cross-platform
-static std::string getUserDataDir() {
-#ifdef _WIN32
-    char path[MAX_PATH];
-    if (SUCCEEDED(SHGetFolderPathA(NULL, CSIDL_APPDATA, NULL, 0, path))) {
-        std::string dir = std::string(path) + "\\OpenSkyscraper";
-        return dir;
-    }
-    return ".";
-#elif defined(__APPLE__)
-    const char* home = getenv("HOME");
-    if (home) {
-        return std::string(home) + "/Library/Application Support/OpenSkyscraper";
-    }
-    return ".";
-#else // Linux/Unix
-    const char* home = getenv("HOME");
-    if (home) {
-        return std::string(home) + "/.openskyscraper";
-    }
-    return ".";
-#endif
-}
-
-// Helper to ensure directory exists
-static void ensureDirExists(const std::string& dir) {
-#ifdef _WIN32
-    CreateDirectoryA(dir.c_str(), NULL);
-#else
-    mkdir(dir.c_str(), 0755);
-#endif
-}
+// Filesystem helper functions are provided by Filesystem.h
 
 Application::Application(int argc, char * argv[])
 :	data(this),
@@ -78,6 +44,7 @@ Application::Application(int argc, char * argv[])
 
 	assert(argc >= 1 && "argv[0] is required");
 	dumpResources = false;
+	dumpExe = dumpSprites = dumpSounds = false;
 	skipMenu = false;
 
 	// Code to retrieve current working directory
@@ -126,6 +93,21 @@ Application::Application(int argc, char * argv[])
 		if (strcmp(argv[i], "--dump-resources") == 0) {
 			assert(i+1 < argc && "--dump-resources is missing path");
 			dumpResources = true;
+			dumpResourcesPath = argv[i+1];
+		}
+		if (strcmp(argv[i], "--dump-exe") == 0) {
+			assert(i+1 < argc && "--dump-exe is missing path");
+			dumpExe = true;
+			dumpResourcesPath = argv[i+1];
+		}
+		if (strcmp(argv[i], "--dump-sprites") == 0) {
+			assert(i+1 < argc && "--dump-sprites is missing path");
+			dumpSprites = true;
+			dumpResourcesPath = argv[i+1];
+		}
+		if (strcmp(argv[i], "--dump-sounds") == 0) {
+			assert(i+1 < argc && "--dump-sounds is missing path");
+			dumpSounds = true;
 			dumpResourcesPath = argv[i+1];
 		}
 		if (strcmp(argv[i], "--skip-menu") == 0) {
@@ -186,8 +168,14 @@ void Application::init()
 		exitCode = 1;
 		return;
 	}
+	// Run fine-grained dumps if requested. --dump-resources remains supported
+	// as a legacy flag that triggers the full dump.
 	if (dumpResources) {
 		simtower->dump(dumpResourcesPath);
+	} else {
+		if (dumpSprites) simtower->dumpSprites(dumpResourcesPath);
+		if (dumpSounds)  simtower->dumpSounds(dumpResourcesPath);
+		if (dumpExe)     simtower->dumpExe(dumpResourcesPath);
 	}
 	delete simtower; simtower = NULL;
 	//exitCode = 1;
@@ -221,8 +209,8 @@ void Application::init()
 	}
 
 	// Prefill user data dir with default.tower if missing
-	std::string userDir = getUserDataDir();
-	ensureDirExists(userDir);
+	std::string userDir = Filesystem::userDataDir();
+	Filesystem::ensureDirExists(userDir);
 #ifdef _WIN32
 	std::string userDefault = userDir + "\\default.tower";
 #else
@@ -450,8 +438,8 @@ void Application::saveGameToFile(const std::string& filename) {
     std::string outPath = filename;
     // If filename is not absolute, save in user data dir
     if (filename.find('/') == std::string::npos && filename.find('\\') == std::string::npos) {
-        std::string userDir = getUserDataDir();
-        ensureDirExists(userDir);
+	std::string userDir = Filesystem::userDataDir();
+	Filesystem::ensureDirExists(userDir);
 #ifdef _WIN32
         outPath = userDir + "\\" + filename;
 #else
@@ -485,7 +473,7 @@ void Application::loadGameFromFile(const std::string& filename) {
     }
     tinyxml2::XMLDocument xml;
     std::vector<std::string> tryPaths;
-    std::string userDir = getUserDataDir();
+	std::string userDir = Filesystem::userDataDir();
 #ifdef _WIN32
     tryPaths.push_back(userDir + "\\" + filename);
 #else
