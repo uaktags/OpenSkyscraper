@@ -1,4 +1,5 @@
-/* Copyright © 2013 Fabian Schuiki */
+/* Copyright © 2013-2015 Fabian Schuiki */
+/* Copyright © 2025 Tim G */
 #include "Office.h"
 #include "../Game.h"
 #include "../Math/Rand.h"

@@ -1,3 +1,5 @@
+/* Copyright © 2022 Vuong Ly */
+/* Copyright © 2025 Tim G */
 #include "../Game.h"
 #include "../Math/Rand.h"
 #include "Security.h"

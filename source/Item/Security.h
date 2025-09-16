@@ -1,3 +1,5 @@
+/* Copyright © 2022 Vuong Ly */
+/* Copyright © 2025 Tim G */
 #pragma once
 #include "../Sprite.h"
 #include "Item.h"

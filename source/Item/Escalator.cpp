@@ -1,3 +1,5 @@
+/* Copyright © 2012 Fabian Schuiki */
+/* Copyright © 2025 Tim G */
 #include "Escalator.h"
 
 using namespace OT::Item;

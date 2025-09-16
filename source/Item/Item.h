@@ -1,3 +1,7 @@
+/* Copyright © 2012-2015 Fabian Schuiki */
+/* Copyright © 2016-2017 Matthew Harvey */
+/* Copyright © 2014 matto */
+/* Copyright © 2025 Tim G */
 #pragma once
 
 #include <set>

@@ -1,4 +1,6 @@
 /* Copyright © 2013 Fabian Schuiki */
+/* Copyright © 2025 Tim G */
+/* Copyright © 2018 Matthew Harvey */
 #pragma once
 #include "Item.h"
 #include "Factory.h"

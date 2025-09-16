@@ -1,3 +1,5 @@
+/* Copyright © 2012-2015 Fabian Schuiki */
+/* Copyright © 2016 Matthew Harvey */
 #include <cassert>
 #include "../Game.h"
 #include "Stairlike.h"

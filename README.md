@@ -45,6 +45,11 @@ Currently we're performing the following experiments and tests:
 
 - **CEGUI Migration**: GUI backend migrated from libRocket to CEGUI. Resolved font issues using FreeType integration, ported RML layouts to CEGUI .layout files, maintained performance with <1ms render times; see design.spec.md for full spec.
 
+UI migration note
+-----------------
+
+The project has migrated much of the UI from libRocket to TGUI. A legacy libRocket decorator `TimeWindowWatch` was used historically to render the in-game watch. That decorator has been removed in favor of a TGUI canvas-based implementation (see `OS-TGUI/source/TimeWindow.cpp :: renderWatch`). If you rely on old `.rml` documents that referenced the decorator, migrate them to TGUI widgets or update the RML to avoid the `watch` decorator.
+
 Coding Style
 ------------
 

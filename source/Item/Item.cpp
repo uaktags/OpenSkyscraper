@@ -1,4 +1,8 @@
-/* Copyright (c) 2012-2015 Fabian Schuiki */
+/* Copyright © 2012-2015 Fabian Schuiki */
+/* Copyright © 2013 hoshi10 */
+/* Copyright © 2016-2017 Matthew Harvey */
+/* Copyright © 2014 matto */
+/* Copyright © 2025 Tim G */
 #include <cassert>
 #include <string>
 #include "../Game.h"

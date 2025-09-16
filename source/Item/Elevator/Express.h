@@ -1,3 +1,6 @@
+/* Copyright © 2012 Fabian Schuiki */
+/* Copyright © 2025 Tim G */
+/* Copyright © 2013 globemaster */
 #pragma once
 #include "Elevator.h"
 #include "../Factory.h"

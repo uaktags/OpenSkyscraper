@@ -1,3 +1,4 @@
+/* Copyright © 2013 hoshi10 */
 #pragma once
 
 #ifdef _WIN32

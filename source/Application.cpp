@@ -194,12 +194,10 @@ void Application::init()
 	}
 	
 
-	//Additional GUI stuff.
-	// TimeWindowWatch decorator registration removed for TGUI migration
-	// TODO: Reimplement watch functionality as TGUI custom widget
-	// Rocket::Core::DecoratorInstancer * instancer = new TimeWindowWatchInstancer;
-	// Rocket::Core::Factory::RegisterDecoratorInstancer("watch", instancer);
-	// instancer->RemoveReference();
+	// Additional GUI setup.
+	// Note: libRocket "watch" decorator (TimeWindowWatch) was used previously.
+	// The watch is now implemented via a TGUI canvas in the TGUI-based TimeWindow
+	// (see OS-TGUI/source/TimeWindow.cpp :: renderWatch()).
 
 	makeMenu(); // Create the top menu bar
 	if (skipMenu) {

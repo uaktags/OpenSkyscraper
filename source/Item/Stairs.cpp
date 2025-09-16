@@ -1,3 +1,5 @@
+/* Copyright © 2012 Fabian Schuiki */
+/* Copyright © 2025 Tim G */
 #include "Stairs.h"
 
 using namespace OT::Item;

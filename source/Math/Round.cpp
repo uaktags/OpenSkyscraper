@@ -1,3 +1,4 @@
+/* Copyright © 2013 hoshi10 */
 #include "Round.h"
 
 #ifdef _MSC_VER

@@ -1,3 +1,4 @@
+/* Copyright © 2013 hoshi10 */
 #pragma once
 #include <stlastar.h>
 #include "MapSearchNode.h"
@@ -20,4 +21,3 @@ namespace OT {
 		void buildRoute(Route &r, Item::Item *start_item, Item::Item *end_item);
 	};
 }
-

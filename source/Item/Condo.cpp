@@ -1,3 +1,5 @@
+/* Copyright © 2017-2018 Matthew Harvey */
+/* Copyright © 2025 Tim G */
 #include "../Game.h"
 #include "../Math/Rand.h"
 #include "Condo.h"

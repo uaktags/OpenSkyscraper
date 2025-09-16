@@ -1,3 +1,8 @@
+/* Copyright © 2012-2013 Fabian Schuiki */
+/* Copyright © 2013 hoshi10 */
+/* Copyright © 2016-2017 Matthew Harvey */
+/* Copyright © 2022 Vuong Ly */
+/* Copyright © 2025 Tim G */
 #include <cassert>
 #include <sstream>
 #include "../Application.h"

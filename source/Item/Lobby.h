@@ -1,3 +1,5 @@
+/* Copyright © 2012-2015 Fabian Schuiki */
+/* Copyright © 2025 Tim G */
 #pragma once
 #include "../Sprite.h"
 #include "Item.h"

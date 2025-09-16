@@ -1,3 +1,6 @@
+/* Copyright © 2012-2013 Fabian Schuiki */
+/* Copyright © 2013 hoshi10 */
+/* Copyright © 2025 Tim G */
 #pragma once
 #include <cstdio>
 #include <string>

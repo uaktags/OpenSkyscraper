@@ -1,3 +1,4 @@
+/* Copyright © 2025 Tim G */
 #include "Cathedral.h"
 #include "../Game.h"
 #include "../Math/Rand.h"
@@ -74,4 +75,3 @@ void Cathedral::advance(double dt)
 
 	if (spriteNeedsUpdate) updateSprite();
 }
-

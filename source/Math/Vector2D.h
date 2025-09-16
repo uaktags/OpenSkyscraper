@@ -1,3 +1,4 @@
+/* Copyright © 2012 Fabian Schuiki */
 #pragma once
 #include <sstream>
 #include <string>

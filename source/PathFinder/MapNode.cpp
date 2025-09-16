@@ -1,3 +1,4 @@
+/* Copyright © 2013 hoshi10 */
 #include "../Item/Item.h"
 #include "FloorNode.h"
 #include "MapNode.h"

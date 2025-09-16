@@ -1,3 +1,5 @@
+/* Copyright © 2017-2018 Matthew Harvey */
+/* Copyright © 2025 Tim G */
 #pragma once
 #include "../Sprite.h"
 #include "Item.h"

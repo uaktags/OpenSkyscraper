@@ -1,3 +1,4 @@
+/* Copyright © 2025 Tim G */
 #include "TGUIBackend.h"
 #include <TGUI/TGUI.hpp>
 #include <TGUI/Backend/SFML-Graphics.hpp>

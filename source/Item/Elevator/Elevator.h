@@ -1,3 +1,6 @@
+/* Copyright © 2012-2015 Fabian Schuiki */
+/* Copyright © 2016 Matthew Harvey */
+/* Copyright © 2013 hoshi10 */
 #pragma once
 #include "../Item.h"
 

@@ -1,3 +1,4 @@
+/* Copyright © 2025 Tim G */
 #pragma once
 
 #include <memory>

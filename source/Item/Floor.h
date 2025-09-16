@@ -1,3 +1,6 @@
+/* Copyright © 2013 hoshi10 */
+/* Copyright © 2025 Tim G */
+/* Copyright © 2015 Fabian Schuiki */
 #pragma once
 #include <set>
 #include "../Sprite.h"

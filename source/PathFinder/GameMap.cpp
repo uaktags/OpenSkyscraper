@@ -1,3 +1,5 @@
+/* Copyright © 2013 hoshi10 */
+/* Copyright © 2016 Matthew Harvey */
 #include <cassert>
 #include "../Item/Item.h"
 #include "../Item/Elevator/Elevator.h"

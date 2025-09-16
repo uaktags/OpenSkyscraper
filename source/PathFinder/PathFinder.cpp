@@ -1,3 +1,4 @@
+/* Copyright © 2013 hoshi10 */
 #include <cmath>
 #include "../Item/Item.h"
 #include "../Route.h"

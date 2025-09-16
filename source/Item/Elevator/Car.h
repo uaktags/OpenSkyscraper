@@ -1,3 +1,5 @@
+/* Copyright © 2012-2015 Fabian Schuiki */
+/* Copyright © 2014 matto */
 #pragma once
 #include "../../GameObject.h"
 #include "../../Sound.h"

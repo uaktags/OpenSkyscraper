@@ -1,3 +1,7 @@
+/* Copyright © 2013-2015 Fabian Schuiki */
+/* Copyright © 2025 Tim G */
+/* Copyright © 2013 hoshi10 */
+/* Copyright © 2017 Matthew Harvey */
 #include "../Game.h"
 #include "../Math/Rand.h"
 #include "Metro.h"

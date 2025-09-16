@@ -1,3 +1,5 @@
+/* Copyright © 2012 Fabian Schuiki */
+/* Copyright © 2013 hoshi10 */
 #pragma once
 #include <string>
 #include "Vector2D.h"

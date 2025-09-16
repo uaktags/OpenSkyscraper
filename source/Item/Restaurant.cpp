@@ -1,3 +1,8 @@
+/* Copyright © 2013 hoshi10 */
+/* Copyright © 2015 Fabian Schuiki */
+/* Copyright © 2025 Tim G */
+/* Copyright © 2015 matto */
+/* Copyright © 2016 Matthew Harvey */
 #include "../Game.h"
 #include "../Math/Rand.h"
 #include "Restaurant.h"

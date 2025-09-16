@@ -1,3 +1,6 @@
+/* Copyright © 2012 Fabian Schuiki */
+/* Copyright © 2016 Matthew Harvey */
+/* Copyright © 2025 Tim G */
 #pragma once
 #include <map>
 #include <string>
