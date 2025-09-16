@@ -1,0 +1,31 @@
+# CodeFlattener Configuration for OpenSkyscraper
+# This configuration is tailored for the OpenSkyscraper C++ project,
+# which is a remake of SimTower using SFML and CMake.
+
+# Use a custom profile that extends the built-in cpp-cmake profile
+profile = "OT"
+
+# Custom profile configuration
+[profiles.OT]
+description = "Custom profile extending cpp-cmake for OpenSkyscraper"
+extends = "cpp-cmake"
+extensions = [".sh"]
+allowed_filenames = ["design.spec.md", "mainmenu.spec.md", "TODO.md", "LICENSE.txt"]
+
+# Include specific directories using globs
+include_globs = ["source/**", "scripts/**", "ci/**", "doc/**", "memory/**", "package/**"]
+
+# Exclude directories using globs
+exclude_globs = ["build/**", "data/**", "thirdparty/**"]
+
+# Output configuration
+output = "OpenSkyscraper-flattened.md"
+markdown = true
+gpt4_tokens = true
+
+# Git integration
+include_git_changes = true
+
+# Processing settings
+parallel = true
+progress = true

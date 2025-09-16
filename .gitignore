@@ -2,10 +2,11 @@
 !/build/default.tower
 build
 Build
-.*
-*~
-!.gitignore
-!.gitmodules
+# Ignore macOS system files
+.DS_Store
+# Allow repository-managed hooks and pre-commit config; track them in repo
+.githooks/
+.pre-commit-config.yaml
 
 # Project Files
 *.kdev4

@@ -53,11 +53,8 @@ The project has migrated much of the UI from libRocket to TGUI. A legacy libRock
 Coding Style
 ------------
 
-- Add a copyright line in the top comment of each file you edit:
-  ```
-  /* Copyright © 2010-2014 John Doe */
-  /* Copyright © 2013 Mark Mensk */
-  ```
+- Please consult the `CONTRIBUTORS` file for canonical author/copyright attributions. Do not add ad-hoc per-file copyright
+  headers; instead ensure you are listed in `CONTRIBUTORS` and open a PR to update it if necessary.
 
 - Everything resides in the OT namespace.
 
