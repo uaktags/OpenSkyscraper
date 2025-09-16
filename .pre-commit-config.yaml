@@ -1,0 +1,16 @@
+repos:
+  - repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: v15.0.7
+    hooks:
+      - id: clang-format
+        files: \.(cpp|h)$
+        args: [--style=file]
+
+  - repo: local
+    hooks:
+      - id: normalize-headers
+        name: Normalize C++ header copyright blocks
+        entry: scripts/normalize_copyrights.sh
+        language: script
+        pass_filenames: false
+        stages: [commit]
