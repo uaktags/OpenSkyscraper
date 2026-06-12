@@ -1,5 +1,7 @@
 #include "Route.h"
+#ifndef OPEN_SKY_ROUTE_SEAM_ONLY
 #include "Item/Item.h"
+#endif
 
 using namespace OT;
 
@@ -23,6 +25,7 @@ bool Route::empty() const
 	return nodes.empty();
 }
 
+#ifndef OPEN_SKY_ROUTE_SEAM_ONLY
 void Route::add(Item::Item * item)
 {
 	add(item, item->position.y);
@@ -40,6 +43,7 @@ void Route::add(Item::Item * item, int floor)
 	if (item->prototype->id == "stairs")    numStairs++;
 	if (item->prototype->id == "escalator") numEscalators++;
 }
+#endif
 
 int Route::score() const
 {
