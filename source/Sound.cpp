@@ -4,8 +4,17 @@
 
 using namespace OT;
 
+namespace
+{
+sf::SoundBuffer &getDefaultSoundBuffer()
+{
+	static sf::SoundBuffer buffer;
+	return buffer;
+}
+}
 
 Sound::Sound()
+	: sf::Sound(getDefaultSoundBuffer())
 {
 	playingInGame = NULL;
 }
@@ -29,5 +38,5 @@ void Sound::Stop()
 
 double Sound::getDurationDouble()
 {
-	return getBuffer()->getDuration().asSeconds();
+	return getBuffer().getDuration().asSeconds();
 }

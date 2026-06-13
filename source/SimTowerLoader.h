@@ -30,7 +30,7 @@ namespace OT
 			char * data;
 			int length;
 			Blob() { data = NULL; length = 0; }
-			~Blob() { if (data) delete data; data = NULL; }
+			~Blob() { if (data) delete[] data; data = NULL; }
 		};
 		typedef std::map<int, Blob> Blobs;
 		typedef std::map<Path, sf::Image> Images;
@@ -46,7 +46,7 @@ namespace OT
 		WindowsNEExecutable exe;
 
 		void prepareBitmaps();
-		void prepareBMPHeader(char * data);
+		void prepareBMPHeader(char * data, int totalSize);
 		void preparePalettes();
 		void loadBitmaps();
 

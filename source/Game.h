@@ -39,6 +39,9 @@ namespace OT {
 
 		bool handleEvent(sf::Event & event);
 		void advance(double dt);
+		bool handleViewportScrollbarEvent(sf::Event & event);
+		void drawViewportScrollbars(sf::RenderTarget & target) const;
+		void qaSetViewportScrollFractions(double horizontal, double vertical);
 
 		Item::Factory itemFactory;
 
@@ -100,6 +103,8 @@ namespace OT {
 
 		void updateRoutes();
 		Route findRoute(Item::Item * start, Item::Item * destination, bool serviceRoute = false);
+		void seedOfficeLunchQa();
+		void seedNewTower();
 
 		Route visualizeRoute;
 
@@ -113,8 +118,11 @@ namespace OT {
 		void reloadGUI();
 
 	private:
+		void clearWorld();
 		double zoom;
 		double2 poi;
+		enum class ViewportDrag { None, Vertical, Horizontal };
+		ViewportDrag viewportDrag;
 
 		//Rocket::Core::ElementDocument * mapWindow;
 

@@ -5,6 +5,7 @@
 #include <SFML/Window.hpp>
 #include <TGUI/Widgets/MenuBar.hpp>
 #include <stack>
+#include <vector>
 
 #include "BitmapManager.h"
 #include "DataManager.h"
@@ -78,9 +79,23 @@ namespace OT
 		void makeMenu();
 
 		std::stack<State *> states;
+		std::vector<State *> statesToDelete;
 
 		bool dumpResources;
 		Path dumpResourcesPath;
+		bool startNewGame;
+		bool startOfficeLunchQa;
+		bool loadGameAtStartup;
+		std::string startupLoadPath;
+		bool captureFrameAtStartup;
+		std::string startupCapturePath;
+		bool setMouseAtStartup;
+		sf::Vector2i startupMousePosition;
+		std::string startupTool;
+		bool setViewportScrollAtStartup;
+		double startupViewportScrollHorizontal;
+		double startupViewportScrollVertical;
+		bool fullscreen;
 	};
 
 	extern Application * App;

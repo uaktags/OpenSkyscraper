@@ -2,10 +2,9 @@
 
 using namespace OT::Item;
 
-
 void Escalator::init()
 {
 	frameCount = 8;
-	sprite.SetImage(App->bitmaps["simtower/escalator"]);
+	sprite.setTexture(App->bitmaps["simtower/escalator"]);
 	Stairlike::init();
 }

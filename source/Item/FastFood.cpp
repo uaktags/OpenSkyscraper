@@ -1,10 +1,10 @@
+/* Copyright © 2013 Fabian Schuiki */
 #include "../Game.h"
 #include "../Math/Rand.h"
 #include "FastFood.h"
 
 using namespace OT;
 using namespace OT::Item;
-
 
 FastFood::~FastFood()
 {
@@ -18,27 +18,27 @@ void FastFood::init()
 	variant = rand() % 5;
 	open = false;
 
-	sprite.SetImage(App->bitmaps["simtower/fastfood"]);
-	sprite.setOrigin(0, 24);
-	sprite.setPosition(getPosition().x*8, -getPosition().y*36);
+	sprite.setTexture(App->bitmaps["simtower/fastfood"]);
+	sprite.setOrigin({0.f, 24.f});
+	sprite.setPosition({static_cast<float>(getPosition().x * 8), static_cast<float>(-getPosition().y * 36)});
 	addSprite(&sprite);
 	spriteNeedsUpdate = false;
 
 	updateSprite();
 }
 
-void FastFood::encodeXML(tinyxml2::XMLPrinter & xml)
+void FastFood::encodeXML(tinyxml2::XMLPrinter &xml)
 {
 	Item::encodeXML(xml);
 	xml.PushAttribute("variant", variant);
 	xml.PushAttribute("open", open);
 }
 
-void FastFood::decodeXML(tinyxml2::XMLElement & xml)
+void FastFood::decodeXML(tinyxml2::XMLElement &xml)
 {
 	Item::decodeXML(xml);
 	variant = xml.IntAttribute("variant");
-	open    = xml.BoolAttribute("open");
+	open = xml.BoolAttribute("open");
 	updateSprite();
 }
 
@@ -46,30 +46,34 @@ void FastFood::updateSprite()
 {
 	spriteNeedsUpdate = false;
 	int index = 3;
-	if (open) index = std::min<int>((int)ceil(people.size() / 5.0), 2);
-	sprite.setTextureRect(sf::IntRect(index*128, variant*24, 128, 24));
+	if (open)
+		index = std::min<int>((int)ceil(people.size() / 5.0), 2);
+	sprite.setTextureRect(sf::IntRect({index * 128, variant * 24}, {128, 24}));
 }
 
 void FastFood::advance(double dt)
 {
-	//Open
-	if (game->time.checkHour(10)) {
+	// Open
+	if (game->time.checkHour(10))
+	{
 		open = true;
 		spriteNeedsUpdate = true;
 
-		//Create new customers for today.
+		// Create new customers for today.
 		int today = 10;
 		clearCustomers();
-		for (int i = 0; i < today; i++) {
-			Customer * c = new Customer(this);
+		for (int i = 0; i < today; i++)
+		{
+			Customer *c = new Customer(this);
 			c->arrivalTime = (game->time.year - 1) * 12 + (game->time.quarter - 1) * 3 + game->time.day + Math::randd(Time::hourToAbsolute(10), Time::hourToAbsolute(20));
 			customers.insert(c);
 			arrivingCustomers.push(c);
 		}
 	}
 
-	//Close
-	if (game->time.checkHour(21) && open) {
+	// Close
+	if (game->time.checkHour(21) && open)
+	{
 		open = false;
 		population = customerMetadata.size();
 		game->populationNeedsUpdate = true;
@@ -78,48 +82,62 @@ void FastFood::advance(double dt)
 		game->transferFunds(population * 200 - 2000, "Income from Fast Food");
 	}
 
-	//Make customers arrive.
-	while (!arrivingCustomers.empty()) {
-		Customer * c = arrivingCustomers.top();
-		if (game->time.absolute > c->arrivalTime && !lobbyRoute.empty()) {
+	// Make customers arrive.
+	while (!arrivingCustomers.empty())
+	{
+		Customer *c = arrivingCustomers.top();
+		if (game->time.absolute > c->arrivalTime && !lobbyRoute.empty())
+		{
 			arrivingCustomers.pop();
 			c->journey.set(lobbyRoute);
-		} else break;
+		}
+		else
+			break;
 	}
 
-	//Make customers leave once they're done.
-	for (std::list<Person *>::iterator ip = eatingCustomers.begin(); ip != eatingCustomers.end();) {
-		Person * p = *ip;
+	// Make customers leave once they're done.
+	for (std::list<Person *>::iterator ip = eatingCustomers.begin(); ip != eatingCustomers.end();)
+	{
+		Person *p = *ip;
 		CustomerMetadata &m = customerMetadata[p];
-		if (game->time.absolute >= m.arrivalTime + 20 * Time::kBaseSpeed || !open) {
+		if (game->time.absolute >= m.arrivalTime + 20 * Time::kBaseSpeed || !open)
+		{
 			const Route &r = game->findRoute(this, game->mainLobby); // Customers may leave for different destinations besides main lobby, so this is not precomputed
-			if (r.empty()) {
+			if (r.empty())
+			{
 				LOG(DEBUG, "%p has no route to leave", p);
 				ip++;
-			} else {
+			}
+			else
+			{
 				LOG(DEBUG, "%p leaving", p);
 				ip = eatingCustomers.erase(ip);
 				removePerson(p);
 				p->journey.set(r);
 			}
-		} else break;
+		}
+		else
+			break;
 	}
 
-	if (spriteNeedsUpdate) updateSprite();
+	if (spriteNeedsUpdate)
+		updateSprite();
 }
 
-void FastFood::addPerson(Person * p)
+void FastFood::addPerson(Person *p)
 {
 	Item::addPerson(p);
-	CustomerMetadata & m = customerMetadata[p];
+	CustomerMetadata &m = customerMetadata[p];
 	m.arrivalTime = game->time.absolute;
 	eatingCustomers.push_back(p);
 	spriteNeedsUpdate = true;
 }
 
-void FastFood::removePerson(Person * p)
+void FastFood::removePerson(Person *p)
 {
 	Item::removePerson(p);
+	eatingCustomers.remove(p);
+	customerMetadata.erase(p);
 	spriteNeedsUpdate = true;
 }
 
@@ -127,14 +145,15 @@ void FastFood::clearCustomers()
 {
 	for (Customers::iterator c = customers.begin(); c != customers.end(); c++)
 		delete *c;
-	while (!arrivingCustomers.empty()) arrivingCustomers.pop();
+	while (!arrivingCustomers.empty())
+		arrivingCustomers.pop();
 	eatingCustomers.clear();
 	customers.clear();
 	customerMetadata.clear();
 }
 
-FastFood::Customer::Customer(FastFood * item)
-:	Person(item->game)
+FastFood::Customer::Customer(FastFood *item)
+	: Person(item->game)
 {
 	arrivalTime = 0;
 	Type types[] = {kMan, kWoman1, kWoman2, kWomanWithChild1};
@@ -143,7 +162,8 @@ FastFood::Customer::Customer(FastFood * item)
 
 Path FastFood::getRandomBackgroundSoundPath()
 {
-	if (!open) return "";
+	if (!open)
+		return "";
 	char name[128];
 	snprintf(name, 128, "simtower/fastfood/%i", rand() % 3);
 	// Maybe we should make the choice of the sound based on the number of customers, not

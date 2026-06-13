@@ -4,11 +4,11 @@
 #include "../Math/Rand.h"
 #include "../Time.h"
 
-using OT::Item::Office;
 using OT::Path;
-using OT::Math::randd;
+using OT::Route;
 using OT::Time;
-
+using OT::Item::Office;
+using OT::Math::randd;
 
 Office::~Office()
 {
@@ -27,8 +27,9 @@ void Office::init()
 	rent = 10000;
 	rentDeposit = rent;
 
-	sprite.SetImage(App->bitmaps["simtower/office"]);
-	sprite.setOrigin(0, 24);
+	sprite.setTexture(App->bitmaps["simtower/office"]);
+	sprite.setOrigin({0.f, 24.f});
+	sprite.setPosition({static_cast<float>(position.x * 8), static_cast<float>(position.y * -36)});
 	addSprite(&sprite);
 	spriteNeedsUpdate = false;
 
@@ -39,9 +40,9 @@ void Office::init()
 		Person::kMan,
 		Person::kMan,
 		Person::kWoman1,
-		Person::kWoman2
-	};
-	for (int i = 0; i < 6; i++) {
+		Person::kWoman2};
+	for (int i = 0; i < 6; i++)
+	{
 		workers.insert(new Worker(this, types[i]));
 	}
 	rescheduleWorkers();
@@ -51,7 +52,7 @@ void Office::init()
 	updateSprite();
 }
 
-void Office::encodeXML(tinyxml2::XMLPrinter & xml)
+void Office::encodeXML(tinyxml2::XMLPrinter &xml)
 {
 	Item::encodeXML(xml);
 	xml.PushAttribute("rent", rent);
@@ -61,14 +62,14 @@ void Office::encodeXML(tinyxml2::XMLPrinter & xml)
 	xml.PushAttribute("lit", lit);
 }
 
-void Office::decodeXML(tinyxml2::XMLElement & xml)
+void Office::decodeXML(tinyxml2::XMLElement &xml)
 {
 	Item::decodeXML(xml);
-	rent        = xml.IntAttribute("rent");
+	rent = xml.IntAttribute("rent");
 	rentDeposit = xml.IntAttribute("rentDeposit");
-	variant     = xml.IntAttribute("variant");
-	occupied    = xml.BoolAttribute("occupied");
-	lit         = xml.BoolAttribute("lit");
+	variant = xml.IntAttribute("variant");
+	occupied = xml.BoolAttribute("occupied");
+	lit = xml.BoolAttribute("lit");
 	updateSprite();
 }
 
@@ -77,17 +78,19 @@ void Office::updateSprite()
 	spriteNeedsUpdate = false;
 	int index_x = (lit ? 0 : 1);
 	int index_y = (occupied ? variant : 6);
-	sprite.setTextureRect(sf::IntRect(index_x*72, index_y*24, 72, 24));
-	sprite.setPosition(position.x*8, position.y*-36);
+	sprite.setTextureRect(sf::IntRect({index_x * 72, index_y * 24}, {72, 24}));
+	sprite.setPosition({static_cast<float>(position.x * 8), static_cast<float>(position.y * -36)});
 }
 
 void Office::advance(double dt)
 {
 	// Occupy the office if it is attractive enough.
-	if (!occupied && game->time.day != 2 && game->time.hour >= 7 && game->time.hour < 17 && isAttractive()) {
+	if (!occupied && game->time.day != 2 && game->time.hour >= 7 && game->time.hour < 17 && isAttractive())
+	{
 		// The item has a 10% chance of being occupied every 1/500th of a day. This means
 		// that on average, an item is occupied after 1/250th of a day.
-		if (game->time.checkTick(0.002) && (rand() % 10) == 0) {
+		if (game->time.checkTick(0.002) && (rand() % 10) == 0)
+		{
 			occupied = true;
 			variant = rand() % 6;
 			lit = true;
@@ -101,9 +104,11 @@ void Office::advance(double dt)
 
 	// Monday 5:00 needs special treatment as this is where rent will be paid and tenants vacate
 	// unattractive items.
-	if (occupied && game->time.checkHour(5) && game->time.day == 0) {
+	if (occupied && game->time.checkHour(5) && game->time.day == 0)
+	{
 		// Vacate unattractive offices.
-		if (!isAttractive()) {
+		if (!isAttractive())
+		{
 			occupied = false;
 			spriteNeedsUpdate = true;
 			population = 0;
@@ -111,78 +116,154 @@ void Office::advance(double dt)
 			game->transferFunds(-rentDeposit, "Vacated Office's rent deposit payed back");
 		}
 
-		//Pay rent for the others.
-		else {
+		// Pay rent for the others.
+		else
+		{
 			game->transferFunds(rent, "Income from Office rent");
 		}
 	}
 
 	// Reset worker schedules at 5:00 if the office is occupied.
-	if (occupied && game->time.checkHour(5) && game->time.day != 2) {
+	if (occupied && game->time.checkHour(5) && game->time.day != 2)
+	{
 		rescheduleWorkers();
 	}
 
 	// Animate workers if occupied.
-	if (occupied) {
+	if (occupied)
+	{
 		// Make workers arrive.
-		while (!arrivalQueue.empty()) {
-			Worker * c = arrivalQueue.top();
-			if (game->time.hour > c->arrivalTime && !lobbyRoute.empty()) {
+		while (!arrivalQueue.empty())
+		{
+			Worker *c = arrivalQueue.top();
+			if (game->time.hour > c->arrivalTime && !lobbyRoute.empty())
+			{
 				arrivalQueue.pop();
 				c->journey.set(lobbyRoute);
-			} else break;
+			}
+			else
+				break;
 		}
 
 		// Make workers leave.
-		while (!departureQueue.empty()) {
-			Worker * c = departureQueue.top();
-			if (game->time.hour > c->departureTime) {
+		while (!departureQueue.empty())
+		{
+			Worker *c = departureQueue.top();
+			if (game->time.hour > c->departureTime)
+			{
 				departureQueue.pop();
 				// Find a way home for the worker.
 				const Route &r = game->findRoute(this, game->mainLobby);
-				if (r.empty()) {
+				if (r.empty())
+				{
 					LOG(DEBUG, "%p has no route to leave", c);
-				} else {
+				}
+				else
+				{
 					LOG(DEBUG, "%p leaving office", c);
 					c->journey.set(r);
 				}
-			} else break;
+			}
+			else
+				break;
+		}
+
+		while (!lunchQueue.empty())
+		{
+			Worker *w = lunchQueue.top();
+			if (game->time.hour > w->lunchTime)
+			{
+				lunchQueue.pop();
+				Route route;
+				if (w->at == this && findLunchRoute(route))
+				{
+					LOG(DEBUG, "Worker %p leaving office for lunch", w);
+					w->journey.set(route);
+					w->lunchReturnTime = game->time.absolute + 10 * Time::kBaseSpeed;
+					lunchReturnQueue.push(w);
+				}
+				else
+				{
+					w->stress += 0.1;
+					LOG(DEBUG, "Worker %p has no route to lunch", w);
+				}
+			}
+			else
+				break;
+		}
+
+		while (!lunchReturnQueue.empty())
+		{
+			Worker *w = lunchReturnQueue.top();
+			if (game->time.check(w->lunchReturnTime))
+			{
+				lunchReturnQueue.pop();
+				if (w->at && w->at != this)
+				{
+					const Route &r = game->findRoute(w->at, this);
+					if (r.empty())
+					{
+						w->stress += 0.1;
+						LOG(DEBUG, "Worker %p has no route back from lunch", w);
+					}
+					else
+					{
+						LOG(DEBUG, "Worker %p returning from lunch", w);
+						w->journey.set(r);
+					}
+				}
+			}
+			else
+				break;
 		}
 
 		// Make salesmen leave.
-		while (!salesLeaveQueue.empty()) {
+		while (!salesLeaveQueue.empty())
+		{
 			Worker *w = salesLeaveQueue.top();
-			if (game->time.check(w->leaveForSalesTime) && !lobbyRoute.empty()) {
+			if (game->time.check(w->leaveForSalesTime) && !lobbyRoute.empty())
+			{
 				salesLeaveQueue.pop();
 				const Route &r = game->findRoute(this, game->mainLobby);
-				if (r.empty()) {
+				if (r.empty())
+				{
 					LOG(DEBUG, "%p has no route to leave", w);
-				} else {
+				}
+				else
+				{
 					LOG(DEBUG, "Salesman %p leaving office", w);
 					w->journey.set(r);
 				}
-			} else break;
+			}
+			else
+				break;
 		}
 
 		// Make salesmen return.
-		while (!salesReturnQueue.empty()) {
+		while (!salesReturnQueue.empty())
+		{
 			Worker *w = salesReturnQueue.top();
-			if (game->time.check(w->returnFromSalesTime) && !lobbyRoute.empty()) {
+			if (game->time.check(w->returnFromSalesTime) && !lobbyRoute.empty())
+			{
 				salesReturnQueue.pop();
 				LOG(DEBUG, "Calling back salesman %p", w);
 				w->journey.set(lobbyRoute);
-			} else break;
+			}
+			else
+				break;
 		}
 	}
 
-	//Turn on the office lights.
+	// Turn on the office lights.
 	bool shouldBeLit = (game->time.day != 2 && game->time.hour >= 7 && game->time.hour < 17) || !people.empty();
-	if (lit != shouldBeLit ) {
+	if (lit != shouldBeLit)
+	{
 		lit = shouldBeLit;
 		spriteNeedsUpdate = true;
 	}
 
-	if (spriteNeedsUpdate) updateSprite();
+	if (spriteNeedsUpdate)
+		updateSprite();
 }
 
 /** Returns whether the item will be vacated at the next month. */
@@ -191,22 +272,25 @@ bool Office::isAttractive()
 	return !lobbyRoute.empty();
 }
 
-void Office::addPerson(Person * p)
+void Office::addPerson(Person *p)
 {
 	Item::addPerson(p);
 
-	//Reduce the person's stress a bit, just for the time being.
+	// Reduce the person's stress a bit, just for the time being.
 	p->stress *= 0.5;
 
 	// If this was a salesman, set a sales leave and return time for him.
-	if (p->type == Person::kSalesman) {
+	if (p->type == Person::kSalesman)
+	{
 		Worker *w = (Worker *)p;
-		if (w->leaveForSalesTime < 0) {
+		if (w->leaveForSalesTime < 0)
+		{
 			w->leaveForSalesTime = game->time.absolute + randd(0.01, 0.02);
 			LOG(DEBUG, "Salesman %p will leave at %f", w, w->leaveForSalesTime);
 			salesLeaveQueue.push(w);
 		}
-		if (w->returnFromSalesTime < 0) {
+		if (w->returnFromSalesTime < 0)
+		{
 			w->returnFromSalesTime = floor(game->time.absolute) + randd(Time::hourToAbsolute(13), Time::hourToAbsolute(15));
 			LOG(DEBUG, "Salesman %p will return at %f", w, w->returnFromSalesTime);
 			salesReturnQueue.push(w);
@@ -214,9 +298,63 @@ void Office::addPerson(Person * p)
 	}
 }
 
+bool Office::findLunchRoute(Route &route)
+{
+	int bestScore = 0;
+	const Game::ItemSet &foodItems = game->itemsByType["fastfood"];
+	for (Game::ItemSet::const_iterator i = foodItems.begin(); i != foodItems.end(); i++)
+	{
+		Route candidate = game->findRoute(this, *i);
+		if (!candidate.empty() && (route.empty() || candidate.score() < bestScore))
+		{
+			route = candidate;
+			bestScore = candidate.score();
+		}
+	}
+	return !route.empty();
+}
+
+void Office::prepareLunchQa(double lunchHour)
+{
+	occupied = true;
+	lit = true;
+	spriteNeedsUpdate = true;
+	while (!arrivalQueue.empty())
+		arrivalQueue.pop();
+	while (!departureQueue.empty())
+		departureQueue.pop();
+	while (!lunchQueue.empty())
+		lunchQueue.pop();
+	while (!lunchReturnQueue.empty())
+		lunchReturnQueue.pop();
+	while (!salesLeaveQueue.empty())
+		salesLeaveQueue.pop();
+	while (!salesReturnQueue.empty())
+		salesReturnQueue.pop();
+	for (Workers::iterator iw = workers.begin(); iw != workers.end(); iw++)
+	{
+		Worker *w = *iw;
+		w->stress = 0;
+		w->leaveForSalesTime = -1;
+		w->returnFromSalesTime = -1;
+		w->lunchReturnTime = -1;
+		if (!w->at)
+			Item::addPerson(w);
+		if (w->type != Person::kSalesman)
+		{
+			w->lunchTime = lunchHour;
+			lunchQueue.push(w);
+		}
+	}
+	population = workers.size();
+	game->populationNeedsUpdate = true;
+	updateSprite();
+}
+
 Path Office::getRandomBackgroundSoundPath()
 {
-	if (!lit || !occupied) return "";
+	if (!lit || !occupied)
+		return "";
 	return "simtower/office";
 }
 
@@ -229,18 +367,27 @@ void Office::rescheduleWorkers()
 	LOG(DEBUG, "Rescheduling workers.");
 
 	// Clear the current queues.
-	while (!arrivalQueue.empty()) arrivalQueue.pop();
-	while (!departureQueue.empty()) departureQueue.pop();
-	while (!lunchQueue.empty()) lunchQueue.pop();
-	while (!salesLeaveQueue.empty()) salesLeaveQueue.pop();
-	while (!salesReturnQueue.empty()) salesReturnQueue.pop();
+	while (!arrivalQueue.empty())
+		arrivalQueue.pop();
+	while (!departureQueue.empty())
+		departureQueue.pop();
+	while (!lunchQueue.empty())
+		lunchQueue.pop();
+	while (!lunchReturnQueue.empty())
+		lunchReturnQueue.pop();
+	while (!salesLeaveQueue.empty())
+		salesLeaveQueue.pop();
+	while (!salesReturnQueue.empty())
+		salesReturnQueue.pop();
 
-	//For each worker, decide on an arrival, departure and lunch time.
-	for (Workers::iterator iw = workers.begin(); iw != workers.end(); iw++) {
+	// For each worker, decide on an arrival, departure and lunch time.
+	for (Workers::iterator iw = workers.begin(); iw != workers.end(); iw++)
+	{
 		Worker *w = *iw;
 		w->arrivalTime = randd(7, 8);
 		w->departureTime = randd(17, 19);
 		w->lunchTime = randd(12, 12.2);
+		w->lunchReturnTime = -1;
 		w->stress = 0;
 		w->leaveForSalesTime = -1;
 		w->returnFromSalesTime = -1;

@@ -15,6 +15,7 @@ namespace OT {
 	public:
 		GameMap();
 		~GameMap();
+		void clear();
 
 		MapNode* addNode(const MapNode::Point &p, Item::Item *item);
 		void removeNode(const MapNode::Point &p, Item::Item *item);
@@ -25,7 +26,5 @@ namespace OT {
 		std::map<MapNode::Point, MapNode *> gameMap;
 		std::map<int, std::list<MapNode*> > mapNodesByFloor;
 		std::map<int, FloorNode *> floorNodes;
-
-		void clear();
 	};
 }

@@ -11,23 +11,29 @@
 
 using namespace OT;
 
-ToolboxWindow::ToolboxWindow(Game * game) : GameObject(game) {
+ToolboxWindow::ToolboxWindow(Game *game) : GameObject(game)
+{
     // No need to explicitly load, BitmapManager will handle it on first use
     window = tgui::ChildWindow::create();
     window->getRenderer()->setTitleBarHeight(10 * app->uiScale);
     window->setClientSize({106 * app->uiScale, app->uiScale * 220});
     // Move toolbox window up to just below the menu bar (22px * uiScale)
-    window->setPosition({0, 24 * app->uiScale});
-    
+    window->setPosition(0, 24 * app->uiScale);
+
     reload();
     app->gui.add(window);
 }
 
-void ToolboxWindow::close() {
-
+void ToolboxWindow::close()
+{
+    if (window) {
+        window->removeAllWidgets();
+        app->gui.remove(window);
+    }
 }
 
-void ToolboxWindow::reload() {
+void ToolboxWindow::reload()
+{
     window->removeAllWidgets();
 
     auto topLayout = tgui::VerticalLayout::create();
@@ -42,34 +48,38 @@ void ToolboxWindow::reload() {
     toolsLayout->addSpace(0.6f);
     auto bulldozeButton = makeButton(21, app->bitmaps["simtower/ui/toolbox/tools"], 0);
     toolsLayout->add(bulldozeButton);
-    bulldozeButton->onPress([this]{ game->selectTool("bulldozer"); });
+    bulldozeButton->onPress([this]
+                            { game->selectTool("bulldozer"); });
 
     auto fingerButton = makeButton(21, app->bitmaps["simtower/ui/toolbox/tools"], 1);
     toolsLayout->add(fingerButton);
-    fingerButton->onPress([this]{ game->selectTool("finger"); });
+    fingerButton->onPress([this]
+                          { game->selectTool("finger"); });
 
     auto inspectButton = makeButton(21, app->bitmaps["simtower/ui/toolbox/tools"], 2);
     toolsLayout->add(inspectButton);
-    inspectButton->onPress([this]{game->selectTool("inspector");});
+    inspectButton->onPress([this]
+                           { game->selectTool("inspector"); });
     toolsLayout->addSpace(0.6f);
 
     // item buttons
     int row = 0;
-    for (int i = 0; i < game->itemFactory.prototypes.size(); i++) {
-        Item::AbstractPrototype * prototype = game->itemFactory.prototypes[i];
+    for (int i = 0; i < game->itemFactory.prototypes.size(); i++)
+    {
+        Item::AbstractPrototype *prototype = game->itemFactory.prototypes[i];
 
         char toolname[128];
         snprintf(toolname, 128, "item-%s", prototype->id.c_str());
 
         char style[512];
-        snprintf(style, 512, "button#%s { background-image-s: %ipx %ipx; }", toolname, prototype->icon*32, prototype->icon*32+32);
+        snprintf(style, 512, "button#%s { background-image-s: %ipx %ipx; }", toolname, prototype->icon * 32, prototype->icon * 32 + 32);
         LOG(DEBUG, "style for %s: %s", prototype->name.c_str(), style);
         LOG(DEBUG, "prototype->icon for %s: %d", prototype->name.c_str(), prototype->icon);
 
         // Choose spritesheet based on uiScale
         sf::Texture itemTexture;
-        //if (app->uiScale == 1.0f) {
-            itemTexture = app->bitmaps["simtower/ui/toolbox/items"];
+        // if (app->uiScale == 1.0f) {
+        itemTexture = app->bitmaps["simtower/ui/toolbox/items"];
         //} else {
         //    itemTexture = app->bitmaps["toolbox/grey.png"];
         //}
@@ -87,40 +97,45 @@ void ToolboxWindow::reload() {
     }
 }
 
-void ToolboxWindow::onToolButtonPress(const char * tool) {
+void ToolboxWindow::onToolButtonPress(const char *tool)
+{
     LOG(IMPORTANT, "tool button pressed: %s", tool);
     game->selectTool(tool);
 }
 
-tgui::BitmapButton::Ptr ToolboxWindow::makeButton(int size, sf::Texture textureMap, int index) {
+tgui::BitmapButton::Ptr ToolboxWindow::makeButton(int size, sf::Texture textureMap, int index)
+{
     int scaledSize = size * app->uiScale;
 
     // Extract the sub-rectangle from the spritesheet
-    sf::IntRect rect(index * size, 0, size, size);
+    sf::IntRect rect({index * size, 0}, {size, size});
     sf::Image iconImage = textureMap.copyToImage();
     sf::Image subImage;
-    subImage.create(size, size);
-    subImage.copy(iconImage, 0, 0, rect, false);
+    subImage.resize({static_cast<unsigned>(size), static_cast<unsigned>(size)});
+    subImage.copy(iconImage, {0, 0}, rect, false);
 
     // Scale the image to the button size
     sf::Image scaledImage;
-    scaledImage.create(scaledSize, scaledSize);
+    scaledImage.resize({static_cast<unsigned>(scaledSize), static_cast<unsigned>(scaledSize)});
     // Simple nearest-neighbor scaling (for pixel art look)
-    for (int y = 0; y < scaledSize; ++y) {
-        for (int x = 0; x < scaledSize; ++x) {
+    for (int y = 0; y < scaledSize; ++y)
+    {
+        for (int x = 0; x < scaledSize; ++x)
+        {
             int srcX = x * size / scaledSize;
             int srcY = y * size / scaledSize;
-            scaledImage.setPixel(x, y, subImage.getPixel(srcX, srcY));
+            scaledImage.setPixel({static_cast<unsigned>(x), static_cast<unsigned>(y)},
+                                 subImage.getPixel({static_cast<unsigned>(srcX), static_cast<unsigned>(srcY)}));
         }
     }
 
     // Create a new SFML texture from the scaled image
     sf::Texture scaledTexture;
-    scaledTexture.loadFromImage(scaledImage);
+    [[maybe_unused]] bool loaded = scaledTexture.loadFromImage(scaledImage);
 
     // Load into TGUI texture using loadFromPixelData
     tgui::Texture tguiImage;
-    tguiImage.loadFromPixelData({scaledSize, scaledSize}, scaledImage.getPixelsPtr());
+    tguiImage.loadFromPixelData({static_cast<unsigned>(scaledSize), static_cast<unsigned>(scaledSize)}, scaledImage.getPixelsPtr());
 
     tgui::BitmapButton::Ptr b = tgui::BitmapButton::create();
     b->setSize(scaledSize, scaledSize);

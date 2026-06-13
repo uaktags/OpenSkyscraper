@@ -2,7 +2,9 @@
 #include <cassert>
 #include "Application.h"
 #include "Game.h"
+#include "Item/FastFood.h"
 #include "Item/Lobby.h"
+#include "Item/Office.h"
 #include "OpenGL.h"
 
 #ifdef _WIN32
@@ -33,12 +35,13 @@ Game::Game(Application & app)
 	itemBelowCursor = NULL;
 	toolPrototype = NULL;
 
-	zoom = app.uiScale;
+	zoom = 0.5;
 	poi.y = 200;
 	poi.x = 0;
 
 	draggingElevator = NULL;
 	draggingMotor = 0;
+	viewportDrag = ViewportDrag::None;
 
 	mainLobby = NULL;
 	metroStation = NULL;
@@ -68,10 +71,46 @@ Game::Game(Application & app)
 
 Game::~Game()
 {
-	for (ItemSet::iterator i = items.begin(); i != items.end(); i++) delete *i;
+	clearWorld();
+}
+
+void Game::clearWorld()
+{
+	for (ItemSet::iterator i = items.begin(); i != items.end(); i++) {
+		delete *i;
+	}
 	items.clear();
 	itemsByFloor.clear();
 	itemsByType.clear();
+	floorItems.clear();
+	mainLobby = NULL;
+	metroStation = NULL;
+	itemBelowCursor = NULL;
+	population = 0;
+	populationNeedsUpdate = false;
+	visualizeRoute.clear();
+	gameMap.clear();
+	decorations.reset();
+
+	draggingElevator = NULL;
+	draggingMotor = 0;
+	draggingElevatorStart = 0;
+	draggingElevatorLower = false;
+	viewportDrag = ViewportDrag::None;
+	toolPrototype = NULL;
+
+	cockSound.Stop();
+	morningSound.Stop();
+	bellsSound.Stop();
+	eveningSound.Stop();
+	while (!autoreleaseSounds.empty()) {
+		Sound * sound = *autoreleaseSounds.begin();
+		sound->Stop();
+		autoreleaseSounds.erase(autoreleaseSounds.begin());
+		delete sound;
+	}
+	playingSounds.clear();
+	soundPlayTimes.clear();
 }
 
 void Game::activate()
@@ -86,37 +125,72 @@ void Game::deactivate()
 
 bool Game::handleEvent(sf::Event & event)
 {
-	switch (event.type) {
-		case sf::Event::KeyPressed: {
-			switch (event.key.code) {
-				case sf::Keyboard::Left:  poi.x -= 20; return true;
-				case sf::Keyboard::Right: poi.x += 20; return true;
-				case sf::Keyboard::Up:    poi.y += 20; return true;
-				case sf::Keyboard::Down:  poi.y -= 20; return true;
-				case sf::Keyboard::F1:    reloadGUI(); return true;
-				case sf::Keyboard::F3:    setRating(1); return true;
-				case sf::Keyboard::F2: {
+	if (handleViewportScrollbarEvent(event))
+		return true;
+
+	enum class EventType {
+		None,
+		KeyPressed,
+		TextEntered,
+		MouseButtonPressed,
+		MouseMoved,
+		MouseButtonReleased
+	};
+
+	EventType eventType = EventType::None;
+	sf::Keyboard::Key keyCode = sf::Keyboard::Key::Unknown;
+	char32_t textUnicode = 0;
+	sf::Vector2i mousePosition{};
+
+	if (const auto * keyPressed = event.getIf<sf::Event::KeyPressed>()) {
+		eventType = EventType::KeyPressed;
+		keyCode = keyPressed->code;
+	} else if (const auto * textEntered = event.getIf<sf::Event::TextEntered>()) {
+		eventType = EventType::TextEntered;
+		textUnicode = textEntered->unicode;
+	} else if (const auto * mouseButtonPressed = event.getIf<sf::Event::MouseButtonPressed>()) {
+		eventType = EventType::MouseButtonPressed;
+		mousePosition = mouseButtonPressed->position;
+	} else if (const auto * mouseMoved = event.getIf<sf::Event::MouseMoved>()) {
+		eventType = EventType::MouseMoved;
+		mousePosition = mouseMoved->position;
+	} else if (event.is<sf::Event::MouseButtonReleased>()) {
+		eventType = EventType::MouseButtonReleased;
+	}
+
+	switch (eventType) {
+		case EventType::KeyPressed: {
+			switch (keyCode) {
+				case sf::Keyboard::Key::Left:  poi.x -= 20; return true;
+				case sf::Keyboard::Key::Right: poi.x += 20; return true;
+				case sf::Keyboard::Key::Up:    poi.y += 20; return true;
+				case sf::Keyboard::Key::Down:  poi.y -= 20; return true;
+				case sf::Keyboard::Key::F1:    reloadGUI(); return true;
+				case sf::Keyboard::Key::F3:    setRating(1); return true;
+				case sf::Keyboard::Key::F2: {
 					FILE * f = fopen("default.tower", "w");
 					tinyxml2::XMLPrinter xml(f);
 					encodeXML(xml);
 					fclose(f);
 				} return true;
-				case sf::Keyboard::PageUp:   zoom /= 2; return true;
-				case sf::Keyboard::PageDown: zoom *= 2; return true;
+				case sf::Keyboard::Key::PageUp:   zoom /= 2; return true;
+				case sf::Keyboard::Key::PageDown: zoom *= 2; return true;
+				default: break;
 			}
 		} break;
 
-		case sf::Event::TextEntered: {
-			switch (event.text.unicode) {
+		case EventType::TextEntered: {
+			switch (textUnicode) {
 				case '0': setSpeedMode(0); return true;
 				case '1': setSpeedMode(1); return true;
 				case '2': setSpeedMode(2); return true;
 				case '3': setSpeedMode(3); return true;
+				default: break;
 			} break;
 		} break;
 
-		case sf::Event::MouseButtonPressed: {
-			float2 mousePoint(event.mouseButton.x, event.mouseButton.y);
+		case EventType::MouseButtonPressed: {
+			float2 mousePoint(mousePosition.x, mousePosition.y);
 			//rectf toolboxWindowRect(float2(toolboxWindow.window->getAbsolutePosition().x, toolboxWindow.window->getAbsolutePosition().y), float2(toolboxWindow.window->GetClientWidth(), toolboxWindow.window->GetClientHeight()));
 			// rectf timeWindowRect(float2(timeWindow.window->GetAbsoluteLeft(), timeWindow.window->GetAbsoluteTop()), float2(timeWindow.window->GetClientWidth(), timeWindow.window->GetClientHeight()));
 			// rectf mapWindowRect(float2(mapWindow->GetAbsoluteLeft(), mapWindow->GetAbsoluteTop()), float2(mapWindow->GetClientWidth(), mapWindow->GetClientHeight()));
@@ -438,7 +512,7 @@ bool Game::handleEvent(sf::Event & event)
 			}
 		} break;
 
-		case sf::Event::MouseMoved: {
+		case EventType::MouseMoved: {
 			if (draggingElevator && draggingElevator->repositionMotor(draggingMotor, toolPosition.y)) {
 				// Construct floors
 				if (draggingElevatorLower) {
@@ -463,11 +537,113 @@ bool Game::handleEvent(sf::Event & event)
 			}
 		} break;
 
-		case sf::Event::MouseButtonReleased: {
+		case EventType::MouseButtonReleased: {
 			draggingElevator = NULL;
 		} break;
+		case EventType::None:
+			break;
 	}
 	return false;
+}
+
+bool Game::handleViewportScrollbarEvent(sf::Event &event)
+{
+	sf::Vector2u ws = app.window.getSize();
+	const int scrollbarSize = 16;
+	const int topOffset = 23;
+	const int rightX = static_cast<int>(ws.x) - scrollbarSize;
+	const int bottomY = static_cast<int>(ws.y) - scrollbarSize;
+
+	auto setVerticalFromMouse = [&](int y) {
+		double usable = std::max(1, static_cast<int>(ws.y) - topOffset - scrollbarSize);
+		double t = std::max(0.0, std::min(1.0, (y - topOffset) / usable));
+		poi.y = 360 * 12 - t * (360 * 13);
+	};
+	auto setHorizontalFromMouse = [&](int x) {
+		double usable = std::max(1, static_cast<int>(ws.x) - scrollbarSize);
+		double t = std::max(0.0, std::min(1.0, x / usable));
+		poi.x = -512 + t * 1024;
+	};
+
+	if (const auto *pressed = event.getIf<sf::Event::MouseButtonPressed>()) {
+		const sf::Vector2i p = pressed->position;
+		if (p.x >= rightX && p.y >= topOffset && p.y < bottomY) {
+			viewportDrag = ViewportDrag::Vertical;
+			setVerticalFromMouse(p.y);
+			return true;
+		}
+		if (p.y >= bottomY && p.x < rightX) {
+			viewportDrag = ViewportDrag::Horizontal;
+			setHorizontalFromMouse(p.x);
+			return true;
+		}
+	}
+	if (const auto *moved = event.getIf<sf::Event::MouseMoved>()) {
+		if (viewportDrag == ViewportDrag::Vertical) {
+			setVerticalFromMouse(moved->position.y);
+			return true;
+		}
+		if (viewportDrag == ViewportDrag::Horizontal) {
+			setHorizontalFromMouse(moved->position.x);
+			return true;
+		}
+	}
+	if (event.is<sf::Event::MouseButtonReleased>()) {
+		if (viewportDrag != ViewportDrag::None) {
+			viewportDrag = ViewportDrag::None;
+			return true;
+		}
+	}
+	return false;
+}
+
+void Game::drawViewportScrollbars(sf::RenderTarget &target) const
+{
+	sf::Vector2u ws = app.window.getSize();
+	const float scrollbarSize = 16.f;
+	const float topOffset = 23.f;
+	const float rightX = static_cast<float>(ws.x) - scrollbarSize;
+	const float bottomY = static_cast<float>(ws.y) - scrollbarSize;
+
+	sf::View previous = target.getView();
+	target.setView(sf::View(sf::FloatRect({0.f, 0.f}, {static_cast<float>(ws.x), static_cast<float>(ws.y)})));
+
+	sf::RectangleShape track;
+	track.setFillColor(sf::Color(198, 198, 198));
+	track.setOutlineColor(sf::Color(32, 32, 32));
+	track.setOutlineThickness(1.f);
+	track.setSize({scrollbarSize, bottomY - topOffset});
+	track.setPosition({rightX, topOffset});
+	target.draw(track);
+
+	double verticalRange = 360 * 13;
+	double vt = std::max(0.0, std::min(1.0, (360 * 12 - poi.y) / verticalRange));
+	sf::RectangleShape thumb;
+	thumb.setFillColor(sf::Color(145, 145, 145));
+	thumb.setOutlineColor(sf::Color(32, 32, 32));
+	thumb.setOutlineThickness(1.f);
+	thumb.setSize({scrollbarSize - 2.f, 96.f});
+	thumb.setPosition({rightX + 1.f, topOffset + static_cast<float>(vt * std::max(1.f, bottomY - topOffset - 96.f))});
+	target.draw(thumb);
+
+	track.setSize({rightX, scrollbarSize});
+	track.setPosition({0.f, bottomY});
+	target.draw(track);
+
+	double ht = std::max(0.0, std::min(1.0, (poi.x + 512) / 1024));
+	thumb.setSize({128.f, scrollbarSize - 2.f});
+	thumb.setPosition({static_cast<float>(ht * std::max(1.f, rightX - 128.f)), bottomY + 1.f});
+	target.draw(thumb);
+
+	target.setView(previous);
+}
+
+void Game::qaSetViewportScrollFractions(double horizontal, double vertical)
+{
+	horizontal = std::max(0.0, std::min(1.0, horizontal));
+	vertical = std::max(0.0, std::min(1.0, vertical));
+	poi.x = -512 + horizontal * 1024;
+	poi.y = 360 * 12 - vertical * (360 * 13);
 }
 
 void Game::advance(double dt)
@@ -500,18 +676,17 @@ void Game::advance(double dt)
 	if (time.checkHour(6))  morningSound.Play(this);
 	if (time.checkHour(9))  bellsSound.Play(this);
 	if (time.checkHour(18)) eveningSound.Play(this);
-	morningSound.setLoop(time.hour < 8);
+	morningSound.setLooping(time.hour < 8);
 
 	//Constrain the POI.
 	double2 halfsize((win.getView().getSize().x)*0.5*zoom, (win.getView().getSize().y)*0.5*zoom);
 	poi.y = std::max<double>(std::min<double>(poi.y, 360*12 - halfsize.y), -360 + halfsize.y);
 
 	//Adust the camera.
-	sf::FloatRect view;
-	view.left   = round(poi.x - halfsize.x);
-	view.top    = round(-poi.y - halfsize.y);
-	view.width  = halfsize.x*2;
-	view.height = halfsize.y*2;
+	sf::FloatRect view(
+		{static_cast<float>(round(poi.x - halfsize.x)), static_cast<float>(round(-poi.y - halfsize.y))},
+		{static_cast<float>(halfsize.x * 2), static_cast<float>(halfsize.y * 2)}
+	);
 	sf::View cameraView(view);
 	win.setView(cameraView);
 
@@ -528,7 +703,7 @@ void Game::advance(double dt)
 	 * translation from one to the other that is needed is to negate the "top"
 	 * of the view when doing the conditional drawing of on-screen objects.
 	 */
-	view.top = -view.top;
+	view.position.y = -view.position.y;
 	Item::AbstractPrototype * previousPrototype = toolPrototype;
 	if (selectedTool.find("item-") == 0) {
 		toolPrototype = itemFactory.prototypesById[selectedTool.substr(5)];
@@ -551,8 +726,8 @@ void Game::advance(double dt)
 	for (ItemSet::iterator i = itemsByType["floor"].begin(); i != itemsByType["floor"].end(); i++) {
 		const int2 & vp = (*i)->getPositionPixels();
 		const sf::Vector2u & vs = (*i)->getSizePixels();
-		if ((vp.x+vs.x >= view.left) && (vp.x <= (view.left + view.width)) &&
-			((vp.y + vs.y) >= (view.top - view.height)) && (vp.y <= view.top)) {
+		if ((vp.x + vs.x >= view.position.x) && (vp.x <= (view.position.x + view.size.x)) &&
+			((vp.y + vs.y) >= (view.position.y - view.size.y)) && (vp.y <= view.position.y)) {
 			win.draw(**i);
 			if ((*i)->getMouseRegion().containsPoint(double2(mp.x, mp.y))) itemBelowCursor = *i;
 		}
@@ -564,8 +739,8 @@ void Game::advance(double dt)
 			if ((*i)->layer != layer) continue;
 			const int2 & vp = (*i)->getPositionPixels();
 			const sf::Vector2u & vs = (*i)->getSizePixels();
-			if ((vp.x+vs.x >= view.left) && (vp.x <= (view.left + view.width)) &&
-				((vp.y + vs.y) >= (view.top - view.height)) && (vp.y <= view.top)) {
+			if ((vp.x + vs.x >= view.position.x) && (vp.x <= (view.position.x + view.size.x)) &&
+				((vp.y + vs.y) >= (view.position.y - view.size.y)) && (vp.y <= view.position.y)) {
 				win.draw(**i);
 				if ((*i)->getMouseRegion().containsPoint(double2(mp.x, mp.y))) itemBelowCursor = *i;
 			}
@@ -574,11 +749,17 @@ void Game::advance(double dt)
 
 	//Highlight the item below the cursor.
 	if (!toolPrototype && itemBelowCursor) {
-		sf::Sprite s;
-		s.scale(itemBelowCursor->getSize().x, itemBelowCursor->getSize().y-12);
-		s.setOrigin(0, 1);
-		s.setPosition(itemBelowCursor->getPosition().x, itemBelowCursor->getPosition().y);
-		s.setColor(sf::Color(255, 255, 255, 255*0.5));
+		const int2 itemPixels = itemBelowCursor->getPositionPixels();
+		const sf::Vector2u itemSize = itemBelowCursor->getSizePixels();
+		sf::RectangleShape s({
+			static_cast<float>(itemSize.x),
+			static_cast<float>(itemSize.y)
+		});
+		s.setPosition({
+			static_cast<float>(itemPixels.x),
+			static_cast<float>(-(itemPixels.y + static_cast<int>(itemSize.y)))
+		});
+		s.setFillColor(sf::Color(255, 255, 255, 128));
 		win.draw(s);
 		drawnSprites++;
 		if (previousItemBelowCursor != itemBelowCursor) {
@@ -586,19 +767,20 @@ void Game::advance(double dt)
 		}
 	}
 
-	//Draw construction template.
-	glBindTexture(GL_TEXTURE_2D, 0);
 	if (toolPrototype) {
-		rectf r(toolPosition.x * 8, -(toolPosition.y+toolPrototype->size.y) * 36, toolPrototype->size.x*8, toolPrototype->size.y*36);
-		r.inset(float2(0.5, 0.5));
-		glColor3f(1, 1, 1);
-		glBegin(GL_LINE_STRIP);
-		glVertex2f(r.minX(), r.minY());
-		glVertex2f(r.maxX(), r.minY());
-		glVertex2f(r.maxX(), r.maxY());
-		glVertex2f(r.minX(), r.maxY());
-		glVertex2f(r.minX(), r.minY());
-		glEnd();
+		sf::RectangleShape placement({
+			static_cast<float>(toolPrototype->size.x * 8),
+			static_cast<float>(toolPrototype->size.y * 36)
+		});
+		placement.setPosition({
+			static_cast<float>(toolPosition.x * 8),
+			static_cast<float>(-(toolPosition.y + toolPrototype->size.y) * 36)
+		});
+		placement.setFillColor(sf::Color(255, 255, 255, 48));
+		placement.setOutlineColor(sf::Color::White);
+		placement.setOutlineThickness(1.f);
+		win.draw(placement);
+		drawnSprites++;
 	}
 
 	//Visualize route.
@@ -625,7 +807,7 @@ void Game::advance(double dt)
 
 	//Adjust pitch of playing sounds.
 	for (SoundSet::iterator s = playingSounds.begin(); s != playingSounds.end();) {
-		if ((*s)->getStatus() == sf::Sound::Stopped) {
+		if ((*s)->getStatus() == sf::SoundSource::Status::Stopped) {
 			playingSounds.erase(s++);
 		} else {
 			(*s)->setPitch(1 + (time.speed_animated-1) * 0.2);
@@ -635,7 +817,7 @@ void Game::advance(double dt)
 
 	//Autorelease sounds.
 	for (SoundSet::iterator s = autoreleaseSounds.begin(); s != autoreleaseSounds.end();) {
-		if ((*s)->getStatus() == sf::Sound::Stopped) {
+		if ((*s)->getStatus() == sf::SoundSource::Status::Stopped) {
 			delete *s;
 			autoreleaseSounds.erase(s++);
 		} else {
@@ -758,10 +940,13 @@ void Game::removeItem(Item::Item * item)
 	}
 
 	if (item == itemBelowCursor) itemBelowCursor = NULL;
+	if (item == mainLobby) mainLobby = NULL;
+	if (item == metroStation) metroStation = NULL;
 
 	gameMap.removeNode(MapNode::Point(item->position.x + item->size.x/2, item->position.y), item);
 	decorations.updateCrane();
 	if (item->prototype->icon == ICON_METRO) decorations.updateTracks(); // Technically, this should not happen as Metro Stations are not removable.
+	delete item;
 }
 
 void Game::extendFloor(int floor, int minX, int maxX) {
@@ -806,6 +991,50 @@ void Game::extendFloor(int floor, int minX, int maxX) {
 	}
 }
 
+void Game::seedOfficeLunchQa()
+{
+	clearWorld();
+	time.set(Time::hourToAbsolute(11.95));
+	setSpeedMode(3);
+	Item::Lobby *lobby = (Item::Lobby *)itemFactory.make("lobby", int2(-16, 0));
+	lobby->size.x = 32;
+	addItem(lobby);
+	addItem(itemFactory.make("stairs", int2(-4, 0)));
+	addItem(itemFactory.make("floor", int2(-16, 1)));
+	Item::Office *office = (Item::Office *)itemFactory.make("office", int2(-12, 1));
+	addItem(office);
+	Item::FastFood *fastFood = (Item::FastFood *)itemFactory.make("fastfood", int2(0, 1));
+	fastFood->open = true;
+	fastFood->updateSprite();
+	addItem(fastFood);
+	updateRoutes();
+	office->prepareLunchQa(12.0);
+	LOG(IMPORTANT, "seeded office lunch QA tower");
+}
+
+void Game::seedNewTower()
+{
+	clearWorld();
+	funds = 4000000;
+	rating = 0;
+	population = 0;
+	populationNeedsUpdate = false;
+	time.set(7/78.0);
+	setSpeedMode(1);
+	selectTool("inspector");
+	poi.x = 0;
+	poi.y = 200;
+
+	Item::Lobby *lobby = (Item::Lobby *)itemFactory.make("lobby", int2(-16, 0));
+	lobby->size.x = 32;
+	lobby->updateSprite();
+	addItem(lobby);
+	extendFloor(1, -16, 16);
+	funds = 4000000;
+	updateRoutes();
+	LOG(IMPORTANT, "seeded new tower");
+}
+
 void Game::encodeXML(tinyxml2::XMLPrinter & xml)
 {
 	xml.OpenElement("tower");
@@ -833,6 +1062,8 @@ void Game::decodeXML(tinyxml2::XMLDocument & xml)
 	tinyxml2::XMLElement * root = xml.RootElement();
 	assert(root);
 
+	clearWorld();
+
 	setFunds(root->IntAttribute("funds"));
 	setRating(root->IntAttribute("rating"));
 	time.set(root->DoubleAttribute("time"));
@@ -849,6 +1080,7 @@ void Game::decodeXML(tinyxml2::XMLDocument & xml)
 		addItem(item);
 		e = e->NextSiblingElement("item");
 	}
+	populationNeedsUpdate = true;
 	updateRoutes();
 }
 
@@ -962,10 +1194,15 @@ void Game::playOnce(Path sound)
 void Game::playRandomBackgroundSound()
 {
 	sf::RenderWindow &win = app.window;
-	sf::FloatRect view = win.getView().getViewport();
+	const sf::View currentView = win.getView();
+	sf::FloatRect view(
+		currentView.getCenter() - currentView.getSize() / 2.f,
+		currentView.getSize()
+	);
+	view.position.y = -view.position.y;
 
 	//Pick a random value between 0 and the screen area.
-	double r = (double)rand() / RAND_MAX * (view.width) * (view.height);
+	double r = (double)rand() / RAND_MAX * view.size.x * view.size.y;
 
 	//Iterate through the items that are in view, subtracting each item's area from the random
 	//value until it drops below 0. That item will be given the chance to play the sound. This
@@ -973,9 +1210,10 @@ void Game::playRandomBackgroundSound()
 	Item::Item *pick = NULL;
 	for (ItemSet::iterator i = items.begin(); i != items.end(); i++) {
 		if ((*i)->layer != 0) continue;
-		const int2 & vp = (*i)->getPosition();
-		const sf::Vector2u & vs = (*i)->getSize();
-		if (vp.x+vs.x >= view.left && vp.x <= (view.left + view.width) && vp.y >= view.top && vp.y-vs.y <= (view.top + view.height)) {
+		const int2 & vp = (*i)->getPositionPixels();
+		const sf::Vector2u & vs = (*i)->getSizePixels();
+		if (vp.x + vs.x >= view.position.x && vp.x <= (view.position.x + view.size.x) &&
+			(vp.y + vs.y) >= (view.position.y - view.size.y) && vp.y <= view.position.y) {
 			int area = vs.x * vs.y;
 			r -= area;
 			if (r <= 0) {

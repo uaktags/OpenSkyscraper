@@ -7,7 +7,7 @@ namespace OT {
     class MainMenu : public State {
         public:
             MainMenu(Application & app);
-            ~MainMenu();
+            ~MainMenu() override = default;
 
             void activate();
             bool handleEvent(sf::Event & event);

@@ -14,8 +14,8 @@ const static double kUnmountPeriod = 0.05; //ditto, but off the elevator
 
 void Car::init()
 {
-	sprite.SetImage(app->bitmaps[elevator->carBitmap]);
-	sprite.setOrigin(0, 30);
+	sprite.setTexture(app->bitmaps[elevator->carBitmap]);
+	sprite.setOrigin({0.f, 30.f});
 	updateSprite();
 
 	arrivingSound.setBuffer(app->sounds["simtower/elevator/arriving"]);
@@ -42,7 +42,7 @@ void Car::reposition()
 {
 	//2 and 4 were determined experimentally to center the car in the elevator.
 	//A better method should probably be determined.
-	sprite.setPosition(elevator->getPositionPixels().x + 2, -altitude * 36 - 4);
+	sprite.setPosition({static_cast<float>(elevator->position.x * 8 + 2), static_cast<float>(-altitude * 36 - 4)});
 }
 
 void Car::updateSprite()
@@ -54,9 +54,9 @@ void Car::updateSprite()
 	else if (pc <= 3) index = 2;
 	else if (pc == elevator->maxCarCapacity) index = 4;
 
-	int w = sprite.getTexture()->getSize().x / 5;
-	int h = sprite.getTexture()->getSize().y;
-	sprite.setTextureRect(sf::IntRect(index*w, 0, w, h));
+	int w = sprite.getTexture().getSize().x / 5;
+	int h = sprite.getTexture().getSize().y;
+	sprite.setTextureRect(sf::IntRect(sf::Vector2i(index*w, 0), sf::Vector2i(w, h)));
 	reposition();
 }
 
@@ -74,23 +74,23 @@ void Car::render(sf::RenderTarget & target) const
 	if (state == kHauling && (p = nextPassengerToUnmount())) {
 		Sprite s;
 		s.SetImage(app->bitmaps["simtower/elevator/people"]);
-		s.setOrigin(direction == Elevator::kUp ? -elevator->shaft.getSize().x : 16, 24);
+		s.setOrigin({static_cast<float>(direction == Elevator::kUp ? -elevator->shaft.getSize().x : 16), 24.f});
 
 		//Calculate the texture subrect for the person stepping out of the car.
 		int type = p->type;
 		sf::IntRect sr;
-		sr.left   = type * 32;
-		sr.width  = 16;
-		sr.top    = 24;
-		sr.height = 24;
+		sr.position.x = type * 32;
+		sr.size.x     = 16;
+		sr.position.y = 24;
+		sr.size.y     = 24;
 		if (direction == Elevator::kUp) {
-			sr.left  += 16;
+			sr.position.x += 16;
 		}
 
 		//Draw the person.
 		s.setColor(sf::Color::Black);
 		s.setTextureRect(sr);
-		s.setPosition(elevator->shaft.getPosition().x, sprite.getPosition().y);
+		s.setPosition({elevator->shaft.getPosition().x, sprite.getPosition().y});
 		target.draw(s);
 	}
 }

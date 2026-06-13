@@ -2,10 +2,9 @@
 
 using namespace OT::Item;
 
-
 void Stairs::init()
 {
 	frameCount = 14;
-	sprite.SetImage(App->bitmaps["simtower/stairs"]);
+	sprite.setTexture(App->bitmaps["simtower/stairs"]);
 	Stairlike::init();
 }

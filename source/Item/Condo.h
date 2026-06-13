@@ -2,22 +2,26 @@
 #include "../Sprite.h"
 #include "Item.h"
 
-namespace OT {
-	namespace Item {
+namespace OT
+{
+	namespace Item
+	{
 		class Condo : public Item
 		{
 		public:
 			OT_ITEM_CONSTRUCTOR(Condo);
-			OT_ITEM_PROTOTYPE(Condo) {
-				p->id    = "condo";
-				p->name  = "Condo";
+			OT_ITEM_PROTOTYPE(Condo)
+			{
+				p->id = "condo";
+				p->name = "Condo";
 				p->price = 200000;
-				p->size  = int2(16,1);
-				p->icon  = 24;
+				p->size = int2(16, 1);
+				p->icon = 24;
 			}
 			virtual ~Condo();
 
-			enum LightingConditions {
+			enum LightingConditions
+			{
 				NIGHT,
 				LIT,
 				DAYTIME
@@ -28,16 +32,18 @@ namespace OT {
 			 * additional information of the occupant, such as the day's schedule
 			 * and the like.
 			 */
-			class CondoOccupant : public Person {
+			class CondoOccupant : public Person
+			{
 			public:
 				CondoOccupant(Condo *item, Person::Type type, double depart, double ret)
 					: Person(item->game, type),
-					departureTime(depart),
-					returnTime(ret),
-					departureJitter(0.0),
-					returnJitter(0.0),
-					atHome(true)
-					{}
+					  departureTime(depart),
+					  returnTime(ret),
+					  departureJitter(0.0),
+					  returnJitter(0.0),
+					  atHome(true)
+				{
+				}
 
 				/// When the occupant is supposed to leave the tower in the morning.
 				double departureTime;
@@ -51,13 +57,17 @@ namespace OT {
 				/// True if the person is currently in the condo
 				bool atHome;
 
-				struct departsLaterThan : public std::binary_function<CondoOccupant *, CondoOccupant *, bool> {
-					bool operator() (const CondoOccupant * a, const CondoOccupant * b) const {
+				struct departsLaterThan
+				{
+					bool operator()(const CondoOccupant *a, const CondoOccupant *b) const
+					{
 						return (a->actualDepartureTime() > a->actualDepartureTime());
 					}
 				};
-				struct returnsLaterThan : public std::binary_function<CondoOccupant *, CondoOccupant *, bool> {
-					bool operator() (const CondoOccupant * a, const CondoOccupant * b) const {
+				struct returnsLaterThan
+				{
+					bool operator()(const CondoOccupant *a, const CondoOccupant *b) const
+					{
 						return (a->actualReturnTime() > a->actualReturnTime());
 					}
 				};
@@ -68,12 +78,13 @@ namespace OT {
 
 			virtual void init();
 
-			virtual void encodeXML(tinyxml2::XMLPrinter & xml) override;
-			virtual void decodeXML(tinyxml2::XMLElement & xml) override;
+			virtual void encodeXML(tinyxml2::XMLPrinter &xml) override;
+			virtual void decodeXML(tinyxml2::XMLElement &xml) override;
 			virtual void advance(double dt);
 
-			virtual void addPerson(Person * p);
-			virtual void removePerson(Person * p);
+			virtual void addPerson(Person *p);
+			virtual void removePerson(Person *p);
+
 		protected:
 			void generateJitters();
 			void moveOccupants();
@@ -91,7 +102,7 @@ namespace OT {
 
 			Sprite sprite;
 			bool spriteNeedsUpdate;
-			std::set<CondoOccupant*> occupants;
+			std::set<CondoOccupant *> occupants;
 			std::priority_queue<CondoOccupant *, std::deque<CondoOccupant *>, CondoOccupant::departsLaterThan> departureQueue;
 			std::priority_queue<CondoOccupant *, std::deque<CondoOccupant *>, CondoOccupant::returnsLaterThan> returnQueue;
 		};

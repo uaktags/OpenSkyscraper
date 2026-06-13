@@ -1,5 +1,5 @@
 #pragma once
 
 #ifdef _WIN32
-extern int round (float x);
+int roundToInt(float x);
 #endif

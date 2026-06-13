@@ -85,20 +85,18 @@ void TimeWindow::reload() {
     int scaledW = ratingSrcW * app->uiScale;
     int scaledH = ratingSrcH * app->uiScale;
     sf::Image ratingSheet = app->bitmaps["simtower/ui/time/rating"].copyToImage();
-    sf::Image ratingSub;
-    ratingSub.create(ratingSrcW, ratingSrcH);
-    ratingSub.copy(ratingSheet, 0, 0, sf::IntRect(0, 0, ratingSrcW, ratingSrcH), false);
-    sf::Image ratingScaled;
-    ratingScaled.create(scaledW, scaledH);
+    sf::Image ratingSub(sf::Vector2u(ratingSrcW, ratingSrcH));
+    ratingSub.copy(ratingSheet, {0u, 0u}, sf::IntRect({0, 0}, {ratingSrcW, ratingSrcH}), false);
+    sf::Image ratingScaled(sf::Vector2u(scaledW, scaledH));
     for (int y = 0; y < scaledH; ++y) {
         for (int x = 0; x < scaledW; ++x) {
             int srcX = x * ratingSrcW / scaledW;
             int srcY = y * ratingSrcH / scaledH;
-            ratingScaled.setPixel(x, y, ratingSub.getPixel(srcX, srcY));
+            ratingScaled.setPixel({static_cast<unsigned int>(x), static_cast<unsigned int>(y)}, ratingSub.getPixel({static_cast<unsigned int>(srcX), static_cast<unsigned int>(srcY)}));
         }
     }
     tgui::Texture rating_tx;
-    rating_tx.loadFromPixelData({scaledW, scaledH}, ratingScaled.getPixelsPtr());
+    rating_tx.loadFromPixelData({static_cast<unsigned int>(scaledW), static_cast<unsigned int>(scaledH)}, ratingScaled.getPixelsPtr());
     rating = tgui::Picture::create(rating_tx);
     rating->setPosition(42 * app->uiScale, 2 * app->uiScale);
     rating->setSize(scaledW, scaledH);
@@ -192,6 +190,14 @@ void TimeWindow::advance(double dt) {
     renderWatch();
 }
 
+void TimeWindow::setVisible(bool visible) {
+    if (window) window->setVisible(visible);
+}
+
+bool TimeWindow::isVisible() const {
+    return window && window->isVisible();
+}
+
 void TimeWindow::renderWatch() {
     sf::Vector2f mid;
     mid.x = watch->getSize().x / 2;
@@ -203,13 +209,14 @@ void TimeWindow::renderWatch() {
 	//double time    = game->time.getHour();
 	double time    = game->time.getHour();
 
-	double angle_h = 2 * M_PI * time/12;
-	double angle_m = 2 * M_PI * time;
+	const double pi = 3.14159265358979323846;
+	double angle_h = 2 * pi * time/12;
+	double angle_m = 2 * pi * time;
 
     //LOG(IMPORTANT, "%f, %f, %f, %f", angle_h, angle_m, game->time.getHour()/12, game->time.getHour());
     watch->clear(tgui::Color::Transparent);
     
-    sf::VertexArray lines(sf::Lines, 4);
+    sf::VertexArray lines(sf::PrimitiveType::Lines, 4);
     lines[0].position = sf::Vector2f(mid.x, mid.y);
     lines[1].position = sf::Vector2f(mid.x + radius_h * sin(angle_h), mid.x + radius_h * -cos(angle_h));
     lines[2].position = sf::Vector2f(mid.x, mid.y);

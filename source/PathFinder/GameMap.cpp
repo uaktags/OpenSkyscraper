@@ -17,6 +17,9 @@ void GameMap::clear() {
 		delete i->second;
 	gameMap.clear();
 	mapNodesByFloor.clear();
+	for (std::map<int, FloorNode *>::iterator i = floorNodes.begin(); i != floorNodes.end(); i++)
+		delete i->second;
+	floorNodes.clear();
 }
 
 MapNode* GameMap::addNode(const MapNode::Point &p, Item::Item *item) {

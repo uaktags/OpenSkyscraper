@@ -3,29 +3,27 @@
 
 using namespace OT;
 
-MainMenu::MainMenu(Application & app) 
-:   State("menu"),
-    app(app)
+MainMenu::MainMenu(Application &app)
+    : State("menu"),
+      app(app)
 {
-    sf::Vector2 panelSize {300 * app.uiScale, 120 * app.uiScale};
+    sf::Vector2f panelSize{300.f * app.uiScale, 120.f * app.uiScale};
     sf::Vector2u windowSize = app.window.getSize();
-    
+
     tgui::Texture bgTx = tgui::Texture();
-    bgTx.load(app.bitmaps["menubg.png"]);
+    bgTx.load(app.bitmaps["simtower/ui/menubg"]);
     bgPicture = tgui::Picture::create(bgTx);
-    // Scale background to fill window
     bgPicture->setSize({static_cast<float>(windowSize.x), static_cast<float>(windowSize.y)});
     bgPicture->setPosition({0, 0});
     app.gui.add(bgPicture);
 
     panel = tgui::Panel::create({panelSize.x, panelSize.y});
-    
-    panel->setPosition({(windowSize.x / 2) - (panelSize.x / 2), (windowSize.y / 2) - (panelSize.y / 2)});
+    panel->setPosition({(windowSize.x / 2.f) - (panelSize.x / 2.f), (windowSize.y / 2.f) - (panelSize.y / 2.f)});
     panel->getRenderer()->setBorders(tgui::Outline(2 * app.uiScale));
     app.gui.add(panel);
 
     auto layout = tgui::VerticalLayout::create();
-    layout->setOrigin(.5f, .5f);
+    layout->setOrigin(0.5f, 0.5f);
     layout->setPosition("50%", "50%");
     panel->add(layout);
     layout->setSize("95%", "95%");
@@ -39,41 +37,45 @@ MainMenu::MainMenu(Application & app)
 
     loadButton = tgui::Button::create("Load Saved Tower");
     loadButton->setTextSize(18 * app.uiScale);
-    loadButton->onPress([this, &app](){
-        app.loadGame();
-    });
+    loadButton->onPress([this, &app]()
+                        { app.loadGame(); });
     layout->add(loadButton);
 
     layout->addSpace(0.4f);
 
     quitButton = tgui::Button::create("Quit");
     quitButton->setTextSize(18 * app.uiScale);
-    quitButton->onPress([this, &app](){
-        app.window.close();
-    });
+    quitButton->onPress([this, &app]()
+                        { app.window.close(); });
     layout->add(quitButton);
 }
 
-void MainMenu::activate() {
+void MainMenu::activate()
+{
     State::activate();
 }
 
-void MainMenu::deactivate() {
+void MainMenu::deactivate()
+{
     State::deactivate();
     panel->removeAllWidgets();
     app.gui.remove(bgPicture);
     app.gui.remove(panel);
 }
 
-bool MainMenu::handleEvent(sf::Event & event) {
+bool MainMenu::handleEvent(sf::Event &event)
+{
     return false;
 }
 
-void MainMenu::advance(double dt) {
+void MainMenu::advance(double dt)
+{
 }
 
-void MainMenu::onNewGamePress() {
-    Game * game = new Game(app);
+void MainMenu::onNewGamePress()
+{
+    Game *game = new Game(app);
+    game->seedNewTower();
     game->saveFilename = "";
     game->isDirty = false;
     app.popState();

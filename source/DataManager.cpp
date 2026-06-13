@@ -38,11 +38,10 @@ void DataManager::init()
 	dirs.push_back(Path("/Library/Application Support/OpenSkyscraper"));
 	dirs.push_back(".");
 #else
-# ifdef BUILD_DEBUG
 	dirs.push_back(path.up(2).down("data"));
-# endif
-	dirs.push_back(path.down("data"));
 	dirs.push_back(path.up().down("data"));
+	dirs.push_back(path.down("data"));
+	dirs.push_back(Path("data"));
 # ifndef _WIN32
 	dirs.push_back(Path("~").down(".openskyscraper"));
 	dirs.push_back(Path("/usr/local/share/openskyscraper"));

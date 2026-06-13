@@ -10,12 +10,19 @@ Decorations::Decorations(Game * game)
 {
 	// Initialize the crane sprite.
 	crane.SetImage(App->bitmaps["simtower/deco/crane"]);
-	crane.setOrigin(20, 36);
+	crane.setOrigin({20.f, 36.f});
 	craneVisible = false;
 
 	track.SetImage(App->bitmaps["simtower/metro/tracks"]);
-	track.setTextureRect(sf::IntRect(0,0,32,36));
-	track.setOrigin(0, 36);
+	track.setTextureRect(sf::IntRect({0,0}, {32,36}));
+	track.setOrigin({0.f, 36.f});
+	tracksVisible = false;
+}
+
+void Decorations::reset()
+{
+	fireStairs.clear();
+	craneVisible = false;
 	tracksVisible = false;
 }
 
@@ -41,19 +48,19 @@ void Decorations::updateFloor(int y)
 		FireStairPair &fsp = fireStairs[y];
 		if (!exists) {
 			fsp.minX.SetImage(App->bitmaps["simtower/deco/fireladder"]);
-			fsp.maxX.SetImage(*fsp.minX.getTexture());
-			fsp.minX.setTextureRect(sf::IntRect(0, 0, 24, 36));
-			fsp.maxX.setTextureRect(sf::IntRect(24, 0, 24, 36));
-			fsp.minX.setOrigin(24, 36);
-			fsp.maxX.setOrigin(0, 36);
+			fsp.maxX.SetImage(fsp.minX.getTexture());
+			fsp.minX.setTextureRect(sf::IntRect({0, 0}, {24, 36}));
+			fsp.maxX.setTextureRect(sf::IntRect({24, 0}, {24, 36}));
+			fsp.minX.setOrigin({24.f, 36.f});
+			fsp.maxX.setOrigin({0.f, 36.f});
 			LOG(DEBUG, "Added fire stairs on floor %i", y);
 		}
 
 		//Position the fire stairs accordingly.
 		int minFloorX = f->getRect().minX();
 		int maxFloorX = f->getRect().maxX();
-		fsp.minX.setPosition(minFloorX * 8.0f, -y * 36.0f);
-		fsp.maxX.setPosition(maxFloorX * 8.0f, -y * 36.0f);
+		fsp.minX.setPosition({minFloorX * 8.0f, -y * 36.0f});
+		fsp.maxX.setPosition({maxFloorX * 8.0f, -y * 36.0f});
 		LOG(DEBUG, "Repositioned fire stairs on floor %i to %i and %i", y, minFloorX, maxFloorX);
 	}
 }
@@ -81,7 +88,7 @@ void Decorations::updateCrane()
 			maxFloorX = std::max(maxFloorX, i->getRect().maxX());
 		}
 		if (minFloorX < maxFloorX) {
-			crane.setPosition((minFloorX + maxFloorX) / 2 * 8.0f, -(maxY + 1) * 36.0f);
+			crane.setPosition({(minFloorX + maxFloorX) / 2 * 8.0f, -(maxY + 1) * 36.0f});
 			craneVisible = (maxFloorX - minFloorX >= 4);
 		} else {
 			craneVisible = false;
@@ -93,7 +100,7 @@ void Decorations::updateCrane()
 
 void Decorations::updateTracks() {
 	if (game->metroStation) {
-		track.setPosition(track.getPosition().x, -game->metroStation->position.y * 36.0f);
+		track.setPosition({track.getPosition().x, -game->metroStation->position.y * 36.0f});
 		tracksVisible = true;
 	} else {
 		tracksVisible = false;
@@ -138,11 +145,11 @@ void Decorations::render(sf::RenderTarget & target) const
 				int offl = std::max<int>(0, (int)(dmin.x - x*32));
 				int offr = std::max<int>(0, (x+1)*4 - rect.minX()) * 8;
 				sf::IntRect sr = track.getTextureRect();
-				sr.left  += offl;
-				sr.width -= offl+offr;
+				sr.position.x += offl;
+				sr.size.x -= offl+offr;
 				t.setTextureRect(sr);
 
-				t.setPosition(x * 32.0f + offl, t.getPosition().y);
+				t.setPosition({x * 32.0f + offl, t.getPosition().y});
 				target.draw(t);
 
 				game->drawnSprites++;
@@ -157,11 +164,11 @@ void Decorations::render(sf::RenderTarget & target) const
 				int offl = std::max<int>(0, rect.maxX() - x*4) * 8;
 				int offr = std::max<int>(0, (int)((x+1)*32 - dmax.x));
 				sf::IntRect sr = track.getTextureRect();
-				sr.left  += offl;
-				sr.width -= offl+offr;
+				sr.position.x += offl;
+				sr.size.x -= offl+offr;
 				t.setTextureRect(sr);
 
-				t.setPosition(x * 32.0f + offl, t.getPosition().y);
+				t.setPosition({x * 32.0f + offl, t.getPosition().y});
 				target.draw(t);
 
 				game->drawnSprites++;

@@ -57,17 +57,17 @@ namespace OT {
 		bool check(double a);
 		bool checkTick(double p);
 		bool checkHour(double h);
-		
+
 	protected:
 		void set(double a);
 		void advance(double dt);
-		
+
 		double prev_absolute;
 		double prev_hour;
 		int prev_day;
 		int prev_quarter;
 		int prev_year;
-		
+
 	private:
 		double speed;
 		double speed_animated;

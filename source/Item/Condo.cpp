@@ -5,7 +5,6 @@
 using namespace OT;
 using namespace OT::Item;
 
-
 Condo::~Condo()
 {
 }
@@ -20,16 +19,12 @@ void Condo::init()
 	rent = 5000;
 	rentDeposit = rent;
 
-	sprite.SetImage(App->bitmaps["simtower/condo"]);
-	sprite.setOrigin(0, 24);
-	sprite.setPosition(getPosition().x * 8, -getPosition().y * 36);
-	addSprite(&sprite);
-	spriteNeedsUpdate = false;
-
-	updateSprite();
+	sprite.setTexture(App->bitmaps["simtower/condo"]);
+	sprite.setOrigin({0.f, 24.f});
+	sprite.setPosition({static_cast<float>(position.x * 8), static_cast<float>(-position.y * 36)});
 }
 
-void Condo::encodeXML(tinyxml2::XMLPrinter & xml)
+void Condo::encodeXML(tinyxml2::XMLPrinter &xml)
 {
 	Item::encodeXML(xml);
 	xml.PushAttribute("rent", rent);
@@ -39,14 +34,14 @@ void Condo::encodeXML(tinyxml2::XMLPrinter & xml)
 	xml.PushAttribute("occupied", occupied);
 }
 
-void Condo::decodeXML(tinyxml2::XMLElement & xml)
+void Condo::decodeXML(tinyxml2::XMLElement &xml)
 {
 	Item::decodeXML(xml);
-	rent        = xml.IntAttribute("rent");
+	rent = xml.IntAttribute("rent");
 	rentDeposit = xml.IntAttribute("rentDeposit");
-	variant     = xml.IntAttribute("variant");
-	lighting    = (LightingConditions)xml.IntAttribute("lighting");
-	occupied    = xml.BoolAttribute("occupied");
+	variant = xml.IntAttribute("variant");
+	lighting = (LightingConditions)xml.IntAttribute("lighting");
+	occupied = xml.BoolAttribute("occupied");
 	updateSprite();
 }
 
@@ -84,16 +79,18 @@ void Condo::updateSprite()
 	}
 
 	LOG(DEBUG, "Updating sprite to index %d and variant %d", index, variant);
-	sprite.setTextureRect(sf::IntRect(index*128, variant*24, 128, 24));
+	sprite.setTextureRect(sf::IntRect({index * 128, variant * 24}, {128, 24}));
 }
 
 void Condo::advance(double dt)
 {
 	// Occupy the condo if it is attractive enough.
-	if (!occupied && game->time.day != 2 && game->time.hour >= 7 && game->time.hour < 17 && isAttractive()) {
+	if (!occupied && game->time.day != 2 && game->time.hour >= 7 && game->time.hour < 17 && isAttractive())
+	{
 		// The item has a 10% chance of being occupied every 1/500th of a day. This means
 		// that on average, an item is occupied after 1/250th of a day.
-		if (game->time.checkTick(0.002) && (rand() % 10) == 0) {
+		if (game->time.checkTick(0.002) && (rand() % 10) == 0)
+		{
 			occupied = true;
 			variant = rand() % 3;
 			spriteNeedsUpdate = true;
@@ -105,9 +102,11 @@ void Condo::advance(double dt)
 
 	// Monday 5:00 needs special treatment as this is where rent will be paid and tenants vacate
 	// unattractive items.
-	if (occupied && game->time.checkHour(5) && game->time.day == 0) {
+	if (occupied && game->time.checkHour(5) && game->time.day == 0)
+	{
 		// Vacate unattractive offices.
-		if (!isAttractive()) {
+		if (!isAttractive())
+		{
 			occupied = false;
 			removeOccupants();
 			spriteNeedsUpdate = true;
@@ -115,13 +114,15 @@ void Condo::advance(double dt)
 			game->populationNeedsUpdate = true;
 			game->transferFunds(-rentDeposit, "Vacated Condo's rent deposit payed back");
 		}
-		//Pay rent for the others.
-		else {
+		// Pay rent for the others.
+		else
+		{
 			game->transferFunds(rent, "Income from Condo's rent");
 		}
 	}
 
-	if (occupied && game->time.checkHour(3)) {
+	if (occupied && game->time.checkHour(3))
+	{
 		generateJitters();
 	}
 
@@ -130,20 +131,24 @@ void Condo::advance(double dt)
 		moveOccupants();
 	}
 
-	if (updateLighting(game->time.getHour())) {
+	if (updateLighting(game->time.getHour()))
+	{
 		spriteNeedsUpdate = true;
 	}
 
-	if (spriteNeedsUpdate) updateSprite();
+	if (spriteNeedsUpdate)
+		updateSprite();
 }
 
 void Condo::generateJitters()
 {
 	// Clear the current queues.
-	while (!returnQueue.empty()) returnQueue.pop();
-	while (!departureQueue.empty()) departureQueue.pop();
+	while (!returnQueue.empty())
+		returnQueue.pop();
+	while (!departureQueue.empty())
+		departureQueue.pop();
 
-	for (CondoOccupant* person : occupants)
+	for (CondoOccupant *person : occupants)
 	{
 		// It's life. You're more likely to be late than early.
 		person->departureJitter = Math::randd(-0.1, 0.3);
@@ -156,41 +161,55 @@ void Condo::generateJitters()
 void Condo::moveOccupants()
 {
 	// Occupants leave the building
-	while (!departureQueue.empty()) {
-		CondoOccupant * c = departureQueue.top();
-		if (game->time.hour > c->actualDepartureTime()) {
+	while (!departureQueue.empty())
+	{
+		CondoOccupant *c = departureQueue.top();
+		if (game->time.hour > c->actualDepartureTime())
+		{
 			departureQueue.pop();
 			c->journey.set(lobbyRoute);
-		} else break;
+		}
+		else
+			break;
 	}
 
-	//Occupants return from their busy days
-	while (!returnQueue.empty()) {
-		CondoOccupant * c = returnQueue.top();
-		if (game->time.hour > c->actualReturnTime() && !lobbyRoute.empty()) {
+	// Occupants return from their busy days
+	while (!returnQueue.empty())
+	{
+		CondoOccupant *c = returnQueue.top();
+		if (game->time.hour > c->actualReturnTime() && !lobbyRoute.empty())
+		{
 			returnQueue.pop();
 			// Find a way home for the Person.
 			const Route &r = game->findRoute(this, game->mainLobby);
-			if (r.empty()) {
+			if (r.empty())
+			{
 				LOG(DEBUG, "%p has no route to leave his or her Condo", c);
-			} else {
+			}
+			else
+			{
 				LOG(DEBUG, "%p leaving condo", c);
 				c->journey.set(r);
 			}
-		} else break;
+		}
+		else
+			break;
 	}
 }
 
 bool Condo::updateLighting(double time)
 {
 	LightingConditions newLighting = lighting;
-	if ((time < 7.0) || (time > 22.0)) {
+	if ((time < 7.0) || (time > 22.0))
+	{
 		newLighting = NIGHT;
 	}
-	else if (time < 19.0) {
+	else if (time < 19.0)
+	{
 		newLighting = DAYTIME;
 	}
-	else {
+	else
+	{
 		newLighting = LIT;
 	}
 
@@ -199,7 +218,7 @@ bool Condo::updateLighting(double time)
 	return retval;
 }
 
-void Condo::addPerson(Person * p)
+void Condo::addPerson(Person *p)
 {
 	Item::addPerson(p);
 	spriteNeedsUpdate = true;
@@ -212,8 +231,7 @@ void Condo::createOccupants()
 	Person::Type adults[] = {
 		Person::kMan,
 		Person::kWoman1,
-		Person::kWoman2
-	};
+		Person::kWoman2};
 
 	for (int i = 0; i < numAdults; ++i)
 	{
@@ -257,14 +275,14 @@ void Condo::createOccupants()
 
 void Condo::removeOccupants()
 {
-	for (Person* occupant : occupants)
+	for (Person *occupant : occupants)
 	{
 		removePerson(occupant);
 		delete occupant;
 	}
 }
 
-void Condo::removePerson(Person * p)
+void Condo::removePerson(Person *p)
 {
 	Item::removePerson(p);
 	spriteNeedsUpdate = true;

@@ -14,7 +14,7 @@ namespace OT {
     class TimeWindow : public GameObject {
         public:
             TimeWindow(Game * game);
-            //~TimeWindow() { close(); }
+            ~TimeWindow() { close(); }
 
             void close();
             void reload();
@@ -28,6 +28,9 @@ namespace OT {
 
             void advance (double dt);
             void renderWatch();
+
+            void setVisible(bool visible);
+            bool isVisible() const;
             
         private:
             static std::string formatMoney(int amount);

@@ -10,8 +10,9 @@ namespace OT
 	class SoundManager : public ResourceManager<sf::SoundBuffer>
 	{
 	public:
-		SoundManager(Application * app) : ResourceManager<sf::SoundBuffer>(app), internal_path("simtower") { internal_path.push_back(Path::SEPARATOR); }
+		SoundManager(Application * app) : ResourceManager<sf::SoundBuffer>(app), usedFallback(false), internal_path("simtower") { internal_path.push_back(Path::SEPARATOR); }
 		bool load(Path name, sf::SoundBuffer & dst);
+		bool usedFallback;
 	private:
 		std::string internal_path;
 	};

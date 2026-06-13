@@ -13,6 +13,7 @@ namespace OT {
 	public:
 		Decorations(Game * game);
 
+		void reset();
 		void updateFloor(int y);
 		void updateCrane();
 		void updateTracks();

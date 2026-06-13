@@ -43,6 +43,30 @@ sf::IntRect toIntRect(int left, int top, int width, int height)
 {
 	return {{left, top}, {width, height}};
 }
+
+bool loadPreparedBitmap(const char *data, int length, sf::Image &img)
+{
+#ifdef _WIN32
+	char tempPath[MAX_PATH];
+	if (GetTempPathA(MAX_PATH, tempPath) != 0) {
+		char tempFile[MAX_PATH];
+		if (GetTempFileNameA(tempPath, "osk", 0, tempFile) != 0) {
+			FILE *f = fopen(tempFile, "wb");
+			if (f) {
+				fwrite(data, 1, length, f);
+				fclose(f);
+				bool loaded = img.loadFromFile(tempFile);
+				DeleteFileA(tempFile);
+				if (loaded)
+					return true;
+			} else {
+				DeleteFileA(tempFile);
+			}
+		}
+	}
+#endif
+	return img.loadFromMemory(data, length);
+}
 }
 
 //TODO: make this into a FileSystem class or whatever.
@@ -443,6 +467,8 @@ void SimTowerLoader::loadBitmaps()
 	loadMergedByID(images["simtower/parking/space"], 'x', 0x86A8, 0x86A9, NULL);
 
 	loadMergedByID(images["simtower/partyhall"], 'y', 0x8B28, 0x8B68, NULL);
+	images["simtower/partyhall"].createMaskFromColor(sf::Color(0x8C, 0xD6, 0xFF));
+	images["simtower/partyhall"].createMaskFromColor(sf::Color(0x4A, 0xB4, 0xFF));
 
 	//Recycling Center
 	sf::Image recycling[2];
@@ -896,8 +922,10 @@ void SimTowerLoader::loadElevatorCar(const sf::Image & img, sf::Image & dst)
 	dst.resize({carw * 5, carh});
 	for (int i = 0; i < 5; i++) {
 		dst.copy(img, {static_cast<unsigned int>(i) * carw, 0u},
-			toIntRect(i * static_cast<int>(w) + 2, 5, static_cast<int>(w) - 2, static_cast<int>(h) - 1));
+			toIntRect(i * static_cast<int>(w) + 2, 5, static_cast<int>(carw), static_cast<int>(carh)));
 	}
+	dst.createMaskFromColor(sf::Color::Black);
+	dst.createMaskFromColor(sf::Color(25, 25, 25));
 }
 
 void SimTowerLoader::applyReplacementPalette(int palette, Blob & raw)
@@ -1031,28 +1059,7 @@ void SimTowerLoader::loadBitmap(int id, sf::Image & img)
 		return;
 	}
 	Blob & bmp = it->second;
-	// SFML 3.0's stb_image BMP loader misreads some SimTower BMPs as all-black
-	// when loaded via loadFromMemory. Write to a temp file and use loadFromFile
-	// which takes a slightly different code path through stb_image.
-#ifdef _WIN32
-	char tmpname[MAX_PATH];
-	GetTempPathA(MAX_PATH, tmpname);
-	char filename[64];
-	snprintf(filename, 64, "os_bmp_%x.bmp", id);
-	strncat(tmpname, filename, MAX_PATH - strlen(tmpname) - 1);
-	std::string path(tmpname);
-	{
-		FILE *f = fopen(path.c_str(), "wb");
-		if (f) { fwrite(bmp.data, 1, bmp.length, f); fclose(f); }
-		else { path.clear(); }
-	}
-	if (!path.empty() && img.loadFromFile(path)) {
-		DeleteFileA(path.c_str());
-		return;
-	}
-	if (!path.empty()) DeleteFileA(path.c_str());
-#endif
-	if (!img.loadFromMemory(bmp.data, bmp.length)) {
+	if (!loadPreparedBitmap(bmp.data, bmp.length, img)) {
 		LOG(ERROR, "unable to load bitmap 0x%x from memory", id);
 	}
 	// rawBitmaps.erase(id);
@@ -1083,7 +1090,7 @@ void SimTowerLoader::loadAnimatedBitmap(int id, sf::Image img[3])
 			bmp.data[o + 20] = bmp.data[o + 16];
 			bmp.data[o + 16] = temp;
 		}
-		if (!img[i].loadFromMemory(bmp.data, bmp.length)) {
+		if (!loadPreparedBitmap(bmp.data, bmp.length, img[i])) {
 			LOG(ERROR, "unable to load bitmap 0x%x from memory", id);
 			return;
 		}
