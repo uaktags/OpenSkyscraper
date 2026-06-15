@@ -98,7 +98,7 @@ void Office::advance(double dt)
 			rentDeposit = rent;
 			population = workers.size();
 			game->populationNeedsUpdate = true;
-			game->transferFunds(rentDeposit, "Occupied Office's rent deposit");
+			game->transferFunds(rentDeposit, "deposit_income", "Occupied Office's rent deposit");
 		}
 	}
 
@@ -113,13 +113,13 @@ void Office::advance(double dt)
 			spriteNeedsUpdate = true;
 			population = 0;
 			game->populationNeedsUpdate = true;
-			game->transferFunds(-rentDeposit, "Vacated Office's rent deposit payed back");
+			game->transferFunds(-rentDeposit, "deposit_refund", "Vacated Office's rent deposit paid back");
 		}
 
 		// Pay rent for the others.
 		else
 		{
-			game->transferFunds(rent, "Income from Office rent");
+			game->transferFunds(rent, "rent_income", "Income from Office rent");
 		}
 	}
 
