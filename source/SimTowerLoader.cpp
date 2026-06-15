@@ -542,11 +542,12 @@ void SimTowerLoader::loadBitmaps()
 	loadElevators();
 
 	//Toolbox
-	loadMergedByID(images["simtower/ui/toolbox/tools"], 'y', 0x825C, 0x825D, 0x825E, NULL);
-	sf::Image speed[2];
-	loadMergedByID(speed[0], 'y', 0x8258, 0x8259, NULL);
-	loadMergedByID(speed[1], 'y', 0x825A, 0x825B, NULL);
-	loadMerged(images["simtower/ui/toolbox/speed"], 'x', &speed[0], &speed[1], NULL);
+	// Update the tool buttons to merge horizontally
+	loadMergedByID(images["simtower/ui/toolbox/tools"], 'x', 0x825C, 0x825D, 0x825E, NULL);
+
+	// Update the speed buttons to be a single horizontal row of 4
+	// (Instead of the previous 2x2 grid logic which was causing cropping issues)
+	loadMergedByID(images["simtower/ui/toolbox/speed"], 'x', 0x8258, 0x8259, 0x825A, 0x825B, NULL);
 
 	sf::Image items[3];
 	for (int i = 0; i < 3; i++) {
@@ -899,7 +900,7 @@ void SimTowerLoader::loadElevators()
 	digits.resize({11u * 12, 2u * 17});
 	for (int i = 0; i < 10; i++) {
 		for (int n = 0; n < 2; n++) {
-			digits.copy(rawDigits[n], toVector2u(i * 11, n * 17), toIntRect(1 + 16 * i, 16, 11, 33));
+			digits.copy(rawDigits[n], toVector2u(i * 11, n * 17), toIntRect(1 + 16 * i, 16, 11, 17));
 		}
 	}
 
@@ -907,7 +908,7 @@ void SimTowerLoader::loadElevators()
 	loadBitmap(0x87ea, rawFirstDigits[0]);
 	loadBitmap(0x87ed, rawFirstDigits[1]);
 	for (int n = 0; n < 2; n++) {
-		digits.copy(rawFirstDigits[n], toVector2u(110, n * 17), toIntRect(36, 16, 11, 33));
+		digits.copy(rawFirstDigits[n], toVector2u(110, n * 17), toIntRect(36, 16, 11, 17));
 	}
 
 	digits.createMaskFromColor(sf::Color(25, 25, 25));

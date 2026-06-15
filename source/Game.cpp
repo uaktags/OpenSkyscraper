@@ -1215,7 +1215,7 @@ void Game::setRating(int r)
 			LOG(IMPORTANT, "rating increased to %i", rating);
 			playOnce("simtower/rating/increased");
 		}
-		//timeWindow.updateRating();
+		timeWindow.updateRating();
 	}
 }
 
@@ -1224,7 +1224,7 @@ void Game::setPopulation(int p)
 	if (population != p) {
 		population = p;
 		ratingMayIncrease();
-		//timeWindow.updatePopulation();
+		timeWindow.updatePopulation();
 	}
 }
 

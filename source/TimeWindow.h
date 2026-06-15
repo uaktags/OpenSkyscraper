@@ -44,6 +44,9 @@ namespace OT {
             tgui::Label::Ptr lblMoneyStats = NULL;
             tgui::Label::Ptr lblDate = NULL;
             tgui::Label::Ptr lblTooltip = NULL;
+            tgui::Label::Ptr lblRating = NULL;
+            tgui::Label::Ptr lblFundsTitle = NULL;
+            tgui::Label::Ptr lblPopulationTitle = NULL;
             tgui::Texture rating_tx;
             tgui::Picture::Ptr rating;
             tgui::CanvasSFML::Ptr watch = NULL;

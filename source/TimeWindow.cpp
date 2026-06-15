@@ -1,5 +1,7 @@
 #include "TimeWindow.h"
 #include "GameObject.h"
+#include "TimeWindowStyle.h"
+#include <SFML/Graphics/Image.hpp>
 #include <SFML/Graphics/Texture.hpp>
 #include <SFML/Graphics/VertexArray.hpp>
 #include <SFML/System/Vector2.hpp>
@@ -22,23 +24,106 @@
 
 using namespace OT;
 
+static sf::Color blendColor(sf::Color a, sf::Color b, float t)
+{
+    return sf::Color(
+        static_cast<uint8_t>(a.r + (b.r - a.r) * t),
+        static_cast<uint8_t>(a.g + (b.g - a.g) * t),
+        static_cast<uint8_t>(a.b + (b.b - a.b) * t),
+        static_cast<uint8_t>(a.a + (b.a - a.a) * t));
+}
+
+static void fillRect(sf::Image &image, unsigned int x, unsigned int y, unsigned int w, unsigned int h, sf::Color color)
+{
+    const unsigned int maxX = std::min(x + w, image.getSize().x);
+    const unsigned int maxY = std::min(y + h, image.getSize().y);
+    for (unsigned int py = y; py < maxY; py++)
+        for (unsigned int px = x; px < maxX; px++)
+            image.setPixel({px, py}, color);
+}
+
+static sf::Image makeModernHeaderBackground(const TimeWindowLayout &layout)
+{
+    sf::Image image({static_cast<unsigned int>(layout.clientWidth), static_cast<unsigned int>(layout.clientHeight)}, sf::Color::Transparent);
+    const sf::Color top(24, 30, layout.backgroundTopBlue, 238);
+    const sf::Color bottom(12, 15, layout.backgroundBottomBlue, 238);
+    const sf::Color panel(42, 49, 62, 205);
+    const sf::Color line(74, 91, 112, 220);
+    const sf::Color accent(0, 170, layout.accentBlue, 235);
+
+    for (unsigned int y = 0; y < image.getSize().y; y++)
+    {
+        const float t = static_cast<float>(y) / static_cast<float>(image.getSize().y - 1);
+        fillRect(image, 0, y, image.getSize().x, 1, blendColor(top, bottom, t));
+    }
+
+    fillRect(image, 0, 0, image.getSize().x, 1, sf::Color(126, 209, 255, 190));
+    fillRect(image, 0, image.getSize().y - 1, image.getSize().x, 1, sf::Color(4, 8, 14, 230));
+    fillRect(image, 0, 0, 1, image.getSize().y, sf::Color(126, 209, 255, 125));
+    fillRect(image, image.getSize().x - 1, 0, 1, image.getSize().y, sf::Color(4, 8, 14, 230));
+    fillRect(image, 2, 2, 4, image.getSize().y - 4, accent);
+
+    // Common Y coordinates for all three cards: Y = s(6) to s(50) (height s(44))
+    const unsigned int cY = static_cast<unsigned int>(layout.clientHeight * 6 / 56);
+    const unsigned int cH = static_cast<unsigned int>(layout.clientHeight * 44 / 56);
+    const unsigned int midY = layout.tooltipBackgroundY;
+
+    // Helper lambda to draw a card's 1-pixel border
+    auto drawCardBorder = [&](unsigned int x, unsigned int y, unsigned int w, unsigned int h) {
+        fillRect(image, x, y, w, 1, line);          // Top
+        fillRect(image, x, y + h - 1, w, 1, line);  // Bottom
+        fillRect(image, x, y, 1, h, line);          // Left
+        fillRect(image, x + w - 1, y, 1, h, line);  // Right
+    };
+
+    // 3. Draw Watch Card (X = s(8) to s(46))
+    const unsigned int watchCardX = layout.watchX - (layout.watchX - 8) * (layout.watchX > 8);
+    const unsigned int watchCardW = layout.watchSize + (layout.watchX - watchCardX) * 2;
+    fillRect(image, watchCardX, cY, watchCardW, cH, sf::Color(9, 14, 22, 170));
+    drawCardBorder(watchCardX, cY, watchCardW, cH);
+
+    // 4. Draw Middle Card (X = layout.tooltipBackgroundX to layout.tooltipBackgroundWidth)
+    // Top Half: Star rating and Date/Time (panel background)
+    fillRect(image, layout.tooltipBackgroundX, cY, layout.tooltipBackgroundWidth, midY - cY, panel);
+    // Bottom Half: Tooltip and Ledger (light-blue background)
+    fillRect(image, layout.tooltipBackgroundX, midY, layout.tooltipBackgroundWidth, cY + cH - midY, sf::Color(232, 240, 248, 220));
+    // Middle divider separating top and bottom halves
+    fillRect(image, layout.tooltipBackgroundX, midY, layout.tooltipBackgroundWidth, 1, line);
+    // Outer border
+    drawCardBorder(layout.tooltipBackgroundX, cY, layout.tooltipBackgroundWidth, cH);
+
+    // 5. Draw Metrics Card (X = layout.tooltipBackgroundX + layout.tooltipBackgroundWidth to clientWidth - s(8))
+    const unsigned int metricsCardX = layout.tooltipBackgroundX + layout.tooltipBackgroundWidth;
+    const unsigned int metricsCardW = layout.clientWidth - metricsCardX - (layout.clientWidth - 512) * (layout.clientWidth > 512);
+    fillRect(image, metricsCardX, cY, metricsCardW, cH, panel);
+    // Horizontal divider inside metrics card (aligned with the middle card's divider)
+    fillRect(image, metricsCardX, midY, metricsCardW, 1, sf::Color(74, 91, 112, 125));
+    // Outer border
+    drawCardBorder(metricsCardX, cY, metricsCardW, cH);
+
+    return image;
+}
+
+static void setLabelColor(tgui::Label::Ptr label, sf::Color color)
+{
+    label->getRenderer()->setTextColor(color);
+}
+
 TimeWindow::TimeWindow(Game * game) : GameObject(game) {
+    const TimeWindowLayout layout = makeModernTimeWindowLayout(app->uiScale);
     window = tgui::ChildWindow::create();
     auto renderer = window->getRenderer();
-    renderer->setTitleBarHeight(10 * app->uiScale);
-    renderer->setBackgroundColor(sf::Color(30, 30, 35, 200));
-    renderer->setTitleBarColor(sf::Color(45, 45, 50));
-    renderer->setBorderColor(sf::Color(80, 80, 90));
-    renderer->setBorders(1);
+    renderer->setTitleBarHeight(0);
+    renderer->setBackgroundColor(sf::Color::Transparent);
+    renderer->setBorderColor(sf::Color::Transparent);
+    renderer->setBorders(0);
     
-    window->setClientSize({431 * app->uiScale, 41 * app->uiScale});
-    window->setPosition({200 * app->uiScale, 22 * app->uiScale});
+    window->setClientSize({static_cast<float>(layout.clientWidth), static_cast<float>(layout.clientHeight)});
+    window->setPosition({128 * app->uiScale, 22 * app->uiScale});
 
     rating_rect = tgui::UIntRect(0,0,108,22);
     messageTimer = 0;
 
-    reload();
-    
     app->gui.add(window);
 }
 
@@ -50,78 +135,92 @@ void TimeWindow::close() {
 }
 
 void TimeWindow::reload() {
+    const TimeWindowLayout layout = makeModernTimeWindowLayout(app->uiScale);
     window->removeAllWidgets();
 
     // BG
-    tgui::Texture image = tgui::Texture();
-    image.load(app->bitmaps["simtower/ui/time/bg"]);
+    sf::Image backgroundImage = makeModernHeaderBackground(layout);
+    tgui::Texture image;
+    image.loadFromPixelData(backgroundImage.getSize(), backgroundImage.getPixelsPtr());
     auto picture = tgui::Picture::create(image);
     picture->setSize("100%", "100%");
     window->add(picture);
 
+    lblFundsTitle = tgui::Label::create("FUND");
+    lblFundsTitle->setTextSize(10 * app->uiScale);
+    lblFundsTitle->setPosition(layout.metricsX, layout.metricsY);
+    lblFundsTitle->setSize(42 * app->uiScale, 13 * app->uiScale);
+    lblFundsTitle->getScrollbar()->setPolicy(tgui::Scrollbar::Policy::Never);
+    setLabelColor(lblFundsTitle, sf::Color(131, 210, 255));
+    window->add(lblFundsTitle);
+
+    lblPopulationTitle = tgui::Label::create("POP");
+    lblPopulationTitle->setTextSize(10 * app->uiScale);
+    lblPopulationTitle->setPosition(layout.metricsX, layout.metricsY + layout.metricRowHeight);
+    lblPopulationTitle->setSize(42 * app->uiScale, 13 * app->uiScale);
+    lblPopulationTitle->getScrollbar()->setPolicy(tgui::Scrollbar::Policy::Never);
+    setLabelColor(lblPopulationTitle, sf::Color(131, 210, 255));
+    window->add(lblPopulationTitle);
+
     // Funds
     lblFunds = tgui::Label::create();
     lblFunds->setHorizontalAlignment(tgui::HorizontalAlignment::Right);
-    lblFunds->setTextSize(13 * app->uiScale);
-    lblFunds->setSize(80 * app->uiScale, 13 * app->uiScale);
-    lblFunds->setPosition(345 * app->uiScale, 5 * app->uiScale);
-    lblFunds->setScrollbarPolicy(tgui::Scrollbar::Policy::Never);
+    lblFunds->setTextSize(12 * app->uiScale);
+    lblFunds->setSize(layout.metricsWidth - 44 * app->uiScale, 14 * app->uiScale);
+    lblFunds->setPosition(layout.metricsX + 44 * app->uiScale, layout.metricsY);
+    lblFunds->getScrollbar()->setPolicy(tgui::Scrollbar::Policy::Never);
+    setLabelColor(lblFunds, sf::Color(244, 248, 252));
     window->add(lblFunds);
 
     // Pops
     lblPopulation = tgui::Label::create();
     lblPopulation->setHorizontalAlignment(tgui::HorizontalAlignment::Right);
-    lblPopulation->setTextSize(13 * app->uiScale);
-    lblPopulation->setSize(80 * app->uiScale, 13 * app->uiScale);
-    lblPopulation->setPosition(345 * app->uiScale, 22 * app->uiScale);
-    lblPopulation->setScrollbarPolicy(tgui::Scrollbar::Policy::Never);
+    lblPopulation->setTextSize(12 * app->uiScale);
+    lblPopulation->setSize(layout.metricsWidth - 44 * app->uiScale, 14 * app->uiScale);
+    lblPopulation->setPosition(layout.metricsX + 44 * app->uiScale, layout.metricsY + layout.metricRowHeight);
+    lblPopulation->getScrollbar()->setPolicy(tgui::Scrollbar::Policy::Never);
+    setLabelColor(lblPopulation, sf::Color(244, 248, 252));
     window->add(lblPopulation);
 
     lblMoneyStats = tgui::Label::create();
+    lblMoneyStats->setHorizontalAlignment(tgui::HorizontalAlignment::Right);
     lblMoneyStats->setTextSize(10 * app->uiScale);
-    lblMoneyStats->setSize(105 * app->uiScale, 13 * app->uiScale);
-    lblMoneyStats->setPosition(235 * app->uiScale, 22 * app->uiScale);
+    lblMoneyStats->setSize(126 * app->uiScale, 12 * app->uiScale);
+    lblMoneyStats->setPosition(layout.metricsX - 140 * app->uiScale, 35 * app->uiScale);
     lblMoneyStats->getScrollbar()->setPolicy(tgui::Scrollbar::Policy::Never);
+    setLabelColor(lblMoneyStats, sf::Color(61, 71, 82));
     window->add(lblMoneyStats);
 
     // message
     lblTooltip = tgui::Label::create();
-    lblTooltip->setPosition(42 * app->uiScale, 25 * app->uiScale);
+    lblTooltip->setPosition(layout.tooltipX, layout.tooltipY);
     lblTooltip->setTextSize(11 * app->uiScale);
+    lblTooltip->setSize(layout.tooltipWidth, 14 * app->uiScale);
+    lblTooltip->getScrollbar()->setPolicy(tgui::Scrollbar::Policy::Never);
+    setLabelColor(lblTooltip, sf::Color(30, 36, 43));
     window->add(lblTooltip);
 
     // date, Time
     lblDate = tgui::Label::create();
-    lblDate->setPosition(160 * app->uiScale, 3 * app->uiScale);
-    lblDate->setTextSize(13 * app->uiScale);
+    lblDate->setHorizontalAlignment(tgui::HorizontalAlignment::Center);
+    lblDate->setPosition(layout.dateX, layout.dateY);
+    lblDate->setSize(172 * app->uiScale, 22 * app->uiScale);
+    lblDate->setTextSize(14 * app->uiScale);
+    lblDate->getScrollbar()->setPolicy(tgui::Scrollbar::Policy::Never);
+    setLabelColor(lblDate, sf::Color(229, 238, 246));
     window->add(lblDate);
 
-    // star rating (scaled)
-    // Extract and scale the correct region from the rating spritesheet
-    int ratingSrcW = 108, ratingSrcH = 22;
-    int scaledW = ratingSrcW * app->uiScale;
-    int scaledH = ratingSrcH * app->uiScale;
-    sf::Image ratingSheet = app->bitmaps["simtower/ui/time/rating"].copyToImage();
-    sf::Image ratingSub(sf::Vector2u(ratingSrcW, ratingSrcH));
-    ratingSub.copy(ratingSheet, {0u, 0u}, sf::IntRect({0, 0}, {ratingSrcW, ratingSrcH}), false);
-    sf::Image ratingScaled(sf::Vector2u(scaledW, scaledH));
-    for (int y = 0; y < scaledH; ++y) {
-        for (int x = 0; x < scaledW; ++x) {
-            int srcX = x * ratingSrcW / scaledW;
-            int srcY = y * ratingSrcH / scaledH;
-            ratingScaled.setPixel({static_cast<unsigned int>(x), static_cast<unsigned int>(y)}, ratingSub.getPixel({static_cast<unsigned int>(srcX), static_cast<unsigned int>(srcY)}));
-        }
-    }
-    tgui::Texture rating_tx;
-    rating_tx.loadFromPixelData({static_cast<unsigned int>(scaledW), static_cast<unsigned int>(scaledH)}, ratingScaled.getPixelsPtr());
-    rating = tgui::Picture::create(rating_tx);
-    rating->setPosition(42 * app->uiScale, 2 * app->uiScale);
-    rating->setSize(scaledW, scaledH);
-    window->add(rating);
+    lblRating = tgui::Label::create();
+    lblRating->setPosition(layout.ratingX, layout.ratingY);
+    lblRating->setSize(layout.ratingWidth, layout.ratingHeight + 6 * app->uiScale);
+    lblRating->setTextSize(15 * app->uiScale);
+    lblRating->getScrollbar()->setPolicy(tgui::Scrollbar::Policy::Never);
+    setLabelColor(lblRating, sf::Color(255, 218, 70));
+    window->add(lblRating);
 
     // watch canvas
-    watch = tgui::CanvasSFML::create({29 * app->uiScale, 29 * app->uiScale});
-    watch->setPosition(5 * app->uiScale, 5 * app->uiScale);
+    watch = tgui::CanvasSFML::create({static_cast<float>(layout.watchSize), static_cast<float>(layout.watchSize)});
+    watch->setPosition(layout.watchX, layout.watchY);
     window->add(watch);
 
     updateRating();
@@ -194,6 +293,13 @@ void TimeWindow::updateRating() {
     LOG(IMPORTANT, "%i", pos);
     // rating_rect = tgui::UIntRect(0, pos, 108, 22);
     rating_rect.top = pos;
+    if (lblRating)
+    {
+        std::string stars;
+        for (int i = 0; i < 5; i++)
+            stars += i <= game->rating ? "★" : "☆";
+        lblRating->setText(stars);
+    }
 }
 
 void TimeWindow::updateFunds() {
@@ -263,10 +369,10 @@ void TimeWindow::renderWatch() {
     lines[1].position = sf::Vector2f(mid.x + radius_h * sin(angle_h), mid.x + radius_h * -cos(angle_h));
     lines[2].position = sf::Vector2f(mid.x, mid.y);
     lines[3].position = sf::Vector2f(mid.x + radius_m * sin(angle_m), mid.x + radius_m * -cos(angle_m));
-    lines[0].color = sf::Color::Black;
-    lines[1].color = sf::Color::Black;
-    lines[2].color = sf::Color::Black;
-    lines[3].color = sf::Color::Black;
+    lines[0].color = sf::Color(230, 240, 248);
+    lines[1].color = sf::Color(230, 240, 248);
+    lines[2].color = sf::Color(0, 190, 255);
+    lines[3].color = sf::Color(0, 190, 255);
 
     watch->draw(lines);
     watch->display();

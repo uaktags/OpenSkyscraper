@@ -68,7 +68,6 @@ namespace OT {
 		int prev_quarter;
 		int prev_year;
 
-	private:
 		double speed;
 		double speed_animated;
 	};

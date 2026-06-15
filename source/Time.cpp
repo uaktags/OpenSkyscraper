@@ -6,6 +6,15 @@ using namespace OT;
 const static double kDayDuration = 3.2; // minutes / game day
 const double Time::kBaseSpeed    = 1.0 / 60 / kDayDuration; // game days / second
 
+const static double kNightStartHour = 19.0;
+const static double kNightEndHour   = 7.0;
+const static double kNightSpeedMultiplier = 2.0;
+
+static bool isNightHour(double hour)
+{
+	return hour >= kNightStartHour || hour < kNightEndHour;
+}
+
 
 double Time::absoluteToHour(double a)
 {
@@ -77,8 +86,8 @@ void Time::advance(double dt)
 		}
 	}
 	
-	//Advance the absolute time.
-	set(absolute + dt * kBaseSpeed * speed_animated);
+	double multiplier = isNightHour(hour) ? kNightSpeedMultiplier : 1.0;
+	set(absolute + dt * kBaseSpeed * speed_animated * multiplier);
 }
 
 /** Returns the current time in a fraction of hours in a day. */

@@ -66,21 +66,43 @@ endif ()
 # Tell CMake to also search the thirdparty directory for modules.
 set(CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/thirdparty" ${CMAKE_MODULE_PATH})
 
-if (WIN32)
-    set(SFML_STATIC_LIBRARIES OFF CACHE BOOL "")
-    find_package(SFML 3.0 CONFIG REQUIRED COMPONENTS Audio Graphics Window System)
-else()
-    set(SFML_STATIC_LIBRARIES FALSE CACHE BOOL "")
-    find_package(SFML 2.6 CONFIG REQUIRED COMPONENTS audio graphics window system)
+set(SFML_STATIC_LIBRARIES OFF CACHE BOOL "")
+find_package(SFML 3.0 CONFIG COMPONENTS Audio Graphics Window System)
+if(NOT SFML_FOUND)
+	message(STATUS "SFML Shared not found, trying static libraries...")
+	set(SFML_STATIC_LIBRARIES ON CACHE BOOL "" FORCE)
+	find_package(SFML 3.0 CONFIG REQUIRED COMPONENTS Audio Graphics Window System)
 endif()
+
+
 
 # Copy the SFML frameworks into the application bundle on Mac OS X.
 if (APPLE)
 	# install(DIRECTORY ${SFML_LIBRARIES} DESTINATION ${CMAKE_BINARY_DIR}/${EXECUTABLE_NAME}.app/Contents/Frameworks)
 endif ()
 
+# Alias SFML 3 targets to SFML 2 lowercase names to satisfy TGUI's dependencies
+if(TARGET SFML::Graphics AND NOT TARGET sfml-graphics)
+	add_library(sfml-graphics ALIAS SFML::Graphics)
+endif()
+if(TARGET SFML::Window AND NOT TARGET sfml-window)
+	add_library(sfml-window ALIAS SFML::Window)
+endif()
+if(TARGET SFML::System AND NOT TARGET sfml-system)
+	add_library(sfml-system ALIAS SFML::System)
+endif()
+if(TARGET SFML::Audio AND NOT TARGET sfml-audio)
+	add_library(sfml-audio ALIAS SFML::Audio)
+endif()
+
 # TGUI
-set(TGUI_STATIC_LIBRARIES FALSE)
+if(EXISTS "/home/tim/Projects/build/TGUI/build")
+	set(TGUI_DIR "/home/tim/Projects/build/TGUI/build" CACHE PATH "Path to local TGUI build" FORCE)
+	set(TGUI_STATIC_LIBRARIES TRUE)
+else()
+	set(TGUI_STATIC_LIBRARIES FALSE)
+endif()
+
 if(WIN32)
 find_package(TGUI CONFIG REQUIRED)
 else ()
@@ -102,7 +124,7 @@ find_package(mspack)
 if (MSPACK_FOUND)
 	include_directories(${MSPACK_INCLUDE_DIRS})
 	link_directories(${MSPACK_LIBRARY_DIRS})
-	target_link_libraries(${EXECUTABLE_NAME} ${MSPACK_LIBRARIES})
+	target_link_libraries(${EXECUTABLE_NAME} PRIVATE ${MSPACK_LIBRARIES})
 	add_definitions(-DMSPACK)
 endif (MSPACK_FOUND)
 

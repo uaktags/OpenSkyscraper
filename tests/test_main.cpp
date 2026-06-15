@@ -8,6 +8,7 @@
 #include "../source/Time.h"
 #include "../source/Route.h"
 #include "../source/Money.h"
+#include "../source/TimeWindowStyle.h"
 
 static int g_failures = 0;
 
@@ -171,6 +172,24 @@ static void testMoneyAccounting()
     EXPECT(money.recentNet() == 300);
 }
 
+static void testTimeWindowModernLayout()
+{
+    const OT::TimeWindowLayout layout = OT::makeModernTimeWindowLayout(1.0f);
+
+    EXPECT(layout.clientWidth == 520);
+    EXPECT(layout.clientHeight == 56);
+    EXPECT(layout.dateX > layout.ratingX + layout.ratingWidth);
+    EXPECT(layout.metricsX > layout.dateX + 120);
+    EXPECT(layout.tooltipWidth >= 300);
+    EXPECT(layout.watchSize == 34);
+    EXPECT(layout.backgroundTopBlue > layout.backgroundBottomBlue);
+    EXPECT(layout.accentBlue > layout.backgroundTopBlue);
+    EXPECT(layout.tooltipBackgroundX == 52);
+    EXPECT(layout.tooltipBackgroundY == 28);
+    EXPECT(layout.tooltipBackgroundWidth == 310);
+    EXPECT(layout.tooltipBackgroundHeight == 22);
+}
+
 int main()
 {
     testSmoke();
@@ -178,6 +197,7 @@ int main()
     testNightSpeedMultiplier();
     testRouteClear();
     testMoneyAccounting();
+    testTimeWindowModernLayout();
 
     if (g_failures > 0)
     {
