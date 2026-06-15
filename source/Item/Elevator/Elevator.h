@@ -40,11 +40,12 @@ namespace OT {
 				std::set<int> unservicedFloors;
 
 				typedef std::set<Car *> Cars;
-				Cars cars;
-				void clearCars();
-				void addCar(int floor);
+			Cars cars;
+			void clearCars();
+			void addCar(int floor);
+			virtual int dailyMaintenanceCost() const override { return 100 + (int)cars.size() * 250 + size.y * 20; }
 
-				typedef enum {
+			typedef enum {
 					kUp   = 1,
 					kNone = 0,
 					kDown = -1

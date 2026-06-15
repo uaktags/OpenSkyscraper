@@ -28,6 +28,7 @@ namespace OT {
 			void updateSprite();
 
 			virtual void render(sf::RenderTarget & target) const;
+			virtual int dailyMaintenanceCost() const override { return size.x * 20; }
 		};
 	}
 }
