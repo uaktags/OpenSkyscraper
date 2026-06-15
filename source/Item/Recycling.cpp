@@ -15,8 +15,8 @@ void Recycling::init()
     Item::init();
 
     sprite.SetImage(App->bitmaps["simtower/recycling"]);
-    sprite.setOrigin(0, 60);
-    sprite.setPosition(getPosition().x * 8, -getPosition().y * 36);
+    sprite.setOrigin({0.f, 60.f});
+    sprite.setPosition({static_cast<float>(getPosition().x * 8), static_cast<float>(-getPosition().y * 36)});
     addSprite(&sprite);
     spriteNeedsUpdate = false;
 
@@ -27,5 +27,5 @@ void Recycling::updateSprite()
 {
     spriteNeedsUpdate = false;
     int index = 0;
-    sprite.setTextureRect(sf::IntRect(index*200, variant*60, 200, 60));
+    sprite.setTextureRect(sf::IntRect({index*200, variant*60}, {200, 60}));
 }

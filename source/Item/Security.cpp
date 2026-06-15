@@ -15,8 +15,8 @@ void Security::init()
     Item::init();
 
     sprite.SetImage(App->bitmaps["simtower/security"]);
-    sprite.setOrigin(0, 24);
-    sprite.setPosition(getPosition().x * 8, -getPosition().y * 36);
+    sprite.setOrigin({0.f, 24.f});
+    sprite.setPosition({static_cast<float>(getPosition().x * 8), static_cast<float>(-getPosition().y * 36)});
     addSprite(&sprite);
     spriteNeedsUpdate = false;
 
@@ -27,5 +27,5 @@ void Security::updateSprite()
 {
     spriteNeedsUpdate = false;
     int index = 0;
-    sprite.setTextureRect(sf::IntRect(index*128, variant*24, 128, 24));
+    sprite.setTextureRect(sf::IntRect({index*128, variant*24}, {128, 24}));
 }
