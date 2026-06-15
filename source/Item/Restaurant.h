@@ -62,6 +62,7 @@ namespace OT
 			void updateSprite();
 
 			virtual void advance(double dt);
+			virtual int dailyMaintenanceCost() const override { return 800; }
 
 			virtual void addPerson(Person *p);
 			virtual void removePerson(Person *p);

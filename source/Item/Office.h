@@ -28,6 +28,7 @@ namespace OT
 			virtual void decodeXML(tinyxml2::XMLElement &xml) override;
 
 			virtual void advance(double dt) override;
+			virtual int dailyMaintenanceCost() const override { return 250; }
 			bool isAttractive();
 
 			virtual void addPerson(Person *p) override;
