@@ -79,7 +79,7 @@ void Restaurant::advance(double dt)
 		game->populationNeedsUpdate = true;
 		spriteNeedsUpdate = true;
 
-		game->transferFunds(population * 400 - 4000, "Income from Restaurant");
+		game->transferFunds(population * 400 - 4000, "retail_income", "Income from Restaurant");
 	}
 
 	// Make customers arrive.

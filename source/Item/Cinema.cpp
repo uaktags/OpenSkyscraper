@@ -106,7 +106,7 @@ void Cinema::advance(double dt)
 		spriteNeedsUpdate = true;
 
 		// TODO: Specify cinema income.
-		game->transferFunds(customers.size() * 500 - 2000, "Income from Movie Theatre");
+		game->transferFunds(customers.size() * 500 - 2000, "entertainment_income", "Income from Movie Theatre");
 
 		// Make the customers leave.
 		const Route &r = game->findRoute(this, game->mainLobby);

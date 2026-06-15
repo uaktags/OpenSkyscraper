@@ -61,7 +61,7 @@ void PartyHall::advance(double dt)
 		spriteNeedsUpdate = true;
 
 		// TODO: Specify party hall income.
-		game->transferFunds(10000, "Income from Party Hall");
+		game->transferFunds(10000, "entertainment_income", "Income from Party Hall");
 	}
 
 	// TODO: Make people arrive at the hall and leave afterwards.

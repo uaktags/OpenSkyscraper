@@ -79,7 +79,7 @@ void FastFood::advance(double dt)
 		game->populationNeedsUpdate = true;
 		spriteNeedsUpdate = true;
 
-		game->transferFunds(population * 200 - 2000, "Income from Fast Food");
+		game->transferFunds(population * 200 - 2000, "retail_income", "Income from Fast Food");
 	}
 
 	// Make customers arrive.
