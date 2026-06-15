@@ -193,28 +193,66 @@ tgui::Button::Ptr ToolboxWindow::makeButton(int width, int height, sf::Texture t
     int scaledWidth = width * app->uiScale;
     int scaledHeight = height * app->uiScale;
 
-    // Extract the sub-rectangle from the spritesheet
-    sf::IntRect normalRect({index * width, 0}, {width, height});
     sf::Image iconImage = textureMap.copyToImage();
+    unsigned int texWidth = iconImage.getSize().x;
+    unsigned int texHeight = iconImage.getSize().y;
+
+    sf::IntRect normalRect;
+    sf::IntRect checkedRect;
+    sf::IntRect hoverRect;
+
+    bool customChecked = false;
+    bool customHover = false;
+
+    // Detect tools texture
+    if (texHeight == 21 && (texWidth == 192 || texWidth == 64)) {
+        if (texWidth == 192) {
+            // Real SimTower tools texture (merged from 3 resources of 64x21)
+            normalRect = sf::IntRect({index * 21, 0}, {21, 21});
+            checkedRect = sf::IntRect({64 + index * 21, 0}, {21, 21});
+            hoverRect = sf::IntRect({128 + index * 21, 0}, {21, 21});
+            customChecked = true;
+            customHover = true;
+        } else {
+            // Fallback tools texture (64x21)
+            normalRect = sf::IntRect({index * 21, 0}, {21, 21});
+        }
+    }
+    // Detect speed texture
+    else if (texWidth == 256 && texHeight == 32) {
+        // Real SimTower speed texture (merged from 4 resources of 64x32)
+        // Each button is 23x24 located at X = 20, Y = 4 relative to resource start
+        normalRect = sf::IntRect({index * 64 + 20, 4}, {23, 24});
+    }
+    // Default logic (e.g. building items or fallbacks)
+    else {
+        normalRect = sf::IntRect({index * width, 0}, {width, height});
+        bool hasCheckedRow = (texHeight >= static_cast<unsigned>(height * 2));
+        if (hasCheckedRow) {
+            checkedRect = sf::IntRect({index * width, height}, {width, height});
+            customChecked = true;
+        }
+    }
 
     auto extract = [&](const sf::IntRect &rect) {
         sf::Image subImage;
-        subImage.resize({static_cast<unsigned>(width), static_cast<unsigned>(height)});
+        subImage.resize({static_cast<unsigned>(rect.size.x), static_cast<unsigned>(rect.size.y)});
         [[maybe_unused]] bool copied = subImage.copy(iconImage, {0, 0}, rect, false);
         return subImage;
     };
 
+    // Extract normal image using the calculated normalRect width/height
+    int actualWidth = normalRect.size.x;
+    int actualHeight = normalRect.size.y;
     sf::Image normalImage = extract(normalRect);
 
     sf::Image checkedImage;
-    bool hasCheckedRow = (iconImage.getSize().y >= static_cast<unsigned>(height * 2));
-    if (hasCheckedRow) {
-        sf::IntRect checkedRect({index * width, height}, {width, height});
+    if (customChecked) {
         checkedImage = extract(checkedRect);
     } else {
-        checkedImage.resize({static_cast<unsigned>(width), static_cast<unsigned>(height)});
-        for (unsigned y = 0; y < static_cast<unsigned>(height); y++) {
-            for (unsigned x = 0; x < static_cast<unsigned>(width); x++) {
+        checkedImage.resize({static_cast<unsigned>(actualWidth), static_cast<unsigned>(actualHeight)});
+        for (unsigned y = 0; y < static_cast<unsigned>(actualHeight); y++) {
+            for (unsigned x = 0; x < static_cast<unsigned>(actualWidth); x++) {
                 sf::Color c = normalImage.getPixel({x, y});
                 c.r = static_cast<std::uint8_t>(c.r * 0.7f);
                 c.g = static_cast<std::uint8_t>(c.g * 0.7f);
@@ -225,14 +263,18 @@ tgui::Button::Ptr ToolboxWindow::makeButton(int width, int height, sf::Texture t
     }
 
     sf::Image hoverImage;
-    hoverImage.resize({static_cast<unsigned>(width), static_cast<unsigned>(height)});
-    for (unsigned y = 0; y < static_cast<unsigned>(height); y++) {
-        for (unsigned x = 0; x < static_cast<unsigned>(width); x++) {
-            sf::Color c = normalImage.getPixel({x, y});
-            c.r = static_cast<std::uint8_t>(std::min(255, static_cast<int>(c.r * 1.15f + 20)));
-            c.g = static_cast<std::uint8_t>(std::min(255, static_cast<int>(c.g * 1.15f + 20)));
-            c.b = static_cast<std::uint8_t>(std::min(255, static_cast<int>(c.b * 1.15f + 20)));
-            hoverImage.setPixel({x, y}, c);
+    if (customHover) {
+        hoverImage = extract(hoverRect);
+    } else {
+        hoverImage.resize({static_cast<unsigned>(actualWidth), static_cast<unsigned>(actualHeight)});
+        for (unsigned y = 0; y < static_cast<unsigned>(actualHeight); y++) {
+            for (unsigned x = 0; x < static_cast<unsigned>(actualWidth); x++) {
+                sf::Color c = normalImage.getPixel({x, y});
+                c.r = static_cast<std::uint8_t>(std::min(255, static_cast<int>(c.r * 1.15f + 20)));
+                c.g = static_cast<std::uint8_t>(std::min(255, static_cast<int>(c.g * 1.15f + 20)));
+                c.b = static_cast<std::uint8_t>(std::min(255, static_cast<int>(c.b * 1.15f + 20)));
+                hoverImage.setPixel({x, y}, c);
+            }
         }
     }
 
@@ -242,8 +284,8 @@ tgui::Button::Ptr ToolboxWindow::makeButton(int width, int height, sf::Texture t
         scaled.resize({static_cast<unsigned>(scaledWidth), static_cast<unsigned>(scaledHeight)});
         for (int y = 0; y < scaledHeight; ++y) {
             for (int x = 0; x < scaledWidth; ++x) {
-                int srcX = x * width / scaledWidth;
-                int srcY = y * height / scaledHeight;
+                int srcX = x * actualWidth / scaledWidth;
+                int srcY = y * actualHeight / scaledHeight;
                 scaled.setPixel({static_cast<unsigned>(x), static_cast<unsigned>(y)},
                                 src.getPixel({static_cast<unsigned>(srcX), static_cast<unsigned>(srcY)}));
             }
