@@ -131,7 +131,8 @@ void ToolboxWindow::reload()
     for (int i = 0; i < 4; i++)
     {
         ButtonState state;
-        auto button = makeButton(23, 24, speedTexture, i, state);
+        int speedIndex = (i == 0 ? 2 : 0);
+        auto button = makeButton(23, 24, speedTexture, speedIndex, state);
         speedLayout->add(button);
         speedButtons[i] = button;
         buttonStates[button] = state;
@@ -202,9 +203,9 @@ tgui::Button::Ptr ToolboxWindow::makeButton(int width, int height, sf::Texture t
     if (texHeight == 21 && (texWidth == 192 || texWidth == 64)) {
         if (texWidth == 192) {
             // Real SimTower tools texture (merged from 3 resources of 64x21)
-            normalRect = sf::IntRect({index * 64 + 0, 0}, {21, 21});
-            checkedRect = sf::IntRect({index * 64 + 21, 0}, {21, 21});
-            hoverRect = sf::IntRect({index * 64 + 42, 0}, {21, 21});
+            normalRect = sf::IntRect({index * 21, 0}, {21, 21});
+            checkedRect = sf::IntRect({64 + index * 21, 0}, {21, 21});
+            hoverRect = sf::IntRect({128 + index * 21, 0}, {21, 21});
             customChecked = true;
             customHover = true;
         } else {
