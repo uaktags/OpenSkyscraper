@@ -135,6 +135,14 @@ void ToolboxWindow::reload()
     speedButtons.clear();
     buttonStates.clear();
 
+    // Calculate total rows and sizes dynamically to prevent overlapping when new items are registered
+    int numItems = game->itemFactory.prototypes.size();
+    int totalRows = (numItems + 2) / 3;
+    int speedY = 25 + totalRows * 32 + 8;
+    int clientHeight = speedY + 24 + 3;
+
+    window->setClientSize({106 * app->uiScale, clientHeight * app->uiScale});
+
     // STEP 1: MOVE TOOL BUTTONS TO THE TOP (Bulldoze, Finger, Inspect)
     auto toolsLayout = tgui::HorizontalLayout::create();
     window->add(toolsLayout);
@@ -217,7 +225,7 @@ void ToolboxWindow::reload()
     auto speedLayout = tgui::HorizontalLayout::create();
     window->add(speedLayout);
     speedLayout->setSize(92 * app->uiScale, 24 * app->uiScale);
-    speedLayout->setPosition(7 * app->uiScale, 193 * app->uiScale);
+    speedLayout->setPosition(7 * app->uiScale, speedY * app->uiScale);
 
     sf::Texture speedTexture = app->bitmaps["simtower/ui/toolbox/speed"];
     if (speedTexture.getSize() == sf::Vector2u(256, 32))
