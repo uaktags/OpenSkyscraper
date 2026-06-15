@@ -54,6 +54,7 @@ namespace OT {
 			}
 
 			virtual void advance(double dt) {}
+			virtual int dailyMaintenanceCost() const { return 0; }
 
 			typedef std::set<Person *> People;
 			People people;
