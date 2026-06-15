@@ -7,6 +7,7 @@
 
 #include "../source/Time.h"
 #include "../source/Route.h"
+#include "../source/Money.h"
 
 static int g_failures = 0;
 
@@ -77,6 +78,53 @@ static void testTimeConversion()
     EXPECT_NEAR(Time::absoluteToHour(15.0 / 26.0), 13.0, 1e-9);
 }
 
+static void testNightSpeedMultiplier()
+{
+    using OT::Time;
+
+    struct TestTime : public Time
+    {
+        using Time::set;
+        using Time::advance;
+
+        void pause() { speed = 0; speed_animated = 0; }
+    };
+
+    const double dt = 1.0;
+
+    TestTime day;
+    day.set(Time::hourToAbsolute(12.0));
+    const double dayStart = day.absolute;
+    day.advance(dt);
+    const double dayDelta = day.absolute - dayStart;
+
+    TestTime night;
+    night.set(Time::hourToAbsolute(20.0));
+    const double nightStart = night.absolute;
+    night.advance(dt);
+    const double nightDelta = night.absolute - nightStart;
+    EXPECT(nightDelta > dayDelta * 1.5);
+
+    TestTime at19;
+    at19.set(Time::hourToAbsolute(19.0));
+    const double at19Start = at19.absolute;
+    at19.advance(dt);
+    EXPECT(at19.absolute - at19Start > dayDelta * 1.5);
+
+    TestTime at7;
+    at7.set(Time::hourToAbsolute(7.0));
+    const double at7Start = at7.absolute;
+    at7.advance(dt);
+    EXPECT_NEAR(at7.absolute - at7Start, dayDelta, 1e-12);
+
+    TestTime pausedNight;
+    pausedNight.set(Time::hourToAbsolute(20.0));
+    pausedNight.pause();
+    const double pausedStart = pausedNight.absolute;
+    pausedNight.advance(dt);
+    EXPECT(pausedNight.absolute == pausedStart);
+}
+
 // Route seam: clear() resets all fields including the cached score and
 // transport counters. score() returns the cached value.
 static void testRouteClear()
@@ -99,11 +147,37 @@ static void testRouteClear()
     EXPECT(r.numElevators == 0);
 }
 
+static void testMoneyAccounting()
+{
+    OT::Money money;
+    money.clear(1000);
+    money.record(500, "rent_income");
+    money.record(-200, "maintenance");
+    EXPECT(money.balance == 1300);
+    EXPECT(money.todayIncome == 500);
+    EXPECT(money.todayExpenses == 200);
+    EXPECT(money.todayNet() == 300);
+    EXPECT(money.todayTotalsByCategory["rent_income"] == 500);
+    EXPECT(money.todayTotalsByCategory["maintenance"] == -200);
+
+    money.finalizeDay();
+    EXPECT(money.todayIncome == 0);
+    EXPECT(money.todayExpenses == 0);
+    EXPECT(money.yesterdayIncome == 500);
+    EXPECT(money.yesterdayExpenses == 200);
+    EXPECT(money.yesterdayNet() == 300);
+    EXPECT(money.recentIncome() == 500);
+    EXPECT(money.recentExpenses() == 200);
+    EXPECT(money.recentNet() == 300);
+}
+
 int main()
 {
     testSmoke();
     testTimeConversion();
+    testNightSpeedMultiplier();
     testRouteClear();
+    testMoneyAccounting();
 
     if (g_failures > 0)
     {
