@@ -64,15 +64,11 @@ void ToolboxWindow::reload()
     speedButtons.clear();
     buttonStates.clear();
 
-    auto topLayout = tgui::VerticalLayout::create();
-    window->add(topLayout);
-    topLayout->setSize("100%", "100%");
-
     // STEP 1: MOVE TOOL BUTTONS TO THE TOP (Bulldoze, Finger, Inspect)
     auto toolsLayout = tgui::HorizontalLayout::create();
-    topLayout->add(toolsLayout, "toolsLayout");
-    toolsLayout->setSize("100%", 21 * app->uiScale);
-    toolsLayout->addSpace(0.6f);
+    window->add(toolsLayout);
+    toolsLayout->setSize(63 * app->uiScale, 21 * app->uiScale);
+    toolsLayout->setPosition(21 * app->uiScale, 2 * app->uiScale);
 
     sf::Texture toolsTexture = app->bitmaps["simtower/ui/toolbox/tools"];
 
@@ -99,7 +95,6 @@ void ToolboxWindow::reload()
     toolsLayout->add(inspectButton);
     toolButtons["inspector"] = inspectButton;
     inspectButton->onPress([this] { game->selectTool("inspector"); });
-    toolsLayout->addSpace(0.6f);
 
     // STEP 2: BUILDING ITEMS
     int row = 0;
@@ -128,9 +123,9 @@ void ToolboxWindow::reload()
 
     // STEP 3: MOVE SPEED CONTROLS TO THE BOTTOM
     auto speedLayout = tgui::HorizontalLayout::create();
-    topLayout->add(speedLayout, "speedLayout");
-    speedLayout->setSize("100%", 24 * app->uiScale);
-    speedLayout->addSpace(0.6f);
+    window->add(speedLayout);
+    speedLayout->setSize(92 * app->uiScale, 24 * app->uiScale);
+    speedLayout->setPosition(7 * app->uiScale, 193 * app->uiScale);
 
     sf::Texture speedTexture = app->bitmaps["simtower/ui/toolbox/speed"];
     for (int i = 0; i < 4; i++)
@@ -142,7 +137,6 @@ void ToolboxWindow::reload()
         buttonStates[button] = state;
         button->onPress([this, i] { onSpeedButtonPress(i); });
     }
-    speedLayout->addSpace(0.6f);
 
     updateTool();
     updateSpeed();
