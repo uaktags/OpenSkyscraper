@@ -1,4 +1,5 @@
 /* Copyright (c) 2012-2015 Fabian Schuiki */
+/* Copyright (c) 2026 OpenSkyscraper contributors */
 #include <cassert>
 #include "Application.h"
 #include "Game.h"
@@ -25,11 +26,13 @@ Game::Game(Application & app)
 	//mapWindow     = NULL;
 
 	funds  = 4000000;
+	money.setBalance(funds);
 	rating = 0;
 	population = 0;
 	populationNeedsUpdate = false;
 
 	time.set(7/78.0);
+	lastAccountingDay = (int)floor(time.absolute);
 	speedMode = 1;
 	selectedTool = "inspector";
 	itemBelowCursor = NULL;
@@ -154,8 +157,9 @@ bool Game::handleEvent(sf::Event & event)
 	} else if (const auto * mouseMoved = event.getIf<sf::Event::MouseMoved>()) {
 		eventType = EventType::MouseMoved;
 		mousePosition = mouseMoved->position;
-	} else if (event.is<sf::Event::MouseButtonReleased>()) {
+	} else if (const auto * mouseButtonReleased = event.getIf<sf::Event::MouseButtonReleased>()) {
 		eventType = EventType::MouseButtonReleased;
+		mousePosition = mouseButtonReleased->position;
 	}
 
 	switch (eventType) {
@@ -190,6 +194,9 @@ bool Game::handleEvent(sf::Event & event)
 		} break;
 
 		case EventType::MouseButtonPressed: {
+			if (toolboxWindow.window && toolboxWindow.window->isMouseOnWidget(tgui::Vector2f(mousePosition.x, mousePosition.y)))
+				return false;
+
 			float2 mousePoint(mousePosition.x, mousePosition.y);
 			//rectf toolboxWindowRect(float2(toolboxWindow.window->getAbsolutePosition().x, toolboxWindow.window->getAbsolutePosition().y), float2(toolboxWindow.window->GetClientWidth(), toolboxWindow.window->GetClientHeight()));
 			// rectf timeWindowRect(float2(timeWindow.window->GetAbsoluteLeft(), timeWindow.window->GetAbsoluteTop()), float2(timeWindow.window->GetClientWidth(), timeWindow.window->GetClientHeight()));
@@ -221,7 +228,7 @@ bool Game::handleEvent(sf::Event & event)
 							toolBoundary.maxY() <= itemRect.maxY()) {
 							LOG(DEBUG, "add car on floor %i to elevator %s", toolPosition.y, e->desc().c_str());
 							e->addCar(toolPosition.y);
-							transferFunds(-80000);
+							transferFunds(-80000, "construction", "Elevator car");
 							handled = true;
 							break;
 						}
@@ -424,7 +431,7 @@ bool Game::handleEvent(sf::Event & event)
 									l->updateSprite();
 									gameMap.addNode(MapNode::Point(i->position.x + i->size.x/2, i->position.y), i);
 									if (diff > 0) {
-										transferFunds(-toolPrototype->price * 4 / diff);
+										transferFunds(-toolPrototype->price * 4 / diff, "construction", "Lobby extension");
 										playOnce("simtower/construction/flexible");
 									}
 									existingLobby = true;
@@ -435,13 +442,13 @@ bool Game::handleEvent(sf::Event & event)
 								Item::Item * item = itemFactory.make(toolPrototype, toolPosition);
 								LOG(INFO, "created new lobby item %p", item);
 								addItem(item);
-								transferFunds(-toolPrototype->price);
+								transferFunds(-toolPrototype->price, "construction", toolPrototype->name);
 								playOnce("simtower/construction/normal");
 							}
 						} else if (toolPrototype->icon != ICON_FLOOR) {
 							Item::Item * item = itemFactory.make(toolPrototype, toolPosition);
 							addItem(item);
-							transferFunds(-toolPrototype->price);
+							transferFunds(-toolPrototype->price, "construction", toolPrototype->name);
 							if (item->canHaulPeople()) {
 								if (item->isElevator()) selectTool("finger");
 								updateRoutes();
@@ -513,6 +520,9 @@ bool Game::handleEvent(sf::Event & event)
 		} break;
 
 		case EventType::MouseMoved: {
+			if (toolboxWindow.window && toolboxWindow.window->isMouseOnWidget(tgui::Vector2f(mousePosition.x, mousePosition.y)))
+				return false;
+
 			if (draggingElevator && draggingElevator->repositionMotor(draggingMotor, toolPosition.y)) {
 				// Construct floors
 				if (draggingElevatorLower) {
@@ -538,6 +548,9 @@ bool Game::handleEvent(sf::Event & event)
 		} break;
 
 		case EventType::MouseButtonReleased: {
+			if (toolboxWindow.window && toolboxWindow.window->isMouseOnWidget(tgui::Vector2f(mousePosition.x, mousePosition.y)))
+				return false;
+
 			draggingElevator = NULL;
 		} break;
 		case EventType::None:
@@ -653,6 +666,11 @@ void Game::advance(double dt)
 
 	//Advance time.
 	time.advance(dt);
+	int currentAccountingDay = (int)floor(time.absolute);
+	if (currentAccountingDay != lastAccountingDay) {
+		settleDailyAccounting();
+		lastAccountingDay = currentAccountingDay;
+	}
 	timeWindow.updateTime();
 
 	timeWindow.advance(dt);
@@ -975,7 +993,7 @@ void Game::extendFloor(int floor, int minX, int maxX) {
 		gameMap.addNode(MapNode::Point(f->position.x + f->size.x/2, f->position.y), f);
 		if (diff_left + diff_right > 0) {
 			decorations.updateFloor(f->position.y);
-			transferFunds(-f->prototype->price * (diff_left + diff_right));
+			transferFunds(-f->prototype->price * (diff_left + diff_right), "construction", "Floor extension");
 			playOnce("simtower/construction/flexible");
 		}
 	} else {
@@ -986,7 +1004,7 @@ void Game::extendFloor(int floor, int minX, int maxX) {
 		f->interval.insert(f->getRect().maxX());
 		f->updateSprite();
 		addItem(f);
-		transferFunds(-f->prototype->price);
+		transferFunds(-f->prototype->price, "construction", "Floor");
 		playOnce("simtower/construction/normal");
 	}
 }
@@ -1016,10 +1034,12 @@ void Game::seedNewTower()
 {
 	clearWorld();
 	funds = 4000000;
+	money.clear(funds);
 	rating = 0;
 	population = 0;
 	populationNeedsUpdate = false;
 	time.set(7/78.0);
+	lastAccountingDay = (int)floor(time.absolute);
 	setSpeedMode(1);
 	selectTool("inspector");
 	poi.x = 0;
@@ -1048,6 +1068,37 @@ void Game::encodeXML(tinyxml2::XMLPrinter & xml)
 	xml.PushAttribute("x", (int)poi.x);
 	xml.PushAttribute("y", (int)poi.y);
 
+	xml.OpenElement("money");
+	xml.PushAttribute("todayIncome", money.todayIncome);
+	xml.PushAttribute("todayExpenses", money.todayExpenses);
+	xml.PushAttribute("yesterdayIncome", money.yesterdayIncome);
+	xml.PushAttribute("yesterdayExpenses", money.yesterdayExpenses);
+	for (std::map<std::string, int>::const_iterator i = money.todayTotalsByCategory.begin(); i != money.todayTotalsByCategory.end(); i++) {
+		xml.OpenElement("today");
+		xml.PushAttribute("category", i->first.c_str());
+		xml.PushAttribute("total", i->second);
+		xml.CloseElement();
+	}
+	for (std::map<std::string, int>::const_iterator i = money.yesterdayTotalsByCategory.begin(); i != money.yesterdayTotalsByCategory.end(); i++) {
+		xml.OpenElement("yesterday");
+		xml.PushAttribute("category", i->first.c_str());
+		xml.PushAttribute("total", i->second);
+		xml.CloseElement();
+	}
+	for (std::vector<Money::DaySummary>::const_iterator i = money.recentDays.begin(); i != money.recentDays.end(); i++) {
+		xml.OpenElement("recentDay");
+		xml.PushAttribute("income", i->income);
+		xml.PushAttribute("expenses", i->expenses);
+		for (std::map<std::string, int>::const_iterator c = i->totalsByCategory.begin(); c != i->totalsByCategory.end(); c++) {
+			xml.OpenElement("category");
+			xml.PushAttribute("name", c->first.c_str());
+			xml.PushAttribute("total", c->second);
+			xml.CloseElement();
+		}
+		xml.CloseElement();
+	}
+	xml.CloseElement();
+
 	for (ItemSet::iterator i = items.begin(); i != items.end(); i++) {
 		xml.OpenElement("item");
 		(*i)->encodeXML(xml);
@@ -1065,8 +1116,34 @@ void Game::decodeXML(tinyxml2::XMLDocument & xml)
 	clearWorld();
 
 	setFunds(root->IntAttribute("funds"));
+	money.clear(funds);
+	if (tinyxml2::XMLElement * moneyElement = root->FirstChildElement("money")) {
+		money.todayIncome = moneyElement->IntAttribute("todayIncome");
+		money.todayExpenses = moneyElement->IntAttribute("todayExpenses");
+		money.yesterdayIncome = moneyElement->IntAttribute("yesterdayIncome");
+		money.yesterdayExpenses = moneyElement->IntAttribute("yesterdayExpenses");
+		for (tinyxml2::XMLElement * e = moneyElement->FirstChildElement("today"); e; e = e->NextSiblingElement("today")) {
+			const char * category = e->Attribute("category");
+			if (category) money.todayTotalsByCategory[category] = e->IntAttribute("total");
+		}
+		for (tinyxml2::XMLElement * e = moneyElement->FirstChildElement("yesterday"); e; e = e->NextSiblingElement("yesterday")) {
+			const char * category = e->Attribute("category");
+			if (category) money.yesterdayTotalsByCategory[category] = e->IntAttribute("total");
+		}
+		for (tinyxml2::XMLElement * e = moneyElement->FirstChildElement("recentDay"); e; e = e->NextSiblingElement("recentDay")) {
+			Money::DaySummary day;
+			day.income = e->IntAttribute("income");
+			day.expenses = e->IntAttribute("expenses");
+			for (tinyxml2::XMLElement * c = e->FirstChildElement("category"); c; c = c->NextSiblingElement("category")) {
+				const char * category = c->Attribute("name");
+				if (category) day.totalsByCategory[category] = c->IntAttribute("total");
+			}
+			money.recentDays.push_back(day);
+		}
+	}
 	setRating(root->IntAttribute("rating"));
 	time.set(root->DoubleAttribute("time"));
+	lastAccountingDay = (int)floor(time.absolute);
 	setSpeedMode(root->IntAttribute("speed"));
 	sky.rainyDay = root->BoolAttribute("rainy");
 	selectTool(root->Attribute("tool"));
@@ -1084,22 +1161,47 @@ void Game::decodeXML(tinyxml2::XMLDocument & xml)
 	updateRoutes();
 }
 
-void Game::transferFunds(int f, std::string message)
+void Game::settleDailyAccounting()
+
 {
-	setFunds(funds + f);
+	money.finalizeDay();
+	int maintenanceCost = calculateDailyMaintenanceCost();
+	if (maintenanceCost > 0) {
+		transferFunds(-maintenanceCost, "maintenance", "Daily maintenance");
+	}
+	timeWindow.updateMoneyStats();
+}
+
+int Game::calculateDailyMaintenanceCost() const
+{
+	int total = 0;
+	for (ItemSet::const_iterator i = items.begin(); i != items.end(); i++) {
+		total += (*i)->dailyMaintenanceCost();
+	}
+	return total;
+}
+
+void Game::transferFunds(int f, std::string category, std::string message)
+{
+	money.record(f, category);
+	setFunds(money.balance);
 	playOnce("simtower/cash");
 	if (!message.empty()) {
 		char c[32];
 		snprintf(c, 32, ": $%i", f);
 		//timeWindow.showMessage(message + c);
 	}
+	timeWindow.updateMoneyStats();
 }
 
 void Game::setFunds(int f)
 {
 	if (funds != f) {
 		funds = f;
+		money.setBalance(funds);
 		//timeWindow.updateFunds();
+		timeWindow.updateFunds();
+		timeWindow.updateMoneyStats();
 	}
 }
 
@@ -1156,7 +1258,7 @@ void Game::setSpeedMode(int sm)
 			case 3: speed = 4; break;
 		}
 		time.speed = speed;
-		//toolboxWindow.updateSpeed();
+		toolboxWindow.updateSpeed();
 	}
 }
 
@@ -1165,7 +1267,7 @@ void Game::selectTool(const char * tool)
 	if (!tool) return;
 	if (selectedTool != tool) {
 		selectedTool = tool;
-		//toolboxWindow.updateTool();
+		toolboxWindow.updateTool();
 		timeWindow.updateTooltip();
 	}
 }

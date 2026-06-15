@@ -10,6 +10,7 @@
 #include "Item/Item.h"
 #include "PathFinder/GameMap.h"
 #include "PathFinder/PathFinder.h"
+#include "Money.h"
 #include "Sky.h"
 #include "Sound.h"
 #include "Sprite.h"
@@ -60,10 +61,11 @@ namespace OT {
 		void extendFloor(int floor, int minX, int maxX);
 
 		int funds;
+		Money money;
 		int rating;
 		int population;
 		bool populationNeedsUpdate;
-		void transferFunds(int f, std::string message = std::string());
+		void transferFunds(int f, std::string category = "misc", std::string message = std::string());
 		void setFunds(int f);
 		void setRating(int r);
 		void setPopulation(int p);
@@ -119,6 +121,9 @@ namespace OT {
 
 	private:
 		void clearWorld();
+		void settleDailyAccounting();
+		int calculateDailyMaintenanceCost() const;
+		int lastAccountingDay;
 		double zoom;
 		double2 poi;
 		enum class ViewportDrag { None, Vertical, Horizontal };
