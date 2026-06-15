@@ -16,6 +16,7 @@
 #include "Metro.h"
 #include "Office.h"
 #include "Condo.h"
+#include "YootCondo.h"
 #include "Security.h"
 #include "MedicalCenter.h"
 #include "Recycling.h"
@@ -52,6 +53,7 @@ void Factory::loadPrototypes()
 	register_item(Metro);
 	register_item(Office);
 	register_item(Condo);
+	register_item(YootCondo);
 	register_item(Security);
 	register_item(MedicalCenter);
 	register_item(Recycling);

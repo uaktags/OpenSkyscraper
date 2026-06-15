@@ -13,8 +13,10 @@
 #include <TGUI/Widgets/VerticalLayout.hpp>
 #include <cstdint>
 #include <algorithm>
+#include <fstream>
 #include "Application.h"
 #include "Game.h"
+#include "Item/YootCondo.h"
 
 using namespace OT;
 
@@ -176,7 +178,28 @@ void ToolboxWindow::reload()
         snprintf(toolname, 128, "item-%s", prototype->id.c_str());
 
         ButtonState state;
-        auto button = makeButton(32, 32, itemTexture, prototype->icon, state);
+        tgui::Button::Ptr button;
+        if (prototype->id == "yoot_condo")
+        {
+            sf::Texture yootIconTexture;
+            std::string pathStr;
+            DataManager::Paths possiblePaths = app->data.paths("Plugins/Condo.t2p");
+            for (const auto &p : possiblePaths) {
+                std::ifstream f(p.c_str());
+                if (f.good()) {
+                    pathStr = p.str();
+                    break;
+                }
+            }
+            if (!pathStr.empty()) {
+                Item::YootCondo::loadPEBitmap(pathStr, 100, yootIconTexture, sf::Color(255, 255, 255));
+            }
+            button = makeButton(26, 26, yootIconTexture, 0, state);
+        }
+        else
+        {
+            button = makeButton(32, 32, itemTexture, prototype->icon, state);
+        }
         int xpos = (5 + 32 * (i % 3)) * app->uiScale;
         int ypos = (25 + row * 32) * app->uiScale;
 

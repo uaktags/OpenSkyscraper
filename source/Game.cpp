@@ -131,6 +131,25 @@ bool Game::handleEvent(sf::Event & event)
 	if (handleViewportScrollbarEvent(event))
 		return true;
 
+	if (const auto *wheelEvent = event.getIf<sf::Event::MouseWheelScrolled>()) {
+		sf::Vector2i mousePosition = wheelEvent->position;
+		if (toolboxWindow.window && toolboxWindow.window->isMouseOnWidget(tgui::Vector2f(mousePosition.x, mousePosition.y)))
+			return false;
+		if (timeWindow.window && timeWindow.window->isMouseOnWidget(tgui::Vector2f(mousePosition.x, mousePosition.y)))
+			return false;
+		if (app.menu && app.menu->isMouseOnWidget(tgui::Vector2f(mousePosition.x, mousePosition.y)))
+			return false;
+
+		bool isShiftPressed = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LShift) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RShift);
+		float delta = wheelEvent->delta;
+		if (wheelEvent->wheel == sf::Mouse::Wheel::Horizontal || isShiftPressed) {
+			poi.x -= delta * 40.f * zoom;
+		} else {
+			poi.y += delta * 40.f * zoom;
+		}
+		return true;
+	}
+
 	enum class EventType {
 		None,
 		KeyPressed,

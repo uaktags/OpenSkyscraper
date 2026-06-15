@@ -22,6 +22,8 @@ void Condo::init()
 	sprite.setTexture(App->bitmaps["simtower/condo"]);
 	sprite.setOrigin({0.f, 24.f});
 	sprite.setPosition({static_cast<float>(position.x * 8), static_cast<float>(-position.y * 36)});
+	addSprite(&sprite);
+	updateSprite();
 }
 
 void Condo::encodeXML(tinyxml2::XMLPrinter &xml)

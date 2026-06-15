@@ -9,6 +9,7 @@
 #include "../source/Route.h"
 #include "../source/Money.h"
 #include "../source/TimeWindowStyle.h"
+#include "../source/WindowsPEExecutable.h"
 
 static int g_failures = 0;
 
@@ -190,6 +191,51 @@ static void testTimeWindowModernLayout()
     EXPECT(layout.tooltipBackgroundHeight == 22);
 }
 
+static void testWindowsPEExecutable()
+{
+    OT::WindowsPEExecutable exe;
+    bool loaded = exe.load("../data/Plugins/Condo.t2p");
+    EXPECT(loaded == true);
+    if (loaded) {
+        EXPECT(exe.resources.find("ATTR") != exe.resources.end());
+        EXPECT(exe.resources.find("OBJMAP") != exe.resources.end());
+        EXPECT(exe.resources.find("2") != exe.resources.end()); // RT_BITMAP
+        
+        auto attr_it = exe.resources.find("ATTR");
+        if (attr_it != exe.resources.end()) {
+            EXPECT(attr_it->second.find(128) != attr_it->second.end());
+            auto res_it = attr_it->second.find(128);
+            if (res_it != attr_it->second.end()) {
+                EXPECT(res_it->second.length > 0);
+                EXPECT(res_it->second.data != nullptr);
+            }
+        }
+    }
+}
+
+static void testWindowsSPExecutable()
+{
+    OT::WindowsPEExecutable exe;
+    bool loaded = exe.load("../data/Plugins/AirJamaica.t2p");
+    EXPECT(loaded == true);
+    if (loaded) {
+        EXPECT(exe.resources.find("ATTR") != exe.resources.end());
+        EXPECT(exe.resources.find("DESC") != exe.resources.end());
+        EXPECT(exe.resources.find("ADDF") != exe.resources.end());
+        EXPECT(exe.resources.find("RAW") != exe.resources.end());
+        
+        auto attr_it = exe.resources.find("ATTR");
+        if (attr_it != exe.resources.end()) {
+            EXPECT(attr_it->second.find(128) != attr_it->second.end());
+            auto res_it = attr_it->second.find(128);
+            if (res_it != attr_it->second.end()) {
+                EXPECT(res_it->second.length > 0);
+                EXPECT(res_it->second.data != nullptr);
+            }
+        }
+    }
+}
+
 int main()
 {
     testSmoke();
@@ -198,6 +244,8 @@ int main()
     testRouteClear();
     testMoneyAccounting();
     testTimeWindowModernLayout();
+    testWindowsPEExecutable();
+    testWindowsSPExecutable();
 
     if (g_failures > 0)
     {

@@ -33,12 +33,13 @@ namespace OT {
             void setVisible(bool visible);
             bool isVisible() const;
             
+        public:
+            tgui::ChildWindow::Ptr window = NULL;
+
         private:
             static std::string formatMoney(int amount);
             static std::string formatCompactMoney(int amount);
             static std::string formatSignedCompactMoney(int amount);
-
-            tgui::ChildWindow::Ptr window = NULL;
             tgui::Label::Ptr lblPopulation = NULL;
             tgui::Label::Ptr lblFunds = NULL;
             tgui::Label::Ptr lblMoneyStats = NULL;
