@@ -94,8 +94,8 @@ void Condo::advance(double dt)
 			occupied = true;
 			variant = rand() % 3;
 			spriteNeedsUpdate = true;
-			rentDeposit = rent;
-			game->transferFunds(rentDeposit, "Occupied Condo's rent deposit");
+			rentDeposit = prototype->price * 2;
+			game->transferFunds(rentDeposit, "condo_sale", "Income from Condo sale");
 			createOccupants();
 		}
 	}
@@ -112,12 +112,7 @@ void Condo::advance(double dt)
 			spriteNeedsUpdate = true;
 			population = 0;
 			game->populationNeedsUpdate = true;
-			game->transferFunds(-rentDeposit, "Vacated Condo's rent deposit payed back");
-		}
-		// Pay rent for the others.
-		else
-		{
-			game->transferFunds(rent, "Income from Condo's rent");
+			game->transferFunds(-prototype->price, "condo_buyback", "Repurchased vacated Condo");
 		}
 	}
 
