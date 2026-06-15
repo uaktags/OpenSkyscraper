@@ -3,6 +3,10 @@
 #include <TGUI/Widgets/ChildWindow.hpp>
 #include <TGUI/Widgets/EditBox.hpp>
 #include <TGUI/Widgets/Button.hpp>
+#include <TGUI/Widgets/CheckBox.hpp>
+#include <TGUI/Widgets/Slider.hpp>
+#include <TGUI/Widgets/ComboBox.hpp>
+#include <cmath>
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>
@@ -40,6 +44,11 @@ Application::Application(int argc, char *argv[])
     assert(App == NULL && "Application initialized multiple times");
     App = this;
     uiScale = 1.0f;
+    audioVolume = 100.f;
+    audioMuted = false;
+    fullscreen = false;
+
+    bool settingsLoaded = loadSettings();
 
     assert(argc >= 1 && "argv[0] is required");
     dumpResources = false;
@@ -51,7 +60,6 @@ Application::Application(int argc, char *argv[])
     setViewportScrollAtStartup = false;
     startupViewportScrollHorizontal = 0.0;
     startupViewportScrollVertical = 0.0;
-    fullscreen = false;
 
     // Code to retrieve current working directory
     // May want to move to Boost library for easier path manipulation
@@ -92,7 +100,7 @@ Application::Application(int argc, char *argv[])
 #endif
 
     // Parse command line arguments.
-    bool uiScaleExplicit = false;
+    bool uiScaleExplicit = settingsLoaded;
     for (int i = 1; i < argc; i++)
     {
         if (strcmp(argv[i], "--debug") == 0)
@@ -331,43 +339,65 @@ void Application::loadGameFromFile(const std::string &filename)
 void Application::showFilenameDialog(const std::string &title, const std::string &defaultName, std::function<void(const std::string &)> callback)
 {
     auto dialog = tgui::ChildWindow::create(title);
-    dialog->setSize(300 * uiScale, 120 * uiScale);
-    dialog->getRenderer()->setTitleBarHeight(10 * uiScale);
+    dialog->setClientSize({300 * uiScale, 110 * uiScale});
+    dialog->getRenderer()->setTitleBarHeight(24 * uiScale);
     dialog->setTitleTextSize(14 * uiScale);
-    dialog->setPosition({(window.getSize().x - dialog->getSize().x) / 2,
-                         (window.getSize().y - dialog->getSize().y) / 2});
+    dialog->getRenderer()->setTitleColor(sf::Color(220, 220, 220));
+    dialog->getRenderer()->setBackgroundColor(sf::Color(30, 30, 35));
+    dialog->getRenderer()->setTitleBarColor(sf::Color(45, 45, 50));
+    dialog->getRenderer()->setBorderColor(sf::Color(80, 80, 90));
+    dialog->getRenderer()->setBorders(2);
+    dialog->setPosition({(window.getSize().x - dialog->getSize().x) / 2.f,
+                         (window.getSize().y - dialog->getSize().y) / 2.f});
     dialog->setResizable(false);
     dialog->setTitleButtons(tgui::ChildWindow::TitleButton::None);
 
     auto editBox = tgui::EditBox::create();
     editBox->setSize(260 * uiScale, 28 * uiScale);
     editBox->setTextSize(14 * uiScale);
-    editBox->setPosition((dialog->getSize().x - editBox->getSize().x) / 2,
-                         20 * uiScale);
+    editBox->setPosition((dialog->getClientSize().x - editBox->getSize().x) / 2.f,
+                         18 * uiScale);
     editBox->setText(defaultName);
+    editBox->getRenderer()->setBackgroundColor(sf::Color(45, 45, 50));
+    editBox->getRenderer()->setTextColor(sf::Color(240, 240, 240));
+    editBox->getRenderer()->setBorderColor(sf::Color(80, 80, 90));
+    editBox->getRenderer()->setBorders(1);
+    editBox->getRenderer()->setRoundedBorderRadius(4 * uiScale);
     dialog->add(editBox);
 
     auto okButton = tgui::Button::create("OK");
     okButton->setSize(80 * uiScale, 28 * uiScale);
     okButton->setTextSize(14 * uiScale);
-    okButton->setPosition(60 * uiScale,
-                          dialog->getSize().y - 40 * uiScale);
+    okButton->setPosition(45 * uiScale,
+                          dialog->getClientSize().y - 45 * uiScale);
+    okButton->getRenderer()->setBackgroundColor(sf::Color(0, 122, 204));
+    okButton->getRenderer()->setTextColor(sf::Color::White);
+    okButton->getRenderer()->setBackgroundColorHover(sf::Color(20, 142, 224));
+    okButton->getRenderer()->setBorderColor(sf::Color(0, 102, 184));
+    okButton->getRenderer()->setBorders(1);
+    okButton->getRenderer()->setRoundedBorderRadius(4 * uiScale);
     dialog->add(okButton);
 
     auto cancelButton = tgui::Button::create("Cancel");
     cancelButton->setSize(80 * uiScale, 28 * uiScale);
     cancelButton->setTextSize(14 * uiScale);
-    cancelButton->setPosition(dialog->getSize().x - 140 * uiScale,
-                              dialog->getSize().y - 40 * uiScale);
+    cancelButton->setPosition(dialog->getClientSize().x - 125 * uiScale,
+                              dialog->getClientSize().y - 45 * uiScale);
+    cancelButton->getRenderer()->setBackgroundColor(sf::Color(60, 60, 65));
+    cancelButton->getRenderer()->setTextColor(sf::Color::White);
+    cancelButton->getRenderer()->setBackgroundColorHover(sf::Color(80, 80, 85));
+    cancelButton->getRenderer()->setBorderColor(sf::Color(50, 50, 55));
+    cancelButton->getRenderer()->setBorders(1);
+    cancelButton->getRenderer()->setRoundedBorderRadius(4 * uiScale);
     dialog->add(cancelButton);
 
-    okButton->onPress([=]()
+    okButton->onPress([this, editBox, dialog, callback]()
                       {
         std::string filename = editBox->getText().toStdString();
         gui.remove(dialog);
         if (!filename.empty())
             callback(filename); });
-    cancelButton->onPress([=]()
+    cancelButton->onPress([this, dialog]()
                           { gui.remove(dialog); });
     gui.add(dialog);
 }
@@ -402,7 +432,7 @@ void Application::saveGameAs()
 
 void Application::makeMenu()
 {
-    auto menu = tgui::MenuBar::create();
+    menu = tgui::MenuBar::create();
     menu->setHeight(22.f * uiScale);
     menu->getRenderer()->setTextSize(14 * uiScale); // scale text size as well
     menu->addMenu("File");
@@ -414,6 +444,7 @@ void Application::makeMenu()
     menu->addMenuItem("Exit");
 
     menu->addMenu("Options");
+    menu->addMenuItem("Settings...");
     menu->addMenuItem("Fullscreen");
 
     menu->addMenu("Windows");
@@ -446,6 +477,9 @@ void Application::makeMenu()
             else if (items.back() == "Save as...") {
                 saveGameAs();
             }
+            else if (items.back() == "Settings...") {
+                showSettingsDialog();
+            }
             else if (items.back() == "Fullscreen") {
                 fullscreen = !fullscreen;
                 if (fullscreen) {
@@ -457,6 +491,7 @@ void Application::makeMenu()
                 }
                 window.setVerticalSyncEnabled(true);
                 gui.setWindow(window);
+                saveSettings();
             }
             else if (items.back() == "Toolbox" || items.back() == "Time" || items.back() == "Reset Layout") {
                 if (states.empty()) return;
@@ -537,7 +572,15 @@ void Application::init()
 
     videoMode = sf::VideoMode({static_cast<unsigned>(1280 * uiScale), static_cast<unsigned>(768 * uiScale)});
 
-    window.create(videoMode, "OpenSkyscraper SFML");
+    if (fullscreen)
+    {
+        videoMode = sf::VideoMode::getDesktopMode();
+        window.create(videoMode, "OpenSkyscraper SFML", sf::Style::Default, sf::State::Fullscreen);
+    }
+    else
+    {
+        window.create(videoMode, "OpenSkyscraper SFML");
+    }
     window.setVerticalSyncEnabled(true);
 
     gui.setWindow(window);
@@ -753,6 +796,7 @@ void Application::loop()
 
 void Application::cleanup()
 {
+    saveSettings();
     while (!states.empty())
     {
         popState();
@@ -801,4 +845,289 @@ void Application::loadGame()
         return;
     showFilenameDialog("Load Game", "default.tower", [this](const std::string &filename)
                        { loadGameFromFile(filename); });
+}
+
+bool Application::loadSettings()
+{
+    tinyxml2::XMLDocument xml;
+    std::string userDir = getUserDataDir();
+#ifdef _WIN32
+    std::string path = userDir + "\\settings.xml";
+#else
+    std::string path = userDir + "/settings.xml";
+#endif
+    if (xml.LoadFile(path.c_str()) == 0)
+    {
+        tinyxml2::XMLElement *root = xml.RootElement();
+        if (root && strcmp(root->Name(), "settings") == 0)
+        {
+            float valVol = 100.f;
+            if (root->QueryFloatAttribute("volume", &valVol) == tinyxml2::XML_SUCCESS) {
+                audioVolume = std::max(0.f, std::min(100.f, valVol));
+            }
+            root->QueryBoolAttribute("muted", &audioMuted);
+            root->QueryBoolAttribute("fullscreen", &fullscreen);
+            float valScale = 1.0f;
+            if (root->QueryFloatAttribute("uiScale", &valScale) == tinyxml2::XML_SUCCESS) {
+                uiScale = std::max(1.0f, std::min(2.0f, valScale));
+            }
+            LOG(INFO, "Loaded settings: volume=%f, muted=%d, fullscreen=%d, uiScale=%f",
+                audioVolume, audioMuted, fullscreen, uiScale);
+            return true;
+        }
+    }
+    return false;
+}
+
+void Application::saveSettings()
+{
+    std::string userDir = getUserDataDir();
+    ensureDirExists(userDir);
+#ifdef _WIN32
+    std::string path = userDir + "\\settings.xml";
+#else
+    std::string path = userDir + "/settings.xml";
+#endif
+    FILE *f = fopen(path.c_str(), "w");
+    if (!f)
+    {
+        LOG(ERROR, "Could not open settings file %s for writing", path.c_str());
+        return;
+    }
+    tinyxml2::XMLPrinter xml(f);
+    xml.OpenElement("settings");
+    xml.PushAttribute("volume", audioVolume);
+    xml.PushAttribute("muted", audioMuted);
+    xml.PushAttribute("fullscreen", fullscreen);
+    xml.PushAttribute("uiScale", uiScale);
+    xml.CloseElement();
+    fclose(f);
+    LOG(INFO, "Saved settings: volume=%f, muted=%d, fullscreen=%d, uiScale=%f",
+        audioVolume, audioMuted, fullscreen, uiScale);
+}
+
+void Application::setAudioVolume(float volume)
+{
+    audioVolume = std::max(0.f, std::min(100.f, volume));
+    if (!states.empty())
+    {
+        Game *game = dynamic_cast<Game *>(states.top());
+        if (game)
+        {
+            for (auto *snd : game->playingSounds)
+            {
+                if (!audioMuted)
+                {
+                    snd->setVolume(audioVolume);
+                }
+            }
+        }
+    }
+}
+
+void Application::setAudioMuted(bool mute)
+{
+    audioMuted = mute;
+    if (!states.empty())
+    {
+        Game *game = dynamic_cast<Game *>(states.top());
+        if (game)
+        {
+            for (auto *snd : game->playingSounds)
+            {
+                snd->setVolume(audioMuted ? 0.f : audioVolume);
+            }
+        }
+    }
+}
+
+void Application::showSettingsDialog()
+{
+    auto existing = gui.get<tgui::ChildWindow>("SettingsDialog");
+    if (existing)
+    {
+        existing->moveToFront();
+        return;
+    }
+
+    float origVolume = audioVolume;
+    bool origMuted = audioMuted;
+
+    auto dialog = tgui::ChildWindow::create("Settings");
+    dialog->setWidgetName("SettingsDialog");
+    dialog->setClientSize({400 * uiScale, 300 * uiScale});
+    dialog->getRenderer()->setTitleBarHeight(24 * uiScale);
+    dialog->setTitleTextSize(14 * uiScale);
+    dialog->getRenderer()->setTitleColor(sf::Color(220, 220, 220));
+    dialog->getRenderer()->setBackgroundColor(sf::Color(30, 30, 35));
+    dialog->getRenderer()->setTitleBarColor(sf::Color(45, 45, 50));
+    dialog->getRenderer()->setBorderColor(sf::Color(80, 80, 90));
+    dialog->getRenderer()->setBorders(2);
+    dialog->setPosition({(window.getSize().x - dialog->getSize().x) / 2.f,
+                         (window.getSize().y - dialog->getSize().y) / 2.f});
+    dialog->setResizable(false);
+
+    dialog->onClose([this, dialog, origVolume, origMuted]() {
+        setAudioMuted(origMuted);
+        setAudioVolume(origVolume);
+        gui.remove(dialog);
+    });
+
+    float padding = 15.f * uiScale;
+    float currentY = 15.f * uiScale;
+
+    // --- AUDIO SECTION ---
+    auto lblAudio = tgui::Label::create("AUDIO");
+    lblAudio->setTextSize(14 * uiScale);
+    lblAudio->getRenderer()->setTextColor(sf::Color(0, 150, 255));
+    lblAudio->setPosition(padding, currentY);
+    dialog->add(lblAudio);
+    currentY += 25.f * uiScale;
+
+    auto chkMute = tgui::CheckBox::create("Mute Sounds");
+    chkMute->setTextSize(12 * uiScale);
+    chkMute->getRenderer()->setTextColor(sf::Color(200, 200, 200));
+    chkMute->setPosition(padding + 10.f * uiScale, currentY);
+    chkMute->setChecked(audioMuted);
+    dialog->add(chkMute);
+    chkMute->onChange([this](bool checked) {
+        setAudioMuted(checked);
+    });
+    currentY += 25.f * uiScale;
+
+    auto lblVolume = tgui::Label::create("Volume: " + std::to_string(static_cast<int>(audioVolume)) + "%");
+    lblVolume->setTextSize(12 * uiScale);
+    lblVolume->getRenderer()->setTextColor(sf::Color(200, 200, 200));
+    lblVolume->setPosition(padding + 10.f * uiScale, currentY);
+    dialog->add(lblVolume);
+
+    auto sldVolume = tgui::Slider::create(0.f, 100.f);
+    sldVolume->setSize(180 * uiScale, 12 * uiScale);
+    sldVolume->setPosition(padding + 150.f * uiScale, currentY + 2.f * uiScale);
+    sldVolume->setValue(audioVolume);
+    dialog->add(sldVolume);
+
+    sldVolume->onValueChange([this, lblVolume](float val) {
+        lblVolume->setText("Volume: " + std::to_string(static_cast<int>(val)) + "%");
+        setAudioVolume(val);
+    });
+    currentY += 35.f * uiScale;
+
+    // --- VIDEO SECTION ---
+    auto lblVideo = tgui::Label::create("VIDEO & SCREEN");
+    lblVideo->setTextSize(14 * uiScale);
+    lblVideo->getRenderer()->setTextColor(sf::Color(0, 150, 255));
+    lblVideo->setPosition(padding, currentY);
+    dialog->add(lblVideo);
+    currentY += 25.f * uiScale;
+
+    auto chkFullscreen = tgui::CheckBox::create("Fullscreen Mode");
+    chkFullscreen->setTextSize(12 * uiScale);
+    chkFullscreen->getRenderer()->setTextColor(sf::Color(200, 200, 200));
+    chkFullscreen->setPosition(padding + 10.f * uiScale, currentY);
+    chkFullscreen->setChecked(fullscreen);
+    dialog->add(chkFullscreen);
+    currentY += 25.f * uiScale;
+
+    auto lblScale = tgui::Label::create("UI Scale / Zoom:");
+    lblScale->setTextSize(12 * uiScale);
+    lblScale->getRenderer()->setTextColor(sf::Color(200, 200, 200));
+    lblScale->setPosition(padding + 10.f * uiScale, currentY);
+    dialog->add(lblScale);
+
+    auto cmbScale = tgui::ComboBox::create();
+    cmbScale->setSize(180 * uiScale, 20 * uiScale);
+    cmbScale->setPosition(padding + 150.f * uiScale, currentY - 2.f * uiScale);
+    cmbScale->addItem("1.0x (1280x768)");
+    cmbScale->addItem("1.25x (1600x960)");
+    cmbScale->addItem("1.5x (1920x1152)");
+    cmbScale->addItem("1.75x (2240x1344)");
+    cmbScale->addItem("2.0x (2560x1536)");
+
+    if (std::abs(uiScale - 1.0f) < 0.1f) cmbScale->setSelectedItem("1.0x (1280x768)");
+    else if (std::abs(uiScale - 1.25f) < 0.1f) cmbScale->setSelectedItem("1.25x (1600x960)");
+    else if (std::abs(uiScale - 1.5f) < 0.1f) cmbScale->setSelectedItem("1.5x (1920x1152)");
+    else if (std::abs(uiScale - 1.75f) < 0.1f) cmbScale->setSelectedItem("1.75x (2240x1344)");
+    else if (std::abs(uiScale - 2.0f) < 0.1f) cmbScale->setSelectedItem("2.0x (2560x1536)");
+    else cmbScale->setSelectedItem("1.0x (1280x768)");
+
+    dialog->add(cmbScale);
+    currentY += 45.f * uiScale;
+
+    // --- BUTTONS ---
+    auto btnApply = tgui::Button::create("Apply");
+    btnApply->setSize(100 * uiScale, 30 * uiScale);
+    btnApply->setTextSize(14 * uiScale);
+    btnApply->setPosition(70 * uiScale, dialog->getClientSize().y - 50 * uiScale);
+    btnApply->getRenderer()->setBackgroundColor(sf::Color(0, 122, 204));
+    btnApply->getRenderer()->setTextColor(sf::Color::White);
+    btnApply->getRenderer()->setBackgroundColorHover(sf::Color(20, 142, 224));
+    dialog->add(btnApply);
+
+    auto btnCancel = tgui::Button::create("Cancel");
+    btnCancel->setSize(100 * uiScale, 30 * uiScale);
+    btnCancel->setTextSize(14 * uiScale);
+    btnCancel->setPosition(dialog->getClientSize().x - 170 * uiScale, dialog->getClientSize().y - 50 * uiScale);
+    btnCancel->getRenderer()->setBackgroundColor(sf::Color(60, 60, 65));
+    btnCancel->getRenderer()->setTextColor(sf::Color::White);
+    btnCancel->getRenderer()->setBackgroundColorHover(sf::Color(80, 80, 85));
+    dialog->add(btnCancel);
+
+    btnCancel->onPress([this, dialog, origVolume, origMuted]() {
+        setAudioMuted(origMuted);
+        setAudioVolume(origVolume);
+        gui.remove(dialog);
+    });
+
+    btnApply->onPress([this, dialog, chkMute, sldVolume, chkFullscreen, cmbScale]() {
+        bool newMute = chkMute->isChecked();
+        float newVolume = sldVolume->getValue();
+        bool newFullscreen = chkFullscreen->isChecked();
+
+        std::string selectedScale = cmbScale->getSelectedItem().toStdString();
+        float newScale = 1.0f;
+        if (selectedScale.find("1.25x") != std::string::npos) newScale = 1.25f;
+        else if (selectedScale.find("1.5x") != std::string::npos) newScale = 1.5f;
+        else if (selectedScale.find("1.75x") != std::string::npos) newScale = 1.75f;
+        else if (selectedScale.find("2.0x") != std::string::npos) newScale = 2.0f;
+
+        setAudioMuted(newMute);
+        setAudioVolume(newVolume);
+
+        bool needWindowRecreation = (newFullscreen != fullscreen) || (std::abs(newScale - uiScale) > 0.01f);
+
+        if (needWindowRecreation)
+        {
+            fullscreen = newFullscreen;
+            uiScale = newScale;
+
+            if (fullscreen)
+            {
+                videoMode = sf::VideoMode::getDesktopMode();
+                window.create(videoMode, "OpenSkyscraper SFML", sf::Style::Default, sf::State::Fullscreen);
+            }
+            else
+            {
+                videoMode = sf::VideoMode({static_cast<unsigned>(1280 * uiScale), static_cast<unsigned>(768 * uiScale)});
+                window.create(videoMode, "OpenSkyscraper SFML", sf::Style::Default, sf::State::Windowed);
+            }
+            window.setVerticalSyncEnabled(true);
+            gui.setWindow(window);
+
+            gui.removeAllWidgets();
+            makeMenu();
+            if (!states.empty())
+            {
+                states.top()->reloadGUI();
+            }
+        }
+        else
+        {
+            gui.remove(dialog);
+        }
+
+        saveSettings();
+    });
+
+    gui.add(dialog);
 }

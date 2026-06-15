@@ -22,6 +22,7 @@ namespace OT
 		virtual bool handleEvent(sf::Event & event) { return false; }
 		virtual void advance(double dt) {}
 		virtual void deactivate();
+		virtual void reloadGUI() {}
 		
 		bool isActive() { return active; }
 		

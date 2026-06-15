@@ -76,9 +76,22 @@ void Elevator::render(sf::RenderTarget &target) const
 		if (!connectsFloor(flr))
 			continue;
 
+		bool isHome = false;
+		for (auto *c : cars) {
+			if (c->homeFloor == flr) {
+				isHome = true;
+				break;
+			}
+		}
+		if (isHome) {
+			d.setColor(sf::Color(255, 100, 100)); // Pinkish-red for home floor
+		} else {
+			d.setColor(sf::Color::White); // Default color (gray digits from sheet)
+		}
+
 		char c[8];
 		int len = snprintf(c, 8, "%i", flr);
-		int x = 11 - (len - 1) * 6 + (size.x - 4) * 4;
+		int x = size.x * 4 - (len - 1) * 6;
 		for (int i = 0; i < len; i++)
 		{
 			int p = 10;

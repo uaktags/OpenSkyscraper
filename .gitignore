@@ -18,3 +18,23 @@ tags
 /doc/source/*
 !/doc/source/Doxyfile
 /doc/html
+
+# Build and IDE files
+/build-fedora/
+/CMakeFiles/
+CMakeCache.txt
+Makefile
+cmake_install.cmake
+
+# Logs and screenshots
+/debug-*.log
+/stderr.log
+/stdout.log
+*.png
+
+# Assets / binaries
+/SIMTOWER.EX_
+/SIMTOWER.EXE
+/data/SIMTOWER.EXE
+/data/SIMTOWER.EX_
+/scratch/

@@ -26,6 +26,7 @@ void Car::init()
 	direction = Elevator::kNone;
 	startAltitude = altitude;
 	destinationFloor = altitude;
+	homeFloor = (int)altitude;
 	journeyTime = 0;
 	state = kIdle;
 }
@@ -42,7 +43,7 @@ void Car::reposition()
 {
 	//2 and 4 were determined experimentally to center the car in the elevator.
 	//A better method should probably be determined.
-	sprite.setPosition({static_cast<float>(elevator->position.x * 8 + 2), static_cast<float>(-altitude * 36 - 4)});
+	sprite.setPosition({static_cast<float>(elevator->position.x * 8 + 2), static_cast<float>(-altitude * 36)});
 }
 
 void Car::updateSprite()
@@ -98,6 +99,7 @@ void Car::render(sf::RenderTarget & target) const
 void Car::encodeXML(tinyxml2::XMLPrinter& xml)
 {
 	xml.PushAttribute("altitude", altitude);
+	xml.PushAttribute("homeFloor", homeFloor);
 }
 
 void Car::decodeXML(tinyxml2::XMLElement& xml)
@@ -105,6 +107,9 @@ void Car::decodeXML(tinyxml2::XMLElement& xml)
 	setAltitude(xml.DoubleAttribute("altitude"));
 	startAltitude = altitude;
 	destinationFloor = altitude;
+	if (xml.QueryIntAttribute("homeFloor", &homeFloor) != tinyxml2::XML_SUCCESS) {
+		homeFloor = (int)altitude;
+	}
 }
 
 void Car::setState(State s)
@@ -296,6 +301,14 @@ void Car::advance(double dt)
 						setState(kClosingDoors);
 					else
 						setState(kIdle);
+				}
+			} break;
+
+			case kIdle: {
+				if (fabs(altitude - homeFloor) > 0.01) {
+					if (journeyTime >= 5.0) {
+						moveTo(homeFloor);
+					}
 				}
 			} break;
 

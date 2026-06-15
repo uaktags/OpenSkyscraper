@@ -47,8 +47,18 @@ namespace OT
 		sf::VideoMode videoMode;
 		
 		tgui::Gui     gui;
-		tgui::MenuBar	menu;
+		tgui::MenuBar::Ptr menu = nullptr;
 		float uiScale;
+
+		bool audioMuted = false;
+		float audioVolume = 100.f;
+
+		bool loadSettings();
+		void saveSettings();
+		void showSettingsDialog();
+
+		void setAudioVolume(float volume);
+		void setAudioMuted(bool mute);
 
 		DataManager   data;
 		BitmapManager bitmaps;

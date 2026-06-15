@@ -1,6 +1,7 @@
 #include <cassert>
 #include "Game.h"
 #include "Sound.h"
+#include "Application.h"
 
 using namespace OT;
 
@@ -24,6 +25,9 @@ void Sound::Play(Game * game)
 	assert(game);
 	playingInGame = game;
 	game->playingSounds.insert(this);
+	if (OT::App) {
+		setVolume(OT::App->audioMuted ? 0.f : OT::App->audioVolume);
+	}
 	sf::Sound::play();
 }
 

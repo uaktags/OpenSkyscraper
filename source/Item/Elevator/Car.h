@@ -39,6 +39,7 @@ namespace OT {
 
 				Elevator::Direction direction;
 				int destinationFloor;
+				int homeFloor;
 
 				typedef enum {
 					kIdle,

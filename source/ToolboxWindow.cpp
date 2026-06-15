@@ -1,11 +1,17 @@
+/* Copyright (c) 2026 OpenSkyscraper contributors */
 #include "ToolboxWindow.h"
 #include "GameObject.h"
 #include <SFML/Graphics/Texture.hpp>
 #include <TGUI/Rect.hpp>
 #include <TGUI/Texture.hpp>
+#include <TGUI/Renderers/ButtonRenderer.hpp>
 #include <TGUI/TwoFingerScrollDetect.hpp>
-#include <TGUI/Widgets/BitmapButton.hpp>
+#include <TGUI/Widgets/Button.hpp>
 #include <TGUI/Widgets/ChildWindow.hpp>
+#include <TGUI/Widgets/HorizontalLayout.hpp>
+#include <TGUI/Widgets/VerticalLayout.hpp>
+#include <cstdint>
+#include <algorithm>
 #include "Application.h"
 #include "Game.h"
 
@@ -13,11 +19,15 @@ using namespace OT;
 
 ToolboxWindow::ToolboxWindow(Game *game) : GameObject(game)
 {
-    // No need to explicitly load, BitmapManager will handle it on first use
     window = tgui::ChildWindow::create();
-    window->getRenderer()->setTitleBarHeight(10 * app->uiScale);
+    auto renderer = window->getRenderer();
+    renderer->setTitleBarHeight(10 * app->uiScale);
+    renderer->setBackgroundColor(sf::Color(30, 30, 35, 200));
+    renderer->setTitleBarColor(sf::Color(45, 45, 50));
+    renderer->setBorderColor(sf::Color(80, 80, 90));
+    renderer->setBorders(1);
+
     window->setClientSize({106 * app->uiScale, app->uiScale * 220});
-    // Move toolbox window up to just below the menu bar (22px * uiScale)
     window->setPosition(0, 24 * app->uiScale);
 
     reload();
@@ -32,38 +42,68 @@ void ToolboxWindow::close()
     }
 }
 
+static void setButtonVisuals(tgui::Button::Ptr button, const ToolboxWindow::ButtonState &state, bool checked)
+{
+    auto renderer = button->getRenderer();
+    if (checked) {
+        renderer->setTexture(state.checked);
+        renderer->setTextureHover(state.checked);
+        renderer->setTextureDown(state.checked);
+    } else {
+        renderer->setTexture(state.normal);
+        renderer->setTextureHover(state.hover);
+        renderer->setTextureDown(state.checked);
+    }
+}
+
 void ToolboxWindow::reload()
 {
     window->removeAllWidgets();
+    buttons.clear();
+    toolButtons.clear();
+    speedButtons.clear();
+    buttonStates.clear();
 
     auto topLayout = tgui::VerticalLayout::create();
     window->add(topLayout);
     topLayout->setSize("100%", "100%");
 
-    // tool buttons
+    // STEP 1: MOVE TOOL BUTTONS TO THE TOP (Bulldoze, Finger, Inspect)
     auto toolsLayout = tgui::HorizontalLayout::create();
     topLayout->add(toolsLayout, "toolsLayout");
     toolsLayout->setSize("100%", 21 * app->uiScale);
-
     toolsLayout->addSpace(0.6f);
-    auto bulldozeButton = makeButton(21, app->bitmaps["simtower/ui/toolbox/tools"], 0);
+
+    sf::Texture toolsTexture = app->bitmaps["simtower/ui/toolbox/tools"];
+
+    // Bulldozer
+    ButtonState bulldozeState;
+    auto bulldozeButton = makeButton(21, 21, toolsTexture, 0, bulldozeState);
+    buttonStates[bulldozeButton] = bulldozeState;
     toolsLayout->add(bulldozeButton);
-    bulldozeButton->onPress([this]
-                            { game->selectTool("bulldozer"); });
+    toolButtons["bulldozer"] = bulldozeButton;
+    bulldozeButton->onPress([this] { game->selectTool("bulldozer"); });
 
-    auto fingerButton = makeButton(21, app->bitmaps["simtower/ui/toolbox/tools"], 1);
+    // Finger (Resize)
+    ButtonState fingerState;
+    auto fingerButton = makeButton(21, 21, toolsTexture, 1, fingerState);
+    buttonStates[fingerButton] = fingerState;
     toolsLayout->add(fingerButton);
-    fingerButton->onPress([this]
-                          { game->selectTool("finger"); });
+    toolButtons["finger"] = fingerButton;
+    fingerButton->onPress([this] { game->selectTool("finger"); });
 
-    auto inspectButton = makeButton(21, app->bitmaps["simtower/ui/toolbox/tools"], 2);
+    // Inspector
+    ButtonState inspectState;
+    auto inspectButton = makeButton(21, 21, toolsTexture, 2, inspectState);
+    buttonStates[inspectButton] = inspectState;
     toolsLayout->add(inspectButton);
-    inspectButton->onPress([this]
-                           { game->selectTool("inspector"); });
+    toolButtons["inspector"] = inspectButton;
+    inspectButton->onPress([this] { game->selectTool("inspector"); });
     toolsLayout->addSpace(0.6f);
 
-    // item buttons
+    // STEP 2: BUILDING ITEMS
     int row = 0;
+    sf::Texture itemTexture = app->bitmaps["simtower/ui/toolbox/items"];
     for (int i = 0; i < game->itemFactory.prototypes.size(); i++)
     {
         Item::AbstractPrototype *prototype = game->itemFactory.prototypes[i];
@@ -71,29 +111,58 @@ void ToolboxWindow::reload()
         char toolname[128];
         snprintf(toolname, 128, "item-%s", prototype->id.c_str());
 
-        char style[512];
-        snprintf(style, 512, "button#%s { background-image-s: %ipx %ipx; }", toolname, prototype->icon * 32, prototype->icon * 32 + 32);
-        LOG(DEBUG, "style for %s: %s", prototype->name.c_str(), style);
-        LOG(DEBUG, "prototype->icon for %s: %d", prototype->name.c_str(), prototype->icon);
-
-        // Choose spritesheet based on uiScale
-        sf::Texture itemTexture;
-        // if (app->uiScale == 1.0f) {
-        itemTexture = app->bitmaps["simtower/ui/toolbox/items"];
-        //} else {
-        //    itemTexture = app->bitmaps["toolbox/grey.png"];
-        //}
-
-        auto button = makeButton(32, itemTexture, prototype->icon);
-        int xpos = 5 + (32 * (i % 3)) * app->uiScale;
-        int ypos = 45 + row * 32 * app->uiScale;
+        ButtonState state;
+        auto button = makeButton(32, 32, itemTexture, prototype->icon, state);
+        int xpos = (5 + 32 * (i % 3)) * app->uiScale;
+        int ypos = (25 + row * 32) * app->uiScale;
 
         button->setPosition(xpos, ypos);
         window->add(button);
         buttons.insert(button);
+        toolButtons[toolname] = button;
+        buttonStates[button] = state;
         button->onPress(&ToolboxWindow::onToolButtonPress, this, toolname);
         if (i % 3 >= 2)
             row++;
+    }
+
+    // STEP 3: MOVE SPEED CONTROLS TO THE BOTTOM
+    auto speedLayout = tgui::HorizontalLayout::create();
+    topLayout->add(speedLayout, "speedLayout");
+    speedLayout->setSize("100%", 24 * app->uiScale);
+    speedLayout->addSpace(0.6f);
+
+    sf::Texture speedTexture = app->bitmaps["simtower/ui/toolbox/speed"];
+    for (int i = 0; i < 4; i++)
+    {
+        ButtonState state;
+        auto button = makeButton(23, 24, speedTexture, i, state);
+        speedLayout->add(button);
+        speedButtons[i] = button;
+        buttonStates[button] = state;
+        button->onPress([this, i] { onSpeedButtonPress(i); });
+    }
+    speedLayout->addSpace(0.6f);
+
+    updateTool();
+    updateSpeed();
+}
+
+void ToolboxWindow::updateTool()
+{
+    for (auto &pair : toolButtons) {
+        auto it = buttonStates.find(pair.second);
+        if (it != buttonStates.end())
+            setButtonVisuals(pair.second, it->second, pair.first == game->selectedTool);
+    }
+}
+
+void ToolboxWindow::updateSpeed()
+{
+    for (auto &pair : speedButtons) {
+        auto it = buttonStates.find(pair.second);
+        if (it != buttonStates.end())
+            setButtonVisuals(pair.second, it->second, pair.first == game->speedMode);
     }
 }
 
@@ -103,42 +172,100 @@ void ToolboxWindow::onToolButtonPress(const char *tool)
     game->selectTool(tool);
 }
 
-tgui::BitmapButton::Ptr ToolboxWindow::makeButton(int size, sf::Texture textureMap, int index)
+void ToolboxWindow::onSpeedButtonPress(int speedMode)
 {
-    int scaledSize = size * app->uiScale;
+    LOG(IMPORTANT, "speed button pressed: %i", speedMode);
+    if (speedMode == 0) {
+        // Pause/Play toggle: restore previous speed, or default to 1x
+        if (game->speedMode == 0)
+            game->setSpeedMode(lastSpeedMode > 0 ? lastSpeedMode : 1);
+        else {
+            lastSpeedMode = game->speedMode;
+            game->setSpeedMode(0);
+        }
+    } else {
+        game->setSpeedMode(speedMode);
+    }
+}
+
+tgui::Button::Ptr ToolboxWindow::makeButton(int width, int height, sf::Texture textureMap, int index, ButtonState &state)
+{
+    int scaledWidth = width * app->uiScale;
+    int scaledHeight = height * app->uiScale;
 
     // Extract the sub-rectangle from the spritesheet
-    sf::IntRect rect({index * size, 0}, {size, size});
+    sf::IntRect normalRect({index * width, 0}, {width, height});
     sf::Image iconImage = textureMap.copyToImage();
-    sf::Image subImage;
-    subImage.resize({static_cast<unsigned>(size), static_cast<unsigned>(size)});
-    subImage.copy(iconImage, {0, 0}, rect, false);
 
-    // Scale the image to the button size
-    sf::Image scaledImage;
-    scaledImage.resize({static_cast<unsigned>(scaledSize), static_cast<unsigned>(scaledSize)});
-    // Simple nearest-neighbor scaling (for pixel art look)
-    for (int y = 0; y < scaledSize; ++y)
-    {
-        for (int x = 0; x < scaledSize; ++x)
-        {
-            int srcX = x * size / scaledSize;
-            int srcY = y * size / scaledSize;
-            scaledImage.setPixel({static_cast<unsigned>(x), static_cast<unsigned>(y)},
-                                 subImage.getPixel({static_cast<unsigned>(srcX), static_cast<unsigned>(srcY)}));
+    auto extract = [&](const sf::IntRect &rect) {
+        sf::Image subImage;
+        subImage.resize({static_cast<unsigned>(width), static_cast<unsigned>(height)});
+        [[maybe_unused]] bool copied = subImage.copy(iconImage, {0, 0}, rect, false);
+        return subImage;
+    };
+
+    sf::Image normalImage = extract(normalRect);
+
+    sf::Image checkedImage;
+    bool hasCheckedRow = (iconImage.getSize().y >= static_cast<unsigned>(height * 2));
+    if (hasCheckedRow) {
+        sf::IntRect checkedRect({index * width, height}, {width, height});
+        checkedImage = extract(checkedRect);
+    } else {
+        checkedImage.resize({static_cast<unsigned>(width), static_cast<unsigned>(height)});
+        for (unsigned y = 0; y < static_cast<unsigned>(height); y++) {
+            for (unsigned x = 0; x < static_cast<unsigned>(width); x++) {
+                sf::Color c = normalImage.getPixel({x, y});
+                c.r = static_cast<std::uint8_t>(c.r * 0.7f);
+                c.g = static_cast<std::uint8_t>(c.g * 0.7f);
+                c.b = static_cast<std::uint8_t>(c.b * 0.7f);
+                checkedImage.setPixel({x, y}, c);
+            }
         }
     }
 
-    // Create a new SFML texture from the scaled image
-    sf::Texture scaledTexture;
-    [[maybe_unused]] bool loaded = scaledTexture.loadFromImage(scaledImage);
+    sf::Image hoverImage;
+    hoverImage.resize({static_cast<unsigned>(width), static_cast<unsigned>(height)});
+    for (unsigned y = 0; y < static_cast<unsigned>(height); y++) {
+        for (unsigned x = 0; x < static_cast<unsigned>(width); x++) {
+            sf::Color c = normalImage.getPixel({x, y});
+            c.r = static_cast<std::uint8_t>(std::min(255, static_cast<int>(c.r * 1.15f + 20)));
+            c.g = static_cast<std::uint8_t>(std::min(255, static_cast<int>(c.g * 1.15f + 20)));
+            c.b = static_cast<std::uint8_t>(std::min(255, static_cast<int>(c.b * 1.15f + 20)));
+            hoverImage.setPixel({x, y}, c);
+        }
+    }
 
-    // Load into TGUI texture using loadFromPixelData
-    tgui::Texture tguiImage;
-    tguiImage.loadFromPixelData({static_cast<unsigned>(scaledSize), static_cast<unsigned>(scaledSize)}, scaledImage.getPixelsPtr());
+    // Helper to scale an image to the button size using nearest-neighbor
+    auto scaleImage = [&](const sf::Image &src) {
+        sf::Image scaled;
+        scaled.resize({static_cast<unsigned>(scaledWidth), static_cast<unsigned>(scaledHeight)});
+        for (int y = 0; y < scaledHeight; ++y) {
+            for (int x = 0; x < scaledWidth; ++x) {
+                int srcX = x * width / scaledWidth;
+                int srcY = y * height / scaledHeight;
+                scaled.setPixel({static_cast<unsigned>(x), static_cast<unsigned>(y)},
+                                src.getPixel({static_cast<unsigned>(srcX), static_cast<unsigned>(srcY)}));
+            }
+        }
+        return scaled;
+    };
 
-    tgui::BitmapButton::Ptr b = tgui::BitmapButton::create();
-    b->setSize(scaledSize, scaledSize);
-    b->setImage(tguiImage);
+    sf::Image scaledNormal = scaleImage(normalImage);
+    sf::Image scaledHover = scaleImage(hoverImage);
+    sf::Image scaledChecked = scaleImage(checkedImage);
+
+    // Load into TGUI textures
+    state.normal.loadFromPixelData({static_cast<unsigned>(scaledWidth), static_cast<unsigned>(scaledHeight)}, scaledNormal.getPixelsPtr());
+    state.hover.loadFromPixelData({static_cast<unsigned>(scaledWidth), static_cast<unsigned>(scaledHeight)}, scaledHover.getPixelsPtr());
+    state.checked.loadFromPixelData({static_cast<unsigned>(scaledWidth), static_cast<unsigned>(scaledHeight)}, scaledChecked.getPixelsPtr());
+
+    tgui::Button::Ptr b = tgui::Button::create();
+    b->setSize(scaledWidth, scaledHeight);
+    auto renderer = b->getRenderer();
+    renderer->setBorders({0, 0, 0, 0});
+    renderer->setTexture(state.normal);
+    renderer->setTextureHover(state.hover);
+    renderer->setTextureDown(state.checked);
     return b;
 }

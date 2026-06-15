@@ -22,7 +22,12 @@ using namespace OT;
 
 TimeWindow::TimeWindow(Game * game) : GameObject(game) {
     window = tgui::ChildWindow::create();
-    window->getRenderer()->setTitleBarHeight(10 * app->uiScale);
+    auto renderer = window->getRenderer();
+    renderer->setTitleBarHeight(10 * app->uiScale);
+    renderer->setBackgroundColor(sf::Color(30, 30, 35, 200));
+    renderer->setTitleBarColor(sf::Color(45, 45, 50));
+    renderer->setBorderColor(sf::Color(80, 80, 90));
+    renderer->setBorders(1);
     
     window->setClientSize({431 * app->uiScale, 41 * app->uiScale});
     window->setPosition({200 * app->uiScale, 22 * app->uiScale});
@@ -36,7 +41,10 @@ TimeWindow::TimeWindow(Game * game) : GameObject(game) {
 }
 
 void TimeWindow::close() {
-    window->removeAllWidgets();
+    if (window) {
+        window->removeAllWidgets();
+        app->gui.remove(window);
+    }
 }
 
 void TimeWindow::reload() {
