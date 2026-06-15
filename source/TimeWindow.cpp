@@ -10,6 +10,8 @@
 #include <TGUI/Widgets/ChildWindow.hpp>
 #include <TGUI/Widgets/Label.hpp>
 #include <TGUI/Widgets/Picture.hpp>
+#include <cstdlib>
+#include <sstream>
 #include <string>
 #include "Application.h"
 #include "Logger.h"
@@ -75,6 +77,13 @@ void TimeWindow::reload() {
     lblPopulation->setScrollbarPolicy(tgui::Scrollbar::Policy::Never);
     window->add(lblPopulation);
 
+    lblMoneyStats = tgui::Label::create();
+    lblMoneyStats->setTextSize(10 * app->uiScale);
+    lblMoneyStats->setSize(105 * app->uiScale, 13 * app->uiScale);
+    lblMoneyStats->setPosition(235 * app->uiScale, 22 * app->uiScale);
+    lblMoneyStats->getScrollbar()->setPolicy(tgui::Scrollbar::Policy::Never);
+    window->add(lblMoneyStats);
+
     // message
     lblTooltip = tgui::Label::create();
     lblTooltip->setPosition(42 * app->uiScale, 25 * app->uiScale);
@@ -118,6 +127,7 @@ void TimeWindow::reload() {
     updateRating();
     updateFunds();
     updatePopulation();
+    updateMoneyStats();
     updateTime();
 }
 
@@ -194,6 +204,17 @@ void TimeWindow::updatePopulation() {
     lblPopulation->setText(std::to_string(game->population));
 }
 
+void TimeWindow::updateMoneyStats() {
+    if (!lblMoneyStats)
+        return;
+
+    std::stringstream str;
+    str << "D " << formatSignedCompactMoney(game->money.todayIncome)
+        << "/" << formatSignedCompactMoney(-game->money.todayExpenses)
+        << " W " << formatSignedCompactMoney(game->money.recentNet());
+    lblMoneyStats->setText(str.str());
+}
+
 void TimeWindow::advance(double dt) {
     if (displayedSpeedMode != game->speedMode) {
         updateTooltip();
@@ -258,4 +279,24 @@ std::string TimeWindow::formatMoney(int amount)
 	string fmt(c);
 	for (int i = (int)fmt.length() - 3; i > 1; i -= 3) fmt.insert(i, "'");
 	return fmt;
+}
+
+std::string TimeWindow::formatCompactMoney(int amount)
+{
+	int absAmount = std::abs(amount);
+	char c[32];
+	if (absAmount >= 1000000)
+		snprintf(c, 32, "$%iM", absAmount / 1000000);
+	else if (absAmount >= 1000)
+		snprintf(c, 32, "$%ik", absAmount / 1000);
+	else
+		snprintf(c, 32, "$%i", absAmount);
+	return std::string(c);
+}
+
+std::string TimeWindow::formatSignedCompactMoney(int amount)
+{
+	if (amount < 0)
+		return "-" + formatCompactMoney(amount);
+	return "+" + formatCompactMoney(amount);
 }

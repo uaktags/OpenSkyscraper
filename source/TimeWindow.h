@@ -23,6 +23,7 @@ namespace OT {
             void updateRating();
             void updateFunds();
             void updatePopulation();
+            void updateMoneyStats();
             void updateTooltip();
             void showMessage(std::string msg);
 
@@ -34,10 +35,13 @@ namespace OT {
             
         private:
             static std::string formatMoney(int amount);
+            static std::string formatCompactMoney(int amount);
+            static std::string formatSignedCompactMoney(int amount);
 
             tgui::ChildWindow::Ptr window = NULL;
             tgui::Label::Ptr lblPopulation = NULL;
             tgui::Label::Ptr lblFunds = NULL;
+            tgui::Label::Ptr lblMoneyStats = NULL;
             tgui::Label::Ptr lblDate = NULL;
             tgui::Label::Ptr lblTooltip = NULL;
             tgui::Texture rating_tx;
