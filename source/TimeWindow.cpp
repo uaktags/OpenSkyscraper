@@ -143,6 +143,7 @@ void TimeWindow::updateTime() {
 
 void TimeWindow::updateTooltip() {
     std::stringstream str;
+    displayedSpeedMode = game->speedMode;
 	if (game->toolPrototype) {
 		str << "Construct ";
 		str << game->toolPrototype->name;
@@ -152,6 +153,14 @@ void TimeWindow::updateTooltip() {
 		if (game->selectedTool == "bulldozer") str << "Bulldoze";
 		if (game->selectedTool == "finger") str << "Resize elevator shaft";
 		if (game->selectedTool == "inspector") str << "Inspect";
+	}
+	if (!str.str().empty()) str << "  |  ";
+	switch (game->speedMode) {
+		case 0: str << "Paused"; break;
+		case 1: str << "Speed 1x"; break;
+		case 2: str << "Speed 2x"; break;
+		case 3: str << "Speed 4x"; break;
+		default: break;
 	}
 	if (!message.empty()) {
 		if (!str.str().empty()) str << "  |  ";
@@ -186,6 +195,10 @@ void TimeWindow::updatePopulation() {
 }
 
 void TimeWindow::advance(double dt) {
+    if (displayedSpeedMode != game->speedMode) {
+        updateTooltip();
+    }
+
     if (messageTimer > 0) {
 		messageTimer -= dt;
 		if (messageTimer <= 0) {

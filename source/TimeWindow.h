@@ -46,6 +46,7 @@ namespace OT {
 
             double messageTimer;
             std::string message;
+            int displayedSpeedMode = -1;
             sf::Vector2f watchPos {6, 6};
 	        const sf::Vector2f watchSize {15, 15};
             tgui::UIntRect rating_rect;

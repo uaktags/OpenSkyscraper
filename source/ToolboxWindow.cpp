@@ -1,6 +1,7 @@
 /* Copyright (c) 2026 OpenSkyscraper contributors */
 #include "ToolboxWindow.h"
 #include "GameObject.h"
+#include <SFML/Graphics/Image.hpp>
 #include <SFML/Graphics/Texture.hpp>
 #include <TGUI/Rect.hpp>
 #include <TGUI/Texture.hpp>
@@ -54,6 +55,74 @@ static void setButtonVisuals(tgui::Button::Ptr button, const ToolboxWindow::Butt
         renderer->setTextureHover(state.hover);
         renderer->setTextureDown(state.checked);
     }
+}
+
+static bool loadGeneratedSpeedTexture(sf::Texture &texture)
+{
+    sf::Image image({92, 48}, sf::Color::Transparent);
+    const sf::Color face[2] = {sf::Color(214, 214, 214), sf::Color(68, 68, 68)};
+    const sf::Color light[2] = {sf::Color::White, sf::Color(112, 112, 112)};
+    const sf::Color shadow[2] = {sf::Color(84, 84, 84), sf::Color(18, 18, 18)};
+    const sf::Color glyph[2] = {sf::Color(20, 20, 20), sf::Color::White};
+
+    auto fillRect = [&](unsigned int x, unsigned int y, unsigned int w, unsigned int h, sf::Color color) {
+        for (unsigned int py = y; py < y + h; py++)
+            for (unsigned int px = x; px < x + w; px++)
+                image.setPixel({px, py}, color);
+    };
+    auto fillTriangle = [&](int ax, int ay, int bx, int by, int cx, int cy, sf::Color color) {
+        const int minX = std::min(ax, std::min(bx, cx));
+        const int maxX = std::max(ax, std::max(bx, cx));
+        const int minY = std::min(ay, std::min(by, cy));
+        const int maxY = std::max(ay, std::max(by, cy));
+        const int area = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
+        for (int y = minY; y <= maxY; y++)
+        {
+            for (int x = minX; x <= maxX; x++)
+            {
+                const int w0 = (bx - ax) * (y - ay) - (by - ay) * (x - ax);
+                const int w1 = (cx - bx) * (y - by) - (cy - by) * (x - bx);
+                const int w2 = (ax - cx) * (y - cy) - (ay - cy) * (x - cx);
+                if ((area >= 0 && w0 >= 0 && w1 >= 0 && w2 >= 0) ||
+                    (area < 0 && w0 <= 0 && w1 <= 0 && w2 <= 0))
+                    image.setPixel({static_cast<unsigned int>(x), static_cast<unsigned int>(y)}, color);
+            }
+        }
+    };
+    auto drawPlay = [&](unsigned int ox, unsigned int oy, unsigned int count, sf::Color color) {
+        for (unsigned int i = 0; i < count; i++)
+        {
+            const int x = static_cast<int>(ox + 5 + i * 5);
+            const int y = static_cast<int>(oy + 5);
+            fillTriangle(x, y, x, y + 14, x + 8, y + 7, color);
+        }
+    };
+
+    for (unsigned int row = 0; row < 2; row++)
+    {
+        for (unsigned int index = 0; index < 4; index++)
+        {
+            const unsigned int x = index * 23;
+            const unsigned int y = row * 24;
+            fillRect(x, y, 23, 24, face[row]);
+            fillRect(x, y, 23, 1, light[row]);
+            fillRect(x, y, 1, 24, light[row]);
+            fillRect(x, y + 23, 23, 1, shadow[row]);
+            fillRect(x + 22, y, 1, 24, shadow[row]);
+
+            if (index == 0)
+            {
+                fillRect(x + 6, y + 5, 4, 14, glyph[row]);
+                fillRect(x + 13, y + 5, 4, 14, glyph[row]);
+            }
+            else
+            {
+                drawPlay(x, y, index, glyph[row]);
+            }
+        }
+    }
+
+    return texture.loadFromImage(image);
 }
 
 void ToolboxWindow::reload()
@@ -128,11 +197,12 @@ void ToolboxWindow::reload()
     speedLayout->setPosition(7 * app->uiScale, 193 * app->uiScale);
 
     sf::Texture speedTexture = app->bitmaps["simtower/ui/toolbox/speed"];
+    if (speedTexture.getSize() == sf::Vector2u(256, 32))
+        loadGeneratedSpeedTexture(speedTexture);
     for (int i = 0; i < 4; i++)
     {
         ButtonState state;
-        int speedIndex = (i == 0 ? 2 : 0);
-        auto button = makeButton(23, 24, speedTexture, speedIndex, state);
+        auto button = makeButton(23, 24, speedTexture, i, state);
         speedLayout->add(button);
         speedButtons[i] = button;
         buttonStates[button] = state;
