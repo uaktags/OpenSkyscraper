@@ -61,14 +61,14 @@ namespace OT
 				{
 					bool operator()(const CondoOccupant *a, const CondoOccupant *b) const
 					{
-						return (a->actualDepartureTime() > a->actualDepartureTime());
+						return (a->actualDepartureTime() > b->actualDepartureTime());
 					}
 				};
 				struct returnsLaterThan
 				{
 					bool operator()(const CondoOccupant *a, const CondoOccupant *b) const
 					{
-						return (a->actualReturnTime() > a->actualReturnTime());
+						return (a->actualReturnTime() > b->actualReturnTime());
 					}
 				};
 

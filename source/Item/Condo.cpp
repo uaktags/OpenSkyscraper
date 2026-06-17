@@ -293,10 +293,10 @@ bool Condo::isAttractive()
 
 double Condo::CondoOccupant::actualReturnTime() const
 {
-	return departureTime + departureJitter;
+	return returnTime + returnJitter;
 }
 
 double Condo::CondoOccupant::actualDepartureTime() const
 {
-	return returnTime + returnJitter;
+	return departureTime + departureJitter;
 }
