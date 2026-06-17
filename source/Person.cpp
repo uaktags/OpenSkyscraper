@@ -1,5 +1,6 @@
 #include <cassert>
 #include "Item/Item.h"
+#include "NameManager.h"
 #include "Person.h"
 
 using namespace OT;
@@ -14,6 +15,7 @@ Person::Person(Game * game, Type type)
 	state  = kWandering;
 	stress = 0.0;
 	eval   = 0.0;
+	name   = NameManager::makeName((int)type);
 }
 
 Person::~Person()
