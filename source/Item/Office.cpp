@@ -139,6 +139,7 @@ void Office::advance(double dt)
 			if (game->time.hour > c->arrivalTime && !lobbyRoute.empty())
 			{
 				arrivalQueue.pop();
+				c->state = Person::kWorking;
 				c->journey.set(lobbyRoute);
 			}
 			else
@@ -161,6 +162,7 @@ void Office::advance(double dt)
 				else
 				{
 					LOG(DEBUG, "%p leaving office", c);
+					c->state = Person::kReturning;
 					c->journey.set(r);
 				}
 			}
@@ -178,6 +180,7 @@ void Office::advance(double dt)
 				if (w->at == this && findLunchRoute(route))
 				{
 					LOG(DEBUG, "Worker %p leaving office for lunch", w);
+					w->state = Person::kLunch;
 					w->journey.set(route);
 					w->lunchReturnTime = game->time.absolute + 10 * Time::kBaseSpeed;
 					lunchReturnQueue.push(w);
@@ -209,6 +212,7 @@ void Office::advance(double dt)
 					else
 					{
 						LOG(DEBUG, "Worker %p returning from lunch", w);
+						w->state = Person::kWorking;
 						w->journey.set(r);
 					}
 				}
@@ -232,6 +236,7 @@ void Office::advance(double dt)
 				else
 				{
 					LOG(DEBUG, "Salesman %p leaving office", w);
+					w->state = Person::kWandering;
 					w->journey.set(r);
 				}
 			}
@@ -247,6 +252,7 @@ void Office::advance(double dt)
 			{
 				salesReturnQueue.pop();
 				LOG(DEBUG, "Calling back salesman %p", w);
+				w->state = Person::kWorking;
 				w->journey.set(lobbyRoute);
 			}
 			else
@@ -275,6 +281,8 @@ bool Office::isAttractive()
 void Office::addPerson(Person *p)
 {
 	Item::addPerson(p);
+
+	p->state = Person::kWorking;
 
 	// Reduce the person's stress a bit, just for the time being.
 	p->stress *= 0.5;
