@@ -164,6 +164,7 @@ void Condo::moveOccupants()
 		if (game->time.hour > c->actualDepartureTime())
 		{
 			departureQueue.pop();
+			c->state = Person::kCommuting;
 			c->journey.set(lobbyRoute);
 		}
 		else
@@ -186,6 +187,7 @@ void Condo::moveOccupants()
 			else
 			{
 				LOG(DEBUG, "%p leaving condo", c);
+				c->state = Person::kReturning;
 				c->journey.set(r);
 			}
 		}
@@ -218,6 +220,7 @@ bool Condo::updateLighting(double time)
 void Condo::addPerson(Person *p)
 {
 	Item::addPerson(p);
+	p->state = Person::kHome;
 	spriteNeedsUpdate = true;
 }
 
