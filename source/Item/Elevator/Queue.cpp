@@ -77,7 +77,7 @@ void Queue::advance(double dt)
 	for (People::iterator ip = people.begin(); ip != people.end();)
 	{
 		Person *p = *(ip++);
-		p->stress += 1.0 / kSecondsUntilStressed / Time::kBaseSpeed * dta;
+		p->addStress(1.0 / kSecondsUntilStressed / Time::kBaseSpeed * dta);
 		if (p->stress >= 1.0)
 			p->journey.next();
 	}

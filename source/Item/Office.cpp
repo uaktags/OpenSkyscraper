@@ -184,7 +184,7 @@ void Office::advance(double dt)
 				}
 				else
 				{
-					w->stress += 0.1;
+					w->addStress(0.1);
 					LOG(DEBUG, "Worker %p has no route to lunch", w);
 				}
 			}
@@ -201,11 +201,11 @@ void Office::advance(double dt)
 				if (w->at && w->at != this)
 				{
 					const Route &r = game->findRoute(w->at, this);
-					if (r.empty())
-					{
-						w->stress += 0.1;
-						LOG(DEBUG, "Worker %p has no route back from lunch", w);
-					}
+				if (r.empty())
+				{
+					w->addStress(0.1);
+					LOG(DEBUG, "Worker %p has no route back from lunch", w);
+				}
 					else
 					{
 						LOG(DEBUG, "Worker %p returning from lunch", w);
