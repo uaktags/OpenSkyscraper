@@ -1,4 +1,5 @@
 #include <cassert>
+#include <vector>
 #include "../../Sprite.h"
 #include "Elevator.h"
 #include "Car.h"
@@ -325,14 +326,17 @@ Queue *Elevator::getQueue(int floor, Direction dir)
 /// after the elevator motors are repositioned or certain floors deactivated.
 void Elevator::cleanQueues()
 {
-	for (Queues::iterator iq = queues.begin(); iq != queues.end(); iq++)
+	// Collect queues to remove first to avoid iterator invalidation and double-delete.
+	std::vector<Queue *> toRemove;
+	for (Queues::iterator iq = queues.begin(); iq != queues.end(); ++iq)
 	{
 		if (!connectsFloor((*iq)->floor))
-		{
-			for (int i = 0; i < 2; i++)
-				delete *iq;
-			queues.erase(iq);
-		}
+			toRemove.push_back(*iq);
+	}
+	for (std::vector<Queue *>::iterator it = toRemove.begin(); it != toRemove.end(); ++it)
+	{
+		queues.erase(*it);
+		delete *it;
 	}
 }
 
