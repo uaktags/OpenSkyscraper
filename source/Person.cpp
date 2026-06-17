@@ -36,6 +36,12 @@ void Person::Journey::set(const Route & r)
 	for (std::vector<Route::Node>::const_iterator nit = r.nodes.begin(); nit != r.nodes.end(); nit++) {
 		nodes.push(*nit);
 	}
+	// If the route is empty, the person is stuck; bail out before touching toFloor/next().
+	if (nodes.empty()) {
+		item = NULL;
+		toFloor = fromFloor;
+		return;
+	}
 	toFloor = nodes.front().toFloor;
 	next();
 }
@@ -44,15 +50,29 @@ void Person::Journey::next()
 {
 	//Remove the person from where he/she is currently at.
 	if (person->at) person->at->removePerson(person);
-	
+
 	//Keep the current floor around.
 	fromFloor = toFloor;
-	
+
+	//Guard against an empty route - this can happen when a Person has no valid
+	//path to their destination. Leave them where they are rather than crashing.
+	if (nodes.empty()) {
+		item = NULL;
+		toFloor = fromFloor;
+		return;
+	}
+
 	//Jump to next node.
-	assert(!nodes.empty());
 	nodes.pop();
-	assert(!nodes.empty());
-	
+
+	//If we've consumed the only node, the journey is complete - keep the person
+	//where they are without adding them to a (non-existent) next item.
+	if (nodes.empty()) {
+		item = NULL;
+		toFloor = fromFloor;
+		return;
+	}
+
 	//Add the person to the node's item.
 	item    = nodes.front().item;
 	toFloor = nodes.front().toFloor;
