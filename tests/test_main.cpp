@@ -8,6 +8,7 @@
 #include "../source/Time.h"
 #include "../source/Route.h"
 #include "../source/Money.h"
+#include "../source/NameManager.h"
 #include "../source/TimeWindowStyle.h"
 #include "../source/WindowsPEExecutable.h"
 
@@ -191,6 +192,33 @@ static void testTimeWindowModernLayout()
     EXPECT(layout.tooltipBackgroundHeight == 22);
 }
 
+static void testNameManager()
+{
+    using OT::NameManager;
+
+    NameManager::reset();
+
+    // Person::Type enum values used here mirror source/Person.h.
+    // 0=kMan, 1=kSalesman, 2=kWoman1, 5=kHousekeeper, 8=kSecurity.
+    EXPECT(NameManager::makeName(0) == "Man #1");
+    EXPECT(NameManager::makeName(1) == "Salesman #1");
+    EXPECT(NameManager::makeName(1) == "Salesman #2");
+    EXPECT(NameManager::makeName(5) == "Housekeeper #1");
+    EXPECT(NameManager::makeName(8) == "Security #1");
+
+    // Per-type counters are independent.
+    NameManager::reset();
+    EXPECT(NameManager::makeName(0) == "Man #1");
+    EXPECT(NameManager::makeName(2) == "Woman #1");
+    EXPECT(NameManager::makeName(0) == "Man #2");
+
+    // Out-of-range type returns a generic "Person" without crashing.
+    EXPECT(NameManager::makeName(-1) == "Person");
+    EXPECT(NameManager::makeName(999) == "Person");
+
+    NameManager::reset();
+}
+
 static void testWindowsPEExecutable()
 {
     OT::WindowsPEExecutable exe;
@@ -244,6 +272,7 @@ int main()
     testRouteClear();
     testMoneyAccounting();
     testTimeWindowModernLayout();
+    testNameManager();
     testWindowsPEExecutable();
     testWindowsSPExecutable();
 

@@ -180,6 +180,7 @@ add_executable(OpenSkyTests
   source/WindowsPEExecutable.cpp
   source/Path.cpp
   source/Logger.cpp
+  source/NameManager.cpp
 )
 target_compile_definitions(OpenSkyTests PRIVATE OPEN_SKY_ROUTE_SEAM_ONLY)
 add_test(NAME OpenSkyTests COMMAND OpenSkyTests)
