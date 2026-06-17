@@ -478,7 +478,7 @@ bool Game::handleEvent(sf::Event & event)
 					} else {
 						LOG(DEBUG, "cannot construct %s at %ix%i, size %ix%i", toolPrototype->id.c_str(), toolPosition.x, toolPosition.y, toolPrototype->size.x, toolPrototype->size.y);
 						playOnce("simtower/construction/impossible");
-						//timeWindow.showMessage("Cannot place item there. " + blockReason + ".");
+						timeWindow.showMessage("Cannot place item there. " + blockReason + ".");
 					}
 				}
 			}
@@ -533,7 +533,7 @@ bool Game::handleEvent(sf::Event & event)
 					visualizeRoute = itemBelowCursor->lobbyRoute;
 					char c[128];
 					snprintf(c, 128, "route score = %i", visualizeRoute.score());
-					//timeWindow.showMessage(c);
+					timeWindow.showMessage(c);
 				}
 			}
 		} break;
@@ -800,7 +800,7 @@ void Game::advance(double dt)
 		win.draw(s);
 		drawnSprites++;
 		if (previousItemBelowCursor != itemBelowCursor) {
-			//timeWindow.showMessage(itemBelowCursor->prototype->name);
+			timeWindow.showMessage(itemBelowCursor->prototype->name);
 		}
 	}
 
@@ -1208,7 +1208,7 @@ void Game::transferFunds(int f, std::string category, std::string message)
 	if (!message.empty()) {
 		char c[32];
 		snprintf(c, 32, ": $%i", f);
-		//timeWindow.showMessage(message + c);
+		timeWindow.showMessage(message + c);
 	}
 	timeWindow.updateMoneyStats();
 }
