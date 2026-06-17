@@ -1,4 +1,5 @@
 #include <cassert>
+#include "Game.h"
 #include "Item/Item.h"
 #include "NameManager.h"
 #include "Person.h"
@@ -16,6 +17,7 @@ Person::Person(Game * game, Type type)
 	stress = 0.0;
 	eval   = 0.0;
 	name   = NameManager::makeName((int)type);
+	if (game) game->people.insert(this);
 }
 
 Person::~Person()
@@ -24,6 +26,13 @@ Person::~Person()
 		LOG(DEBUG, "forcefully removed from %s", at->desc().c_str());
 		at->removePerson(this);
 	}
+	if (game) game->people.erase(this);
+}
+
+void Person::advance(double dt)
+{
+	if (state == kHome || state == kResting)
+		addStress(-dt * 0.5);
 }
 
 void Person::encodeXML(tinyxml2::XMLPrinter &xml)

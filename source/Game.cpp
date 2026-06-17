@@ -699,6 +699,10 @@ void Game::advance(double dt)
 		(*i)->advance(dt);
 	}
 
+	for (PersonSet::iterator p = people.begin(); p != people.end(); p++) {
+		(*p)->advance(dt);
+	}
+
 	if (populationNeedsUpdate) {
 		populationNeedsUpdate = false;
 		int p = 0;

@@ -43,9 +43,9 @@ namespace OT {
 		Person(Game * game, Type type = kMan);
 		virtual ~Person();
 
-		/// Subclass hook called every frame. Default is a no-op; subclasses
-		/// override to drive state transitions and decide where to go next.
-		virtual void advance(double dt) {}
+		/// Subclass hook called every frame. Default recovers stress when
+		/// resting or at home; subclasses override to drive state transitions.
+		virtual void advance(double dt);
 
 		/// Apply a stress delta, clamping the resulting value to [0, 100].
 		void addStress(double amount) { stress += amount; if (stress < 0) stress = 0; if (stress > 100) stress = 100; }

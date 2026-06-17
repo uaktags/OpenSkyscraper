@@ -48,6 +48,8 @@ namespace OT {
 
 		typedef std::set<Item::Item *> ItemSet;
 		ItemSet items;
+		typedef std::set<class Person *> PersonSet;
+		PersonSet people;
 		typedef std::map<int, ItemSet> ItemSetByInt;
 		typedef std::map<std::string, ItemSet> ItemSetByString;
 		typedef std::map<int, Item::Floor *> FloorItems;
