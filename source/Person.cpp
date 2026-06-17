@@ -11,7 +11,9 @@ Person::Person(Game * game, Type type)
 	type(type)
 {
 	at     = NULL;
+	state  = kWandering;
 	stress = 0.0;
+	eval   = 0.0;
 }
 
 Person::~Person()
@@ -20,6 +22,28 @@ Person::~Person()
 		LOG(DEBUG, "forcefully removed from %s", at->desc().c_str());
 		at->removePerson(this);
 	}
+}
+
+void Person::encodeXML(tinyxml2::XMLPrinter &xml)
+{
+	xml.PushAttribute("type", type);
+	xml.PushAttribute("state", state);
+	xml.PushAttribute("stress", stress);
+	xml.PushAttribute("eval", eval);
+	xml.PushAttribute("name", name.c_str());
+	xml.PushAttribute("from", from.c_str());
+	xml.PushAttribute("goingTo", goingTo.c_str());
+}
+
+void Person::decodeXML(tinyxml2::XMLElement &xml)
+{
+	type    = (Type)xml.IntAttribute("type", kMan);
+	state   = (State)xml.IntAttribute("state", kWandering);
+	stress  = xml.DoubleAttribute("stress", 0.0);
+	eval    = xml.DoubleAttribute("eval", 0.0);
+	name    = xml.Attribute("name", "");
+	from    = xml.Attribute("from", "");
+	goingTo = xml.Attribute("goingTo", "");
 }
 
 Person::Journey::Journey(Person * p)
