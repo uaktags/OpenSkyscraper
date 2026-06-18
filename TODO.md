@@ -90,19 +90,18 @@ Phase 2: Missing Items & Commercial Depth                   [Hotel DONE, rest in
     - [ ] Stop admitting customers after 19:00 so venues empty toward end of day (existing `TODO.md` note).
     - [ ] Persist customers to XML (existing `TODO.md` note — F2 save/reload leaves empty venues).
 
-- [PARTIAL] **2.3.3 Cinema: movie scheduling & revenue** (`source/Item/Cinema.cpp`)
+- [DONE] **2.3.3 Cinema: movie scheduling & revenue** (`source/Item/Cinema.cpp`)
     - [DONE] Person state transitions on arrival/departure.
-    - [ ] Replace placeholder income (`Cinema.cpp:144` `TODO: Specify cinema income`) with attendance-based revenue.
-    - [ ] Showtime scheduling (2–3 shows/day).
-    - [ ] Audience arrival/dispersal through the tower.
+    - [DONE] Two screenings/day (13:00 doors / 15:00 start / 17:00 close, and 19:00 / 21:00 / 23:00).
+    - [DONE] Attendance-based income: `attendees * ticketPrice - screeningFee` using `people.size()` at close.
     - [ ] Halfway-through-movie break (per original; verify).
     - [ ] Permit underground construction (verify original behaviour).
 
-- [PARTIAL] **2.3.4 PartyHall: event visitors** (`source/Item/PartyHall.cpp`)
-    - [DONE] Fixed-income placeholder (`PartyHall.cpp:64`).
-    - [ ] Replace `TODO: Specify party hall income` with attendance-scaled revenue.
-    - [ ] Confirm party timing from original (believed two parties/day, AM + PM).
-    - [ ] Spawn visitors, have them arrive / stay / leave.
+- [DONE] **2.3.4 PartyHall: event visitors** (`source/Item/PartyHall.cpp`)
+    - [DONE] `PartyHall::Visitor` subclass; spawned on each open.
+    - [DONE] Two parties/day (afternoon 13:00-17:00 and evening 19:00-23:00).
+    - [DONE] Attendance-based income: `attendees * visitorFee - eventCost`.
+    - [DONE] Visitors arrive, get stress relief, depart on close.
 
 - [PARTIAL] **2.4 Metro train cycles** (`source/Item/Metro.cpp`)
     - [DONE] Train arrival / departure intervals driven by `Time::absolute` (default: 30 min gap, 10 min dwell; `kTrainDwellAbs` / `kTrainGapAbs` constants).
@@ -131,13 +130,14 @@ Phase 3: Game Systems                                        [STUB — major wor
     - [ ] `ExpandoBadHotel()` shrink/grow under-performing hotels.
     - [ ] Per-type counters `CountPC` / `CountVC` / `CountIn` / `CountDay` (more granular than current `Counts`).
 
-- [STUB] **3.2 Level / star-rating expansion** (`source/Game.cpp:1256` `ratingMayIncrease()`)
-    - [DONE] Stub: 0→1 at 300 pop, 1→2 at 1000 pop (security TODO).
-    - [ ] Define star thresholds in new `source/LevelUp.h` (1★ start; 2★ ~300 pop + parking; 3★ ~1000 + express elevators + security; 4★ ~2000 + medical + restaurants + hotel; 5★ ~3000 + cinema + metro).
-    - [ ] `ratingMayIncrease()` checks population **and** required facilities.
-    - [ ] `ToolboxWindow` greys out locked items with "Unlocks at N stars" tooltip.
-    - [ ] Construction handler rejects placement below required rating.
-    - [ ] Level-up dialog/notification (currently missing entirely).
+- [DONE] **3.2 Level / star-rating expansion** (`source/LevelUp.{h,cpp}`, `source/Game.cpp:ratingMayIncrease`)
+    - [DONE] Star thresholds (1★ start; 2★ at 300 pop; 3★ at 1000 pop + Security; 4★ at 2000 pop + Medical; 5★ at 3000 pop + Metro).
+    - [DONE] `ratingMayIncrease()` checks population **and** required facilities via `JudgeSystem::Counts`; loops to multi-promote if eligible.
+    - [DONE] Construction handler rejects placement below `LevelUp::minRatingToBuild()` with a clear reason.
+    - [DONE] `ToolboxWindow` greys out locked items with "Unlocks at N stars" tooltip; reloads on promotion.
+    - [DONE] Promotion message via `TimeWindow.showMessage()`.
+    - [ ] **VIP visits** and **Cathedral "Tower of the Year"** ending (codemap.md:2653, needs VIP system).
+    - [ ] Level-up dialog window (currently a transient message, not a modal).
 
 - [ ] **3.3 Fire / Emergency / Thief events** — No files exist. Priority LOW.
     - [ ] `EventScheduler` randomly triggers events based on time + rating.
@@ -169,12 +169,14 @@ Phase 4: UI & Visualization                                   [PENDING]
     - [ ] Click minimap to jump viewport to that floor.
     - [ ] Mode cycling via button or keyboard.
 
-- [ ] **4.3 Status overlays (Eval / Pric / Hotel)** — No files exist.
-    - [ ] `enum StatusMode { kNormal, kEval, kPric, kHotel }` in Game.
-    - [ ] Eval: blue/yellow/red tint based on `getEvaluation()` or route score.
-    - [ ] Pric: light blue/yellow/green/red based on rent pricing tier.
-    - [ ] Hotel: red overlay if hotel room is dirty.
-    - [ ] `StatusMode::Switch()` on toolbar button / keyboard shortcut.
+- [PARTIAL] **4.3 Status overlays (Eval / Pric / Hotel)** — `Game::StatusMode` enum + `O` key cycle.
+    - [DONE] `enum StatusMode { kNormal, kEval, kPric, kHotel }` on Game; cycle via `O` key with mode-name message.
+    - [DONE] Eval overlay: blue/yellow/red tint on each tenant item based on `Item::evaluation`.
+    - [DONE] Hotel overlay: red on dirty rooms, yellow on occupied, green on clean.
+    - [DONE] Per-item culling so offscreen overlays are skipped.
+    - [ ] **Pric overlay** — needs rent pricing tier data per tenant (deferred until pricing model lands).
+    - [ ] Toolbar button to cycle modes (currently keyboard only).
+    - [ ] Minimap integration (Phase 4.2) so the overlays also render on the minimap.
 
 - [ ] **4.4 Construction animation** (also in original `TODO.md`)
     - [ ] Add `bool underConstruction` + `double constructionEndTime` to `Item`.
