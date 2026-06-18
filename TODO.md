@@ -187,13 +187,18 @@ Phase 4: UI & Visualization                                   [PENDING]
     - [ ] Toolbar button to cycle modes (currently keyboard only).
     - [ ] Minimap integration (Phase 4.2) so the overlays also render on the minimap.
 
-- [ ] **4.4 Construction animation** (also in original `TODO.md`)
-    - [ ] Add `bool underConstruction` + `double constructionEndTime` to `Item`.
-    - [ ] `Item::render()` swaps in `construction/solid` (regular) or `construction/grid` (lobbies, parking) sprite while building.
-    - [ ] `Item::advance()` flips to finished sprite at end time; item non-functional until then.
+- [DONE] **4.4 Construction animation** (also in original `TODO.md`)
+    - [DONE] `bool underConstruction` + `double constructionEndTime` on `Item`; persisted in XML.
+    - [DONE] `Item::render()` draws a hatched khaki overlay rectangle while building (real sprites hidden).
+    - [DONE] `Game::advance()` skips the item's advance, maintenance, and construction timer check; clears the flag with a "normal" construction sound on completion.
+    - [DONE] `Factory::make()` sets the flag on fresh placement; `decodeXML()` overrides with saved state.
+    - [DONE] Inspector dialog shows "under construction" with remaining-time estimate.
+    - [DONE] Duration scales with item width (`constructionDuration()` virtual, overridable per subclass).
+    - [ ] Swap rectangle overlay for actual `construction/solid` and `construction/grid` bitmaps.
+    - [ ] Per-prototype duration tuning (currently 2h + 0.2h/tile width).
 
 
-Phase 5: Polish & Balance                                     [PENDING]
+Phase 5: Polish & Balance                                     [IN PROGRESS]
 -----------------------------------------------------------------------
 
 - [PARTIAL] **5.1 Tenant satisfaction & retention**
@@ -215,13 +220,16 @@ Phase 5: Polish & Balance                                     [PENDING]
     - [ ] Stress penalty applied directly to occupants (currently only depresses the cached evaluation).
     - [ ] Per-prototype tuning (e.g. cinema louder than office).
 
-- [ ] **5.3 Elevator control panel** (original `ElvDlogT.h/c`)
+- [PARTIAL] **5.3 Elevator control panel** (original `ElvDlogT.h/c`)
     - [DONE] Per-floor service toggle via finger tool.
-    - [ ] Double-click elevator → TGUI `ElvDialog`.
+    - [DONE] `ElevatorDialog` (TGUI child window + scrollable panel) with per-floor toggle buttons.
+    - [DONE] `Game::toggleElevatorService()` helper encapsulates gameMap + cleanQueues + updateRoutes.
+    - [DONE] Opened from InspectorDialog via "Floors..." button (visible only for elevators).
+    - [DONE] Button labels refresh each frame so external changes (finger tool) stay in sync.
+    - [DONE] Escape / Close button / title-bar X close the dialog.
     - [ ] WD/WE (weekday/weekend) service modes.
     - [ ] Express-to-top / express-to-bottom buttons.
     - [ ] Time-before-departing slider.
-    - [ ] Per-floor service toggles in dialog (currently only via finger tool).
 
 
 Phase 6: Long Tail / Deferred                                 [DEFERRED]
