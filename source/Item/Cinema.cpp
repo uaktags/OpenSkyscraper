@@ -1,6 +1,7 @@
 #include "../Game.h"
 #include "../Math/Rand.h"
 #include "Cinema.h"
+#include <string>
 
 using namespace OT;
 using namespace OT::Item;
@@ -33,6 +34,23 @@ void Cinema::encodeXML(tinyxml2::XMLPrinter &xml)
 	xml.PushAttribute("open", open);
 	xml.PushAttribute("playing", playing);
 	xml.PushAttribute("movie", movieType);
+
+	for (Customers::iterator c = customers.begin(); c != customers.end(); c++)
+	{
+		Customer *customer = *c;
+		if (customer->at != this)
+			continue;
+
+		xml.OpenElement("customer");
+		xml.PushAttribute("type", customer->type);
+		xml.PushAttribute("state", customer->state);
+		xml.PushAttribute("stress", customer->stress);
+		xml.PushAttribute("eval", customer->eval);
+		xml.PushAttribute("name", customer->name.c_str());
+		xml.PushAttribute("from", customer->from.c_str());
+		xml.PushAttribute("goingTo", customer->goingTo.c_str());
+		xml.CloseElement();
+	}
 }
 
 void Cinema::decodeXML(tinyxml2::XMLElement &xml)
@@ -41,6 +59,24 @@ void Cinema::decodeXML(tinyxml2::XMLElement &xml)
 	open = xml.BoolAttribute("open");
 	playing = xml.BoolAttribute("playing");
 	movieType = xml.IntAttribute("movie");
+	clearCustomers();
+
+	for (tinyxml2::XMLElement *e = xml.FirstChildElement("customer"); e; e = e->NextSiblingElement("customer"))
+	{
+		Customer *c = new Customer(this);
+		c->type = (Person::Type)e->IntAttribute("type", Person::kMan);
+		c->state = (Person::State)e->IntAttribute("state", Person::kShopping);
+		c->stress = e->DoubleAttribute("stress", 0.0);
+		c->eval = e->DoubleAttribute("eval", 0.0);
+		c->name = e->Attribute("name", "");
+		c->from = e->Attribute("from", "");
+		c->goingTo = e->Attribute("goingTo", "");
+
+		customers.insert(c);
+		if (open)
+			addPerson(c);
+	}
+
 	updateSprite();
 }
 
@@ -120,6 +156,9 @@ void Cinema::advance(double dt)
 			else
 			{
 				LOG(DEBUG, "%p leaving", p);
+				p->state = Person::kReturning;
+				p->from = prototype->name;
+				p->goingTo = "Exit";
 				removePerson(p);
 				p->journey.set(r);
 			}
@@ -151,6 +190,9 @@ Path Cinema::getRandomBackgroundSoundPath()
 void Cinema::addPerson(Person *p)
 {
 	Item::addPerson(p);
+	p->state = Person::kShopping;
+	p->eval = 60;
+	p->addStress(-20);
 	spriteNeedsUpdate = true;
 }
 
@@ -165,6 +207,8 @@ Cinema::Customer::Customer(Cinema *item)
 {
 	Type types[] = {kMan, kWoman1, kWoman2, kWomanWithChild1};
 	type = types[rand() % 4];
+	from = "City";
+	goingTo = item->prototype->name;
 }
 
 /** Removes all customers from the item. */

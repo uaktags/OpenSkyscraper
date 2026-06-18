@@ -22,6 +22,7 @@ namespace OT {
 			int price;
 			int2 size;
 			int icon;
+			int variant;
 			int entrance_offset;
 			int exit_offset;
 			

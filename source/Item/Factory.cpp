@@ -8,6 +8,7 @@
 #include "Factory.h"
 #include "FastFood.h"
 #include "Floor.h"
+#include "Hotel.h"
 #include "Lobby.h"
 #include "Restaurant.h"
 #include "Stairs.h"
@@ -48,6 +49,9 @@ void Factory::loadPrototypes()
 	register_item(Elevator::Standard);
 	register_item(FastFood);
 	register_item(Restaurant);
+	prototypes.push_back(Hotel::makeSinglePrototype());
+	prototypes.push_back(Hotel::makeDoublePrototype());
+	prototypes.push_back(Hotel::makeSuitePrototype());
 	register_item(PartyHall);
 	register_item(Cinema);
 	register_item(Metro);
@@ -82,7 +86,21 @@ OT::Item::Item * Factory::make(std::string prototypeID, int2 position)
 OT::Item::Item * Factory::make(tinyxml2::XMLElement & xml)
 {
 	int2 position(xml.IntAttribute("x"), xml.IntAttribute("y"));
-	Item * item = make(xml.Attribute("type"), position);
+	std::string type = xml.Attribute("type") ? xml.Attribute("type") : "";
+	// Legacy migration: older saves stored every hotel room under the single
+	// "hotel" id and disambiguated the room type with a "variant" attribute.
+	// Redirect those entries to the new per-variant prototypes so the correct
+	// size, icon and behaviour are restored.
+	if (type == "hotel")
+	{
+		switch (xml.IntAttribute("variant", 0))
+		{
+			case 1:  type = "hotel_double"; break;
+			case 2:  type = "hotel_suite";  break;
+			default: type = "hotel_single"; break;
+		}
+	}
+	Item * item = make(type, position);
 	assert(item);
 	item->decodeXML(xml);
 	return item;

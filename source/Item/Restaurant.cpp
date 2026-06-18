@@ -2,6 +2,7 @@
 #include "../Game.h"
 #include "../Math/Rand.h"
 #include "Restaurant.h"
+#include <string>
 
 using namespace OT;
 using namespace OT::Item;
@@ -32,6 +33,37 @@ void Restaurant::encodeXML(tinyxml2::XMLPrinter &xml)
 	Item::encodeXML(xml);
 	xml.PushAttribute("variant", variant);
 	xml.PushAttribute("open", open);
+
+	for (Customers::iterator c = customers.begin(); c != customers.end(); c++)
+	{
+		Customer *customer = *c;
+
+		CustomerMetadataMap::iterator m = customerMetadata.find(customer);
+		bool eating = (m != customerMetadata.end());
+		bool arriving = (!eating && customer->at == NULL && customer->state == Person::kWandering);
+		if (!eating && !arriving)
+			continue;
+
+		xml.OpenElement("customer");
+		xml.PushAttribute("lobbyArrival", customer->arrivalTime);
+		xml.PushAttribute("type", customer->type);
+		xml.PushAttribute("state", customer->state);
+		xml.PushAttribute("stress", customer->stress);
+		xml.PushAttribute("eval", customer->eval);
+		xml.PushAttribute("name", customer->name.c_str());
+		xml.PushAttribute("from", customer->from.c_str());
+		xml.PushAttribute("goingTo", customer->goingTo.c_str());
+		if (eating)
+		{
+			xml.PushAttribute("phase", "eating");
+			xml.PushAttribute("itemArrival", m->second.arrivalTime);
+		}
+		else
+		{
+			xml.PushAttribute("phase", "arriving");
+		}
+		xml.CloseElement();
+	}
 }
 
 void Restaurant::decodeXML(tinyxml2::XMLElement &xml)
@@ -39,6 +71,33 @@ void Restaurant::decodeXML(tinyxml2::XMLElement &xml)
 	Item::decodeXML(xml);
 	variant = xml.IntAttribute("variant");
 	open = xml.BoolAttribute("open");
+	clearCustomers();
+
+	for (tinyxml2::XMLElement *e = xml.FirstChildElement("customer"); e; e = e->NextSiblingElement("customer"))
+	{
+		Customer *c = new Customer(this);
+		c->arrivalTime = e->DoubleAttribute("lobbyArrival");
+		c->type = (Person::Type)e->IntAttribute("type", Person::kMan);
+		c->state = (Person::State)e->IntAttribute("state", Person::kWandering);
+		c->stress = e->DoubleAttribute("stress", 0.0);
+		c->eval = e->DoubleAttribute("eval", 0.0);
+		c->name = e->Attribute("name", "");
+		c->from = e->Attribute("from", "");
+		c->goingTo = e->Attribute("goingTo", "");
+
+		customers.insert(c);
+		std::string phase = e->Attribute("phase", "arriving");
+		if (phase == "eating")
+		{
+			addPerson(c);
+			customerMetadata[c].arrivalTime = e->DoubleAttribute("itemArrival");
+		}
+		else
+		{
+			arrivingCustomers.push(c);
+		}
+	}
+
 	updateSprite();
 }
 
@@ -113,6 +172,9 @@ void Restaurant::advance(double dt)
 				LOG(DEBUG, "%p leaving", p);
 				ip = eatingCustomers.erase(ip);
 				removePerson(p);
+				p->state = Person::kReturning;
+				p->from = prototype->name;
+				p->goingTo = "Exit";
 				p->journey.set(r);
 			}
 		}
@@ -127,6 +189,9 @@ void Restaurant::advance(double dt)
 void Restaurant::addPerson(Person *p)
 {
 	Item::addPerson(p);
+	p->state = Person::kShopping;
+	p->eval = 50;
+	p->addStress(-10);
 	CustomerMetadata &m = customerMetadata[p];
 	m.arrivalTime = game->time.absolute;
 	eatingCustomers.push_back(p);
@@ -158,6 +223,8 @@ Restaurant::Customer::Customer(Restaurant *item)
 	arrivalTime = 0;
 	Type types[] = {kMan, kWoman1, kWoman2, kWomanWithChild1};
 	type = types[rand() % 4];
+	from = "City";
+	goingTo = item->prototype->name;
 }
 
 Path Restaurant::getRandomBackgroundSoundPath()
