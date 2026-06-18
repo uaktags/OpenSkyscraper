@@ -22,6 +22,7 @@ Game::Game(Application & app)
 	toolboxWindow(this),
 	timeWindow(this),
 	inspectorDialog(this),
+	mapWindow(this),
 	sky(this),
 	decorations(this)
 {
@@ -83,6 +84,7 @@ Game::~Game()
 void Game::clearWorld()
 {
 	inspectorDialog.close();
+	mapWindow.close();
 	for (ItemSet::iterator i = items.begin(); i != items.end(); i++) {
 		delete *i;
 	}
@@ -203,8 +205,12 @@ bool Game::handleEvent(sf::Event & event)
 			case sf::Keyboard::Key::PageUp:   zoom /= 2; return true;
 			case sf::Keyboard::Key::PageDown: zoom *= 2; return true;
 			case sf::Keyboard::Key::O:        cycleStatusMode(); return true;
+			case sf::Keyboard::Key::M:
+				mapWindow.setVisible(!mapWindow.isVisible());
+				return true;
 			case sf::Keyboard::Key::Escape:
 				if (inspectorDialog.isVisible()) { inspectorDialog.close(); return true; }
+				if (mapWindow.isVisible())       { mapWindow.setVisible(false); return true; }
 				break;
 				default: break;
 			}
@@ -731,6 +737,15 @@ void Game::advance(double dt)
 	// Keep the inspector popup live if it's on screen.
 	inspectorDialog.refresh();
 
+	// Refresh the minimap every ~1 second of game time (cheaper than every
+	// frame, plenty for an overview that mostly changes on construction).
+	if (mapWindow.isVisible() &&
+	    floor(time.absolute / (0.25 * Time::kBaseSpeed)) !=
+	    floor((time.absolute - time.dta) / (0.25 * Time::kBaseSpeed)))
+	{
+		mapWindow.renderMap();
+	}
+
 	//Play sounds.
 	if (time.checkHour(5))  cockSound.Play(this);
 	if (time.checkHour(6))  morningSound.Play(this);
@@ -954,6 +969,7 @@ void Game::reloadGUI()
 
 	toolboxWindow.reload();
 	timeWindow.reload();
+	mapWindow.reload();
 }
 
 void Game::addItem(Item::Item * item)
@@ -1380,6 +1396,12 @@ void Game::cycleStatusMode()
 	statusMode = next;
 	const char *names[] = { "Normal view", "Evaluation view", "Pricing view", "Hotel view" };
 	timeWindow.showMessage(names[static_cast<int>(next)]);
+}
+
+void Game::centerViewportOnTile(double tileX, double tileY)
+{
+	poi.x = tileX * 8.0;
+	poi.y = tileY * 36.0;
 }
 
 void Game::selectTool(const char * tool)

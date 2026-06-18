@@ -20,6 +20,7 @@
 #include "ToolboxWindow.h"
 #include "TimeWindow.h"
 #include "InspectorDialog.h"
+#include "MapWindow.h"
 #include "JudgeSystem.h"
 #include "LevelUp.h"
 
@@ -79,6 +80,7 @@ namespace OT {
 		ToolboxWindow toolboxWindow;
 		TimeWindow    timeWindow;
 		InspectorDialog inspectorDialog;
+		MapWindow     mapWindow;
 
 		Time time;
 		int speedMode;
@@ -121,6 +123,10 @@ namespace OT {
 		Route findRoute(Item::Item * start, Item::Item * destination, bool serviceRoute = false);
 		void seedOfficeLunchQa();
 		void seedNewTower();
+
+		/// Centre the main viewport on the given tower tile coordinate.
+		/// Used by the minimap click-to-jump.
+		void centerViewportOnTile(double tileX, double tileY);
 
 		Route visualizeRoute;
 
