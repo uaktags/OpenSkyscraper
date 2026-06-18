@@ -2,6 +2,7 @@
 #include <cassert>
 #include <string>
 #include "../Game.h"
+#include "../Time.h"
 #include "Item.h"
 
 using namespace OT::Item;
@@ -11,6 +12,13 @@ using OT::int2;
 using OT::rectd;
 using OT::recti;
 using std::string;
+
+double Item::constructionDuration() const
+{
+	// ~2 game-hours plus a small per-tile surcharge so larger footprints
+	// take a little longer. Tunable per-subclass.
+	return OT::Time::hourToAbsolute(2.0 + 0.2 * size.x);
+}
 
 Item::~Item()
 {
@@ -67,6 +75,24 @@ void Item::draw(sf::RenderTarget &target, sf::RenderStates states) const
 
 void Item::render(sf::RenderTarget &target) const
 {
+	// Construction placeholder: draw a hatched overlay over the item's
+	// footprint and skip the real sprites. The base still increments
+	// drawnSprites for parity with the regular path.
+	if (underConstruction)
+	{
+		const int2 p = getPositionPixels();
+		const sf::Vector2u s = getSizePixels();
+		sf::RectangleShape overlay({static_cast<float>(s.x), static_cast<float>(s.y)});
+		overlay.setPosition({static_cast<float>(p.x),
+		                     static_cast<float>(-(p.y + static_cast<int>(s.y)))});
+		overlay.setFillColor(sf::Color(170, 145, 75, 230));
+		overlay.setOutlineColor(sf::Color(90, 70, 30));
+		overlay.setOutlineThickness(1.f);
+		target.draw(overlay);
+		game->drawnSprites++;
+		return;
+	}
+
 	for (SpriteSet::iterator s = sprites.begin(); s != sprites.end(); s++)
 	{
 		game->drawnSprites++;
@@ -91,11 +117,21 @@ void Item::encodeXML(tinyxml2::XMLPrinter &xml)
 	xml.PushAttribute("x", position.x);
 	xml.PushAttribute("y", position.y);
 	xml.PushAttribute("evaluation", evaluation);
+	if (underConstruction)
+	{
+		xml.PushAttribute("underConstruction", underConstruction);
+		xml.PushAttribute("constructionEndTime", constructionEndTime);
+	}
 }
 
 void Item::decodeXML(tinyxml2::XMLElement &xml)
 {
 	evaluation = xml.DoubleAttribute("evaluation", 50.0);
+	// Saved state wins over the Factory's "fresh placement" default so a
+	// save mid-construction restores correctly (and finished items stay
+	// finished after a reload).
+	underConstruction = xml.BoolAttribute("underConstruction", false);
+	constructionEndTime = xml.DoubleAttribute("constructionEndTime", 0.0);
 }
 
 void Item::addPerson(Person *p)

@@ -20,7 +20,7 @@ namespace OT {
 		public:
 			int layer;
 			AbstractPrototype * const prototype;
-			Item(Game * game, AbstractPrototype * prototype) : GameObject(game), sf::Drawable(), prototype(prototype), size(prototype->size) { layer = 0; population = 0; evaluation = 50; }
+			Item(Game * game, AbstractPrototype * prototype) : GameObject(game), sf::Drawable(), prototype(prototype), size(prototype->size) { layer = 0; population = 0; evaluation = 50; underConstruction = false; constructionEndTime = 0; }
 			virtual ~Item();
 			virtual void init() {}
 
@@ -61,6 +61,17 @@ namespace OT {
 		/// Condo::isAttractive() consult this when deciding move-in/vacation.
 		double evaluation;
 		virtual double getEvaluation() const { return evaluation; }
+
+		/// Construction animation state. Set by Factory::make on fresh
+		/// placement; cleared by Game::advance once time.absolute reaches
+		/// constructionEndTime. While true, the item renders a placeholder
+		/// overlay instead of its real sprites, does not advance, and does
+		/// not contribute to daily maintenance. See Phase 4.4.
+		bool   underConstruction;
+		double constructionEndTime;
+		/// Default construction duration for an item of this prototype's
+		/// size, in absolute-time units. Subclasses may override.
+		virtual double constructionDuration() const;
 
 		typedef std::set<Person *> People;
 			People people;

@@ -1,6 +1,7 @@
 #include <cassert>
 #include <sstream>
 #include "../Application.h"
+#include "../Game.h"
 #include "Elevator/Express.h"
 #include "Elevator/Service.h"
 #include "Elevator/Standard.h"
@@ -76,6 +77,11 @@ OT::Item::Item * Factory::make(AbstractPrototype * prototype, int2 position)
 	Item * item = prototype->make(game);
 	item->setPosition(position);
 	item->init();
+	// Mark fresh placements as under construction. Saved games call
+	// make() too, but their decodeXML() run immediately afterwards and
+	// restore the persisted underConstruction flag, overriding this.
+	item->underConstruction = true;
+	item->constructionEndTime = game->time.absolute + item->constructionDuration();
 	return item;
 }
 

@@ -111,6 +111,16 @@ std::string InspectorDialog::describeItem(Item::Item * item)
 	s << "Floor " << item->position.y
 	  << ", x=" << item->position.x << "\n\n";
 
+	if (item->underConstruction)
+	{
+		double remainAbs = item->constructionEndTime - game->time.absolute;
+		if (remainAbs < 0) remainAbs = 0;
+		int remainMinutes = static_cast<int>(remainAbs / OT::Time::hourToAbsolute(1.0) * 60.0);
+		s << "[under construction]\n"
+		  << "Ready in ~" << remainMinutes << " min\n\n";
+		return s.str();
+	}
+
 	// Core stats common to every tenant.
 	s << "Maintenance: " << item->dailyMaintenanceCost() << "/day\n";
 	s << "Evaluation:  " << static_cast<int>(item->evaluation) << "/100\n";

@@ -718,7 +718,19 @@ void Game::advance(double dt)
 	sky.advance(dt);
 
 	for (ItemSet::iterator i = items.begin(); i != items.end(); i++) {
-		(*i)->advance(dt);
+		Item::Item * item = *i;
+		// Construction timer: clear the flag once elapsed and let the
+		// item start ticking. Items still under construction are skipped
+		// entirely - no people, no schedules, no rent.
+		if (item->underConstruction) {
+			if (time.absolute >= item->constructionEndTime) {
+				item->underConstruction = false;
+				playOnce("simtower/construction/normal");
+			} else {
+				continue;
+			}
+		}
+		item->advance(dt);
 	}
 
 	for (PersonSet::iterator p = people.begin(); p != people.end(); p++) {
@@ -1290,6 +1302,8 @@ int Game::calculateDailyMaintenanceCost() const
 {
 	int total = 0;
 	for (ItemSet::const_iterator i = items.begin(); i != items.end(); i++) {
+		// Unfinished buildings cost nothing to maintain.
+		if ((*i)->underConstruction) continue;
 		total += (*i)->dailyMaintenanceCost();
 	}
 	return total;
