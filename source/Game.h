@@ -20,6 +20,7 @@
 #include "ToolboxWindow.h"
 #include "TimeWindow.h"
 #include "InspectorDialog.h"
+#include "ElevatorDialog.h"
 #include "MapWindow.h"
 #include "JudgeSystem.h"
 #include "LevelUp.h"
@@ -80,6 +81,7 @@ namespace OT {
 		ToolboxWindow toolboxWindow;
 		TimeWindow    timeWindow;
 		InspectorDialog inspectorDialog;
+		ElevatorDialog  elevatorDialog;
 		MapWindow     mapWindow;
 
 		Time time;
@@ -127,6 +129,11 @@ namespace OT {
 		/// Centre the main viewport on the given tower tile coordinate.
 		/// Used by the minimap click-to-jump.
 		void centerViewportOnTile(double tileX, double tileY);
+
+		/// Toggle elevator service for a floor. Encapsulates the gameMap +
+		/// cleanQueues + updateRoutes dance so UI dialogs don't need to reach
+		/// into the pathfinder directly.
+		void toggleElevatorService(class Item::Elevator::Elevator * e, int floor);
 
 		Route visualizeRoute;
 

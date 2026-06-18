@@ -16,6 +16,7 @@ InspectorDialog::InspectorDialog(Game * game)
 {
 	window = NULL;
 	content = NULL;
+	floorsButton = NULL;
 	currentItem = NULL;
 }
 
@@ -26,6 +27,7 @@ void InspectorDialog::close()
 		app->gui.remove(window);
 		window.reset();
 		content.reset();
+		floorsButton.reset();
 	}
 	currentItem = NULL;
 }
@@ -55,6 +57,21 @@ void InspectorDialog::buildWindow()
 	content->getScrollbar()->setPolicy(tgui::Scrollbar::Policy::Automatic);
 	content->setSize({208 * app->uiScale, 218 * app->uiScale});
 	window->add(content);
+
+	// "Floors..." button - only visible when inspecting an elevator. Opens
+	// the ElevatorDialog with per-floor service toggles.
+	floorsButton = tgui::Button::create("Floors...");
+	floorsButton->setSize(60 * app->uiScale, 18 * app->uiScale);
+	floorsButton->setPosition({6 * app->uiScale, 232 * app->uiScale});
+	floorsButton->setTextSize(11 * app->uiScale);
+	floorsButton->setVisible(false);
+	floorsButton->onPress([this] {
+		if (!currentItem) return;
+		Item::Elevator::Elevator * e =
+			dynamic_cast<Item::Elevator::Elevator *>(currentItem);
+		if (e) game->elevatorDialog.showForElevator(e);
+	});
+	window->add(floorsButton);
 
 	// Close button at the bottom.
 	auto closeBtn = tgui::Button::create("Close");
@@ -197,4 +214,7 @@ void InspectorDialog::refresh()
 	if (!window || !content || !currentItem) return;
 	window->setTitle(currentItem->prototype->name);
 	content->setText(describeItem(currentItem));
+	// Show the "Floors..." button only when inspecting an elevator.
+	if (floorsButton)
+		floorsButton->setVisible(currentItem->isElevator());
 }

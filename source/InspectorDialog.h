@@ -41,6 +41,7 @@ namespace OT
 	private:
 		tgui::ChildWindow::Ptr window;
 		tgui::Label::Ptr       content;
+		tgui::Button::Ptr      floorsButton;  ///< Shown only for elevators.
 		Item::Item *           currentItem;
 
 		void buildWindow();
