@@ -1,123 +1,339 @@
-General
--------
+OpenSky TODO
+============
 
-- `mapWindow` should be its own class `MapWindow`, like the other two.
-- Cache the result of the KWAJ decompression so the game doesn't decompress SIMTOWER.EX_ everytime it is relaunched.
+Status legend: `[DONE]` complete · `[PARTIAL]` started but incomplete · `[ ]` not started · `[STUB]` placeholder exists · `[DEFERRED]` intentionally postponed
 
+Branch: `feature/simtower-gap-impl` — see `.omo/plans/simtower-gap-implementation.md` for full design notes.
+
+Sources of truth for status were verified against `source/` (not just the plan doc) on 2026-06-17.
+
+
+-------------------------------------------------------------------------------
+General / Cross-cutting
+-------------------------------------------------------------------------------
+
+- [ ] `mapWindow` should be its own class `MapWindow`, like the other two. (Currently commented out in `Game.h` / `Game.cpp`.)
+- [ ] Cache the result of the KWAJ decompression so the game doesn't decompress `SIMTOWER.EX_` every launch.
 
 ### Pausing doesn't affect elevators
-When pausing the game, elevators keep moving as if the game was unpaused. The weird thing is that the elevators react to speedup by moving faster. Why wouldn't they react to the speeddown?
-
-### Clean up CMakeLists.txt
-[DONE] There's a lot of old stuff in the CMakeLists.txt file, such as the Lua and ObjectiveLua stuff, as well as CEGUI and the like. Clean this up so the compiling process won't break on stuff that's not even required anymore ;)
+When pausing the game, elevators keep moving as if the game was unpaused. They react to speedup by moving faster — investigate why they don't react to the speeddown.
 
 ### Game Speed
-The game speed seems to be rather fast compared to elevator movements. Cinema customers are hardly able to arrive at the theatre in time. Maybe we should slow down the time a bit? Or speed up the elevators? I don't remember how fast the regular elevators actually were.
-
-### Decorations
-Add tower decorations:
-
-- [DONE] Fire Stairs
-- [DONE] Crane at the top of the tower
-
-### Construction Animation
-Animate the construction of items. The `construction/*` bitmaps should help with that. The `solid` bitmap is for regular items, the `grid` bitmap for lobbies, car parkings, etc.
+Game speed seems rather fast compared to elevator movements. Cinema customers hardly arrive at the theatre in time. Slow down time, or speed up elevators?
 
 ### Different Access Floors for Items
-At the moment, people enter all items on floor 0 (relative to the item). Certain items, such as the Metro station & Cinema, are accessed via floor 1. The item prototype should contain a field that enables a relative shift of the access floor.
+People enter all items on floor 0 (relative to the item). Certain items (Metro station, Cinema) are accessed via floor 1. The item prototype should carry a field that enables a relative shift of the access floor.
+
+### Clean up CMakeLists.txt
+[DONE] Removed old Lua/ObjectiveLua/CEGUI cruft.
 
 
-Background Noise
-----------------
-[DONE] Many items produce background noise in the original game. E.g. Fast Foods, Offices and Condos had really distinctive sounds. Write a system that regularly iterates over a subset of all visible items and asks each for a background sound to be played. The system should be fair, i.e. each item should have a fair chance of playing back some sound.
+-------------------------------------------------------------------------------
+SimTower Gap Implementation — Phase Tracking
+-------------------------------------------------------------------------------
 
-[DONE] My current implementation idea: Iterate through the visible items at regular intervals, say 0.5s. Each item has a playback chance calculated as `p = itemArea / screenArea = itemWidth * itemHeight / screenArea`. Through a random number an item is picked that is asked for a sound which is then played back. One caveat here is that simply using `screenArea` in the above formula yields a total probability of `p >= 1`, since the total area of all items may actually be larger than the screen area due to items being only partially visible. Substitute `screenArea` in the above formula with `K = max(screenArea, summedItemAreas)`.
+Phase 0: Foundation Repairs                                  [DONE]
+-----------------------------------------------------------------------
+
+All four foundation repairs landed on `feature/simtower-gap-impl`.
+
+- [DONE] **0.1 Fix priority-queue comparator bugs** — `Office.h` and `Condo.h` comparators were self-comparing (`a > a`); corrected to `a > b`. Condo time helpers straightened out. Commit `836ef8a`.
+- [DONE] **0.2 Fix elevator queue cleanup** — `Elevator::cleanQueues()` iterator invalidation / double-delete repaired. Commit `563ea44`.
+- [DONE] **0.3 Empty-route guard in Person::Journey** — `Person::Journey::set()` / `next()` now guard against empty `nodes`. Commit `108e5a2`.
+- [DONE] **0.4 Restore HUD updates** — Commented-out `TimeWindow.updateFunds/updateRating/updatePopulation` etc. re-enabled. Commit `e58e125`.
 
 
-PathFinding
------------
+Phase 1: People & Simulation Foundation                      [DONE — Metro pending]
+-----------------------------------------------------------------------
 
-- [DONE] Create a game map representing the various transport access points as transport nodes, and available floors as floor nodes. Buildings are assumed to be accessible once we reach a generic floor node.
-- [DONE] Rewrite findRoute() to utilise A-Star search algorithm to find a route from start to destination item.
-- Balance the path costs for using each transport to better represent the original, or to make it more reasonable.
-- Check for availability of sky-lobby before allowing transfer between elevators.
+- [DONE] **1.1 Person state machine + identity fields** — `Person::State` enum (`kWandering, kHome, kCommuting, kWorking, kLunch, kShopping, kReturning, kResting, kIdle`) added to `source/Person.h`. `name`, `from`, `goingTo`, `eval` fields added. Commit `a4be685`.
+- [DONE] **1.2 Stress system** — `Person::addStress(amount)` clamps to `[0,100]`; existing stress mutations routed through it. Commits `4d1c5e5`, `6097f22`.
+- [DONE] **1.3 NameManager** — `source/NameManager.{h,cpp}` generates default display names per person type; covered by test. Commits `98bc941`, `b66ebfb`.
+- [DONE] **1.x Person::advance() wired into Game loop** — Commit `75102e3`.
+- [DONE] **1.x Condo state transitions** — `CondoOccupant` driven by new State enum. Commit `ca424bc`.
+- [DONE] **1.x Office state transitions** — `Office::Worker` driven by new State enum. Commit `ae13bd4`.
+- [DONE] **1.x FastFood / Restaurant / Cinema subclass state** — Guests now transition through `kLunch` / `kShopping` / `kReturning` on arrival and departure. (Plan listed this as pending; verified present in `FastFood.cpp:195`, `Restaurant.cpp:192`, `Cinema.cpp:193`.)
+- [DONE] **1.x Metro subclass state** — `Metro::Visitor` cycles `kCommuting` → `kShopping` → `kReturning` → `kIdle` (commit for Phase 2.4).
 
+
+Phase 2: Missing Items & Commercial Depth                   [Hotel DONE, rest in progress]
+-----------------------------------------------------------------------
+
+- [DONE] **2.1 Hotel system** — `source/Item/Hotel.{h,cpp}` implements single/double/suite variants, room state (clean/occupied/dirty), full guest lifecycle (arrival → dinner → sleep → wake → checkout), housekeeper dispatch, persistence, and Factory registration (`hotel_single`, `hotel_double`, `hotel_suite`, with legacy `hotel` migration).
+    - [ ] Verify VIP check-in → rating boost (original: VIP arrivals affect tower rating).
+    - [ ] Verify guest actually pathfinds to a Restaurant for dinner (currently tagged `goingTo = "Restaurant"` but no route lookup).
+    - [ ] Validate sprite frame rects against `single` / `double` / `suite` sheet.
+
+- [PARTIAL] **2.2 Parking system** — Basic item landed.
+    - [DONE] `source/Item/Parking.{h,cpp}` with `totalSpaces()` (derived from width × 2), `usedSpaces()`, `hasSpace()` / `assignSpace()` / `freeSpace()`.
+    - [DONE] Registered in `source/Item/Factory.cpp` as prototype `"parking"`; added `ICON_PARKING` to `Factory.h`.
+    - [DONE] Tower-wide coverage metric in `JudgeSystem::computeParkingCoverage()` (1 space / 4 offices + 1 / hotel room); Office and Hotel scoring penalised when coverage < 50% / 100%.
+    - [DONE] `used` counter persisted in XML.
+    - [ ] **Gate integration** (`SetupAllGate()` equivalent) — connect parking to road access.
+    - [ ] **Cars visually appear/disappear** on tiles (per-cell occupancy sprites).
+    - [ ] Hook `assignSpace()` / `freeSpace()` into actual office-worker / hotel-guest arrival (currently the coverage check uses total capacity only).
+
+- [PARTIAL] **2.3.1 Office: rent, evaluation, lunch** (`source/Item/Office.{h,cpp}`)
+    - [DONE] Rent + deposit collection on Monday 05:00 (`Office.cpp:105`-`122`).
+    - [DONE] `findLunchRoute()` + `kLunch` dispatch at 12:00 (`Office.cpp:180`-`183`).
+    - [DONE] `isAttractive()` route-based gate for move-in.
+    - [ ] Extend `isAttractive()` to consider amenity coverage (security, food reachability) not just route score.
+    - [ ] Salesman behaviour: leave for sales, return, no lunch.
+    - [ ] Stress recovery when worker returns from successful lunch; stress gain when no food reachable.
+
+- [PARTIAL] **2.3.2 FastFood / Restaurant: schedules & pricing** (`source/Item/{FastFood,Restaurant}.{h,cpp}`)
+    - [DONE] Person state transitions (`kLunch` / `kShopping` / `kReturning`).
+    - [ ] Weekday-dependent hours (offices only populate Mon–Fri).
+    - [ ] Customer count scaled by reachable office / hotel population.
+    - [ ] Pricing model: `income = customers * pricePerMeal - dailyMaintenance`.
+    - [ ] Restaurants should serve hotel guests at dinner; FastFood should serve office workers at lunch.
+    - [ ] Stop admitting customers after 19:00 so venues empty toward end of day (existing `TODO.md` note).
+    - [ ] Persist customers to XML (existing `TODO.md` note — F2 save/reload leaves empty venues).
+
+- [PARTIAL] **2.3.3 Cinema: movie scheduling & revenue** (`source/Item/Cinema.cpp`)
+    - [DONE] Person state transitions on arrival/departure.
+    - [ ] Replace placeholder income (`Cinema.cpp:144` `TODO: Specify cinema income`) with attendance-based revenue.
+    - [ ] Showtime scheduling (2–3 shows/day).
+    - [ ] Audience arrival/dispersal through the tower.
+    - [ ] Halfway-through-movie break (per original; verify).
+    - [ ] Permit underground construction (verify original behaviour).
+
+- [PARTIAL] **2.3.4 PartyHall: event visitors** (`source/Item/PartyHall.cpp`)
+    - [DONE] Fixed-income placeholder (`PartyHall.cpp:64`).
+    - [ ] Replace `TODO: Specify party hall income` with attendance-scaled revenue.
+    - [ ] Confirm party timing from original (believed two parties/day, AM + PM).
+    - [ ] Spawn visitors, have them arrive / stay / leave.
+
+- [PARTIAL] **2.4 Metro train cycles** (`source/Item/Metro.cpp`)
+    - [DONE] Train arrival / departure intervals driven by `Time::absolute` (default: 30 min gap, 10 min dwell; `kTrainDwellAbs` / `kTrainGapAbs` constants).
+    - [DONE] `spawnVisitors()` emits 2–5 visitors per arrival, each routed to a reachable commercial venue.
+    - [DONE] Visitors return to the platform after a random dwell window; departing train boards them (`boardReturnedVisitors()`) and yields fare revenue (`metro_fare`).
+    - [DONE] Visitor state machine (`kCommuting` → `kShopping` → `kReturning` → `kIdle`) closes the last Phase 1.x subclass-state item.
+    - [DONE] `Visitor` and `nextTrainTime` persisted across save/reload.
+    - [ ] Tune `kTrainDwellAbs` / `kTrainGapAbs` against the original SimTower feel.
+    - [ ] Target underground commercial specifically (currently any reachable venue).
+    - [ ] Metro tracks as a decoration (parallel to fire stairs / crane — see existing Decorations work).
+    - [ ] Enforce: only one Metro instance per game.
+    - [ ] Forbid building any item below the Metro.
+
+
+Phase 3: Game Systems                                        [STUB — major work pending]
+-----------------------------------------------------------------------
+
+- [PARTIAL] **3.1 Judge / Evaluation engine** — `source/JudgeSystem.{h,cpp}` landed.
+    - [DONE] `JudgeSystem::evaluateAll(Game*)` called daily from `Game::settleDailyAccounting()`; runs after maintenance so scores reflect yesterday's state.
+    - [DONE] Per-tenant scoring (`scoreOffice` / `scoreCondo` / `scoreHotel` / `scoreCommercial`) using route quality, occupant stress, amenity coverage (FastFood lunch, Restaurant dinner, Security).
+    - [DONE] Scores cached on `Item::evaluation` (persisted in XML) and mirrored onto `Person::eval` for inspector / overlay use.
+    - [DONE] `Office::isAttractive()` and `Condo::isAttractive()` consult evaluation (≥30 required, default 50 keeps fresh tenants attractive).
+    - [DONE] `Counts` struct (offices / condos / hotels / hotelsDirty / foodOutlets / security / medical / population) approximates `CountT.h/c`; ready to feed star progression (3.2) and overlays (4.3).
+    - [DONE] Tower-wide parking coverage metric feeds Office / Hotel scoring (see 2.2).
+    - [ ] `JudgeAllHotel()` daily hotel performance review (currently each hotel is scored individually; aggregate review still TODO).
+    - [ ] `ExpandoBadHotel()` shrink/grow under-performing hotels.
+    - [ ] Per-type counters `CountPC` / `CountVC` / `CountIn` / `CountDay` (more granular than current `Counts`).
+
+- [STUB] **3.2 Level / star-rating expansion** (`source/Game.cpp:1256` `ratingMayIncrease()`)
+    - [DONE] Stub: 0→1 at 300 pop, 1→2 at 1000 pop (security TODO).
+    - [ ] Define star thresholds in new `source/LevelUp.h` (1★ start; 2★ ~300 pop + parking; 3★ ~1000 + express elevators + security; 4★ ~2000 + medical + restaurants + hotel; 5★ ~3000 + cinema + metro).
+    - [ ] `ratingMayIncrease()` checks population **and** required facilities.
+    - [ ] `ToolboxWindow` greys out locked items with "Unlocks at N stars" tooltip.
+    - [ ] Construction handler rejects placement below required rating.
+    - [ ] Level-up dialog/notification (currently missing entirely).
+
+- [ ] **3.3 Fire / Emergency / Thief events** — No files exist. Priority LOW.
+    - [ ] `EventScheduler` randomly triggers events based on time + rating.
+    - [ ] Fire: floor-to-floor spreading, helicopter extinguish, water spray.
+    - [ ] Terror: bomb threats, player defusal minigame.
+    - [ ] Thief: targets tenants, calls police, existing `Security` item becomes functional (currently STUB).
+    - [ ] Emergency mode: reset all person states, evacuate.
+
+- [ ] **3.4 Weather / Environment (CLUT equivalent)** — No files exist.
+    - [ ] `Lighting` manager class (SFML has no indexed palettes; use shader / vertex tint).
+    - [ ] Time-of-day tint applied to all items in `Item::render()`.
+    - [ ] Rain reduces brightness + blue tint (extend existing `Sky.cpp`).
+    - [ ] Sunrise/sunset orange-red tint; night dark blue with lit-window sprite variants.
+
+
+Phase 4: UI & Visualization                                   [PENDING]
+-----------------------------------------------------------------------
+
+- [STUB] **4.1 Info / inspector dialogs** — `selectedTool == "inspector"` only logs to console + draws a route line (`Game.cpp:531`).
+    - [ ] TGUI popup on inspect click; populate by target type.
+    - [ ] Person: name, type, stress, eval, from/to, current state.
+    - [ ] Item: name, maintenance cost, occupants, route score, satisfaction.
+    - [ ] Elevator: floors served, cars, queues, status.
+    - [ ] Wire tenant complaint messages to `TimeWindow.showMessage()`.
+
+- [ ] **4.2 Minimap** (`//mapWindow` commented in `Game.h` / `Game.cpp`) — also tracked under General.
+    - [ ] `source/MapWindow.{h,cpp}` using SFML render texture.
+    - [ ] Tower body grey; elevators as black vertical shafts; sky background.
+    - [ ] Click minimap to jump viewport to that floor.
+    - [ ] Mode cycling via button or keyboard.
+
+- [ ] **4.3 Status overlays (Eval / Pric / Hotel)** — No files exist.
+    - [ ] `enum StatusMode { kNormal, kEval, kPric, kHotel }` in Game.
+    - [ ] Eval: blue/yellow/red tint based on `getEvaluation()` or route score.
+    - [ ] Pric: light blue/yellow/green/red based on rent pricing tier.
+    - [ ] Hotel: red overlay if hotel room is dirty.
+    - [ ] `StatusMode::Switch()` on toolbar button / keyboard shortcut.
+
+- [ ] **4.4 Construction animation** (also in original `TODO.md`)
+    - [ ] Add `bool underConstruction` + `double constructionEndTime` to `Item`.
+    - [ ] `Item::render()` swaps in `construction/solid` (regular) or `construction/grid` (lobbies, parking) sprite while building.
+    - [ ] `Item::advance()` flips to finished sprite at end time; item non-functional until then.
+
+
+Phase 5: Polish & Balance                                     [PENDING]
+-----------------------------------------------------------------------
+
+- [PARTIAL] **5.1 Tenant satisfaction & retention**
+    - [DONE] Stress accumulation + `addStress()` plumbing.
+    - [ ] Office workers leave if stress > 80% or no lunch reachable.
+    - [ ] Condo occupants vacate if noise too high or no route to lobby.
+    - [ ] Hotel guests rate stay based on cleanliness, noise, elevator wait.
+    - [ ] `population` updates correctly when tenants leave.
+
+- [ ] **5.2 Noise / zoning system** (original `Kinsoku.h/c`)
+    - [ ] `noiseLevel` property on each item prototype.
+    - [ ] Offices/commercial = high noise; condos/hotels = noise-sensitive.
+    - [ ] `Item::noiseAffects(Item* neighbor)` check horizontal distance vs threshold (120px hotel rooms, 240px condos per SimTower Notes).
+    - [ ] Stress penalty applied for incompatible neighbours.
+
+- [ ] **5.3 Elevator control panel** (original `ElvDlogT.h/c`)
+    - [DONE] Per-floor service toggle via finger tool.
+    - [ ] Double-click elevator → TGUI `ElvDialog`.
+    - [ ] WD/WE (weekday/weekend) service modes.
+    - [ ] Express-to-top / express-to-bottom buttons.
+    - [ ] Time-before-departing slider.
+    - [ ] Per-floor service toggles in dialog (currently only via finger tool).
+
+
+Phase 6: Long Tail / Deferred                                 [DEFERRED]
+-----------------------------------------------------------------------
+
+Low priority — revisit after Phases 2–5 land.
+
+- [DEFERRED] **6.1 Outdoor objects** — antennas, ads, parks (original `OutObjT.h/c`).
+- [DEFERRED] **6.2 Outside view toggle** (original `OutSideT.h/c`, `OutTV.h/c`).
+- [DEFERRED] **6.3 Television / multimedia system** — TV placement, commercial revenue (`QTimeT.h/c`, `QCM.h/c`, `QTSelect.h/c`).
+- [DEFERRED] **6.4 Santa / seasonal events** (original `SantaT.h/c`).
+- [DEFERRED] **6.5 Church weddings** (original `ChurchT.h/c`).
+- [DEFERRED] **6.6 Future simulation / what-if mode** (original `FutureT.h/c`).
+- [DEFERRED] **6.7 AquaZone** (original `AquaT.h/c`).
+
+
+-------------------------------------------------------------------------------
+Item-specific notes (carried over from earlier TODO)
+-------------------------------------------------------------------------------
 
 Item::FastFood
 --------------
-[DONE] In order to make the customers arrive at the tower, the fast food item has to iterate over all its
-customers at each frame. This could be made more efficient if there was an arrival queue which,
-after today's customers are initialized, is populated with the customers ordered by their arrival
-time. The fast food would then only have to check if the queue's frontmost customer has
-`c->arrivalTime >= game->time.hours` , pop the customer, and in case
-`game->time.checkHour(c->arrivalTime)` make the customer arrive.
-
-- New customers arrive until the fast food closes, or at least the transit times make it seem so. Maybe we should change their behaviour such that customers won't enter the tower after 1900. This would also make the fast foods look empty towards the end of the day, which is a nice thing to have.
-
-- Store the customers to disk. At the moment, when you save the debug tower using F2 and reload the game, you end up with open yet empty fast foods.
-
-
-Person
-------
-- Handle change of routes (from accessible to inaccessible and vice-versa) for people already travelling. Need to stop them from continuing their journey to prevent crashes when transport routes are changed, and transit appropriately out of the flow of traffic.
-
-
-Hotels
-------
-Implement the hotel system. For this, maybe have a look at the implementation in the `master` branch. It is not very well-written but reproduces the original game's behaviour. In general what should happen is:
-
-- Hotels should start to get populated after 17:00. Occupants immediately queue up in the lobby.
-- Occupants should move out for dinner after ~0.5h after entering their room. This means they will look for Item::Restaurant items, or leave the tower.
-- All occupants should go to sleep between 23:00 and 1:30.
-- Occupants should get up between 6:00 and 8:00 and leave between 8:00 and 10:00 and leave the room back in the dirty state.
-- Housekeepers should move to dirty bedrooms, stay there and clean for a fixed amount of absolute time. This is important since otherwise the housekeepers would take far longer to clean a room during noon than at 10:00. After leaving the hotel room, the room should be reset to the tidy state.
-
-
-Item::PartyHall
----------------
-
-- Check the original game for the exact timing of parties. I think I recall that there were two parties held each day, but I don't remember when.
-- Check how much money you get back from party halls. Maybe that's based on the number of people visiting?
-- Make people arrive/leave.
-
+- [DONE] Customer arrival loop iterates customers each frame.
+- [ ] Stop admitting customers after 19:00 so venues empty toward end of day.
+- [ ] Persist customers to disk — F2 save/reload currently leaves open but empty FastFoods.
 
 Item::Cinema
 ------------
-
-- Check playing times in the original game.
-- Implement income simulation. It is somehow based on the number of patrons I guess.
-- Did the original game have a break halfway through the movie?
-- Should be able to be built underground (if I recall correctly).
-
-
-Item::Elevator
---------------
-
-- [DONE] Add animation of people leaving an elevator car. At the moment, only the "step in" animation is shown when people enter the elevator.
-
-
-Item::Metro
------------
-
-- Make trains arrive/leave in regular absolute time intervals (see Time object's absolute time member).
-- Metro stations should create customers that visit shops below ground. Each train should bring new customers, and haul away passengers waiting on the platform.
-- Add metro tracks. This should probably go into the same category as the fire stairs and crane, i.e. tower decorations.
-
+- [ ] Verify showtimes against original.
+- [ ] Implement attendance-based income (replace TODO at `Cinema.cpp:144`).
+- [ ] Confirm halfway-through-movie break.
+- [ ] Verify underground construction support.
 
 Item::Office
 ------------
-Office workers don't leave the office at 12 to have lunch yet. The lunch time is being properly scheduled at the moment, but no decision logic is in place that looks for an appropriate fast food for these people.
+- [DONE] Lunch scheduling logic exists.
+- [DONE] Rent + deposit collection.
+- [ ] Office workers should also arrive by car (currently lobby only).
 
-Office workers should also be able to arrive by car. At the moment, they only use the lobby.
+Item::PartyHall
+---------------
+- [ ] Confirm party timing from original.
+- [ ] Confirm income model (attendance-based? flat?).
+- [ ] Make people arrive/leave.
 
-- Allow only one instance of Metro in the game.
-- Prevent construction of any item below Metro.
+Item::Metro
+-----------
+- [ ] Trains arrive/leave at regular absolute-time intervals.
+- [ ] Each train brings visitors for underground commercial and hauls away waiting passengers.
+- [ ] Metro tracks as decoration.
 
+Item::Elevator
+--------------
+- [DONE] Step-out animation for people leaving a car (step-in was already animated).
 
 Item::Floor
 -----------
+- [DONE] Auto-create / extend floor item when constructing buildings or resizing elevators.
+- [DONE] Floor item exposes width, eliminating per-floor iteration.
+- [DONE] Floor renders behind other items; ceilings no longer rendered separately.
+- [DONE] Floor renders in segments (full when empty, ceiling-only when built upon).
 
-- [DONE] Create & extend width of floor item automatically when constructing building items & resizing elevators.
-- [DONE] Floor item will provide floor width information, so there is no longer a need to iterate through all items on a floor to find the floor width limits.
-- [DONE] Floor item is rendered behind all other building items, so there is no longer a need to render ceilings separately for buildings.
-- [DONE] Floor item is rendered in segments: Full floor item if there is no building item present, and only ceiling if there is a building item present.
+
+-------------------------------------------------------------------------------
+PathFinding
+-------------------------------------------------------------------------------
+
+- [DONE] Game map of transport access points + floor nodes; buildings accessible from a generic floor node.
+- [DONE] `findRoute()` rewritten as A-Star over the transport graph.
+- [ ] Balance path costs for each transport to better match the original.
+- [ ] Check for sky-lobby availability before allowing elevator transfer.
+- [ ] Handle route changes (accessible ↔ inaccessible) for people already travelling — stop them mid-journey to avoid crashes and transit them out of the flow cleanly.
+
+
+-------------------------------------------------------------------------------
+Reference Index (codemap.md → implementation)
+-------------------------------------------------------------------------------
+
+| Module                            | Doc Source            | Impl File                       | Status   |
+|-----------------------------------|-----------------------|---------------------------------|----------|
+| Animation / CLUT                  | codemap.md:72-107     | source/Sky.*                    | PARTIAL  |
+| People animation                  | codemap.md:108-141    | —                               | MISSING  |
+| Bitmap loading                    | codemap.md:207-237    | source/BitmapManager.*          | PORTED   |
+| Blocks                            | codemap.md:238-272    | source/Item/Floor.*             | REIMPL   |
+| Church                            | codemap.md:274-312    | —                               | MISSING  |
+| Clouds/Sky                        | codemap.md:313-343    | source/Sky.*                    | PORTED   |
+| Command buttons                   | codemap.md:344-378    | source/ToolboxWindow.*          | REIMPL   |
+| Count/Statistics                  | codemap.md:414-447    | —                               | MISSING  |
+| Draw utilities                    | codemap.md:518-550    | source/Sprite.*                 | REIMPL   |
+| Dust/Cleaning                     | codemap.md:586-618    | —                               | MISSING  |
+| Emergency                         | codemap.md:749-773    | —                               | MISSING  |
+| End/Cleanup                       | codemap.md:775-801    | source/Game::clearWorld         | PORTED   |
+| Event/Fire/Terror                 | codemap.md:833-862    | —                               | MISSING  |
+| File operations                   | codemap.md:864-893    | source/Game encode/decode XML   | PARTIAL  |
+| Find dialogs                      | codemap.md:895-956    | —                               | MISSING  |
+| Fire                              | codemap.md:958-990    | —                               | MISSING  |
+| Guard/Security                    | codemap.md:1020-1049  | source/Item/Security.*          | STUB     |
+| Hotel                             | codemap.md:1051-1098  | source/Item/Hotel.*             | PORTED   |
+| Info destination                  | codemap.md:1124-1146  | —                               | MISSING  |
+| Info/HUD                          | codemap.md:1148-1193  | source/TimeWindow.*             | PARTIAL  |
+| Info messages                     | codemap.md:1100-1122  | —                               | MISSING  |
+| Initialize                        | codemap.md:1195-1223  | source/Application.*            | PORTED   |
+| Judge/Evaluation                  | codemap.md:1225-1251  | source/JudgeSystem.*            | PORTED   |
+| Kinsoku/Placement                 | codemap.md:1253-1277  | —                               | MISSING  |
+| Level/Progression                 | codemap.md:1279-1343  | source/Game.cpp ratingMayIncrease | STUB   |
+| Maintenance                       | codemap.md:1344-1377  | —                               | MISSING  |
+| Main window                       | codemap.md:1378-1408  | source/Application.*            | PORTED   |
+| Map/minimap                       | codemap.md:1410-1460  | (commented out)                 | MISSING  |
+| Medical                           | codemap.md:1462-1489  | source/Item/MedicalCenter.*     | STUB     |
+| Money                             | codemap.md:1491-1517  | source/Money.h                  | PORTED   |
+| Movie/Cinema                      | codemap.md:1519-1546  | source/Item/Cinema.*            | PARTIAL  |
+| Name system                       | codemap.md:1548-1575  | source/NameManager.*            | PORTED   |
+| Outdoor objects                   | codemap.md:1577-1603  | —                               | MISSING  |
+| Outside view                      | codemap.md:1605-1641  | —                               | MISSING  |
+| OutTV                             | codemap.md:1643-1676  | —                               | MISSING  |
+| Parameters                        | codemap.md:1678-1710  | —                               | MISSING  |
+| Parking                           | codemap.md:1746-1776  | source/Item/Parking.*           | PARTIAL  |
+| People (UniPeple)                 | codemap.md:2495-2522  | source/Person.*                 | PORTED   |
+| Quick drawing                     | codemap.md:1864-1891  | (SFML-native)                   | REIMPL   |
+| Restaurant                        | codemap.md:1893-1923  | source/Item/Restaurant.*        | PARTIAL  |
+| Route/Pathfind                    | codemap.md:1925-1955  | source/PathFinder/*             | GOOD     |
+| Santa                             | codemap.md:1957-1985  | —                               | MISSING  |
+| Side rendering                    | codemap.md:1987-2015  | —                               | MISSING  |
+| Sound                             | codemap.md:2017-2049  | source/Sound.*                  | PORTED   |
+| Status overlays                   | codemap.md:2051-2079  | —                               | MISSING  |
+| Stress                            | codemap.md:2111-2137  | source/Person.*                 | PORTED   |
+| Subway                            | codemap.md:2168-2195  | source/Item/Metro.*             | STUB     |
+| Tenants                           | codemap.md:2221-2275  | (spread)                        | PARTIAL  |
+| Thief                             | codemap.md:2277-2305  | —                               | MISSING  |
+| Time                              | codemap.md:2307-2334  | source/Time.*                   | PORTED   |
+| Toolbox                           | codemap.md:2336-2366  | source/ToolboxWindow.*          | PORTED   |
+| VIP                               | codemap.md:2653-2690  | —                               | MISSING  |
