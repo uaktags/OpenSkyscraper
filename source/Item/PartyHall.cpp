@@ -4,9 +4,16 @@
 
 using namespace OT;
 using namespace OT::Item;
+using OT::Math::randd;
+
+// Attendance model: per-visitor fee net of the per-event cost.
+static const int kVisitorFee   = 200;
+static const int kEventCost    = 1500;
+static const int kVisitorsPerEvent = 25;
 
 PartyHall::~PartyHall()
 {
+	clearVisitors();
 }
 
 void PartyHall::init()
@@ -47,24 +54,54 @@ void PartyHall::updateSprite()
 
 void PartyHall::advance(double dt)
 {
-	// Open
-	if (game->time.checkHour(13))
+	// Two parties per day: afternoon 13:00-17:00 and evening 19:00-23:00.
+	if (game->time.checkHour(13) || game->time.checkHour(19))
 	{
 		open = true;
 		spriteNeedsUpdate = true;
+
+		// Spawn visitors for this session.
+		clearVisitors();
+		if (!lobbyRoute.empty())
+		{
+			for (int i = 0; i < kVisitorsPerEvent; ++i)
+			{
+				Visitor *v = new Visitor(this);
+				visitors.insert(v);
+				v->journey.set(lobbyRoute);
+			}
+		}
 	}
 
 	// Close
-	if (game->time.checkHour(17) && open)
+	if ((game->time.checkHour(17) || game->time.checkHour(23)) && open)
 	{
 		open = false;
 		spriteNeedsUpdate = true;
 
-		// TODO: Specify party hall income.
-		game->transferFunds(10000, "entertainment_income", "Income from Party Hall");
-	}
+		// Attendance-based income: visitors who actually made it into the
+		// hall (counted via `people`) times the per-visitor fee, less the
+		// fixed event cost.
+		int attendees = static_cast<int>(people.size());
+		int net = attendees * kVisitorFee - kEventCost;
+		game->transferFunds(net, "entertainment_income", "Income from Party Hall");
 
-	// TODO: Make people arrive at the hall and leave afterwards.
+		// Send visitors home.
+		const Route &r = game->findRoute(this, game->mainLobby);
+		for (Visitors::iterator it = visitors.begin(); it != visitors.end(); ++it)
+		{
+			Visitor *v = *it;
+			if (!r.empty())
+			{
+				v->state = Person::kReturning;
+				v->from = prototype->name;
+				v->goingTo = "Exit";
+				removePerson(v);
+				v->journey.set(r);
+			}
+		}
+		// Visitors will be cleared on the next opening or on destruction.
+	}
 
 	if (spriteNeedsUpdate)
 		updateSprite();
@@ -75,4 +112,35 @@ Path PartyHall::getRandomBackgroundSoundPath()
 	if (!open)
 		return "";
 	return "simtower/partyhall";
+}
+
+void PartyHall::addPerson(Person *p)
+{
+	Item::addPerson(p);
+	p->state = Person::kShopping;
+	p->eval = 60;
+	p->addStress(-15);
+	spriteNeedsUpdate = true;
+}
+
+void PartyHall::removePerson(Person *p)
+{
+	Item::removePerson(p);
+	spriteNeedsUpdate = true;
+}
+
+PartyHall::Visitor::Visitor(PartyHall *hall)
+	: Person(hall->game)
+{
+	Type types[] = {kMan, kWoman1, kWoman2, kChild, kWomanWithChild1};
+	type = types[rand() % 5];
+	from = "City";
+	goingTo = hall->prototype->name;
+}
+
+void PartyHall::clearVisitors()
+{
+	for (Visitors::iterator it = visitors.begin(); it != visitors.end(); ++it)
+		delete *it;
+	visitors.clear();
 }

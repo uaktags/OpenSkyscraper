@@ -141,8 +141,16 @@ void Cinema::advance(double dt)
 		playing = false;
 		spriteNeedsUpdate = true;
 
-		// TODO: Specify cinema income.
-		game->transferFunds(customers.size() * 500 - 2000, "entertainment_income", "Income from Movie Theatre");
+		// Attendance-based income: count customers who actually reached the
+		// theatre (those still in `people`), times the ticket price, less the
+		// fixed royalty per screening. Replaces the previous flat calculation
+		// that credited every spawned customer regardless of whether they
+		// found a route in.
+		const int kTicketPrice = 80;
+		const int kScreeningFee = 2000;
+		int attendees = static_cast<int>(people.size());
+		int net = attendees * kTicketPrice - kScreeningFee;
+		game->transferFunds(net, "entertainment_income", "Income from Movie Theatre");
 
 		// Make the customers leave.
 		const Route &r = game->findRoute(this, game->mainLobby);

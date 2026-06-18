@@ -1,6 +1,7 @@
 #pragma once
 #include "../Sprite.h"
 #include "Item.h"
+#include <set>
 
 namespace OT {
 	namespace Item {
@@ -16,20 +17,33 @@ namespace OT {
 				p->icon  = 15;
 			}
 			virtual ~PartyHall();
-			
+
 			virtual void init();
-			
+
 			virtual void encodeXML(tinyxml2::XMLPrinter & xml);
 			virtual void decodeXML(tinyxml2::XMLElement & xml);
-			
+
 			bool open;
-			
+
+			/** A Person who arrives for a party. Spawned when the hall opens,
+			 *  removed when the hall closes (with attendance-based income). */
+			class Visitor : public Person {
+			public:
+				Visitor(PartyHall *hall);
+			};
+			typedef std::set<Visitor *> Visitors;
+			Visitors visitors;
+			void clearVisitors();
+
 			Sprite sprite;
 			bool spriteNeedsUpdate;
 			void updateSprite();
-			
+
 			virtual void advance(double dt);
 			virtual int dailyMaintenanceCost() const override { return 1000; }
+
+			virtual void addPerson(Person * p);
+			virtual void removePerson(Person * p);
 
 			Path getRandomBackgroundSoundPath();
 		};
