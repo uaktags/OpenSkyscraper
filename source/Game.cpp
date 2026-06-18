@@ -21,6 +21,7 @@ Game::Game(Application & app)
 	itemFactory(this),
 	toolboxWindow(this),
 	timeWindow(this),
+	inspectorDialog(this),
 	sky(this),
 	decorations(this)
 {
@@ -81,6 +82,7 @@ Game::~Game()
 
 void Game::clearWorld()
 {
+	inspectorDialog.close();
 	for (ItemSet::iterator i = items.begin(); i != items.end(); i++) {
 		delete *i;
 	}
@@ -201,6 +203,9 @@ bool Game::handleEvent(sf::Event & event)
 			case sf::Keyboard::Key::PageUp:   zoom /= 2; return true;
 			case sf::Keyboard::Key::PageDown: zoom *= 2; return true;
 			case sf::Keyboard::Key::O:        cycleStatusMode(); return true;
+			case sf::Keyboard::Key::Escape:
+				if (inspectorDialog.isVisible()) { inspectorDialog.close(); return true; }
+				break;
 				default: break;
 			}
 		} break;
@@ -541,13 +546,11 @@ bool Game::handleEvent(sf::Event & event)
 						}
 					}
 				}
-				else if (selectedTool == "inspector") {
-					LOG(DEBUG, "inspect %s", itemBelowCursor->desc().c_str());
-					visualizeRoute = itemBelowCursor->lobbyRoute;
-					char c[128];
-					snprintf(c, 128, "route score = %i", visualizeRoute.score());
-					timeWindow.showMessage(c);
-				}
+			else if (selectedTool == "inspector") {
+				LOG(DEBUG, "inspect %s", itemBelowCursor->desc().c_str());
+				visualizeRoute = itemBelowCursor->lobbyRoute;
+				inspectorDialog.showForItem(itemBelowCursor);
+			}
 			}
 		} break;
 
@@ -724,6 +727,9 @@ void Game::advance(double dt)
 		}
 		setPopulation(p);
 	}
+
+	// Keep the inspector popup live if it's on screen.
+	inspectorDialog.refresh();
 
 	//Play sounds.
 	if (time.checkHour(5))  cockSound.Play(this);

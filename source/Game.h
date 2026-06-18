@@ -19,6 +19,7 @@
 #include "Decorations.h"
 #include "ToolboxWindow.h"
 #include "TimeWindow.h"
+#include "InspectorDialog.h"
 #include "JudgeSystem.h"
 #include "LevelUp.h"
 
@@ -77,6 +78,7 @@ namespace OT {
 
 		ToolboxWindow toolboxWindow;
 		TimeWindow    timeWindow;
+		InspectorDialog inspectorDialog;
 
 		Time time;
 		int speedMode;
