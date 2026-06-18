@@ -20,6 +20,7 @@
 #include "ToolboxWindow.h"
 #include "TimeWindow.h"
 #include "JudgeSystem.h"
+#include "LevelUp.h"
 
 namespace OT {
 	namespace Item { class AbstractPrototype; }

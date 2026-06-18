@@ -11,12 +11,14 @@
 #include <TGUI/Widgets/ChildWindow.hpp>
 #include <TGUI/Widgets/HorizontalLayout.hpp>
 #include <TGUI/Widgets/VerticalLayout.hpp>
+#include <TGUI/Widgets/Label.hpp>
 #include <cstdint>
 #include <algorithm>
 #include <fstream>
 #include "Application.h"
 #include "Game.h"
 #include "Item/YootCondo.h"
+#include "LevelUp.h"
 
 using namespace OT;
 
@@ -212,6 +214,20 @@ void ToolboxWindow::reload()
         int ypos = (25 + row * 32) * app->uiScale;
 
         button->setPosition(xpos, ypos);
+
+        // Star-rating gate: disable buttons for prototypes the player can't
+        // build yet. Attach a tooltip explaining the unlock requirement.
+        int minRating = LevelUp::minRatingToBuild(prototype->id);
+        if (minRating > game->rating)
+        {
+            button->setEnabled(false);
+            auto tip = tgui::Label::create();
+            tip->setText(prototype->name + " unlocks at " +
+                         std::to_string(minRating + 1) + " stars");
+            tip->setTextSize(12);
+            button->setToolTip(tip);
+        }
+
         window->add(button);
         buttons.insert(button);
         toolButtons[toolname] = button;

@@ -39,6 +39,7 @@ namespace OT
 			int foodOutlets;     ///< fast food + restaurant
 			int securityOffices;
 			int medicalCenters;
+			int metros;
 			int population;
 		};
 		const Counts & counts() const { return lastCounts; }

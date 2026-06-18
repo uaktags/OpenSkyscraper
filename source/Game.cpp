@@ -253,13 +253,23 @@ bool Game::handleEvent(sf::Event & event)
 						}
 					}
 				}
-				if (!handled) {
-					bool constructionBlocked = false;
-					std::string blockReason;
-					int minFloorX = INT_MAX;
-					int maxFloorX = INT_MIN;
+			if (!handled) {
+				bool constructionBlocked = false;
+				std::string blockReason;
+				int minFloorX = INT_MAX;
+				int maxFloorX = INT_MIN;
 
-					if (toolPosition.y < -9 && toolPrototype->icon != ICON_METRO) {
+				// Star-rating gate: some prototypes require a minimum tower
+				// rating to build. Reject early so the player gets feedback.
+				int minRating = LevelUp::minRatingToBuild(toolPrototype->id);
+				if (minRating > rating)
+				{
+					constructionBlocked = true;
+					blockReason = toolPrototype->name + " unlocks at " +
+					              std::to_string(minRating + 1) + " stars";
+				}
+
+				if (toolPosition.y < -9 && toolPrototype->icon != ICON_METRO) {
 						constructionBlocked = true;
 						blockReason = "Cannot build below floor B9";
 					}
@@ -1259,16 +1269,30 @@ void Game::setPopulation(int p)
  *  population, or an item constructed. */
 void Game::ratingMayIncrease()
 {
-	switch (rating) {
-		case 0: {
-			if (population >= 300) setRating(1);
-		} break;
-		case 1: {
-			if (population >= 1000) {
-				//TODO: check for security center presence.
-				//timeWindow.showMessage("Your tower needs security.");
+	// Run a fresh judge pass so facility counts reflect the current state
+	// (e.g. the Security office the player just finished). This is cheap
+	// relative to construction events.
+	judgeSystem.evaluateAll(this);
+	const JudgeSystem::Counts & counts = judgeSystem.counts();
+
+	while (true)
+	{
+		const LevelUp::Requirements * req = LevelUp::advancementRequirements(rating);
+		if (!req) break; // already at max rating
+
+		if (!LevelUp::meetsRequirements(*req, population, counts))
+		{
+			// Surface what's missing as a one-shot hint, but only when the
+			// player is close enough that the next push might trigger it.
+			if (population >= req->population - 50 && population < req->population)
+			{
+				timeWindow.showMessage(std::string("Next: ") + req->summary);
 			}
-		} break;
+			break;
+		}
+		setRating(rating + 1);
+		timeWindow.showMessage(std::string("Promoted to ") + std::to_string(rating + 1) + " stars!");
+		toolboxWindow.reload(); // refresh build locks
 	}
 }
 

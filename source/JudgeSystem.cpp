@@ -190,6 +190,7 @@ void JudgeSystem::evaluateAll(Game * game)
 		else if (id == "fastfood" || id == "restaurant") ++lastCounts.foodOutlets;
 		else if (id == "security")                       ++lastCounts.securityOffices;
 		else if (id == "medicalcenter")                  ++lastCounts.medicalCenters;
+		else if (id == "metro")                          ++lastCounts.metros;
 	}
 	lastCounts.population = game->population;
 

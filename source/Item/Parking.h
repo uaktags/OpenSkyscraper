@@ -23,7 +23,7 @@ namespace OT {
 				p->name  = "Parking";
 				p->price = 5000;
 				p->size  = int2(8, 1);
-				p->icon  = 22;
+				p->icon  = 20;
 			}
 			virtual ~Parking();
 
