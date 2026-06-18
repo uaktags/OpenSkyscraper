@@ -223,6 +223,7 @@ void JudgeSystem::evaluateAll(Game * game)
 		}
 
 		item->evaluation = score;
+		if (score < 25.0) ++lastCounts.criticalTenants;
 
 		// Mirror the item score onto each person currently at the item, so
 		// the inspector and per-person overlays have something to show.
@@ -234,6 +235,17 @@ void JudgeSystem::evaluateAll(Game * game)
 	    lastCounts.offices, lastCounts.condos, lastCounts.hotels, lastCounts.hotelsDirty,
 	    lastCounts.foodOutlets, lastCounts.securityOffices, lastCounts.medicalCenters,
 	    lastCounts.population, parkingCoverage);
+
+	// Surface a daily complaint if any tenant is critically unhappy. The
+	// original SimTower does this via InfoDlog/TenantInfo messages.
+	if (lastCounts.criticalTenants > 0)
+	{
+		char buf[128];
+		snprintf(buf, sizeof(buf), "%d tenant%s unhappy - check the Evaluation view (O)",
+		         lastCounts.criticalTenants,
+		         lastCounts.criticalTenants == 1 ? " is" : "s are");
+		game->timeWindow.showMessage(buf);
+	}
 }
 
 void JudgeSystem::computeParkingCoverage(Game * game)

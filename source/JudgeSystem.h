@@ -41,6 +41,7 @@ namespace OT
 			int medicalCenters;
 			int metros;
 			int population;
+			int criticalTenants; ///< tenants with evaluation < 25 (complaint risk)
 		};
 		const Counts & counts() const { return lastCounts; }
 

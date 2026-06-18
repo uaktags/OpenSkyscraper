@@ -187,7 +187,10 @@ void Office::advance(double dt)
 				}
 				else
 				{
-					w->addStress(0.1);
+					// A missed lunch is a meaningful stress hit - enough that
+					// workers with no reachable food will eventually flee for
+					// the day once stress crosses the flee threshold.
+					w->addStress(15.0);
 					LOG(DEBUG, "Worker %p has no route to lunch", w);
 				}
 			}
@@ -257,6 +260,26 @@ void Office::advance(double dt)
 			}
 			else
 				break;
+		}
+
+		// Stress-flee: any worker currently at the office whose stress has
+		// crossed the flee threshold heads home for the day early. Salesmen
+		// are excluded - they're already in and out on sales trips.
+		const double kStressFleeThreshold = 80.0;
+		const Route &homeRoute = game->findRoute(this, game->mainLobby);
+		for (Workers::iterator iw = workers.begin(); iw != workers.end(); ++iw)
+		{
+			Worker *w = *iw;
+			if (w->at == this && w->state == Person::kWorking &&
+			    w->stress > kStressFleeThreshold && !homeRoute.empty())
+			{
+				LOG(DEBUG, "Worker %p fleeing office (stress %.1f)", w, w->stress);
+				w->state = Person::kReturning;
+				w->goingTo = "Home (stressed)";
+				w->journey.set(homeRoute);
+				w->addStress(-10.0); // recovering on the way home
+				game->timeWindow.showMessage("Worker leaves a stressful office");
+			}
 		}
 	}
 
