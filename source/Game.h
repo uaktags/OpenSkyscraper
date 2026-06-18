@@ -82,6 +82,14 @@ namespace OT {
 		int speedMode;
 		void setSpeedMode(int sm);
 
+		/// Status overlay mode for the main viewport. Cycled with the 'O' key.
+		/// Mirrors StatusMode.h/c from the Yoot source. Eval tint uses the
+		/// cached Item::evaluation from JudgeSystem; Hotel tint flags dirty
+		/// rooms. Pric is a placeholder until the rent-pricing model lands.
+		enum StatusMode { kNormal, kEval, kPric, kHotel };
+		StatusMode statusMode;
+		void cycleStatusMode();
+
 		std::string selectedTool;
 		int2 toolPosition;
 		Item::AbstractPrototype * toolPrototype;

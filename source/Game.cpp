@@ -6,6 +6,7 @@
 #include "Item/FastFood.h"
 #include "Item/Lobby.h"
 #include "Item/Office.h"
+#include "Item/Hotel.h"
 #include "OpenGL.h"
 
 #ifdef _WIN32
@@ -37,6 +38,7 @@ Game::Game(Application & app)
 	selectedTool = "inspector";
 	itemBelowCursor = NULL;
 	toolPrototype = NULL;
+	statusMode = kNormal;
 
 	zoom = 0.5;
 	poi.y = 200;
@@ -196,8 +198,9 @@ bool Game::handleEvent(sf::Event & event)
 					encodeXML(xml);
 					fclose(f);
 				} return true;
-				case sf::Keyboard::Key::PageUp:   zoom /= 2; return true;
-				case sf::Keyboard::Key::PageDown: zoom *= 2; return true;
+			case sf::Keyboard::Key::PageUp:   zoom /= 2; return true;
+			case sf::Keyboard::Key::PageDown: zoom *= 2; return true;
+			case sf::Keyboard::Key::O:        cycleStatusMode(); return true;
 				default: break;
 			}
 		} break;
@@ -798,6 +801,58 @@ void Game::advance(double dt)
 		}
 	}
 
+	//Status overlay pass: tint tenant items according to statusMode. The
+	//overlay is a translucent quad sized to the item. Only tenant types are
+	//tinted - floors, elevators and lobbies are left alone.
+	if (statusMode != kNormal) {
+		for (ItemSet::iterator i = items.begin(); i != items.end(); i++) {
+			Item::Item * item = *i;
+			const std::string & id = item->prototype->id;
+			bool isTenant = (id == "office" || id == "condo" || id == "yoot_condo" ||
+			                 id == "hotel_single" || id == "hotel_double" ||
+			                 id == "hotel_suite" || id == "hotel" ||
+			                 id == "fastfood" || id == "restaurant" ||
+			                 id == "cinema"    || id == "partyhall");
+			if (!isTenant) continue;
+
+			sf::Color tint = sf::Color::Transparent;
+			if (statusMode == kEval) {
+				double e = item->evaluation;
+				if      (e >= 70) tint = sf::Color(  0,  96, 255, 110); // blue = high
+				else if (e >= 40) tint = sf::Color(255, 200,   0, 110); // yellow = medium
+				else              tint = sf::Color(255,   0,   0, 110); // red = low
+			} else if (statusMode == kHotel) {
+				if (id == "hotel_single" || id == "hotel_double" ||
+				    id == "hotel_suite"  || id == "hotel") {
+					Item::Hotel * hotel = dynamic_cast<Item::Hotel *>(item);
+					if (hotel) {
+						if      (hotel->roomState == Item::Hotel::kDirty)    tint = sf::Color(255, 0, 0, 140);
+						else if (hotel->roomState == Item::Hotel::kOccupied) tint = sf::Color(255, 200, 0, 90);
+						else                                                tint = sf::Color(0, 200, 0, 90);
+					}
+				} else continue;
+			} else if (statusMode == kPric) {
+				// TODO(Phase 4.3): rent pricing tiers - needs per-tenant rent data.
+				continue;
+			}
+			if (tint.a == 0) continue;
+
+			const int2 vp = item->getPositionPixels();
+			const sf::Vector2u vs = item->getSizePixels();
+			// Cull offscreen overlays.
+			if (!(vp.x + vs.x >= view.position.x) || !(vp.x <= (view.position.x + view.size.x)) ||
+			    !((vp.y + vs.y) >= (view.position.y - view.size.y)) || !(vp.y <= view.position.y))
+				continue;
+
+			sf::RectangleShape overlay({static_cast<float>(vs.x), static_cast<float>(vs.y)});
+			overlay.setPosition({static_cast<float>(vp.x),
+			                     static_cast<float>(-(vp.y + static_cast<int>(vs.y)))});
+			overlay.setFillColor(tint);
+			win.draw(overlay);
+			drawnSprites++;
+		}
+	}
+
 	//Highlight the item below the cursor.
 	if (!toolPrototype && itemBelowCursor) {
 		const int2 itemPixels = itemBelowCursor->getPositionPixels();
@@ -1311,6 +1366,14 @@ void Game::setSpeedMode(int sm)
 		time.speed = speed;
 		toolboxWindow.updateSpeed();
 	}
+}
+
+void Game::cycleStatusMode()
+{
+	StatusMode next = static_cast<StatusMode>((static_cast<int>(statusMode) + 1) % 4);
+	statusMode = next;
+	const char *names[] = { "Normal view", "Evaluation view", "Pricing view", "Hotel view" };
+	timeWindow.showMessage(names[static_cast<int>(next)]);
 }
 
 void Game::selectTool(const char * tool)
