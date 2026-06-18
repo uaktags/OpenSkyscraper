@@ -90,10 +90,12 @@ void Item::encodeXML(tinyxml2::XMLPrinter &xml)
 	xml.PushAttribute("type", prototype->id.c_str());
 	xml.PushAttribute("x", position.x);
 	xml.PushAttribute("y", position.y);
+	xml.PushAttribute("evaluation", evaluation);
 }
 
 void Item::decodeXML(tinyxml2::XMLElement &xml)
 {
+	evaluation = xml.DoubleAttribute("evaluation", 50.0);
 }
 
 void Item::addPerson(Person *p)

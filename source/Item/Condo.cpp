@@ -291,7 +291,10 @@ void Condo::removePerson(Person *p)
 /** Returns whether the item will be vacated at the next month. */
 bool Condo::isAttractive()
 {
-	return !lobbyRoute.empty();
+	// Need a route to the lobby, and a non-critical evaluation score.
+	// JudgeSystem refreshes evaluation daily; the default of 50 keeps fresh
+	// condos attractive before the first evaluation pass.
+	return !lobbyRoute.empty() && evaluation >= 30.0;
 }
 
 double Condo::CondoOccupant::actualReturnTime() const

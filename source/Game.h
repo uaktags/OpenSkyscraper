@@ -19,6 +19,7 @@
 #include "Decorations.h"
 #include "ToolboxWindow.h"
 #include "TimeWindow.h"
+#include "JudgeSystem.h"
 
 namespace OT {
 	namespace Item { class AbstractPrototype; }
@@ -115,6 +116,10 @@ namespace OT {
 		GameMap gameMap;
 		PathFinder pathFinder;
 		Decorations decorations;
+
+		/// Daily tenant & hotel evaluation engine. Updated once per day from
+		/// settleDailyAccounting(); scores are cached on each Item::evaluation.
+		JudgeSystem judgeSystem;
 
 	public:
 		void encodeXML(tinyxml2::XMLPrinter & xml);

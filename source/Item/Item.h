@@ -20,7 +20,7 @@ namespace OT {
 		public:
 			int layer;
 			AbstractPrototype * const prototype;
-			Item(Game * game, AbstractPrototype * prototype) : GameObject(game), sf::Drawable(), prototype(prototype), size(prototype->size) { layer = 0; population = 0; }
+			Item(Game * game, AbstractPrototype * prototype) : GameObject(game), sf::Drawable(), prototype(prototype), size(prototype->size) { layer = 0; population = 0; evaluation = 50; }
 			virtual ~Item();
 			virtual void init() {}
 
@@ -53,10 +53,16 @@ namespace OT {
 				return c;
 			}
 
-			virtual void advance(double dt) {}
-			virtual int dailyMaintenanceCost() const { return 0; }
+		virtual void advance(double dt) {}
+		virtual int dailyMaintenanceCost() const { return 0; }
 
-			typedef std::set<Person *> People;
+		/// Satisfaction score in [0, 100] maintained by JudgeSystem. Defaults
+		/// to 50 (neutral) so unevaluated items remain attractive. Office and
+		/// Condo::isAttractive() consult this when deciding move-in/vacation.
+		double evaluation;
+		virtual double getEvaluation() const { return evaluation; }
+
+		typedef std::set<Person *> People;
 			People people;
 			virtual void addPerson(Person * p);
 			virtual void removePerson(Person * p);

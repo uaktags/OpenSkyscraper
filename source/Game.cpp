@@ -1192,6 +1192,10 @@ void Game::settleDailyAccounting()
 	if (maintenanceCost > 0) {
 		transferFunds(-maintenanceCost, "maintenance", "Daily maintenance");
 	}
+	// Re-evaluate every tenant so Office/Condo::isAttractive() and the
+	// inspector have fresh satisfaction scores for the new day. Runs after
+	// maintenance so stress/counts reflect yesterday's state.
+	judgeSystem.evaluateAll(this);
 	timeWindow.updateMoneyStats();
 }
 
