@@ -156,12 +156,16 @@ Phase 3: Game Systems                                        [STUB — major wor
 Phase 4: UI & Visualization                                   [PENDING]
 -----------------------------------------------------------------------
 
-- [STUB] **4.1 Info / inspector dialogs** — `selectedTool == "inspector"` only logs to console + draws a route line (`Game.cpp:531`).
-    - [ ] TGUI popup on inspect click; populate by target type.
-    - [ ] Person: name, type, stress, eval, from/to, current state.
-    - [ ] Item: name, maintenance cost, occupants, route score, satisfaction.
-    - [ ] Elevator: floors served, cars, queues, status.
-    - [ ] Wire tenant complaint messages to `TimeWindow.showMessage()`.
+- [PARTIAL] **4.1 Info / inspector dialogs** — `source/InspectorDialog.{h,cpp}` popup.
+    - [DONE] TGUI popup opens on inspect-click; closes on Close button, title-bar X, or Escape.
+    - [DONE] Item content: name, floor, daily maintenance, cached evaluation, occupant count, route score.
+    - [DONE] Hotel content: room state (clean/occupied/dirty), capacity.
+    - [DONE] Elevator content: cars count, queues count, serviced floors, unserviced count, total waiting passengers.
+    - [DONE] Occupant list (up to 8): name, state, stress, eval for each person at the item.
+    - [DONE] Refreshes every frame so values stay live; tears down on world clear.
+    - [ ] **Per-person sprite hit-testing** — clicking an individual walking person should open their info directly (currently we list all occupants of the clicked item).
+    - [ ] Wire tenant complaint messages (stress > threshold) to `TimeWindow.showMessage()`.
+    - [ ] Tenant messaging: route-based complaints ("can't reach lobby", "no lunch nearby").
 
 - [ ] **4.2 Minimap** (`//mapWindow` commented in `Game.h` / `Game.cpp`) — also tracked under General.
     - [ ] `source/MapWindow.{h,cpp}` using SFML render texture.
