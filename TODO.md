@@ -12,7 +12,7 @@ Sources of truth for status were verified against `source/` (not just the plan d
 General / Cross-cutting
 -------------------------------------------------------------------------------
 
-- [ ] `mapWindow` should be its own class `MapWindow`, like the other two. (Currently commented out in `Game.h` / `Game.cpp`.)
+- [DONE] `mapWindow` is now its own class `MapWindow` (Phase 4.2).
 - [ ] Cache the result of the KWAJ decompression so the game doesn't decompress `SIMTOWER.EX_` every launch.
 
 ### Pausing doesn't affect elevators
@@ -167,11 +167,16 @@ Phase 4: UI & Visualization                                   [PENDING]
     - [ ] Wire tenant complaint messages (stress > threshold) to `TimeWindow.showMessage()`.
     - [ ] Tenant messaging: route-based complaints ("can't reach lobby", "no lunch nearby").
 
-- [ ] **4.2 Minimap** (`//mapWindow` commented in `Game.h` / `Game.cpp`) — also tracked under General.
-    - [ ] `source/MapWindow.{h,cpp}` using SFML render texture.
-    - [ ] Tower body grey; elevators as black vertical shafts; sky background.
-    - [ ] Click minimap to jump viewport to that floor.
-    - [ ] Mode cycling via button or keyboard.
+- [PARTIAL] **4.2 Minimap** (`source/MapWindow.{h,cpp}`)
+    - [DONE] TGUI child window + SFML canvas overview, anchored to right edge.
+    - [DONE] Items drawn as filled rectangles; elevators as dark bars.
+    - [DONE] StatusMode-aware tinting (matches main viewport Eval/Hotel overlays).
+    - [DONE] Toggle with `M` key; closes on Escape; hidden by default.
+    - [DONE] Click-to-jump via `Game::centerViewportOnTile()`.
+    - [DONE] Throttled refresh (~1 s of game time) plus reload on GUI rebuild / world clear.
+    - [ ] Toolbar button to toggle (currently keyboard only).
+    - [ ] Dedicated Pric palette (deferred with the rent-pricing model).
+    - [ ] Separate grey-body + sky-background rendering mode per the original (`MapT.h/c`).
 
 - [PARTIAL] **4.3 Status overlays (Eval / Pric / Hotel)** — `Game::StatusMode` enum + `O` key cycle.
     - [DONE] `enum StatusMode { kNormal, kEval, kPric, kHotel }` on Game; cycle via `O` key with mode-name message.
@@ -193,16 +198,22 @@ Phase 5: Polish & Balance                                     [PENDING]
 
 - [PARTIAL] **5.1 Tenant satisfaction & retention**
     - [DONE] Stress accumulation + `addStress()` plumbing.
-    - [ ] Office workers leave if stress > 80% or no lunch reachable.
-    - [ ] Condo occupants vacate if noise too high or no route to lobby.
-    - [ ] Hotel guests rate stay based on cleanliness, noise, elevator wait.
-    - [ ] `population` updates correctly when tenants leave.
+    - [DONE] Office workers flee for the day when stress > 80 (state → `kReturning`, route to lobby, partial relief on the way home).
+    - [DONE] Missed lunch now applies a meaningful 15-point stress hit (was 0.1).
+    - [DONE] Daily complaint message from `JudgeSystem` when critical-tenant count > 0 (with hint to open the Eval view).
+    - [DONE] Office/Condo weekly vacation via `isAttractive()` (evaluation ≥ 30) already wired.
+    - [ ] Condo occupants vacate mid-week when stress is critical (currently only weekly via `isAttractive`).
+    - [ ] Hotel guests rate stay based on cleanliness, noise, elevator wait (currently fixed `eval = 50` on arrival; JudgeSystem overwrites daily but in-stay feedback is shallow).
+    - [ ] `population` correctly updates when tenants leave mid-day (verify path for stress-flee).
 
-- [ ] **5.2 Noise / zoning system** (original `Kinsoku.h/c`)
-    - [ ] `noiseLevel` property on each item prototype.
-    - [ ] Offices/commercial = high noise; condos/hotels = noise-sensitive.
-    - [ ] `Item::noiseAffects(Item* neighbor)` check horizontal distance vs threshold (120px hotel rooms, 240px condos per SimTower Notes).
-    - [ ] Stress penalty applied for incompatible neighbours.
+- [PARTIAL] **5.2 Noise / zoning system** (original `Kinsoku.h/c`)
+    - [DONE] Noise profile per tenant type (loud: office/fastfood/restaurant/cinema/partyhall/metro; sensitive: condo/hotel).
+    - [DONE] Isolation radii from SimTower Notes (30 tiles for condos/240px, 15 tiles for hotels/120px).
+    - [DONE] `computeNoisePenalty()` scans same-floor and adjacent-floor neighbours within radius, linear falloff, cross-floor dampening.
+    - [DONE] Penalty wired into `scoreCondo` (full) and `scoreHotel` (70%) inside JudgeSystem.
+    - [ ] `noiseLevel` / `noiseSensitivity` as actual `AbstractPrototype` fields (currently a lookup table in JudgeSystem).
+    - [ ] Stress penalty applied directly to occupants (currently only depresses the cached evaluation).
+    - [ ] Per-prototype tuning (e.g. cinema louder than office).
 
 - [ ] **5.3 Elevator control panel** (original `ElvDlogT.h/c`)
     - [DONE] Per-floor service toggle via finger tool.
@@ -314,11 +325,11 @@ Reference Index (codemap.md → implementation)
 | Info messages                     | codemap.md:1100-1122  | —                               | MISSING  |
 | Initialize                        | codemap.md:1195-1223  | source/Application.*            | PORTED   |
 | Judge/Evaluation                  | codemap.md:1225-1251  | source/JudgeSystem.*            | PORTED   |
-| Kinsoku/Placement                 | codemap.md:1253-1277  | —                               | MISSING  |
+| Kinsoku/Placement                 | codemap.md:1253-1277  | source/JudgeSystem.cpp (noise)  | PARTIAL  |
 | Level/Progression                 | codemap.md:1279-1343  | source/Game.cpp ratingMayIncrease | STUB   |
 | Maintenance                       | codemap.md:1344-1377  | —                               | MISSING  |
 | Main window                       | codemap.md:1378-1408  | source/Application.*            | PORTED   |
-| Map/minimap                       | codemap.md:1410-1460  | (commented out)                 | MISSING  |
+| Map/minimap                       | codemap.md:1410-1460  | source/MapWindow.*              | PORTED   |
 | Medical                           | codemap.md:1462-1489  | source/Item/MedicalCenter.*     | STUB     |
 | Money                             | codemap.md:1491-1517  | source/Money.h                  | PORTED   |
 | Movie/Cinema                      | codemap.md:1519-1546  | source/Item/Cinema.*            | PARTIAL  |
