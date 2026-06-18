@@ -1,10 +1,12 @@
 #include "Game.h"
 #include "Item/Item.h"
 #include "Item/Hotel.h"
+#include "Item/Parking.h"
 #include "JudgeSystem.h"
 #include "Person.h"
 
 #include <algorithm>
+#include <cmath>
 
 using namespace OT;
 
@@ -34,6 +36,7 @@ namespace
 JudgeSystem::JudgeSystem()
 {
 	lastCounts = Counts();
+	parkingCoverage = 1.0;
 }
 
 double JudgeSystem::clampScore(double v)
@@ -89,6 +92,13 @@ double JudgeSystem::scoreOffice(Game * game, Item::Item * item)
 	if (!bucket(game, "security").empty())
 		score += 3;
 
+	// Parking: original requires 1 space per 4 offices. Undercoverage taxes
+	// the office's evaluation.
+	if (parkingCoverage < 0.5)
+		score -= 10;
+	else if (parkingCoverage < 1.0)
+		score -= 5;
+
 	return clampScore(score);
 }
 
@@ -132,6 +142,13 @@ double JudgeSystem::scoreHotel(Game * game, Item::Item * item)
 			std::any_of(restaurants.begin(), restaurants.end(),
 				[&](Item::Item * r) { return !game->findRoute(item, r).empty(); });
 		score += dinnerReachable ? 8 : -8;
+
+		// Parking: original requires 1 space per hotel suite (treat any hotel
+		// room as needing 1 space for MVP).
+		if (parkingCoverage < 0.5)
+			score -= 12;
+		else if (parkingCoverage < 1.0)
+			score -= 6;
 	}
 
 	return clampScore(score);
@@ -155,7 +172,31 @@ void JudgeSystem::evaluateAll(Game * game)
 	// Reset tallies.
 	lastCounts = Counts();
 
-	// Walk every item, dispatching to the appropriate scorer by prototype id.
+	// Pass 1: cheap counting pass so derived metrics (parking coverage) are
+	// available before the per-item scorers run.
+	for (Game::ItemSet::iterator it = game->items.begin(); it != game->items.end(); ++it)
+	{
+		const std::string & id = (*it)->prototype->id;
+		if (id == "office")                              ++lastCounts.offices;
+		else if (id == "condo" || id == "yoot_condo")    ++lastCounts.condos;
+		else if (id == "hotel_single" || id == "hotel_double" ||
+		         id == "hotel_suite" || id == "hotel")
+		{
+			++lastCounts.hotels;
+			Item::Hotel * hotel = dynamic_cast<Item::Hotel *>(*it);
+			if (hotel && hotel->roomState == Item::Hotel::kDirty)
+				++lastCounts.hotelsDirty;
+		}
+		else if (id == "fastfood" || id == "restaurant") ++lastCounts.foodOutlets;
+		else if (id == "security")                       ++lastCounts.securityOffices;
+		else if (id == "medicalcenter")                  ++lastCounts.medicalCenters;
+	}
+	lastCounts.population = game->population;
+
+	// Tower-wide parking coverage, cached for the per-item scorers below.
+	computeParkingCoverage(game);
+
+	// Pass 2: walk every item, dispatching to the appropriate scorer.
 	for (Game::ItemSet::iterator it = game->items.begin(); it != game->items.end(); ++it)
 	{
 		Item::Item * item = *it;
@@ -165,34 +206,19 @@ void JudgeSystem::evaluateAll(Game * game)
 		if (id == "office")
 		{
 			score = scoreOffice(game, item);
-			++lastCounts.offices;
 		}
 		else if (id == "condo" || id == "yoot_condo")
 		{
 			score = scoreCondo(game, item);
-			++lastCounts.condos;
 		}
 		else if (id == "hotel_single" || id == "hotel_double" || id == "hotel_suite" || id == "hotel")
 		{
 			score = scoreHotel(game, item);
-			++lastCounts.hotels;
-			Item::Hotel * hotel = dynamic_cast<Item::Hotel *>(item);
-			if (hotel && hotel->roomState == Item::Hotel::kDirty)
-				++lastCounts.hotelsDirty;
 		}
 		else if (id == "fastfood" || id == "restaurant" ||
 		         id == "cinema"    || id == "partyhall")
 		{
 			score = scoreCommercial(game, item);
-			if (id == "fastfood" || id == "restaurant") ++lastCounts.foodOutlets;
-		}
-		else if (id == "security")
-		{
-			++lastCounts.securityOffices;
-		}
-		else if (id == "medicalcenter")
-		{
-			++lastCounts.medicalCenters;
 		}
 
 		item->evaluation = score;
@@ -203,10 +229,26 @@ void JudgeSystem::evaluateAll(Game * game)
 			(*p)->eval = score;
 	}
 
-	lastCounts.population = game->population;
-
-	LOG(DEBUG, "JudgeSystem pass: o=%i c=%i h=%i (dirty=%i) food=%i sec=%i med=%i pop=%i",
+	LOG(DEBUG, "JudgeSystem pass: o=%i c=%i h=%i (dirty=%i) food=%i sec=%i med=%i pop=%i cov=%.2f",
 	    lastCounts.offices, lastCounts.condos, lastCounts.hotels, lastCounts.hotelsDirty,
 	    lastCounts.foodOutlets, lastCounts.securityOffices, lastCounts.medicalCenters,
-	    lastCounts.population);
+	    lastCounts.population, parkingCoverage);
+}
+
+void JudgeSystem::computeParkingCoverage(Game * game)
+{
+	// Sum capacity across all parking items.
+	int totalSpaces = 0;
+	const Game::ItemSet & parking = bucket(game, "parking");
+	for (Game::ItemSet::const_iterator p = parking.begin(); p != parking.end(); ++p)
+	{
+		Item::Parking * park = dynamic_cast<Item::Parking *>(*p);
+		if (park) totalSpaces += park->totalSpaces();
+	}
+
+	// Original SimTower rule of thumb: 1 space per 4 offices and 1 per hotel
+	// room. Condos are owner-occupied and assumed to have their own garage.
+	int required = (lastCounts.offices + 3) / 4 + lastCounts.hotels;
+
+	parkingCoverage = (required == 0) ? 1.0 : static_cast<double>(totalSpaces) / required;
 }

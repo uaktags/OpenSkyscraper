@@ -53,6 +53,11 @@ namespace OT
 		/// Shared metrics.
 		static double clampScore(double v);
 
+		/// Tower-wide parking coverage in [0, 1+]. Cached per evaluateAll()
+		/// pass so the per-item scorers can refer to it cheaply.
+		void computeParkingCoverage(Game * game);
+		double parkingCoverage;
+
 		Counts lastCounts;
 	};
 }
