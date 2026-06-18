@@ -31,6 +31,81 @@ namespace
 			sum += (*p)->stress;
 		return sum / item->people.size();
 	}
+
+	// Noise model approximating the original Kinsoku.h/c placement rules.
+	struct NoiseProfile { int level; int sensitivity; };
+	NoiseProfile noiseProfileFor(const std::string & id)
+	{
+		// Loud tenants - offices and commercial activity.
+		if (id == "office"   || id == "fastfood"   || id == "restaurant" ||
+		    id == "cinema"   || id == "partyhall"  || id == "metro")     return {90,  0};
+		// Quiet but noise-sensitive residents.
+		if (id == "condo" || id == "yoot_condo")                          return {10, 90};
+		if (id == "hotel_single" || id == "hotel_double" ||
+		    id == "hotel_suite"  || id == "hotel")                        return {10, 70};
+		return {0, 0};
+	}
+
+	// Isolation radius in tiles, per the SimTower Notes
+	// (120px / 8px = 15 tiles for hotels, 240px / 8px = 30 tiles for condos).
+	int noiseRadiusTilesFor(const std::string & id)
+	{
+		if (id == "condo" || id == "yoot_condo")              return 30;
+		if (id.find("hotel") != std::string::npos)            return 15;
+		return 0;
+	}
+
+	// Sum the noise load on a sensitive item from loud neighbours on the same
+	// floor and the two adjacent floors. Returns a 0..25 evaluation penalty.
+	double computeNoisePenalty(Game * game, Item::Item * item)
+	{
+		NoiseProfile np = noiseProfileFor(item->prototype->id);
+		if (np.sensitivity == 0) return 0;
+		int radius = noiseRadiusTilesFor(item->prototype->id);
+		if (radius <= 0) return 0;
+
+		double noiseLoad = 0;
+		for (int floorDelta = -1; floorDelta <= 1; ++floorDelta)
+		{
+			int floor = item->position.y + floorDelta;
+			Game::ItemSetByInt::const_iterator it = game->itemsByFloor.find(floor);
+			if (it == game->itemsByFloor.end()) continue;
+
+			for (Game::ItemSet::const_iterator nit = it->second.begin();
+			     nit != it->second.end(); ++nit)
+			{
+				Item::Item *neighbor = *nit;
+				if (neighbor == item) continue;
+				NoiseProfile np2 = noiseProfileFor(neighbor->prototype->id);
+				if (np2.level == 0) continue;
+
+				// Horizontal gap between the two item rectangles (tiles).
+				int myMin = item->position.x;
+				int myMax = item->position.x + item->size.x;
+				int nMin  = neighbor->position.x;
+				int nMax  = neighbor->position.x + neighbor->size.x;
+				int dist;
+				if (nMin >= myMax)      dist = nMin - myMax;
+				else if (myMin >= nMax) dist = myMin - nMax;
+				else                    dist = 0; // overlapping
+				// Cross-floor noise has to pass through a ceiling, treat that
+				// as a few extra tiles of distance.
+				if (floorDelta != 0) dist += 5;
+
+				if (dist < radius)
+				{
+					double weight = 1.0 - static_cast<double>(dist) / radius;
+					noiseLoad += np2.level * weight;
+				}
+			}
+		}
+
+		if (noiseLoad <= 0) return 0;
+		// Scale so a single neighbouring office at distance 0 (~90 load)
+		// subtracts ~18 points from a condo's evaluation.
+		if (noiseLoad > 125.0) noiseLoad = 125.0;
+		return noiseLoad * 0.2;
+	}
 }
 
 JudgeSystem::JudgeSystem()
@@ -118,6 +193,9 @@ double JudgeSystem::scoreCondo(Game * game, Item::Item * item)
 			[&](Item::Item * r) { return !game->findRoute(item, r).empty(); });
 	score += foodReachable ? 3 : 0;
 
+	// Noise penalty - condos are the most noise-sensitive tenant.
+	score -= computeNoisePenalty(game, item);
+
 	return clampScore(score);
 }
 
@@ -149,6 +227,9 @@ double JudgeSystem::scoreHotel(Game * game, Item::Item * item)
 			score -= 12;
 		else if (parkingCoverage < 1.0)
 			score -= 6;
+
+		// Noise penalty - hotels are noise-sensitive but less so than condos.
+		score -= computeNoisePenalty(game, item) * 0.7;
 	}
 
 	return clampScore(score);
