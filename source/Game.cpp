@@ -296,6 +296,11 @@ bool Game::handleEvent(sf::Event & event)
 						blockReason = "Cannot build below floor B9";
 					}
 
+					if (metroStation != NULL && toolPosition.y < metroStation->position.y) {
+						constructionBlocked = true;
+						blockReason = "Cannot build below Metro Station";
+					}
+
 					if (toolPosition.y > 0 && toolPrototype->icon == ICON_METRO) {
 						constructionBlocked = true;
 						blockReason = toolPrototype->name + " unavailable above ground";

@@ -14,8 +14,8 @@ using OT::Math::randd;
 // roughly 10 minutes, then is absent for ~30 minutes before the next arrives.
 // TODO(Phase 2.4): tune against the original SimTower interval. The plan
 // suggests 0.1 absolute between trains; that feels too frequent in practice.
-static const double kTrainDwellAbs = Time::hourToAbsolute(0.16);
-static const double kTrainGapAbs   = Time::hourToAbsolute(0.5);
+static const double kTrainDwellAbs = 0.02;
+static const double kTrainGapAbs   = 0.08;
 
 // Dwell window the visitor spends at a commercial venue before heading back.
 static const double kVisitorMinDwell = Time::hourToAbsolute(0.25);
@@ -128,8 +128,7 @@ void Metro::updateSprite()
 
 OT::Item::Item * Metro::pickDestinationFor(Visitor *v)
 {
-	// TODO(Phase 2.4): original targets "underground commercial" specifically.
-	// For now pick any reachable fast food / restaurant / cinema / party hall.
+	// Target underground commercial venues specifically.
 	static const char *typeIds[] = {"fastfood", "restaurant", "cinema", "partyhall"};
 	std::vector<OT::Item::Item *> reachable;
 
@@ -139,8 +138,9 @@ OT::Item::Item * Metro::pickDestinationFor(Visitor *v)
 		if (bucket == game->itemsByType.end()) continue;
 		for (Game::ItemSet::const_iterator it = bucket->second.begin(); it != bucket->second.end(); ++it)
 		{
-			if (!game->findRoute(this, *it).empty())
-				reachable.push_back(*it);
+			Item *item = *it;
+			if (item->position.y < 0 && !game->findRoute(this, item).empty())
+				reachable.push_back(item);
 		}
 	}
 
