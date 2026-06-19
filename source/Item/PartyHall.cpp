@@ -96,7 +96,10 @@ void PartyHall::advance(double dt)
 				v->state = Person::kReturning;
 				v->from = prototype->name;
 				v->goingTo = "Exit";
-				removePerson(v);
+				if (v->at == this)
+				{
+					removePerson(v);
+				}
 				v->journey.set(r);
 			}
 		}

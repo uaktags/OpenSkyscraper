@@ -301,6 +301,11 @@ bool Game::handleEvent(sf::Event & event)
 						blockReason = toolPrototype->name + " unavailable above ground";
 					}
 
+					if (toolPosition.y > 0 && toolPrototype->id == "cinema") {
+						constructionBlocked = true;
+						blockReason = toolPrototype->name + " unavailable above ground";
+					}
+
 					if (toolPrototype->icon == ICON_LOBBY) {
 						if (toolPosition.y % 15 != 0) {
 							constructionBlocked = true;

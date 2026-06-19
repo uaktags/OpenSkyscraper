@@ -16,6 +16,7 @@ void Cinema::init()
 
 	open = false;
 	playing = false;
+	intermission = false;
 	movieType = rand() % 15;
 	animation = 0;
 	animationFrame = 0;
@@ -33,6 +34,7 @@ void Cinema::encodeXML(tinyxml2::XMLPrinter &xml)
 	Item::encodeXML(xml);
 	xml.PushAttribute("open", open);
 	xml.PushAttribute("playing", playing);
+	xml.PushAttribute("intermission", intermission);
 	xml.PushAttribute("movie", movieType);
 
 	for (Customers::iterator c = customers.begin(); c != customers.end(); c++)
@@ -58,6 +60,7 @@ void Cinema::decodeXML(tinyxml2::XMLElement &xml)
 	Item::decodeXML(xml);
 	open = xml.BoolAttribute("open");
 	playing = xml.BoolAttribute("playing");
+	intermission = xml.BoolAttribute("intermission", false);
 	movieType = xml.IntAttribute("movie");
 	clearCustomers();
 
@@ -89,8 +92,16 @@ void Cinema::updateSprite()
 	{
 		if (playing)
 		{
-			hallIndex = 3 + animationFrame;
-			screenIndex = 3 + movieType;
+			if (intermission)
+			{
+				hallIndex = 2;
+				screenIndex = 2;
+			}
+			else
+			{
+				hallIndex = 3 + animationFrame;
+				screenIndex = 3 + movieType;
+			}
 		}
 		else
 		{
@@ -111,6 +122,7 @@ void Cinema::advance(double dt)
 	{
 		open = true;
 		playing = false;
+		intermission = false;
 		spriteNeedsUpdate = true;
 
 		// Fill in the customers for this screening.
@@ -130,8 +142,30 @@ void Cinema::advance(double dt)
 	if ((game->time.checkHour(15) || game->time.checkHour(21)) && open)
 	{
 		playing = true;
+		intermission = false;
 		spriteNeedsUpdate = true;
 		// game->timeWindow.showMessage("Movie starts at the Movie Theatre");
+	}
+
+	// Intermission
+	if ((game->time.checkHour(16) || game->time.checkHour(22)) && open && playing)
+	{
+		if (!intermission)
+		{
+			intermission = true;
+			spriteNeedsUpdate = true;
+			game->playOnce("simtower/doorbell");
+
+			for (Customers::iterator c = customers.begin(); c != customers.end(); c++)
+			{
+				Customer *p = *c;
+				if (p->at == this)
+				{
+					p->eval = std::min(p->eval + 15.0, 100.0);
+					p->addStress(-15.0);
+				}
+			}
+		}
 	}
 
 	// Close
@@ -139,6 +173,7 @@ void Cinema::advance(double dt)
 	{
 		open = false;
 		playing = false;
+		intermission = false;
 		spriteNeedsUpdate = true;
 
 		// Attendance-based income: count customers who actually reached the
@@ -167,7 +202,10 @@ void Cinema::advance(double dt)
 				p->state = Person::kReturning;
 				p->from = prototype->name;
 				p->goingTo = "Exit";
-				removePerson(p);
+				if (p->at == this)
+				{
+					removePerson(p);
+				}
 				p->journey.set(r);
 			}
 		}
@@ -188,7 +226,7 @@ void Cinema::advance(double dt)
 
 Path Cinema::getRandomBackgroundSoundPath()
 {
-	if (!open || !playing)
+	if (!open || !playing || intermission)
 		return "";
 	char name[128];
 	snprintf(name, 128, "simtower/cinema/movie%i", movieType);

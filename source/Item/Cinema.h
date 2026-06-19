@@ -26,6 +26,7 @@ namespace OT {
 			
 			bool open;
 			bool playing;
+			bool intermission;
 			int movieType;
 
 			class Customer : public Person {
