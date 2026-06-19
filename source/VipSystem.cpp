@@ -129,6 +129,8 @@ void VipSystem::endVisit()
 	const double baseGapDays = randDays(kVisitGapMinDays, kVisitGapMaxDays);
 	const double extraGapDays = (score < kGoodEvalThreshold) ? 3.0 : 0.0;
 	nextVisitTime = game->time.absolute + Time::hourToAbsolute(24.0 * (baseGapDays + extraGapDays));
+
+	game->ratingMayIncrease();
 }
 
 void VipSystem::advance(double dt)

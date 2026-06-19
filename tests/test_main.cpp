@@ -290,13 +290,14 @@ static void testLevelUpRules()
 	JudgeSystem::Counts c = {};
 	c.securityOffices = 0; c.medicalCenters = 0; c.metros = 0;
 
-	EXPECT(LevelUp::meetsRequirements(*r1to2, 300, c));  // pop only
-	EXPECT(!LevelUp::meetsRequirements(*r1to2, 299, c)); // pop short
+	EXPECT(LevelUp::meetsRequirements(*r1to2, 300, c, 0));  // pop only
+	EXPECT(!LevelUp::meetsRequirements(*r1to2, 299, c, 0)); // pop short
 
-	// 2 -> 3 stars needs security.
-	EXPECT(!LevelUp::meetsRequirements(*r2to3, 1000, c)); // missing security
+	// 2 -> 3 stars needs security + VIP approval.
+	EXPECT(!LevelUp::meetsRequirements(*r2to3, 1000, c, 0)); // missing security & VIP
 	c.securityOffices = 1;
-	EXPECT(LevelUp::meetsRequirements(*r2to3, 1000, c));
+	EXPECT(!LevelUp::meetsRequirements(*r2to3, 1000, c, 0)); // missing VIP
+	EXPECT(LevelUp::meetsRequirements(*r2to3, 1000, c, 1));  // security + VIP present
 
 	// minRatingToBuild: locked items have explicit ratings, the rest 0.
 	EXPECT(LevelUp::minRatingToBuild("cinema")    == 4);

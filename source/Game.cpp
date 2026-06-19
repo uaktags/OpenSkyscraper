@@ -1389,7 +1389,7 @@ void Game::ratingMayIncrease()
 		const LevelUp::Requirements * req = LevelUp::advancementRequirements(rating);
 		if (!req) break; // already at max rating
 
-		if (!LevelUp::meetsRequirements(*req, population, counts))
+		if (!LevelUp::meetsRequirements(*req, population, counts, vipSystem.positiveReviews()))
 		{
 			// Surface what's missing as a one-shot hint, but only when the
 			// player is close enough that the next push might trigger it.

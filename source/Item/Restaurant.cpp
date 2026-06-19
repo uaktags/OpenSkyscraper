@@ -2,6 +2,7 @@
 #include "../Game.h"
 #include "../Math/Rand.h"
 #include "Restaurant.h"
+#include "Hotel.h"
 #include <string>
 
 using namespace OT;
@@ -161,7 +162,17 @@ void Restaurant::advance(double dt)
 		CustomerMetadata &m = customerMetadata[p];
 		if (game->time.absolute >= m.arrivalTime + 20 * Time::kBaseSpeed || !open)
 		{
-			const Route &r = game->findRoute(this, game->mainLobby); // Customers may leave for different destinations besides main lobby, so this is not precomputed
+			Route r;
+			Hotel::Guest *guest = dynamic_cast<Hotel::Guest *>(p);
+			if (guest && guest->hotel)
+			{
+				r = game->findRoute(this, guest->hotel);
+			}
+			else
+			{
+				r = game->findRoute(this, game->mainLobby);
+			}
+
 			if (r.empty())
 			{
 				LOG(DEBUG, "%p has no route to leave", p);
@@ -174,7 +185,14 @@ void Restaurant::advance(double dt)
 				removePerson(p);
 				p->state = Person::kReturning;
 				p->from = prototype->name;
-				p->goingTo = "Exit";
+				if (guest && guest->hotel)
+				{
+					p->goingTo = guest->hotel->prototype->name;
+				}
+				else
+				{
+					p->goingTo = "Exit";
+				}
 				p->journey.set(r);
 			}
 		}

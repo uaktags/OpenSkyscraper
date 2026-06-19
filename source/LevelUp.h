@@ -29,6 +29,7 @@ namespace OT
 			bool needsSecurity;    ///< At least one Security office built.
 			bool needsMedical;     ///< At least one Medical Center built.
 			bool needsMetro;       ///< A Metro station built.
+			bool needsVip;         ///< A positive VIP review received.
 			const char * summary;  ///< Short human-readable description.
 		};
 
@@ -44,6 +45,7 @@ namespace OT
 		/// Helper: does the given tower state satisfy the requirements?
 		static bool meetsRequirements(const Requirements & req,
 		                               int population,
-		                               const JudgeSystem::Counts & counts);
+		                               const JudgeSystem::Counts & counts,
+		                               int vipReviews);
 	};
 }

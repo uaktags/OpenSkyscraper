@@ -91,6 +91,7 @@ void Hotel::init()
 	Item::init();
 
 	variant = prototype->variant;
+	subVariant = rand() % 2;
 	roomState = kClean;
 	dirtySince = 0;
 	housekeeper = NULL;
@@ -113,7 +114,31 @@ void Hotel::updateSprite()
 		case kSuite:  frameWidth = 56; break;
 	}
 	int row = (roomState == kDirty) ? 1 : 0;
-	sprite.setTextureRect(sf::IntRect({0, row * 24}, {frameWidth, 24}));
+	if (variant == kDouble)
+	{
+		row += subVariant * 2;
+	}
+
+	int col = 0;
+	if (roomState == kOccupied)
+	{
+		bool resting = false;
+		for (std::set<Guest *>::iterator it = guests.begin(); it != guests.end(); ++it)
+		{
+			if ((*it)->state == Person::kResting)
+			{
+				resting = true;
+				break;
+			}
+		}
+		col = resting ? 2 : 3;
+	}
+	else if (housekeeper && housekeeper->at == this && housekeeper->cleaning)
+	{
+		col = 1;
+	}
+
+	sprite.setTextureRect(sf::IntRect({col * frameWidth, row * 24}, {frameWidth, 24}));
 }
 
 void Hotel::scheduleGuest(Guest *g)
@@ -218,6 +243,34 @@ void Hotel::advance(double dt)
 			g->state = Person::kShopping;
 			g->from = prototype->name;
 			g->goingTo = "Restaurant";
+
+			Route bestRoute;
+			int bestScore = 0;
+			const Game::ItemSet &restaurants = game->itemsByType["restaurant"];
+			for (Game::ItemSet::const_iterator i = restaurants.begin(); i != restaurants.end(); i++)
+			{
+				Route candidate = game->findRoute(this, *i);
+				if (!candidate.empty() && (bestRoute.empty() || candidate.score() < bestScore))
+				{
+					bestRoute = candidate;
+					bestScore = candidate.score();
+				}
+			}
+			if (!bestRoute.empty())
+			{
+				g->journey.set(bestRoute);
+			}
+			else
+			{
+				// No restaurant reachable - they leave the tower
+				const Route &r = game->findRoute(this, game->mainLobby);
+				if (!r.empty())
+				{
+					g->state = Person::kReturning;
+					g->goingTo = "Exit";
+					g->journey.set(r);
+				}
+			}
 		}
 		// Go to sleep.
 		else if (g->atHotel && g->state == Person::kHome && t >= g->sleepTime && t < g->wakeTime)
@@ -332,6 +385,7 @@ void Hotel::encodeXML(tinyxml2::XMLPrinter &xml)
 {
 	Item::encodeXML(xml);
 	xml.PushAttribute("variant", variant);
+	xml.PushAttribute("subVariant", subVariant);
 	xml.PushAttribute("roomState", roomState);
 	xml.PushAttribute("dirtySince", dirtySince);
 
@@ -376,6 +430,7 @@ void Hotel::decodeXML(tinyxml2::XMLElement &xml)
 {
 	Item::decodeXML(xml);
 	variant = xml.IntAttribute("variant", prototype->variant);
+	subVariant = xml.IntAttribute("subVariant", rand() % 2);
 	roomState = xml.IntAttribute("roomState", kClean);
 	dirtySince = xml.DoubleAttribute("dirtySince", 0.0);
 	clearAll();
@@ -437,7 +492,7 @@ Path Hotel::getRandomBackgroundSoundPath()
 }
 
 Hotel::Guest::Guest(Hotel *item)
-	: Person(item->game)
+	: Person(item->game), hotel(item)
 {
 	arrivalTime = 0;
 	dinnerLeaveTime = 0;
