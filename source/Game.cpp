@@ -466,7 +466,7 @@ bool Game::handleEvent(sf::Event & event)
 							for (ItemSet::const_iterator ii = itemsOnFloor.begin(); !existingLobby && ii != itemsOnFloor.end(); ii++) {
 								Item::Item * i = *ii;
 								if (i->prototype->icon == ICON_LOBBY) {
-									gameMap.removeNode(MapNode::Point(i->position.x + i->size.x/2, i->position.y), i);
+									gameMap.removeNode(MapNode::Point(i->position.x + i->size.x/2, i->position.y + i->prototype->entrance_offset), i);
 									Item::Lobby * l = (Item::Lobby *) i;
 									int diff = 0;
 									if (toolPosition.x < l->position.x) {
@@ -480,7 +480,7 @@ bool Game::handleEvent(sf::Event & event)
 									}
 									LOG(INFO, "lobby diff = %d", diff);
 									l->updateSprite();
-									gameMap.addNode(MapNode::Point(i->position.x + i->size.x/2, i->position.y), i);
+									gameMap.addNode(MapNode::Point(i->position.x + i->size.x/2, i->position.y + i->prototype->entrance_offset), i);
 									if (diff > 0) {
 										transferFunds(-toolPrototype->price * 4 / diff, "construction", "Lobby extension");
 										playOnce("simtower/construction/flexible");
@@ -1058,7 +1058,7 @@ void Game::addItem(Item::Item * item)
 		}
 	}
 
-	gameMap.addNode(MapNode::Point(item->position.x + item->size.x/2, item->position.y), item);
+	gameMap.addNode(MapNode::Point(item->position.x + item->size.x/2, item->position.y + item->prototype->entrance_offset), item);
 	decorations.updateCrane();
 	if (item == metroStation) decorations.updateTracks();
 }
@@ -1094,7 +1094,7 @@ void Game::removeItem(Item::Item * item)
 	if (item == mainLobby) mainLobby = NULL;
 	if (item == metroStation) metroStation = NULL;
 
-	gameMap.removeNode(MapNode::Point(item->position.x + item->size.x/2, item->position.y), item);
+	gameMap.removeNode(MapNode::Point(item->position.x + item->size.x/2, item->position.y + item->prototype->entrance_offset), item);
 	decorations.updateCrane();
 	if (item->prototype->icon == ICON_METRO) decorations.updateTracks(); // Technically, this should not happen as Metro Stations are not removable.
 	delete item;
@@ -1107,7 +1107,7 @@ void Game::extendFloor(int floor, int minX, int maxX) {
 		std::multiset<int> &interval = f->interval;
 		interval.erase(interval.find(f->position.x));
 		interval.erase(interval.find(f->getRect().maxX()));
-		gameMap.removeNode(MapNode::Point(f->position.x + f->size.x/2, f->position.y), f);
+		gameMap.removeNode(MapNode::Point(f->position.x + f->size.x/2, f->position.y + f->prototype->entrance_offset), f);
 		float diff_left = 0;
 		if (minX < f->position.x) {
 			diff_left = f->position.x - minX;
@@ -1123,7 +1123,7 @@ void Game::extendFloor(int floor, int minX, int maxX) {
 		f->updateSprite();
 		interval.insert(f->position.x);
 		interval.insert(f->getRect().maxX());
-		gameMap.addNode(MapNode::Point(f->position.x + f->size.x/2, f->position.y), f);
+		gameMap.addNode(MapNode::Point(f->position.x + f->size.x/2, f->position.y + f->prototype->entrance_offset), f);
 		if (diff_left + diff_right > 0) {
 			decorations.updateFloor(f->position.y);
 			transferFunds(-f->prototype->price * (diff_left + diff_right), "construction", "Floor extension");

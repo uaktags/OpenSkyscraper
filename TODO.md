@@ -21,7 +21,7 @@ When pausing the game, elevators keep moving as if the game was unpaused. They r
 ### Game Speed
 Game speed seems rather fast compared to elevator movements. Cinema customers hardly arrive at the theatre in time. Slow down time, or speed up elevators?
 
-### Different Access Floors for Items
+### [DONE] Different Access Floors for Items
 People enter all items on floor 0 (relative to the item). Certain items (Metro station, Cinema) are accessed via floor 1. The item prototype should carry a field that enables a relative shift of the access floor.
 
 ### Clean up CMakeLists.txt
