@@ -85,7 +85,10 @@ void Item::render(sf::RenderTarget &target) const
 		sf::RectangleShape overlay({static_cast<float>(s.x), static_cast<float>(s.y)});
 		overlay.setPosition({static_cast<float>(p.x),
 		                     static_cast<float>(-(p.y + static_cast<int>(s.y)))});
-		overlay.setFillColor(sf::Color(170, 145, 75, 230));
+		// Compose the placeholder color with the global Lighting tint so
+		// construction sites also respect day/night/rain (Phase 3.4).
+		const sf::Color base(170, 145, 75, 230);
+		overlay.setFillColor(game->lighting.compose(base));
 		overlay.setOutlineColor(sf::Color(90, 70, 30));
 		overlay.setOutlineThickness(1.f);
 		target.draw(overlay);
@@ -93,10 +96,26 @@ void Item::render(sf::RenderTarget &target) const
 		return;
 	}
 
+	// Apply the global Lighting tint to each sprite. Sprites keep their
+	// own color elsewhere (often white, sometimes a subclass-specific
+	// tint), so we save/restore around the draw to avoid compounding the
+	// tint across frames. Phase 3.4.
+	const sf::Color tint = game->lighting.tint();
+	const bool tinted = (tint != sf::Color(255, 255, 255, 255));
 	for (SpriteSet::iterator s = sprites.begin(); s != sprites.end(); s++)
 	{
 		game->drawnSprites++;
-		target.draw(**s);
+		if (tinted)
+		{
+			const sf::Color orig = (*s)->getColor();
+			(*s)->setColor(game->lighting.compose(orig));
+			target.draw(**s);
+			(*s)->setColor(orig);
+		}
+		else
+		{
+			target.draw(**s);
+		}
 	}
 
 	if (!canHaulPeople() && position.y != 0 && prototype->icon != ICON_FLOOR && lobbyRoute.empty())
@@ -107,6 +126,7 @@ void Item::render(sf::RenderTarget &target) const
 		noroute.setOrigin({size.x / 2.f, size.y / 2.f});
 		size = getSize();
 		noroute.setPosition({size.x / 2.f, -size.y / 2.f});
+		if (tinted) noroute.setColor(game->lighting.compose(sf::Color::White));
 		target.draw(noroute);
 	}
 }

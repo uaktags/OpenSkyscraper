@@ -54,6 +54,17 @@ void Floor::render(sf::RenderTarget &target) const
 	int right = 0;
 	Sprite b = background;
 	Sprite c = ceiling;
+	// Compose floor sprites with the global Lighting tint (Phase 3.4).
+	// Floor is the single biggest visual surface in the tower, so it
+	// needs the day/night/rain treatment even though it overrides
+	// Item::render entirely.
+	const sf::Color tint = game->lighting.tint();
+	const bool tinted = (tint != sf::Color(255, 255, 255, 255));
+	if (tinted)
+	{
+		b.setColor(game->lighting.compose(b.getColor()));
+		c.setColor(game->lighting.compose(c.getColor()));
+	}
 	for (std::multiset<int>::const_iterator i = interval.begin(); i != interval.end();)
 	{
 		if (drawBackground)

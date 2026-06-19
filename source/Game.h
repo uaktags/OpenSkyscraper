@@ -11,6 +11,7 @@
 #include "PathFinder/GameMap.h"
 #include "PathFinder/PathFinder.h"
 #include "Money.h"
+#include "Lighting.h"
 #include "Sky.h"
 #include "Sound.h"
 #include "Sprite.h"
@@ -103,6 +104,11 @@ namespace OT {
 		void selectTool(const char * tool);
 
 		Sky sky;
+
+		/// Global time-of-day + weather tint (Phase 3.4). Refreshed each
+		/// frame after the Sky state has been updated; applied per-sprite
+		/// in Item::render() / Floor::render().
+		Lighting lighting;
 
 		Item::Elevator::Elevator * draggingElevator;
 		int draggingElevatorStart;

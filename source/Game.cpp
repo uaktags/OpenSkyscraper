@@ -25,6 +25,7 @@ Game::Game(Application & app)
 	elevatorDialog(this),
 	mapWindow(this),
 	sky(this),
+	lighting(this),
 	decorations(this)
 {
 	//mapWindow     = NULL;
@@ -719,6 +720,7 @@ void Game::advance(double dt)
 
 	timeWindow.advance(dt);
 	sky.advance(dt);
+	lighting.advance(dt);
 
 	for (ItemSet::iterator i = items.begin(); i != items.end(); i++) {
 		Item::Item * item = *i;

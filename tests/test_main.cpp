@@ -11,6 +11,7 @@
 #include "../source/NameManager.h"
 #include "../source/TimeWindowStyle.h"
 #include "../source/WindowsPEExecutable.h"
+#include "../source/Lighting.h"
 
 static int g_failures = 0;
 
@@ -219,6 +220,40 @@ static void testNameManager()
     NameManager::reset();
 }
 
+// Lighting seam: the per-channel color multiplication is a pure helper
+// (declared inline in Lighting.h) and is the core of the Phase 3.4 tint
+// math. Verify identity, halving, and alpha preservation.
+static void testLightingColorMath()
+{
+	using OT::Lighting;
+	const sf::Color white(255, 255, 255, 255);
+	const sf::Color half(128, 128, 128, 200);
+
+	// white * white == white (no-op tint).
+	sf::Color id = Lighting::multiply(white, white);
+	EXPECT(id.r == 255 && id.g == 255 && id.b == 255);
+
+	// white * half ~= half (tint of 128/255 ~ 0.502 should darken white).
+	sf::Color dark = Lighting::multiply(white, half);
+	EXPECT(dark.r == 128 && dark.g == 128 && dark.b == 128);
+	// Alpha of the *left* argument is preserved by contract.
+	EXPECT(dark.a == 255);
+
+	// Alpha preservation: 200 * whatever keeps 200.
+	sf::Color alphaTest = Lighting::multiply(sf::Color(255, 255, 255, 200), half);
+	EXPECT(alphaTest.a == 200);
+
+	// Symmetry of the RGB channels: multiply(black, anything) == black.
+	sf::Color black(0, 0, 0, 255);
+	sf::Color k = Lighting::multiply(black, white);
+	EXPECT(k.r == 0 && k.g == 0 && k.b == 0);
+
+	// Halving twice equals quartering (associativity on integers).
+	sf::Color quarter = Lighting::multiply(Lighting::multiply(white, half), half);
+	EXPECT(quarter.r == (128 * 128) / 255);
+	EXPECT(quarter.r > 60 && quarter.r < 70);
+}
+
 static void testWindowsPEExecutable()
 {
     OT::WindowsPEExecutable exe;
@@ -272,8 +307,9 @@ int main()
     testRouteClear();
     testMoneyAccounting();
     testTimeWindowModernLayout();
-    testNameManager();
-    testWindowsPEExecutable();
+	testNameManager();
+	testLightingColorMath();
+	testWindowsPEExecutable();
     testWindowsSPExecutable();
 
     if (g_failures > 0)

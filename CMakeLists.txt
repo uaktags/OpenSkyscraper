@@ -183,5 +183,10 @@ add_executable(OpenSkyTests
   source/NameManager.cpp
 )
 target_compile_definitions(OpenSkyTests PRIVATE OPEN_SKY_ROUTE_SEAM_ONLY)
+# Lighting.h pulls in <SFML/Graphics/Color.hpp> for the tint color. We only
+# need the headers (sf::Color is a POD struct defined inline), but linking
+# against SFML::Graphics is the simplest way to make the include paths
+# available to the test target without pulling in the rest of the engine.
+target_link_libraries(OpenSkyTests PRIVATE SFML::Graphics)
 add_test(NAME OpenSkyTests COMMAND OpenSkyTests)
 
