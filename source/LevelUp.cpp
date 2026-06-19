@@ -8,11 +8,11 @@ namespace
 	// Index 0 = advancing from 1 star to 2 stars (rating 0 -> 1).
 	// Index 4 is unused (5 stars is the maximum).
 	const LevelUp::Requirements kAdvancement[] = {
-		{   0, false, false, false, "Starting tower"               }, // rating 0 (1 star) - always
-		{ 300, false, false, false, "Reach 300 population"         }, // 1 -> 2 stars
-		{1000, true,  false, false, "1000 population + Security"   }, // 2 -> 3 stars
-		{2000, true,  true,  false, "2000 population + Medical"    }, // 3 -> 4 stars
-		{3000, true,  true,  true,  "3000 population + Metro"      }, // 4 -> 5 stars
+		{   0, false, false, false, false, "Starting tower"               }, // rating 0 (1 star) - always
+		{ 300, false, false, false, false, "Reach 300 population"         }, // 1 -> 2 stars
+		{1000, true,  false, false, true,  "1000 population + Security + VIP Approval" }, // 2 -> 3 stars
+		{2000, true,  true,  false, false, "2000 population + Medical"    }, // 3 -> 4 stars
+		{3000, true,  true,  true,  true,  "3000 population + Metro + VIP Approval" }, // 4 -> 5 stars
 	};
 
 	struct ItemLock { const char * id; int minRating; };
@@ -61,11 +61,13 @@ int LevelUp::minRatingToBuild(const std::string & prototypeId)
 
 bool LevelUp::meetsRequirements(const Requirements & req,
                                 int population,
-                                const JudgeSystem::Counts & counts)
+                                const JudgeSystem::Counts & counts,
+                                int vipReviews)
 {
 	if (population < req.population) return false;
 	if (req.needsSecurity && counts.securityOffices <= 0) return false;
 	if (req.needsMedical  && counts.medicalCenters <= 0)  return false;
 	if (req.needsMetro    && counts.metros <= 0)          return false;
+	if (req.needsVip      && vipReviews <= 0)             return false;
 	return true;
 }

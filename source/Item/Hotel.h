@@ -21,6 +21,7 @@ namespace OT
 			enum RoomState { kClean = 0, kOccupied = 1, kDirty = 2 };
 
 			int variant;
+			int subVariant;
 			int roomState;
 			double dirtySince;
 			int capacity() const;
@@ -31,6 +32,7 @@ namespace OT
 				Guest(Hotel *item);
 				virtual ~Guest() { LOG(DEBUG, "hotel guest %p killed", this); }
 
+				Hotel *hotel;
 				double arrivalTime;
 				double dinnerLeaveTime;
 				double dinnerReturnTime;
