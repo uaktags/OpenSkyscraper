@@ -2,6 +2,7 @@
 #include "../Game.h"
 #include "../Math/Rand.h"
 #include "Restaurant.h"
+#include "Hotel.h"
 #include <string>
 
 using namespace OT;
@@ -18,6 +19,7 @@ void Restaurant::init()
 
 	variant = rand() % 4;
 	open = false;
+	pricePerMeal = 400;
 
 	sprite.setTexture(App->bitmaps["simtower/restaurant"]);
 	sprite.setOrigin({0.f, 24.f});
@@ -33,6 +35,8 @@ void Restaurant::encodeXML(tinyxml2::XMLPrinter &xml)
 	Item::encodeXML(xml);
 	xml.PushAttribute("variant", variant);
 	xml.PushAttribute("open", open);
+	xml.PushAttribute("pricePerMeal", pricePerMeal);
+	xml.PushAttribute("population", population);
 
 	for (Customers::iterator c = customers.begin(); c != customers.end(); c++)
 	{
@@ -71,6 +75,8 @@ void Restaurant::decodeXML(tinyxml2::XMLElement &xml)
 	Item::decodeXML(xml);
 	variant = xml.IntAttribute("variant");
 	open = xml.BoolAttribute("open");
+	pricePerMeal = xml.IntAttribute("pricePerMeal", 400);
+	population = xml.IntAttribute("population", 0);
 	clearCustomers();
 
 	for (tinyxml2::XMLElement *e = xml.FirstChildElement("customer"); e; e = e->NextSiblingElement("customer"))
@@ -112,25 +118,41 @@ void Restaurant::updateSprite()
 
 void Restaurant::advance(double dt)
 {
-	// Open
+		// Open
 	if (game->time.checkHour(17))
 	{
 		open = true;
 		spriteNeedsUpdate = true;
 
 		// Create new customers for today.
-		int today = 10;
+		int today = 0;
+		for (Game::ItemSet::const_iterator i = game->items.begin(); i != game->items.end(); ++i)
+		{
+			if (Hotel *hotel = dynamic_cast<Hotel *>(*i))
+			{
+				if (!game->findRoute(hotel, this).empty())
+				{
+					int roomPop = hotel->guests.size();
+					if (roomPop == 0 && !hotel->lobbyRoute.empty())
+					{
+						roomPop = hotel->capacity();
+					}
+					today += roomPop;
+				}
+			}
+		}
+
 		clearCustomers();
 		for (int i = 0; i < today; i++)
 		{
 			Customer *c = new Customer(this);
-			c->arrivalTime = (game->time.year - 1) * 12 + (game->time.quarter - 1) * 3 + game->time.day + Math::randd(Time::hourToAbsolute(17), Time::hourToAbsolute(22));
+			c->arrivalTime = (game->time.year - 1) * 12 + (game->time.quarter - 1) * 3 + game->time.day + Math::randd(Time::hourToAbsolute(17), Time::hourToAbsolute(19));
 			customers.insert(c);
 			arrivingCustomers.push(c);
 		}
 	}
 
-	// Close
+// Close
 	if (game->time.checkHour(23) && open)
 	{
 		open = false;
@@ -138,7 +160,7 @@ void Restaurant::advance(double dt)
 		game->populationNeedsUpdate = true;
 		spriteNeedsUpdate = true;
 
-		game->transferFunds(population * 400 - 4000, "retail_income", "Income from Restaurant");
+		game->transferFunds(population * pricePerMeal - dailyMaintenanceCost(), "retail_income", "Income from Restaurant");
 	}
 
 	// Make customers arrive.
@@ -148,7 +170,15 @@ void Restaurant::advance(double dt)
 		if (game->time.absolute > c->arrivalTime && !lobbyRoute.empty())
 		{
 			arrivingCustomers.pop();
-			c->journey.set(lobbyRoute);
+			if (game->time.hour < 19.0)
+			{
+				c->journey.set(lobbyRoute);
+			}
+			else
+			{
+				customers.erase(c);
+				delete c;
+			}
 		}
 		else
 			break;

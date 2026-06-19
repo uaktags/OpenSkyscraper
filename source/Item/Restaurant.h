@@ -28,6 +28,7 @@ namespace OT
 
 			int variant;
 			bool open;
+			int pricePerMeal;
 
 			class Customer : public Person
 			{
