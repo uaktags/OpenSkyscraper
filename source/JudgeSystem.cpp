@@ -7,6 +7,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <set>
 
 using namespace OT;
 
@@ -119,6 +121,27 @@ double JudgeSystem::clampScore(double v)
 	if (v < 0)   return 0;
 	if (v > 100) return 100;
 	return v;
+}
+
+namespace {
+	// Rule-of-thumb capacities used by the granular counters. They don't
+	// drive any gameplay directly; they just give the statistics UI and
+	// future VIP system a sensible "this tower can hold N people" number.
+	int populationCapacityFor(const std::string & id)
+	{
+		if (id == "office")                       return 3;
+		if (id == "condo" || id == "yoot_condo")  return 2;
+		return 0; // hotels counted via capacity() below
+	}
+	int visitorCapacityFor(const std::string & id)
+	{
+		// Coarse visitor estimates for commercial venues.
+		if (id == "fastfood")    return 6;
+		if (id == "restaurant")  return 8;
+		if (id == "cinema")      return 20;
+		if (id == "partyhall")   return 15;
+		return 0;
+	}
 }
 
 /** Base score shared by all tenant types. Rewards being reachable from the
@@ -265,13 +288,24 @@ void JudgeSystem::evaluateAll(Game * game)
 		{
 			++lastCounts.hotels;
 			Item::Hotel * hotel = dynamic_cast<Item::Hotel *>(*it);
-			if (hotel && hotel->roomState == Item::Hotel::kDirty)
-				++lastCounts.hotelsDirty;
+			if (hotel)
+			{
+				if (hotel->roomState == Item::Hotel::kDirty)    ++lastCounts.hotelsDirty;
+				else if (hotel->roomState == Item::Hotel::kOccupied) ++lastCounts.hotelsOccupied;
+				lastCounts.visitorCapacity += hotel->capacity();
+			}
 		}
 		else if (id == "fastfood" || id == "restaurant") ++lastCounts.foodOutlets;
 		else if (id == "security")                       ++lastCounts.securityOffices;
 		else if (id == "medicalcenter")                  ++lastCounts.medicalCenters;
 		else if (id == "metro")                          ++lastCounts.metros;
+
+		// Granular capacity / occupancy tallies. These are reported
+		// alongside the basic Counts above so future UI/VIP systems can
+		// read a single struct instead of rescanning the world.
+		lastCounts.populationCapacity += populationCapacityFor(id);
+		lastCounts.visitorCapacity    += visitorCapacityFor(id);
+		lastCounts.currentOccupants   += static_cast<int>((*it)->people.size());
 	}
 	lastCounts.population = game->population;
 
@@ -312,10 +346,17 @@ void JudgeSystem::evaluateAll(Game * game)
 			(*p)->eval = score;
 	}
 
-	LOG(DEBUG, "JudgeSystem pass: o=%i c=%i h=%i (dirty=%i) food=%i sec=%i med=%i pop=%i cov=%.2f",
+	LOG(DEBUG, "JudgeSystem pass: o=%i c=%i h=%i (dirty=%i occ=%i) food=%i sec=%i med=%i pop=%i cap=%i/%i cov=%.2f",
 	    lastCounts.offices, lastCounts.condos, lastCounts.hotels, lastCounts.hotelsDirty,
-	    lastCounts.foodOutlets, lastCounts.securityOffices, lastCounts.medicalCenters,
-	    lastCounts.population, parkingCoverage);
+	    lastCounts.hotelsOccupied, lastCounts.foodOutlets, lastCounts.securityOffices,
+	    lastCounts.medicalCenters, lastCounts.population, lastCounts.populationCapacity,
+	    lastCounts.visitorCapacity, parkingCoverage);
+
+	// Aggregate hotel review (JudgeAllHotel equivalent) and per-tenant
+	// bad-day tracking (ExpandoBadHotel equivalent). Each may surface a
+	// message via timeWindow.showMessage.
+	reviewHotels(game);
+	reviewUnderperformers(game);
 
 	// Surface a daily complaint if any tenant is critically unhappy. The
 	// original SimTower does this via InfoDlog/TenantInfo messages.
@@ -326,6 +367,117 @@ void JudgeSystem::evaluateAll(Game * game)
 		         lastCounts.criticalTenants,
 		         lastCounts.criticalTenants == 1 ? " is" : "s are");
 		game->timeWindow.showMessage(buf);
+	}
+}
+
+bool JudgeSystem::reviewHotels(Game * game)
+{
+	// Aggregate review across all hotel items. Updates hotelAvgEval and
+	// emits a daily complaint when hotels are persistently underperforming
+	// (low average evaluation OR persistent dirty-room ratio). This is
+	// the JudgeAllHotel equivalent from the Yoot source.
+	lastCounts.hotelAvgEval = 0.0;
+	if (lastCounts.hotels <= 0) return false;
+
+	double sumEval = 0;
+	int counted = 0;
+	for (Game::ItemSet::iterator it = game->items.begin(); it != game->items.end(); ++it)
+	{
+		Item::Hotel * hotel = dynamic_cast<Item::Hotel *>(*it);
+		if (!hotel) continue;
+		sumEval += hotel->evaluation;
+		++counted;
+	}
+	if (counted == 0) return false;
+	lastCounts.hotelAvgEval = sumEval / counted;
+
+	const double dirtyRatio = static_cast<double>(lastCounts.hotelsDirty) / lastCounts.hotels;
+	const double occRatio   = static_cast<double>(lastCounts.hotelsOccupied) / lastCounts.hotels;
+
+	// Complaint thresholds: very low average evaluation, or a tower where
+	// most hotel rooms are dirty (housekeeping can't keep up). Phrased so
+	// we only nag when something is concretely wrong.
+	if (lastCounts.hotelAvgEval < 35.0)
+	{
+		char buf[160];
+		snprintf(buf, sizeof(buf),
+		         "Hotels struggling (avg eval %.0f) - check routes, restaurants & parking",
+		         lastCounts.hotelAvgEval);
+		game->timeWindow.showMessage(buf);
+		return true;
+	}
+	if (dirtyRatio > 0.5 && lastCounts.hotels >= 3)
+	{
+		char buf[128];
+		snprintf(buf, sizeof(buf),
+		         "%d of %d hotel rooms need housekeeping",
+		         lastCounts.hotelsDirty, lastCounts.hotels);
+		game->timeWindow.showMessage(buf);
+		return true;
+	}
+	// Positive note when running near capacity - helps the player understand
+	// their hotel is doing well (mirrors original VIP/evaluation feedback).
+	if (occRatio > 0.8 && lastCounts.hotelsOccupied >= 4)
+	{
+		game->timeWindow.showMessage("Hotel occupancy high - consider building more rooms");
+	}
+	return false;
+}
+
+void JudgeSystem::reviewUnderperformers(Game * game)
+{
+	// ExpandoBadHotel equivalent. The original dynamically grew/shrank
+	// hotels; our items have fixed footprints after construction, so we
+	// instead track a per-tenant "bad-day streak" and surface targeted
+	// complaints only when a tenant has been unhappy for several days.
+	// This avoids spamming the player on a single transient dip.
+	const double kBadThreshold = 25.0;
+	const int    kWarnAfterDays = 3;
+
+	// Build the current set of underperformers so we can prune stale
+	// entries below.
+	std::set<Item::Item *> stillBad;
+	for (Game::ItemSet::iterator it = game->items.begin(); it != game->items.end(); ++it)
+	{
+		Item::Item * item = *it;
+		const std::string & id = item->prototype->id;
+		// Only track actual tenant types (skip elevators, floors, lobbies).
+		bool isTenant = (id == "office"   || id == "condo"    || id == "yoot_condo" ||
+		                 id == "hotel_single" || id == "hotel_double" ||
+		                 id == "hotel_suite"  || id == "hotel" ||
+		                 id == "fastfood" || id == "restaurant" ||
+		                 id == "cinema"   || id == "partyhall");
+		if (!isTenant) continue;
+
+		if (item->evaluation < kBadThreshold)
+		{
+			stillBad.insert(item);
+			int & streak = badDayStreak[item];
+			++streak;
+			// Warn once when the tenant crosses the persistence threshold,
+			// and again every 5 days after so the player is reminded.
+			if (streak == kWarnAfterDays || (streak > kWarnAfterDays && (streak - kWarnAfterDays) % 5 == 0))
+			{
+				char buf[160];
+				snprintf(buf, sizeof(buf), "%s on floor %i has been unhappy for %i day%s",
+				         item->prototype->name.c_str(),
+				         item->position.y,
+				         streak,
+				         streak == 1 ? "" : "s");
+				game->timeWindow.showMessage(buf);
+			}
+		}
+	}
+
+	// Decay/clear streaks for items that recovered, and prune entries for
+	// items that have been removed from the world.
+	for (std::map<Item::Item *, int>::iterator it = badDayStreak.begin();
+	     it != badDayStreak.end(); )
+	{
+		if (stillBad.find(it->first) == stillBad.end())
+			it = badDayStreak.erase(it);
+		else
+			++it;
 	}
 }
 

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <map>
+
 namespace OT
 {
 	class Game;
@@ -30,18 +32,32 @@ namespace OT
 		void evaluateAll(Game * game);
 
 		/// Tallies accumulated during the last evaluateAll() pass.
+		/// Approximates the per-type counters (CountPC / CountVC /
+		/// CountIn / CountDay) from CountT.h/c in the Yoot source.
 		struct Counts
 		{
 			int offices;
 			int condos;
 			int hotels;
 			int hotelsDirty;
+			int hotelsOccupied;   ///< hotel rooms currently kOccupied
 			int foodOutlets;     ///< fast food + restaurant
 			int securityOffices;
 			int medicalCenters;
 			int metros;
 			int population;
 			int criticalTenants; ///< tenants with evaluation < 25 (complaint risk)
+
+			/// Granular capacity/occupancy metrics. Capacity uses each
+			/// item type's rule-of-thumb (offices: 3 workers, condos: 2
+			/// residents, hotels: capacity() per room). Visitors and
+			/// day-pass counts are stubbed until the matching scheduling
+			/// work lands; they are reported here so future UI/stat
+			/// windows can read a single struct.
+			int populationCapacity; ///< sum of worker/resident capacity
+			int visitorCapacity;    ///< hotel + commercial capacity
+			int currentOccupants;   ///< people currently at an item
+			double hotelAvgEval;    ///< mean evaluation across hotels, 0 if none
 		};
 		const Counts & counts() const { return lastCounts; }
 
@@ -52,6 +68,17 @@ namespace OT
 		double scoreHotel(Game * game, Item::Item * item);
 		double scoreCommercial(Game * game, Item::Item * item);
 
+		/// Aggregate hotel review (JudgeAllHotel equivalent). Returns
+		/// true if hotels are underperforming enough to surface a daily
+		/// complaint. Also updates lastCounts.hotelAvgEval.
+		bool reviewHotels(Game * game);
+
+		/// Per-tenant bad-day tracking (ExpandoBadHotel equivalent).
+		/// Bumps a counter for each tenant with evaluation < 25, decays
+		/// it otherwise, and returns the list of tenants that have been
+		/// unhappy long enough to warrant a targeted complaint.
+		void reviewUnderperformers(Game * game);
+
 		/// Shared metrics.
 		static double clampScore(double v);
 
@@ -61,5 +88,10 @@ namespace OT
 		double parkingCoverage;
 
 		Counts lastCounts;
+
+		/// Item pointer -> consecutive bad days. Used by
+		/// reviewUnderperformers to only complain about persistently
+		/// unhappy tenants rather than transient dips.
+		std::map<Item::Item *, int> badDayStreak;
 	};
 }
