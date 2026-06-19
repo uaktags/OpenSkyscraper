@@ -13,7 +13,7 @@ General / Cross-cutting
 -------------------------------------------------------------------------------
 
 - [DONE] `mapWindow` is now its own class `MapWindow` (Phase 4.2).
-- [ ] Cache the result of the KWAJ decompression so the game doesn't decompress `SIMTOWER.EX_` every launch.
+- [DONE] Cache the result of the KWAJ decompression so the game doesn't decompress `SIMTOWER.EX_` every launch.
 
 ### [DONE] Pausing doesn't affect elevators
 When pausing the game, elevators keep moving as if the game was unpaused. They react to speedup by moving faster — investigate why they don't react to the speeddown.
