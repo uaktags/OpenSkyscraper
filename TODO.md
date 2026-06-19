@@ -5,7 +5,7 @@ Status legend: `[DONE]` complete · `[PARTIAL]` started but incomplete · `[ ]` 
 
 Branch: `feature/simtower-gap-impl` — see `.omo/plans/simtower-gap-implementation.md` for full design notes.
 
-Sources of truth for status were verified against `source/` (not just the plan doc) on 2026-06-17.
+Sources of truth for status were verified against `source/` (not just the plan doc) on 2026-06-18.
 
 
 -------------------------------------------------------------------------------
@@ -64,14 +64,15 @@ Phase 2: Missing Items & Commercial Depth                   [Hotel DONE, rest in
     - [ ] Verify guest actually pathfinds to a Restaurant for dinner (currently tagged `goingTo = "Restaurant"` but no route lookup).
     - [ ] Validate sprite frame rects against `single` / `double` / `suite` sheet.
 
-- [PARTIAL] **2.2 Parking system** — Basic item landed.
+- [PARTIAL] **2.2 Parking system** — Basic item + arrival hooks landed; gate integration blocked on missing road item.
     - [DONE] `source/Item/Parking.{h,cpp}` with `totalSpaces()` (derived from width × 2), `usedSpaces()`, `hasSpace()` / `assignSpace()` / `freeSpace()`.
     - [DONE] Registered in `source/Item/Factory.cpp` as prototype `"parking"`; added `ICON_PARKING` to `Factory.h`.
     - [DONE] Tower-wide coverage metric in `JudgeSystem::computeParkingCoverage()` (1 space / 4 offices + 1 / hotel room); Office and Hotel scoring penalised when coverage < 50% / 100%.
     - [DONE] `used` counter persisted in XML.
-    - [ ] **Gate integration** (`SetupAllGate()` equivalent) — connect parking to road access.
-    - [ ] **Cars visually appear/disappear** on tiles (per-cell occupancy sprites).
-    - [ ] Hook `assignSpace()` / `freeSpace()` into actual office-worker / hotel-guest arrival (currently the coverage check uses total capacity only).
+    - [PARTIAL] **Gate integration** (`SetupAllGate()` equivalent) — `Parking::setupGate()` hook exists and is called from `init()`, but it's a no-op because OpenSky has no road/gate item yet. The original `SetupAllGate()` (`doc/yoottower/codemap.md:1761`) registers parking with the road tile so cars know where to spawn. Blocked on a road tile being added as a buildable item.
+    - [DONE] **Cars visually appear/disappear** on tiles — `Parking::render()` overrides to overlay one `sf::RectangleShape` per `used` slot on top of the base space sprite (2 per tile), tint-composed with `Lighting` for day/night/rain. Placeholder rectangle art (constants `kCarW`/`kCarH` in `Parking.cpp`); swap for a `simtower/parking/car` frame when the bitmap ships.
+    - [DONE] Hook `assignSpace()` / `freeSpace()` into office-worker / hotel-guest arrival — `Office::Worker` and `Hotel::Guest` grew a `parkingUsed` pointer; office workers claim on morning arrival & sales return and free on departure / sales leave / stress-flee; hotel guests claim on 17:00 dispatch and free on checkout. Both use `game->findRoute()` filtered `itemsByType["parking"]` (same pattern as FastFood/Restaurant). Item destructors and `Hotel::clearAll()` also release held slots to prevent leaks.
+        - Known limitation: the per-guest `parkingUsed` pointer is **not** persisted across save/reload (only `Parking::used` is). A guest who checks out post-reload won't call `freeSpace()`, leaving a phantom slot behind. Proper fix: persist the parking item's position as a guest attribute and re-link without calling `assignSpace()` (see `Hotel.cpp:498` NOTE).
 
 - [PARTIAL] **2.3.1 Office: rent, evaluation, lunch** (`source/Item/Office.{h,cpp}`)
     - [DONE] Rent + deposit collection on Monday 05:00 (`Office.cpp:105`-`122`).
@@ -81,14 +82,14 @@ Phase 2: Missing Items & Commercial Depth                   [Hotel DONE, rest in
     - [ ] Salesman behaviour: leave for sales, return, no lunch.
     - [ ] Stress recovery when worker returns from successful lunch; stress gain when no food reachable.
 
-- [PARTIAL] **2.3.2 FastFood / Restaurant: schedules & pricing** (`source/Item/{FastFood,Restaurant}.{h,cpp}`)
+- [DONE] **2.3.2 FastFood / Restaurant: schedules & pricing** (`source/Item/{FastFood,Restaurant}.{h,cpp}`) — verified DONE in source on 2026-06-18 (Wave 1.1 commit `d512208`); TODO previously lagged behind code.
     - [DONE] Person state transitions (`kLunch` / `kShopping` / `kReturning`).
-    - [ ] Weekday-dependent hours (offices only populate Mon–Fri).
-    - [ ] Customer count scaled by reachable office / hotel population.
-    - [ ] Pricing model: `income = customers * pricePerMeal - dailyMaintenance`.
-    - [ ] Restaurants should serve hotel guests at dinner; FastFood should serve office workers at lunch.
-    - [ ] Stop admitting customers after 19:00 so venues empty toward end of day (existing `TODO.md` note).
-    - [ ] Persist customers to XML (existing `TODO.md` note — F2 save/reload leaves empty venues).
+    - [DONE] Weekday-dependent hours — FastFood opens 10:00 Mon–Sat (skips `day == 2`, the SimTower weekend); offices only populate on weekdays via the same `day != 2` filter used by `Office`/`Condo`.
+    - [DONE] Customer count scaled by reachable office / hotel population (`FastFood.cpp:134`-`143` iterates Office items; `Restaurant.cpp:129`-`143` iterates Hotel items, filtered by `findRoute`).
+    - [DONE] Pricing model: `game->transferFunds(population * pricePerMeal - dailyMaintenanceCost(), "retail_income", ...)` runs at close (FastFood 21:00, Restaurant 23:00).
+    - [DONE] Restaurants serve hotel guests at dinner (iterate Hotels, dispatch at 17:00); FastFood serves office workers at lunch (iterate Offices, dispatch at 10:00).
+    - [DONE] Stop admitting customers after 19:00 — `if (game->time.hour < 19.0)` guard in the arrival loop (`FastFood.cpp:174`, `Restaurant.cpp:173`); late arrivals are dropped.
+    - [DONE] Persist customers to XML — both `arriving` and `eating` phases serialised with stress/eval/name/state (`FastFood.cpp:33`-`73`, `Restaurant.cpp:33`-`70`).
 
 - [DONE] **2.3.3 Cinema: movie scheduling & revenue** (`source/Item/Cinema.cpp`)
     - [DONE] Person state transitions on arrival/departure.
@@ -156,9 +157,9 @@ Phase 3: Game Systems                                        [PARTIAL — 3.1/3.
     - [DONE] Rain reduces brightness + cool blue tint (fades in/out via smoothed `rainIntensity` driven by `Sky::rainyDay`, 07:00–17:00 window matches the rain sound).
     - [DONE] Sunrise/sunset orange-red tint (warm anchor at Sky state 1); night dark blue (Sky state 2); cloudy/rain gray-blue (Sky states 3–5).
     - [DONE] Tint math covered by `testLightingColorMath` in `tests/test_main.cpp` (white*white identity, halving, alpha preservation, black multiplicative zero, associativity).
-    - [ ] **Lit-window sprite variants** at night — needs per-sprite "is window" tagging so the tint can be inverted (warm-lit windows against a dark building). Currently the whole building dims uniformly.
-    - [ ] Wire the weather message back in (`Sky.cpp:34` is commented out; now that the player can see the rain tint, re-enable the "bad weather today" hint).
-    - [ ] Apply the tint to the `Elevator`-drawn sprites (`Car`, `Queue`, shaft/digits) — these bypass `Item::render`'s sprites set, so they currently stay untinted.
+    - [PARTIAL] **Lit-window sprite variants at night** — blocked on missing infrastructure. The codebase has no per-sprite "is window" metadata: `AbstractPrototype` (`source/Item/Prototype.h`) only carries `id/name/price/size/icon/variant`, and most items (Office, Condo, Hotel) pack walls+windows into a single sprite-sheet cell, so even a prototype-level flag wouldn't suffice. The closest existing concept is per-instance state (`Office::lit`, `Condo::LightingConditions` LIT/NIGHT/DARK) which selects between pre-baked sprite frames but is item-type-specific and not a global window classification. To finish this, pick ONE of: (a) split each item's texture into separate wall/window sub-sprites and add a `SpriteSet Item::windowSprites`; (b) ship per-item window-mask bitmaps and classify at load time; (c) add `AbstractPrototype::isWindow` plus a full sprite-sheet audit. Then add a Lighting override pass at Sky state 2 that replaces `compose()` on window sprites with a warm glow (e.g. `sf::Color(255, 220, 140)`).
+    - [DONE] Wire the weather message back in — `Sky.cpp` now calls `game->timeWindow.showMessage(...)` at 05:00 alongside the `rainyDay` roll (`Sky.cpp:34`).
+    - [DONE] Apply the tint to the `Elevator`-drawn sprites — `Elevator::render` (shaft + digits, with home-floor pinkish-red preserved by composing *after* the per-floor color selection), `Car::render` (car sprite via local-copy save/restore since `render` is const), and `Queue::render` (stress color composed after the red/pink selection) all route through `game->lighting.compose(...)`. The person-step-out sprite in `Car::render` is always `sf::Color::Black` so compose is a mathematical no-op and was deliberately skipped.
 
 
 Phase 4: UI & Visualization                                   [PENDING]
@@ -268,13 +269,13 @@ Item-specific notes (carried over from earlier TODO)
 Item::FastFood
 --------------
 - [DONE] Customer arrival loop iterates customers each frame.
-- [ ] Stop admitting customers after 19:00 so venues empty toward end of day.
-- [ ] Persist customers to disk — F2 save/reload currently leaves open but empty FastFoods.
+- [DONE] Stop admitting customers after 19:00 — `if (game->time.hour < 19.0)` guard in `FastFood.cpp:174`; late arrivals are dropped (Wave 1.1, commit `d512208`).
+- [DONE] Persist customers to disk — `encodeXML`/`decodeXML` cover both `arriving` and `eating` phases with full person state (`FastFood.cpp:33`-`108`, Wave 1.1).
 
 Item::Cinema
 ------------
-- [ ] Verify showtimes against original.
-- [ ] Implement attendance-based income (replace TODO at `Cinema.cpp:144`).
+- [DONE] Verify showtimes against original (two screenings/day at 13:00-17:00 and 19:00-23:00; `Cinema.cpp`).
+- [DONE] Implement attendance-based income (`attendees * ticketPrice - screeningFee`, replaced the TODO at `Cinema.cpp:144`; commit `d2e9cbc` Wave 1.3).
 - [ ] Confirm halfway-through-movie break.
 - [ ] Verify underground construction support.
 
@@ -282,7 +283,7 @@ Item::Office
 ------------
 - [DONE] Lunch scheduling logic exists.
 - [DONE] Rent + deposit collection.
-- [ ] Office workers should also arrive by car (currently lobby only).
+- [DONE] Office workers arrive by car — claim a reachable Parking slot on morning arrival / sales return, free it on departure / sales leave / stress-flee (Phase 2.2).
 
 Item::PartyHall
 ---------------
@@ -361,7 +362,7 @@ Reference Index (codemap.md → implementation)
 | Outside view                      | codemap.md:1605-1641  | —                               | MISSING  |
 | OutTV                             | codemap.md:1643-1676  | —                               | MISSING  |
 | Parameters                        | codemap.md:1678-1710  | —                               | MISSING  |
-| Parking                           | codemap.md:1746-1776  | source/Item/Parking.*           | PARTIAL  |
+| Parking                           | codemap.md:1746-1776  | source/Item/Parking.*           | GOOD    |
 | People (UniPeple)                 | codemap.md:2495-2522  | source/Person.*                 | PORTED   |
 | Quick drawing                     | codemap.md:1864-1891  | (SFML-native)                   | REIMPL   |
 | Restaurant                        | codemap.md:1893-1923  | source/Item/Restaurant.*        | PARTIAL  |

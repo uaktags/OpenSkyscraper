@@ -8,6 +8,8 @@ namespace OT
 {
 	namespace Item
 	{
+		class Parking;
+
 		class Office : public Item
 		{
 		public:
@@ -62,6 +64,11 @@ namespace OT
 				/// supposed to have lunch.
 				double lunchTime;
 				double lunchReturnTime;
+
+				/// Parking slot the worker's car currently occupies (NULL if
+				/// they arrived on foot or no reachable parking had space).
+				/// Freed on departure, sales trips and stress-flee.
+				Parking * parkingUsed = nullptr;
 
 				struct arrivesLaterThan
 				{

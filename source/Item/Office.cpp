@@ -3,18 +3,55 @@
 #include "../Game.h"
 #include "../Math/Rand.h"
 #include "../Time.h"
+#include "Parking.h"
 
 using OT::Path;
 using OT::Route;
 using OT::Time;
 using OT::Item::Office;
+using OT::Item::Parking;
 using OT::Math::randd;
+
+// Find a reachable Parking with a free slot and assign it to the worker.
+// Mirrors the FastFood/Restaurant pattern of iterating game->itemsByType
+// and filtering by findRoute. Returns the claimed Parking or NULL.
+static Parking * claimReachableParking(OT::Game * game, OT::Item::Item * origin)
+{
+	const OT::Game::ItemSet &parkings = game->itemsByType["parking"];
+	for (OT::Game::ItemSet::const_iterator it = parkings.begin(); it != parkings.end(); ++it)
+	{
+		Parking *park = dynamic_cast<Parking *>(*it);
+		if (!park || !park->hasSpace()) continue;
+		if (game->findRoute(origin, park).empty()) continue;
+		if (park->assignSpace())
+		{
+			park->spriteNeedsUpdate = true;
+			return park;
+		}
+	}
+	return NULL;
+}
+
+static void releaseParking(Parking * park)
+{
+	if (!park) return;
+	park->freeSpace();
+	park->spriteNeedsUpdate = true;
+}
 
 Office::~Office()
 {
 	// Get rid of the workers.
 	for (Workers::iterator c = workers.begin(); c != workers.end(); c++)
+	{
+		if ((*c)->parkingUsed)
+		{
+			(*c)->parkingUsed->freeSpace();
+			(*c)->parkingUsed->spriteNeedsUpdate = true;
+			(*c)->parkingUsed = NULL;
+		}
 		delete *c;
+	}
 }
 
 void Office::init()
@@ -141,6 +178,9 @@ void Office::advance(double dt)
 				arrivalQueue.pop();
 				c->state = Person::kWorking;
 				c->journey.set(lobbyRoute);
+				// Drive in: claim a reachable parking slot for the car.
+				if (!c->parkingUsed)
+					c->parkingUsed = claimReachableParking(game, this);
 			}
 			else
 				break;
@@ -164,6 +204,9 @@ void Office::advance(double dt)
 					LOG(DEBUG, "%p leaving office", c);
 					c->state = Person::kReturning;
 					c->journey.set(r);
+					// Drive home: free the parking slot.
+					releaseParking(c->parkingUsed);
+					c->parkingUsed = NULL;
 				}
 			}
 			else
@@ -241,6 +284,10 @@ void Office::advance(double dt)
 					LOG(DEBUG, "Salesman %p leaving office", w);
 					w->state = Person::kWandering;
 					w->journey.set(r);
+					// Driving off for the sales trip - free the slot; it
+					// will be re-claimed when the salesman returns.
+					releaseParking(w->parkingUsed);
+					w->parkingUsed = NULL;
 				}
 			}
 			else
@@ -257,6 +304,9 @@ void Office::advance(double dt)
 				LOG(DEBUG, "Calling back salesman %p", w);
 				w->state = Person::kWorking;
 				w->journey.set(lobbyRoute);
+				// Drive back in - try to claim a fresh slot.
+				if (!w->parkingUsed)
+					w->parkingUsed = claimReachableParking(game, this);
 			}
 			else
 				break;
@@ -278,6 +328,8 @@ void Office::advance(double dt)
 				w->goingTo = "Home (stressed)";
 				w->journey.set(homeRoute);
 				w->addStress(-10.0); // recovering on the way home
+				releaseParking(w->parkingUsed);
+				w->parkingUsed = NULL;
 				game->timeWindow.showMessage("Worker leaves a stressful office");
 			}
 		}

@@ -4,11 +4,38 @@
 #include "../Time.h"
 #include "Factory.h"
 #include "Hotel.h"
+#include "Parking.h"
 #include <cmath>
 #include <string>
 
 using namespace OT;
 using namespace OT::Item;
+
+// Find a reachable Parking with a free slot and assign it. Mirrors the
+// FastFood/Restaurant iteration pattern. Returns the claimed Parking or NULL.
+static Parking * claimReachableParking(Game * game, OT::Item::Item * origin)
+{
+	const Game::ItemSet &parkings = game->itemsByType["parking"];
+	for (Game::ItemSet::const_iterator it = parkings.begin(); it != parkings.end(); ++it)
+	{
+		Parking *park = dynamic_cast<Parking *>(*it);
+		if (!park || !park->hasSpace()) continue;
+		if (game->findRoute(origin, park).empty()) continue;
+		if (park->assignSpace())
+		{
+			park->spriteNeedsUpdate = true;
+			return park;
+		}
+	}
+	return NULL;
+}
+
+static void releaseParking(Parking * park)
+{
+	if (!park) return;
+	park->freeSpace();
+	park->spriteNeedsUpdate = true;
+}
 
 Hotel::~Hotel()
 {
@@ -169,7 +196,11 @@ void Hotel::scheduleGuest(Guest *g)
 void Hotel::clearAll()
 {
 	for (std::set<Guest *>::iterator it = guests.begin(); it != guests.end(); ++it)
+	{
+		releaseParking((*it)->parkingUsed);
+		(*it)->parkingUsed = NULL;
 		delete *it;
+	}
 	guests.clear();
 	while (!arrivingGuests.empty())
 		arrivingGuests.pop();
@@ -211,6 +242,9 @@ void Hotel::advance(double dt)
 		{
 			arrivingGuests.pop();
 			g->journey.set(lobbyRoute);
+			// Drive in: claim a reachable parking slot for the car.
+			if (!g->parkingUsed)
+				g->parkingUsed = claimReachableParking(game, this);
 		}
 		else
 			break;
@@ -294,6 +328,9 @@ void Hotel::advance(double dt)
 				g->from = prototype->name;
 				g->goingTo = "Exit";
 				g->journey.set(r);
+				// Drive home: free the parking slot.
+				releaseParking(g->parkingUsed);
+				g->parkingUsed = NULL;
 			}
 			roomState = kDirty;
 			dirtySince = t;
@@ -458,6 +495,13 @@ void Hotel::decodeXML(tinyxml2::XMLElement &xml)
 		{
 			Item::addPerson(g);
 			g->atHotel = true;
+			// NOTE(Phase 2.2): parkingUsed is not persisted across save/reload.
+			// Parking::used IS persisted, so the tower-wide slot count stays
+			// correct, but the per-guest back-pointer is lost. This means a
+			// guest who checks out post-reload won't call freeSpace() on their
+			// slot, leaving it claimed until the parking is rebuilt. Proper
+			// fix: persist the parking item's position as a guest attribute
+			// and re-link the pointer here without calling assignSpace().
 		}
 		else
 		{

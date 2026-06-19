@@ -1,5 +1,6 @@
 #include <cassert>
 #include <vector>
+#include "../../Game.h"
 #include "../../Sprite.h"
 #include "Elevator.h"
 #include "Car.h"
@@ -64,6 +65,10 @@ void Elevator::render(sf::RenderTarget &target) const
 	d.setTexture(app->bitmaps["simtower/elevator/digits"]);
 	d.setOrigin({5, 8});
 
+	const sf::Color tint = game->lighting.tint();
+	const bool tinted = (tint != sf::Color(255, 255, 255, 255));
+	if (tinted) s.setColor(game->lighting.compose(s.getColor()));
+
 	int minY = position.y;
 	int maxY = size.y + minY - 1;
 
@@ -84,11 +89,9 @@ void Elevator::render(sf::RenderTarget &target) const
 				break;
 			}
 		}
-		if (isHome) {
-			d.setColor(sf::Color(255, 100, 100)); // Pinkish-red for home floor
-		} else {
-			d.setColor(sf::Color::White); // Default color (gray digits from sheet)
-		}
+		sf::Color digitColor = isHome ? sf::Color(255, 100, 100) : sf::Color::White; // Pinkish-red for home floor, white otherwise
+		if (tinted) digitColor = game->lighting.compose(digitColor);
+		d.setColor(digitColor);
 
 		char c[8];
 		int len = snprintf(c, 8, "%i", flr);

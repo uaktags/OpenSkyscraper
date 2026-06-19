@@ -12,8 +12,14 @@ namespace OT {
 		 * room and 1 per 4 offices; under-covered towers penalise office and
 		 * hotel evaluation.
 		 *
-		 * TODO(Phase 2.2): gate integration (SetupAllGate equivalent) and
-		 * visual car sprites on individual tiles. */
+		 * Per-cell occupancy is rendered as small coloured rectangles on
+		 * top of the parking-space sprite (one rectangle per `used` slot).
+		 * Swap the rectangle for a proper "simtower/parking/car" frame
+		 * once the art is available.
+		 *
+		 * Gate integration (SetupAllGate equivalent) is currently a no-op
+		 * stub — the original links parking to a road tile that doesn't
+		 * exist in OpenSky yet. See setupGate(). */
 		class Parking : public Item
 		{
 		public:
@@ -31,6 +37,7 @@ namespace OT {
 			virtual void encodeXML(tinyxml2::XMLPrinter &xml);
 			virtual void decodeXML(tinyxml2::XMLElement &xml);
 			virtual void advance(double dt);
+			virtual void render(sf::RenderTarget & target) const override;
 			virtual int dailyMaintenanceCost() const override { return 50; }
 
 			/// Spaces available on this tile, derived from width.
@@ -46,6 +53,9 @@ namespace OT {
 
 		private:
 			int used;
+			/// Original SimTower's SetupAllGate(): link parking to a road
+			/// tile so cars can drive in/out. No-op until a road item lands.
+			void setupGate();
 		};
 	}
 }

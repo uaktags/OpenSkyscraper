@@ -68,7 +68,16 @@ void Car::draw(sf::RenderTarget & target, sf::RenderStates states) const
 
 void Car::render(sf::RenderTarget & target) const
 {
-	target.draw(sprite);
+	const sf::Color tint = game->lighting.tint();
+	const bool tinted = (tint != sf::Color(255, 255, 255, 255));
+
+	if (tinted) {
+		Sprite tmp = sprite;
+		tmp.setColor(game->lighting.compose(sprite.getColor()));
+		target.draw(tmp);
+	} else {
+		target.draw(sprite);
+	}
 
 	//Draw the people stepping out of the elevator.
 	Person *p = NULL;

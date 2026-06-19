@@ -97,6 +97,9 @@ void Queue::render(sf::RenderTarget &target) const
 	s.setOrigin({0.f, 24.f});
 	s.setPosition({0.f, 0.f});
 
+	const sf::Color tint = game->lighting.tint();
+	const bool tinted = (tint != sf::Color(255, 255, 255, 255));
+
 	for (People::const_iterator ip = people.begin(); ip != people.end(); ip++)
 	{
 		Person *p = *ip;
@@ -132,6 +135,7 @@ void Queue::render(sf::RenderTarget &target) const
 			color = sf::Color(255, 0, 0);
 		else if (p->stress > 0.4)
 			color = sf::Color(255, 128, 128);
+		if (tinted) color = game->lighting.compose(color);
 
 		// Draw the person.
 		s.setColor(color);

@@ -8,6 +8,8 @@ namespace OT
 {
 	namespace Item
 	{
+		class Parking;
+
 		class Hotel : public Item
 		{
 		public:
@@ -40,6 +42,11 @@ namespace OT
 				double wakeTime;
 				double checkoutTime;
 				bool atHotel;
+
+				/// Parking slot the guest's car occupies during their
+				/// stay (NULL if no reachable parking had space). Freed
+				/// on checkout.
+				Parking * parkingUsed = nullptr;
 
 				struct laterThan
 				{
