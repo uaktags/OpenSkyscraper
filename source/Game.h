@@ -22,9 +22,11 @@
 #include "TimeWindow.h"
 #include "InspectorDialog.h"
 #include "ElevatorDialog.h"
+#include "LevelUpDialog.h"
 #include "MapWindow.h"
 #include "JudgeSystem.h"
 #include "LevelUp.h"
+#include "VipSystem.h"
 
 namespace OT {
 	namespace Item { class AbstractPrototype; }
@@ -83,6 +85,7 @@ namespace OT {
 		TimeWindow    timeWindow;
 		InspectorDialog inspectorDialog;
 		ElevatorDialog  elevatorDialog;
+		LevelUpDialog   levelUpDialog;
 		MapWindow     mapWindow;
 
 		Time time;
@@ -150,6 +153,11 @@ namespace OT {
 		/// Daily tenant & hotel evaluation engine. Updated once per day from
 		/// settleDailyAccounting(); scores are cached on each Item::evaluation.
 		JudgeSystem judgeSystem;
+
+		/// Periodic VIP visit system (Phase 3.2). Schedules random VIP
+		/// visits once the tower reaches 2 stars / 100+ population, and
+		/// grants bonuses (or complaints) based on the latest judge pass.
+		VipSystem vipSystem;
 
 	public:
 		void encodeXML(tinyxml2::XMLPrinter & xml);

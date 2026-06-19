@@ -12,6 +12,8 @@
 #include "../source/TimeWindowStyle.h"
 #include "../source/WindowsPEExecutable.h"
 #include "../source/Lighting.h"
+#include "../source/JudgeSystem.h"
+#include "../source/LevelUp.h"
 
 static int g_failures = 0;
 
@@ -254,6 +256,60 @@ static void testLightingColorMath()
 	EXPECT(quarter.r > 60 && quarter.r < 70);
 }
 
+// LevelUp seam: the rating progression rules are pure static functions
+// (LevelUp.h / LevelUp.cpp). The Phase 3.2 VIP system and level-up
+// dialog both build on these. Pin down the advancement table and the
+// min-rating-to-build lookup so a refactor can't silently shift the
+// star thresholds.
+//
+// Note: rating is 0-based internally (0=1 star ... 4=5 stars).
+// advancementRequirements(N) returns the requirements to advance FROM
+// rating N (i.e. N stars) TO N+1 (so it indexes into the rules table
+// at N+1, skipping the "starting tower" entry at index 0).
+static void testLevelUpRules()
+{
+	using OT::LevelUp;
+	using OT::JudgeSystem;
+
+	// 1 star -> 2 stars needs 300 population.
+	const LevelUp::Requirements * r1to2 = LevelUp::advancementRequirements(0);
+	EXPECT(r1to2 != nullptr);
+	EXPECT(r1to2->population == 300);
+
+	// 2 stars -> 3 stars needs 1000 + security.
+	const LevelUp::Requirements * r2to3 = LevelUp::advancementRequirements(1);
+	EXPECT(r2to3 != nullptr);
+	EXPECT(r2to3->population == 1000);
+	EXPECT(r2to3->needsSecurity);
+
+	// 5 stars is the max - no advancement from rating 4.
+	const LevelUp::Requirements * rMax = LevelUp::advancementRequirements(4);
+	EXPECT(rMax == nullptr);
+
+	// meetsRequirements: pure helper, takes a Counts struct.
+	JudgeSystem::Counts c = {};
+	c.securityOffices = 0; c.medicalCenters = 0; c.metros = 0;
+
+	EXPECT(LevelUp::meetsRequirements(*r1to2, 300, c));  // pop only
+	EXPECT(!LevelUp::meetsRequirements(*r1to2, 299, c)); // pop short
+
+	// 2 -> 3 stars needs security.
+	EXPECT(!LevelUp::meetsRequirements(*r2to3, 1000, c)); // missing security
+	c.securityOffices = 1;
+	EXPECT(LevelUp::meetsRequirements(*r2to3, 1000, c));
+
+	// minRatingToBuild: locked items have explicit ratings, the rest 0.
+	EXPECT(LevelUp::minRatingToBuild("cinema")    == 4);
+	EXPECT(LevelUp::minRatingToBuild("metro")     == 4);
+	EXPECT(LevelUp::minRatingToBuild("hotel_single") == 3);
+	EXPECT(LevelUp::minRatingToBuild("security")  == 2);
+	EXPECT(LevelUp::minRatingToBuild("fastfood")  == 1);
+	EXPECT(LevelUp::minRatingToBuild("office")    == 0);
+	EXPECT(LevelUp::minRatingToBuild("lobby")     == 0);
+	EXPECT(LevelUp::minRatingToBuild("nonexistent_prototype") == 0);
+}
+
+
 static void testWindowsPEExecutable()
 {
     OT::WindowsPEExecutable exe;
@@ -301,16 +357,17 @@ static void testWindowsSPExecutable()
 
 int main()
 {
-    testSmoke();
-    testTimeConversion();
-    testNightSpeedMultiplier();
-    testRouteClear();
-    testMoneyAccounting();
-    testTimeWindowModernLayout();
+	testSmoke();
+	testTimeConversion();
+	testNightSpeedMultiplier();
+	testRouteClear();
+	testMoneyAccounting();
+	testTimeWindowModernLayout();
 	testNameManager();
 	testLightingColorMath();
+	testLevelUpRules();
 	testWindowsPEExecutable();
-    testWindowsSPExecutable();
+	testWindowsSPExecutable();
 
     if (g_failures > 0)
     {

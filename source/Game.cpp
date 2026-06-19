@@ -26,7 +26,9 @@ Game::Game(Application & app)
 	mapWindow(this),
 	sky(this),
 	lighting(this),
-	decorations(this)
+	decorations(this),
+	vipSystem(this),
+	levelUpDialog(this)
 {
 	//mapWindow     = NULL;
 
@@ -123,6 +125,8 @@ void Game::clearWorld()
 	}
 	playingSounds.clear();
 	soundPlayTimes.clear();
+	vipSystem.reset();
+	levelUpDialog.close();
 }
 
 void Game::activate()
@@ -721,6 +725,7 @@ void Game::advance(double dt)
 	timeWindow.advance(dt);
 	sky.advance(dt);
 	lighting.advance(dt);
+	vipSystem.advance(dt);
 
 	for (ItemSet::iterator i = items.begin(); i != items.end(); i++) {
 		Item::Item * item = *i;
@@ -1196,6 +1201,9 @@ void Game::encodeXML(tinyxml2::XMLPrinter & xml)
 	xml.PushAttribute("x", (int)poi.x);
 	xml.PushAttribute("y", (int)poi.y);
 
+	// Persist VIP scheduling state so visits don't reset on save/reload.
+	vipSystem.encodeXML(xml);
+
 	xml.OpenElement("money");
 	xml.PushAttribute("todayIncome", money.todayIncome);
 	xml.PushAttribute("todayExpenses", money.todayExpenses);
@@ -1278,6 +1286,10 @@ void Game::decodeXML(tinyxml2::XMLDocument & xml)
 
 	poi.x = root->IntAttribute("x");
 	poi.y = root->IntAttribute("y");
+
+	// Restore VIP scheduling state (no-op on older saves - all fields
+	// default to fresh-tower values inside decodeXML).
+	vipSystem.decodeXML(*root);
 
 	tinyxml2::XMLElement * e = root->FirstChildElement("item");
 	while (e) {
@@ -1388,6 +1400,10 @@ void Game::ratingMayIncrease()
 			break;
 		}
 		setRating(rating + 1);
+		// Show a level-up modal in addition to the transient message.
+		// The modal lists the freshly unlocked items so the player knows
+		// what they can now build (Phase 3.2).
+		levelUpDialog.showForRating(rating);
 		timeWindow.showMessage(std::string("Promoted to ") + std::to_string(rating + 1) + " stars!");
 		toolboxWindow.reload(); // refresh build locks
 	}
