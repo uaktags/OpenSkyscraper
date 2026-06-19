@@ -53,6 +53,17 @@ double Time::hourToAbsolute(double h)
 
 Time::Time()
 {
+	absolute = 0;
+	dta = 0;
+	hour = 0;
+	day = 0;
+	quarter = 1;
+	year = 1;
+	prev_absolute = 0;
+	prev_hour = 0;
+	prev_day = 0;
+	prev_quarter = 1;
+	prev_year = 1;
 	speed = 1;
 	speed_animated = speed;
 }
@@ -72,6 +83,8 @@ void Time::set(double t)
 		day = (int)floor(t) % 3;
 		quarter = (int)floor(t/3) % 4 + 1;
 		year = (int)floor(t/3/4) + 1;
+	} else {
+		dta = 0;
 	}
 }
 

@@ -116,7 +116,7 @@ Application::Application(int argc, char *argv[])
         {
             assert(i + 1 < argc && "--dump-resources is missing path");
             dumpResources = true;
-            dumpResourcesPath = argv[i + 1];
+            dumpResourcesPath = argv[++i];
         }
         if (strcmp(argv[i], "--new-game") == 0)
         {

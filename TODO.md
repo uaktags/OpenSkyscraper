@@ -15,7 +15,7 @@ General / Cross-cutting
 - [DONE] `mapWindow` is now its own class `MapWindow` (Phase 4.2).
 - [ ] Cache the result of the KWAJ decompression so the game doesn't decompress `SIMTOWER.EX_` every launch.
 
-### Pausing doesn't affect elevators
+### [DONE] Pausing doesn't affect elevators
 When pausing the game, elevators keep moving as if the game was unpaused. They react to speedup by moving faster — investigate why they don't react to the speeddown.
 
 ### Game Speed
@@ -200,10 +200,17 @@ Phase 4: UI & Visualization                                   [PENDING]
     - [DONE] `Item::render()` draws a hatched khaki overlay rectangle while building (real sprites hidden).
     - [DONE] `Game::advance()` skips the item's advance, maintenance, and construction timer check; clears the flag with a "normal" construction sound on completion.
     - [DONE] `Factory::make()` sets the flag on fresh placement; `decodeXML()` overrides with saved state.
-    - [DONE] Inspector dialog shows "under construction" with remaining-time estimate.
-    - [DONE] Duration scales with item width (`constructionDuration()` virtual, overridable per subclass).
+    - [DONE] `InspectorDialog` shows "under construction" with remaining-time estimate.
+    - [DONE] `Duration` scales with item width (`constructionDuration()` virtual, overridable per subclass).
     - [ ] Swap rectangle overlay for actual `construction/solid` and `construction/grid` bitmaps.
     - [ ] Per-prototype duration tuning (currently 2h + 0.2h/tile width).
+
+- [ ] **4.5 Toolbox categories (click-and-hold)**
+    - [ ] Click and hold a category parent tool (e.g. Lobby, Standard Elevator, Hotel Single, Condo) to show/hide sub-tools of the same type.
+    - [ ] Lobby hides Floor and Stairs.
+    - [ ] Standard Elevator hides Express Elevator and Service Elevator.
+    - [ ] Hotel Single hides Hotel Double and Hotel Suite.
+    - [ ] Condo hides YootCondo.
 
 
 Phase 5: Polish & Balance                                     [IN PROGRESS]
