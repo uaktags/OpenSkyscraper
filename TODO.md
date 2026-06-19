@@ -116,7 +116,7 @@ Phase 2: Missing Items & Commercial Depth                   [Hotel DONE, rest in
     - [ ] Forbid building any item below the Metro.
 
 
-Phase 3: Game Systems                                        [STUB — major work pending]
+Phase 3: Game Systems                                        [PARTIAL — 3.1/3.2/3.4 in progress, 3.3 pending]
 -----------------------------------------------------------------------
 
 - [PARTIAL] **3.1 Judge / Evaluation engine** — `source/JudgeSystem.{h,cpp}` landed.
@@ -126,18 +126,21 @@ Phase 3: Game Systems                                        [STUB — major wor
     - [DONE] `Office::isAttractive()` and `Condo::isAttractive()` consult evaluation (≥30 required, default 50 keeps fresh tenants attractive).
     - [DONE] `Counts` struct (offices / condos / hotels / hotelsDirty / foodOutlets / security / medical / population) approximates `CountT.h/c`; ready to feed star progression (3.2) and overlays (4.3).
     - [DONE] Tower-wide parking coverage metric feeds Office / Hotel scoring (see 2.2).
-    - [ ] `JudgeAllHotel()` daily hotel performance review (currently each hotel is scored individually; aggregate review still TODO).
-    - [ ] `ExpandoBadHotel()` shrink/grow under-performing hotels.
-    - [ ] Per-type counters `CountPC` / `CountVC` / `CountIn` / `CountDay` (more granular than current `Counts`).
+    - [DONE] **`JudgeAllHotel()` aggregate review** — `JudgeSystem::reviewHotels()` computes tower-wide hotel occupancy / cleanliness / average evaluation and surfaces a daily complaint when hotels are persistently underperforming (low avg eval, or dirty ratio > 50% on 3+ room towers). Also notes high-occupancy towers.
+    - [DONE] **`ExpandoBadHotel()` underperformer tracking** — `JudgeSystem::reviewUnderperformers()` keeps a per-tenant "bad-day streak" map and only complains once a tenant has been below the critical-evaluation threshold for 3+ days (with reminders every 5 days). Original SimTower dynamically shrunk/grew hotels; we surface complaints instead since items have fixed footprints.
+    - [DONE] **Per-type counters `CountPC` / `CountVC` / `CountIn`** — `Counts` extended with `populationCapacity`, `visitorCapacity`, `currentOccupants`, `hotelsOccupied`, and `hotelAvgEval`. (`CountDay` deferred until daily-arrival tracking lands.)
+    - [ ] `CountDay` (total arrivals per day) — needs person-spawn bookkeeping; deferred.
 
-- [DONE] **3.2 Level / star-rating expansion** (`source/LevelUp.{h,cpp}`, `source/Game.cpp:ratingMayIncrease`)
+- [PARTIAL] **3.2 Level / star-rating expansion** (`source/LevelUp.{h,cpp}`, `source/Game.cpp:ratingMayIncrease`)
     - [DONE] Star thresholds (1★ start; 2★ at 300 pop; 3★ at 1000 pop + Security; 4★ at 2000 pop + Medical; 5★ at 3000 pop + Metro).
     - [DONE] `ratingMayIncrease()` checks population **and** required facilities via `JudgeSystem::Counts`; loops to multi-promote if eligible.
     - [DONE] Construction handler rejects placement below `LevelUp::minRatingToBuild()` with a clear reason.
     - [DONE] `ToolboxWindow` greys out locked items with "Unlocks at N stars" tooltip; reloads on promotion.
     - [DONE] Promotion message via `TimeWindow.showMessage()`.
-    - [ ] **VIP visits** and **Cathedral "Tower of the Year"** ending (codemap.md:2653, needs VIP system).
-    - [ ] Level-up dialog window (currently a transient message, not a modal).
+    - [DONE] **VIP visits** — `source/VipSystem.{h,cpp}` schedules random VIP visits once the tower hits 2★ / 100+ population (3–8 day gaps, longer after a bad review). Each ~2h visit evaluates the latest judge pass and grants a cash bonus (full $50k for excellent, half for content) or a complaint. State persists across save/reload via `vipNextVisit` / `vipVisiting` attributes; `positiveReviews()` is intended to gate the Cathedral ending.
+    - [DONE] **Level-up dialog window** — `source/LevelUpDialog.{h,cpp}` TGUI modal pops up on every promotion showing the new star count and the comma-separated list of freshly-unlocked prototypes (driven by `LevelUp::minRatingToBuild`). Closes on OK button, title-bar X, or Escape; auto-closed on `clearWorld()`.
+    - [ ] **Cathedral "Tower of the Year"** ending — needs a Cathedral item (none exists yet); the VIP `positiveReviews` counter is plumbed for future gating.
+    - [ ] Spawn an actual walking VIP sprite (currently the visit is abstract).
 
 - [ ] **3.3 Fire / Emergency / Thief events** — No files exist. Priority LOW.
     - [ ] `EventScheduler` randomly triggers events based on time + rating.
@@ -146,11 +149,16 @@ Phase 3: Game Systems                                        [STUB — major wor
     - [ ] Thief: targets tenants, calls police, existing `Security` item becomes functional (currently STUB).
     - [ ] Emergency mode: reset all person states, evacuate.
 
-- [ ] **3.4 Weather / Environment (CLUT equivalent)** — No files exist.
-    - [ ] `Lighting` manager class (SFML has no indexed palettes; use shader / vertex tint).
-    - [ ] Time-of-day tint applied to all items in `Item::render()`.
-    - [ ] Rain reduces brightness + blue tint (extend existing `Sky.cpp`).
-    - [ ] Sunrise/sunset orange-red tint; night dark blue with lit-window sprite variants.
+- [PARTIAL] **3.4 Weather / Environment (CLUT equivalent)** — `source/Lighting.{h,cpp}` landed.
+    - [DONE] `Lighting` manager class — extends `GameObject`, refreshed once per frame from `Game::advance()` after `Sky::advance()`.
+    - [DONE] Time-of-day tint applied to all items — `Item::render()` and `Floor::render()` multiply each sprite's color by `Lighting::compose()` (save/restore around the draw so the tint doesn't compound across frames).
+    - [DONE] Construction overlay also composes with the global tint so building sites respect day/night.
+    - [DONE] Rain reduces brightness + cool blue tint (fades in/out via smoothed `rainIntensity` driven by `Sky::rainyDay`, 07:00–17:00 window matches the rain sound).
+    - [DONE] Sunrise/sunset orange-red tint (warm anchor at Sky state 1); night dark blue (Sky state 2); cloudy/rain gray-blue (Sky states 3–5).
+    - [DONE] Tint math covered by `testLightingColorMath` in `tests/test_main.cpp` (white*white identity, halving, alpha preservation, black multiplicative zero, associativity).
+    - [ ] **Lit-window sprite variants** at night — needs per-sprite "is window" tagging so the tint can be inverted (warm-lit windows against a dark building). Currently the whole building dims uniformly.
+    - [ ] Wire the weather message back in (`Sky.cpp:34` is commented out; now that the player can see the rain tint, re-enable the "bad weather today" hint).
+    - [ ] Apply the tint to the `Elevator`-drawn sprites (`Car`, `Queue`, shaft/digits) — these bypass `Item::render`'s sprites set, so they currently stay untinted.
 
 
 Phase 4: UI & Visualization                                   [PENDING]
@@ -310,7 +318,7 @@ Reference Index (codemap.md → implementation)
 
 | Module                            | Doc Source            | Impl File                       | Status   |
 |-----------------------------------|-----------------------|---------------------------------|----------|
-| Animation / CLUT                  | codemap.md:72-107     | source/Sky.*                    | PARTIAL  |
+| Animation / CLUT                  | codemap.md:72-107     | source/Sky.*, source/Lighting.* | PARTIAL  |
 | People animation                  | codemap.md:108-141    | —                               | MISSING  |
 | Bitmap loading                    | codemap.md:207-237    | source/BitmapManager.*          | PORTED   |
 | Blocks                            | codemap.md:238-272    | source/Item/Floor.*             | REIMPL   |
@@ -334,7 +342,7 @@ Reference Index (codemap.md → implementation)
 | Initialize                        | codemap.md:1195-1223  | source/Application.*            | PORTED   |
 | Judge/Evaluation                  | codemap.md:1225-1251  | source/JudgeSystem.*            | PORTED   |
 | Kinsoku/Placement                 | codemap.md:1253-1277  | source/JudgeSystem.cpp (noise)  | PARTIAL  |
-| Level/Progression                 | codemap.md:1279-1343  | source/Game.cpp ratingMayIncrease | STUB   |
+| Level/Progression                 | codemap.md:1279-1343  | source/Game.cpp ratingMayIncrease, source/VipSystem.*, source/LevelUpDialog.* | PARTIAL  |
 | Maintenance                       | codemap.md:1344-1377  | —                               | MISSING  |
 | Main window                       | codemap.md:1378-1408  | source/Application.*            | PORTED   |
 | Map/minimap                       | codemap.md:1410-1460  | source/MapWindow.*              | PORTED   |
@@ -361,4 +369,4 @@ Reference Index (codemap.md → implementation)
 | Thief                             | codemap.md:2277-2305  | —                               | MISSING  |
 | Time                              | codemap.md:2307-2334  | source/Time.*                   | PORTED   |
 | Toolbox                           | codemap.md:2336-2366  | source/ToolboxWindow.*          | PORTED   |
-| VIP                               | codemap.md:2653-2690  | —                               | MISSING  |
+| VIP                               | codemap.md:2653-2690  | source/VipSystem.*              | PARTIAL  |
