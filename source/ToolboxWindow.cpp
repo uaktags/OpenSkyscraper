@@ -22,8 +22,36 @@
 
 using namespace OT;
 
+static const std::map<std::string, std::vector<std::string>> CATEGORIES = {
+    {"lobby", {"floor", "stairs"}},
+    {"standard_elevator", {"express_elevator", "service_elevator"}},
+    {"hotel_single", {"hotel_double", "hotel_suite"}},
+    {"condo", {"yoot_condo"}}
+};
+
+bool ToolboxWindow::isChildTool(const std::string& toolId, std::string& outParentId) const {
+    for (auto const& pair : CATEGORIES) {
+        for (auto const& child : pair.second) {
+            if (child == toolId) {
+                outParentId = pair.first;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool ToolboxWindow::isCategoryParent(const std::string& toolId) const {
+    return CATEGORIES.find(toolId) != CATEGORIES.end();
+}
+
 ToolboxWindow::ToolboxWindow(Game *game) : GameObject(game)
 {
+    expandedCategories["lobby"] = false;
+    expandedCategories["standard_elevator"] = false;
+    expandedCategories["hotel_single"] = false;
+    expandedCategories["condo"] = false;
+
     window = tgui::ChildWindow::create();
     auto renderer = window->getRenderer();
     renderer->setTitleBarHeight(10 * app->uiScale);
@@ -137,8 +165,34 @@ void ToolboxWindow::reload()
     speedButtons.clear();
     buttonStates.clear();
 
+    // Auto-expand category of selected tool if it is a child
+    std::string selectedProtoId = "";
+    if (game->selectedTool.rfind("item-", 0) == 0) {
+        selectedProtoId = game->selectedTool.substr(5);
+    }
+    std::string parentId;
+    if (!selectedProtoId.empty() && isChildTool(selectedProtoId, parentId)) {
+        expandedCategories[parentId] = true;
+    }
+
+    // Filter prototypes to only include visible ones
+    std::vector<Item::AbstractPrototype*> visiblePrototypes;
+    for (int i = 0; i < game->itemFactory.prototypes.size(); i++)
+    {
+        Item::AbstractPrototype *prototype = game->itemFactory.prototypes[i];
+        
+        std::string parent;
+        if (isChildTool(prototype->id, parent)) {
+            if (expandedCategories[parent]) {
+                visiblePrototypes.push_back(prototype);
+            }
+        } else {
+            visiblePrototypes.push_back(prototype);
+        }
+    }
+
     // Calculate total rows and sizes dynamically to prevent overlapping when new items are registered
-    int numItems = game->itemFactory.prototypes.size();
+    int numItems = visiblePrototypes.size();
     int totalRows = (numItems + 2) / 3;
     int speedY = 25 + totalRows * 32 + 8;
     int clientHeight = speedY + 24 + 3;
@@ -180,9 +234,9 @@ void ToolboxWindow::reload()
     // STEP 2: BUILDING ITEMS
     int row = 0;
     sf::Texture itemTexture = app->bitmaps["simtower/ui/toolbox/items"];
-    for (int i = 0; i < game->itemFactory.prototypes.size(); i++)
+    for (int i = 0; i < visiblePrototypes.size(); i++)
     {
-        Item::AbstractPrototype *prototype = game->itemFactory.prototypes[i];
+        Item::AbstractPrototype *prototype = visiblePrototypes[i];
 
         char toolname[128];
         snprintf(toolname, 128, "item-%s", prototype->id.c_str());
@@ -232,7 +286,30 @@ void ToolboxWindow::reload()
         buttons.insert(button);
         toolButtons[toolname] = button;
         buttonStates[button] = state;
-        button->onPress(&ToolboxWindow::onToolButtonPress, this, toolname);
+
+        std::string toolnameStr(toolname);
+        
+        button->onMousePress([this, toolnameStr](tgui::Vector2f pos) {
+            pressedTool = toolnameStr;
+            pressTime = std::chrono::steady_clock::now();
+        });
+
+        button->onMouseRelease([this, toolnameStr](tgui::Vector2f pos) {
+            if (pressedTool == toolnameStr) {
+                auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - pressTime
+                ).count();
+
+                std::string protoId = (toolnameStr.rfind("item-", 0) == 0) ? toolnameStr.substr(5) : "";
+                if (elapsed >= 300 && !protoId.empty() && isCategoryParent(protoId)) {
+                    expandedCategories[protoId] = !expandedCategories[protoId];
+                    reload();
+                } else {
+                    onToolButtonPress(toolnameStr.c_str());
+                }
+            }
+        });
+
         if (i % 3 >= 2)
             row++;
     }
@@ -262,6 +339,20 @@ void ToolboxWindow::reload()
 
 void ToolboxWindow::updateTool()
 {
+    // Auto-expand category of selected tool if it is a child
+    std::string selectedProtoId = "";
+    if (game->selectedTool.rfind("item-", 0) == 0) {
+        selectedProtoId = game->selectedTool.substr(5);
+    }
+    std::string parentId;
+    if (!selectedProtoId.empty() && isChildTool(selectedProtoId, parentId)) {
+        if (!expandedCategories[parentId]) {
+            expandedCategories[parentId] = true;
+            reload();
+            return;
+        }
+    }
+
     for (auto &pair : toolButtons) {
         auto it = buttonStates.find(pair.second);
         if (it != buttonStates.end())

@@ -8,6 +8,8 @@
 #include <map>
 #include <set>
 #include <string>
+#include <vector>
+#include <chrono>
 
 
 namespace OT {
@@ -48,5 +50,11 @@ namespace OT {
 
             int lastSpeedMode = 1;
 
+            bool isChildTool(const std::string& toolId, std::string& outParentId) const;
+            bool isCategoryParent(const std::string& toolId) const;
+
+            std::map<std::string, bool> expandedCategories;
+            std::string pressedTool;
+            std::chrono::steady_clock::time_point pressTime;
     };
 }
