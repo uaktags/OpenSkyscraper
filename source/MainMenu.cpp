@@ -43,7 +43,10 @@ void MainMenu::reloadGUI()
     sf::Vector2f panelSize{320.f * app.uiScale, 180.f * app.uiScale};
 
     tgui::Texture bgTx = tgui::Texture();
-    bgTx.load(app.bitmaps["simtower/ui/menubg"]);
+    {
+        const sf::Texture &bgTex = app.bitmaps["simtower/ui/menubg"];
+        bgTx.loadFromPixelData(bgTex.getSize(), bgTex.copyToImage().getPixelsPtr());
+    }
     bgPicture = tgui::Picture::create(bgTx);
     bgPicture->setSize({static_cast<float>(windowSize.x), static_cast<float>(windowSize.y)});
     bgPicture->setPosition({0, 0});

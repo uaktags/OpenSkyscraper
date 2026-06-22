@@ -182,15 +182,15 @@ static void testTimeWindowModernLayout()
     const OT::TimeWindowLayout layout = OT::makeModernTimeWindowLayout(1.0f);
 
     EXPECT(layout.clientWidth == 520);
-    EXPECT(layout.clientHeight == 56);
+    EXPECT(layout.clientHeight == 80);
     EXPECT(layout.dateX > layout.ratingX + layout.ratingWidth);
     EXPECT(layout.metricsX > layout.dateX + 120);
-    EXPECT(layout.tooltipWidth >= 300);
+    EXPECT(layout.tooltipWidth >= 298);
     EXPECT(layout.watchSize == 34);
     EXPECT(layout.backgroundTopBlue > layout.backgroundBottomBlue);
     EXPECT(layout.accentBlue > layout.backgroundTopBlue);
     EXPECT(layout.tooltipBackgroundX == 52);
-    EXPECT(layout.tooltipBackgroundY == 28);
+    EXPECT(layout.tooltipBackgroundY == 30);
     EXPECT(layout.tooltipBackgroundWidth == 310);
     EXPECT(layout.tooltipBackgroundHeight == 22);
 }

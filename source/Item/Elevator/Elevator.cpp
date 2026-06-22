@@ -500,7 +500,7 @@ void Elevator::decideCarDestination(Car *car)
 		// lie behin the car a negative distance. We only serve queues that are somewhat ahead of
 		// the car.
 		double distance = q->floor - car->altitude;
-		distance *= car->direction;
+		distance *= static_cast<double>(car->direction);
 		if (distance < 0.5)
 			continue;
 
