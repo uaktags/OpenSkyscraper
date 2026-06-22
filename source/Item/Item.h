@@ -44,6 +44,14 @@ namespace OT {
 
 			virtual rectd getMouseRegion(); //in world pixel
 
+		/// Fine-grained hit test in world-pixel coordinates. Defaults to a
+		/// simple rect check against getMouseRegion(); transport items
+		/// (stairs, escalators, elevators) override this so clicks pass
+		/// through the empty parts of their tile footprint to the tenant
+		/// behind. In SimTower you click directly on the stair sprite or
+		/// the elevator's motor gearbox, not the whole bounding box.
+		virtual bool containsPoint(const double2 & pt);
+
 			virtual void encodeXML(tinyxml2::XMLPrinter & xml);
 			virtual void decodeXML(tinyxml2::XMLElement & xml);
 
@@ -84,6 +92,7 @@ namespace OT {
 			Route metroRoute;
 			virtual void updateRoutes();
 
+			virtual bool isOccupied() const { return false; }
 			virtual bool canHaulPeople() const { return false; }
 			virtual bool connectsFloor(int floor) const { return false; }
 			virtual bool isStairlike() const { return false; }

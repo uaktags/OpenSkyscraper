@@ -37,6 +37,7 @@ namespace OT
 		tgui::ChildWindow::Ptr      window;
 		tgui::ScrollablePanel::Ptr  panel;
 		tgui::Label::Ptr            header;
+		tgui::Button::Ptr           showToggleBtn;
 		Item::Elevator::Elevator *  currentElevator;
 
 		/// Button per floor, keyed by floor number.
@@ -45,5 +46,7 @@ namespace OT
 		void buildWindow();
 		void rebuildFloorButtons();
 		std::string buttonLabel(int floor) const;
+		std::string showToggleLabel() const;
+		void updateShowToggle();
 	};
 }

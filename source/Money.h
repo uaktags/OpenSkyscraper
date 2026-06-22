@@ -19,7 +19,8 @@ namespace OT {
 		};
 
 		Money()
-		: balance(0), todayIncome(0), todayExpenses(0), yesterdayIncome(0), yesterdayExpenses(0)
+		: balance(0), todayIncome(0), todayExpenses(0), yesterdayIncome(0), yesterdayExpenses(0),
+		  quarterStartBalance(0), lastQuarterBalance(0), quarterIncome(0), quarterExpenses(0)
 		{
 		}
 
@@ -33,6 +34,11 @@ namespace OT {
 			todayTotalsByCategory.clear();
 			yesterdayTotalsByCategory.clear();
 			recentDays.clear();
+			quarterStartBalance = newBalance;
+			lastQuarterBalance = newBalance;
+			quarterIncome = 0;
+			quarterExpenses = 0;
+			quarterTotalsByCategory.clear();
 		}
 
 		void setBalance(int newBalance)
@@ -44,10 +50,14 @@ namespace OT {
 		{
 			balance += amount;
 			todayTotalsByCategory[category] += amount;
-			if (amount >= 0)
+			quarterTotalsByCategory[category] += amount;
+			if (amount >= 0) {
 				todayIncome += amount;
-			else
+				quarterIncome += amount;
+			} else {
 				todayExpenses -= amount;
+				quarterExpenses -= amount;
+			}
 		}
 
 		void finalizeDay()
@@ -69,8 +79,22 @@ namespace OT {
 			todayTotalsByCategory.clear();
 		}
 
+		/// Snapshot the quarter and start a fresh one. Called by Game when
+		/// the time quarter rolls over. The balance at the moment of the
+		/// rollover is the "last quarter balance" shown in the finance
+		/// window, and becomes the starting balance for the new quarter.
+		void finalizeQuarter()
+		{
+			lastQuarterBalance = balance;
+			quarterStartBalance = balance;
+			quarterIncome = 0;
+			quarterExpenses = 0;
+			quarterTotalsByCategory.clear();
+		}
+
 		int todayNet() const { return todayIncome - todayExpenses; }
 		int yesterdayNet() const { return yesterdayIncome - yesterdayExpenses; }
+		int quarterNet() const { return quarterIncome - quarterExpenses; }
 
 		int recentIncome() const
 		{
@@ -102,5 +126,15 @@ namespace OT {
 		std::map<std::string, int> yesterdayTotalsByCategory;
 
 		std::vector<DaySummary> recentDays;
+
+		/// Accumulators for the current quarter (reset on quarter rollover).
+		/// Read by the Finance window; quarterStartBalance is the balance at
+		/// the moment the quarter began (i.e. lastQuarterBalance of the
+		/// previous quarter).
+		int quarterStartBalance;
+		int lastQuarterBalance;
+		int quarterIncome;
+		int quarterExpenses;
+		std::map<std::string, int> quarterTotalsByCategory;
 	};
 }

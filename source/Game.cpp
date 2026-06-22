@@ -24,6 +24,7 @@ Game::Game(Application & app)
 	inspectorDialog(this),
 	elevatorDialog(this),
 	mapWindow(this),
+	financeWindow(this),
 	sky(this),
 	lighting(this),
 	decorations(this),
@@ -40,8 +41,7 @@ Game::Game(Application & app)
 
 	time.set(7/78.0);
 	lastAccountingDay = (int)floor(time.absolute);
-	speedMode = 1;
-	selectedTool = "inspector";
+	lastAccountingQuarter = time.quarter;
 	itemBelowCursor = NULL;
 	toolPrototype = NULL;
 	statusMode = kNormal;
@@ -90,6 +90,7 @@ void Game::clearWorld()
 	inspectorDialog.close();
 	elevatorDialog.close();
 	mapWindow.close();
+	financeWindow.close();
 	for (ItemSet::iterator i = items.begin(); i != items.end(); i++) {
 		delete *i;
 	}
@@ -209,19 +210,23 @@ bool Game::handleEvent(sf::Event & event)
 					encodeXML(xml);
 					fclose(f);
 				} return true;
-			case sf::Keyboard::Key::PageUp:   zoom /= 2; return true;
-			case sf::Keyboard::Key::PageDown: zoom *= 2; return true;
-			case sf::Keyboard::Key::O:        cycleStatusMode(); return true;
-			case sf::Keyboard::Key::M:
-				mapWindow.setVisible(!mapWindow.isVisible());
-				return true;
-			case sf::Keyboard::Key::Escape:
-				if (inspectorDialog.isVisible()) { inspectorDialog.close(); return true; }
-				if (elevatorDialog.isVisible())  { elevatorDialog.close();  return true; }
-				if (mapWindow.isVisible())       { mapWindow.setVisible(false); return true; }
-				break;
-				default: break;
-			}
+		case sf::Keyboard::Key::PageUp:   zoom /= 2; return true;
+		case sf::Keyboard::Key::PageDown: zoom *= 2; return true;
+		case sf::Keyboard::Key::O:        cycleStatusMode(); return true;
+		case sf::Keyboard::Key::M:
+			mapWindow.setVisible(!mapWindow.isVisible());
+			return true;
+		case sf::Keyboard::Key::F:
+			financeWindow.setVisible(!financeWindow.isVisible());
+			return true;
+		case sf::Keyboard::Key::Escape:
+			if (inspectorDialog.isVisible()) { inspectorDialog.close(); return true; }
+			if (elevatorDialog.isVisible())  { elevatorDialog.close();  return true; }
+			if (financeWindow.isVisible())   { financeWindow.setVisible(false); return true; }
+			if (mapWindow.isVisible())       { mapWindow.setVisible(false); return true; }
+			break;
+			default: break;
+		}
 		} break;
 
 		case EventType::TextEntered: {
@@ -256,6 +261,39 @@ bool Game::handleEvent(sf::Event & event)
 
 			if (selectedTool.find("item-") == 0 && toolPrototype) {
 				// Construction logic for item tools only
+				double2 halfsize((app.window.getSize().x)*0.5*zoom, (app.window.getSize().y)*0.5*zoom);
+				sf::FloatRect viewRect(
+					{static_cast<float>(round(poi.x - halfsize.x)), static_cast<float>(round(-poi.y - halfsize.y))},
+					{static_cast<float>(halfsize.x * 2), static_cast<float>(halfsize.y * 2)}
+				);
+				sf::View cameraView(viewRect);
+				sf::Vector2f mp = app.window.mapPixelToCoords(mousePosition, cameraView);
+				mp.y = -mp.y;
+
+				int height = toolPrototype->size.y;
+				int yHeightOffset = height;
+				if (toolPrototype->icon == ICON_LOBBY) {
+					bool ctrl = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl);
+					bool shift = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LShift);
+					if (ctrl) {
+						height = shift ? 3 : 2;
+					} else {
+						height = 1;
+					}
+					yHeightOffset = 1;
+				}
+				toolPosition = int2(round(mp.x/8-toolPrototype->size.x/2.0), round(mp.y/36-yHeightOffset/2.0));
+
+				struct SizeGuard {
+					int &val;
+					int oldVal;
+					~SizeGuard() { val = oldVal; }
+				} guard{toolPrototype->size.y, toolPrototype->size.y};
+
+				if (toolPrototype->icon == ICON_LOBBY) {
+					toolPrototype->size.y = height;
+				}
+
 				bool handled = false;
 				recti toolBoundary = recti(toolPosition, toolPrototype->size);
 				if (toolPrototype->id.find("elevator") == 0) {
@@ -454,6 +492,58 @@ bool Game::handleEvent(sf::Event & event)
 						if (i) {
 							minFloorX = i->position.x;
 							maxFloorX = i->getRect().maxX();
+
+							// If the floor below is the top of a multi-story lobby
+							// and the new item is wider than the lobby, auto-extend
+							// the lobby to match. This mirrors SimTower's behaviour of
+							// letting you place condos/offices directly above a sky
+							// lobby without manually widening it first. See Phase 2.5.
+							if (toolPosition.y > 0 && toolPrototype->icon != ICON_LOBBY) {
+								const ItemSet &belowItems = itemsByFloor[toolPosition.y - 1];
+								for (ItemSet::const_iterator bi = belowItems.begin(); bi != belowItems.end(); bi++) {
+									Item::Item * below = *bi;
+									if (below->prototype->icon == ICON_LOBBY && below->size.y > 1) {
+										Item::Lobby * l = (Item::Lobby *) below;
+										const int lobbyRight = l->position.x + l->size.x;
+										const int toolRight  = toolPosition.x + toolPrototype->size.x;
+										int diffLeft = 0, diffRight = 0;
+										int oldMinX = l->position.x;
+										int oldMaxX = l->getRect().maxX();
+										if (toolPosition.x < l->position.x) {
+											diffLeft = l->position.x - toolPosition.x;
+											l->size.x += diffLeft;
+											l->setPosition(toolPosition);
+										}
+										if (toolRight > lobbyRight) {
+											diffRight = toolRight - lobbyRight;
+											l->size.x += diffRight;
+										}
+										if (diffLeft + diffRight > 0) {
+											int newMinX = l->position.x;
+											int newMaxX = l->getRect().maxX();
+											// Extend floor intervals on every lobby floor.
+											for (int f = l->position.y; f < l->position.y + l->size.y; f++) {
+												extendFloor(f, newMinX, newMaxX);
+												FloorItems::iterator fi = floorItems.find(f);
+												if (fi != floorItems.end()) {
+													std::multiset<int> &interval = fi->second->interval;
+													std::multiset<int>::iterator it = interval.find(oldMinX);
+													if (it != interval.end()) interval.erase(it);
+													it = interval.find(oldMaxX);
+													if (it != interval.end()) interval.erase(it);
+													interval.insert(newMinX);
+													interval.insert(newMaxX);
+												}
+											}
+											maxFloorX = l->position.x + l->size.x;
+											minFloorX = l->position.x;
+											transferFunds(-l->prototype->price * 4 / (diffLeft + diffRight), "construction", "Lobby extension");
+											playOnce("simtower/construction/flexible");
+										}
+										break;
+									}
+								}
+							}
 						}
 					}
 					if (toolPosition.x < minFloorX || toolPosition.x + toolPrototype->size.x > maxFloorX) {
@@ -479,6 +569,8 @@ bool Game::handleEvent(sf::Event & event)
 									gameMap.removeNode(MapNode::Point(i->position.x + i->size.x/2, i->position.y + i->prototype->entrance_offset), i);
 									Item::Lobby * l = (Item::Lobby *) i;
 									int diff = 0;
+									int oldMinX = l->position.x;
+									int oldMaxX = l->getRect().maxX();
 									if (toolPosition.x < l->position.x) {
 										diff = l->position.x - toolPosition.x;
 										l->size.x += diff;
@@ -492,6 +584,21 @@ bool Game::handleEvent(sf::Event & event)
 									l->updateSprite();
 									gameMap.addNode(MapNode::Point(i->position.x + i->size.x/2, i->position.y + i->prototype->entrance_offset), i);
 									if (diff > 0) {
+										int newMinX = l->position.x;
+										int newMaxX = l->getRect().maxX();
+										for (int f = l->position.y; f < l->position.y + l->size.y; f++) {
+											extendFloor(f, newMinX, newMaxX);
+											FloorItems::iterator fi = floorItems.find(f);
+											if (fi != floorItems.end()) {
+												std::multiset<int> &interval = fi->second->interval;
+												std::multiset<int>::iterator it = interval.find(oldMinX);
+												if (it != interval.end()) interval.erase(it);
+												it = interval.find(oldMaxX);
+												if (it != interval.end()) interval.erase(it);
+												interval.insert(newMinX);
+												interval.insert(newMaxX);
+											}
+										}
 										transferFunds(-toolPrototype->price * 4 / diff, "construction", "Lobby extension");
 										playOnce("simtower/construction/flexible");
 									}
@@ -518,7 +625,7 @@ bool Game::handleEvent(sf::Event & event)
 							playOnce("simtower/construction/normal");
 						}
 					} else {
-						LOG(DEBUG, "cannot construct %s at %ix%i, size %ix%i", toolPrototype->id.c_str(), toolPosition.x, toolPosition.y, toolPrototype->size.x, toolPrototype->size.y);
+						LOG(DEBUG, "cannot construct %s at %ix%i, size %ix%i, reason: %s", toolPrototype->id.c_str(), toolPosition.x, toolPosition.y, toolPrototype->size.x, toolPrototype->size.y, blockReason.c_str());
 						playOnce("simtower/construction/impossible");
 						timeWindow.showMessage("Cannot place item there. " + blockReason + ".");
 					}
@@ -730,12 +837,19 @@ void Game::advance(double dt)
 		settleDailyAccounting();
 		lastAccountingDay = currentAccountingDay;
 	}
+	// Quarter rollover: snapshot the balance so the finance window can
+	// show "Last Quarter Balance" and reset the quarterly accumulators.
+	if (time.quarter != lastAccountingQuarter) {
+		money.finalizeQuarter();
+		lastAccountingQuarter = time.quarter;
+	}
 	timeWindow.updateTime();
 
 	timeWindow.advance(dt);
 	sky.advance(dt);
 	lighting.advance(dt);
 	vipSystem.advance(dt);
+	toolboxWindow.update();
 
 	for (ItemSet::iterator i = items.begin(); i != items.end(); i++) {
 		Item::Item * item = *i;
@@ -779,6 +893,15 @@ void Game::advance(double dt)
 		mapWindow.renderMap();
 	}
 
+	// Refresh the finance window on the same cadence; its figures only
+	// change when money moves, so a ~1s throttle is plenty.
+	if (financeWindow.isVisible() &&
+	    floor(time.absolute / (0.25 * Time::kBaseSpeed)) !=
+	    floor((time.absolute - time.dta) / (0.25 * Time::kBaseSpeed)))
+	{
+		financeWindow.refresh();
+	}
+
 	//Play sounds.
 	if (time.checkHour(5))  cockSound.Play(this);
 	if (time.checkHour(6))  morningSound.Play(this);
@@ -815,7 +938,19 @@ void Game::advance(double dt)
 	Item::AbstractPrototype * previousPrototype = toolPrototype;
 	if (selectedTool.find("item-") == 0) {
 		toolPrototype = itemFactory.prototypesById[selectedTool.substr(5)];
-		toolPosition = int2(round(mp.x/8-toolPrototype->size.x/2.0), round(mp.y/36-toolPrototype->size.y/2.0));
+		int height = toolPrototype->size.y;
+		int yHeightOffset = height;
+		if (toolPrototype->icon == ICON_LOBBY) {
+			bool ctrl = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl);
+			bool shift = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LShift);
+			if (ctrl) {
+				height = shift ? 3 : 2;
+			} else {
+				height = 1;
+			}
+			yHeightOffset = 1;
+		}
+		toolPosition = int2(round(mp.x/8-toolPrototype->size.x/2.0), round(mp.y/36-yHeightOffset/2.0));
 	} else {
 		toolPrototype = NULL;
 		toolPosition = int2(floor(mp.x/8), floor(mp.y/36));
@@ -837,7 +972,7 @@ void Game::advance(double dt)
 		if ((vp.x + vs.x >= view.position.x) && (vp.x <= (view.position.x + view.size.x)) &&
 			((vp.y + vs.y) >= (view.position.y - view.size.y)) && (vp.y <= view.position.y)) {
 			win.draw(**i);
-			if ((*i)->getMouseRegion().containsPoint(double2(mp.x, mp.y))) itemBelowCursor = *i;
+			if ((*i)->containsPoint(double2(mp.x, mp.y))) itemBelowCursor = *i;
 		}
 	}
 
@@ -850,7 +985,7 @@ void Game::advance(double dt)
 			if ((vp.x + vs.x >= view.position.x) && (vp.x <= (view.position.x + view.size.x)) &&
 				((vp.y + vs.y) >= (view.position.y - view.size.y)) && (vp.y <= view.position.y)) {
 				win.draw(**i);
-				if ((*i)->getMouseRegion().containsPoint(double2(mp.x, mp.y))) itemBelowCursor = *i;
+				if ((*i)->containsPoint(double2(mp.x, mp.y))) itemBelowCursor = *i;
 			}
 		}
 	}
@@ -861,6 +996,7 @@ void Game::advance(double dt)
 	if (statusMode != kNormal) {
 		for (ItemSet::iterator i = items.begin(); i != items.end(); i++) {
 			Item::Item * item = *i;
+			if (item->underConstruction) continue;
 			const std::string & id = item->prototype->id;
 			bool isTenant = (id == "office" || id == "condo" || id == "yoot_condo" ||
 			                 id == "hotel_single" || id == "hotel_double" ||
@@ -886,8 +1022,11 @@ void Game::advance(double dt)
 					}
 				} else continue;
 			} else if (statusMode == kPric) {
-				// TODO(Phase 4.3): rent pricing tiers - needs per-tenant rent data.
-				continue;
+				if (id == "condo" || id == "yoot_condo" || id == "office") {
+					if (!item->isOccupied()) {
+						tint = sf::Color(255, 200, 0, 110); // yellow = For Sale/Rent
+					}
+				}
 			}
 			if (tint.a == 0) continue;
 
@@ -928,13 +1067,23 @@ void Game::advance(double dt)
 	}
 
 	if (toolPrototype) {
+		int height = toolPrototype->size.y;
+		if (toolPrototype->icon == ICON_LOBBY) {
+			bool ctrl = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl);
+			bool shift = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LShift);
+			if (ctrl) {
+				height = shift ? 3 : 2;
+			} else {
+				height = 1;
+			}
+		}
 		sf::RectangleShape placement({
 			static_cast<float>(toolPrototype->size.x * 8),
-			static_cast<float>(toolPrototype->size.y * 36)
+			static_cast<float>(height * 36)
 		});
 		placement.setPosition({
 			static_cast<float>(toolPosition.x * 8),
-			static_cast<float>(-(toolPosition.y + toolPrototype->size.y) * 36)
+			static_cast<float>(-(toolPosition.y + height) * 36)
 		});
 		placement.setFillColor(sf::Color(255, 255, 255, 48));
 		placement.setOutlineColor(sf::Color::White);
@@ -950,10 +1099,14 @@ void Game::advance(double dt)
 	if (!visualizeRoute.nodes.empty()) prevFloor = visualizeRoute.nodes[0].item->position.y;
 	for (std::vector<Route::Node>::iterator nit = visualizeRoute.nodes.begin(); nit != visualizeRoute.nodes.end(); nit++) {
 		Route::Node & n = *nit;
-		rectf r = n.item->getRect();
 		if (n.item != mainLobby) {
-			glVertex2f(r.midX()*8, -prevFloor * 36 - 5);
-			glVertex2f(r.midX()*8, -n.toFloor * 36 - 5);
+			// Use the item's visual X (left edge of its first tile + 4px
+			// to centre on the narrow stair/elevator sprite), not the
+			// logical-tile centre which is offset by size.x/2 tiles for
+			// transport items with large footprints.
+			float px = n.item->position.x * 8 + 4;
+			glVertex2f(px, -prevFloor * 36 - 5);
+			glVertex2f(px, -n.toFloor * 36 - 5);
 		}
 		prevFloor = n.toFloor;
 	}
@@ -1003,6 +1156,7 @@ void Game::reloadGUI()
 	toolboxWindow.reload();
 	timeWindow.reload();
 	mapWindow.reload();
+	financeWindow.reload();
 }
 
 void Game::addItem(Item::Item * item)
@@ -1183,16 +1337,12 @@ void Game::seedNewTower()
 	populationNeedsUpdate = false;
 	time.set(7/78.0);
 	lastAccountingDay = (int)floor(time.absolute);
+	lastAccountingQuarter = time.quarter;
 	setSpeedMode(1);
 	selectTool("inspector");
 	poi.x = 0;
 	poi.y = 200;
 
-	Item::Lobby *lobby = (Item::Lobby *)itemFactory.make("lobby", int2(-16, 0));
-	lobby->size.x = 32;
-	lobby->updateSprite();
-	addItem(lobby);
-	extendFloor(1, -16, 16);
 	funds = 4000000;
 	updateRoutes();
 	LOG(IMPORTANT, "seeded new tower");
@@ -1219,6 +1369,9 @@ void Game::encodeXML(tinyxml2::XMLPrinter & xml)
 	xml.PushAttribute("todayExpenses", money.todayExpenses);
 	xml.PushAttribute("yesterdayIncome", money.yesterdayIncome);
 	xml.PushAttribute("yesterdayExpenses", money.yesterdayExpenses);
+	xml.PushAttribute("lastQuarterBalance", money.lastQuarterBalance);
+	xml.PushAttribute("quarterIncome", money.quarterIncome);
+	xml.PushAttribute("quarterExpenses", money.quarterExpenses);
 	for (std::map<std::string, int>::const_iterator i = money.todayTotalsByCategory.begin(); i != money.todayTotalsByCategory.end(); i++) {
 		xml.OpenElement("today");
 		xml.PushAttribute("category", i->first.c_str());
@@ -1241,6 +1394,12 @@ void Game::encodeXML(tinyxml2::XMLPrinter & xml)
 			xml.PushAttribute("total", c->second);
 			xml.CloseElement();
 		}
+		xml.CloseElement();
+	}
+	for (std::map<std::string, int>::const_iterator i = money.quarterTotalsByCategory.begin(); i != money.quarterTotalsByCategory.end(); i++) {
+		xml.OpenElement("quarter");
+		xml.PushAttribute("category", i->first.c_str());
+		xml.PushAttribute("total", i->second);
 		xml.CloseElement();
 	}
 	xml.CloseElement();
@@ -1268,6 +1427,10 @@ void Game::decodeXML(tinyxml2::XMLDocument & xml)
 		money.todayExpenses = moneyElement->IntAttribute("todayExpenses");
 		money.yesterdayIncome = moneyElement->IntAttribute("yesterdayIncome");
 		money.yesterdayExpenses = moneyElement->IntAttribute("yesterdayExpenses");
+		money.lastQuarterBalance = moneyElement->IntAttribute("lastQuarterBalance", money.balance);
+		money.quarterStartBalance = money.lastQuarterBalance;
+		money.quarterIncome = moneyElement->IntAttribute("quarterIncome", 0);
+		money.quarterExpenses = moneyElement->IntAttribute("quarterExpenses", 0);
 		for (tinyxml2::XMLElement * e = moneyElement->FirstChildElement("today"); e; e = e->NextSiblingElement("today")) {
 			const char * category = e->Attribute("category");
 			if (category) money.todayTotalsByCategory[category] = e->IntAttribute("total");
@@ -1275,6 +1438,10 @@ void Game::decodeXML(tinyxml2::XMLDocument & xml)
 		for (tinyxml2::XMLElement * e = moneyElement->FirstChildElement("yesterday"); e; e = e->NextSiblingElement("yesterday")) {
 			const char * category = e->Attribute("category");
 			if (category) money.yesterdayTotalsByCategory[category] = e->IntAttribute("total");
+		}
+		for (tinyxml2::XMLElement * e = moneyElement->FirstChildElement("quarter"); e; e = e->NextSiblingElement("quarter")) {
+			const char * category = e->Attribute("category");
+			if (category) money.quarterTotalsByCategory[category] = e->IntAttribute("total");
 		}
 		for (tinyxml2::XMLElement * e = moneyElement->FirstChildElement("recentDay"); e; e = e->NextSiblingElement("recentDay")) {
 			Money::DaySummary day;
@@ -1290,6 +1457,7 @@ void Game::decodeXML(tinyxml2::XMLDocument & xml)
 	setRating(root->IntAttribute("rating"));
 	time.set(root->DoubleAttribute("time"));
 	lastAccountingDay = (int)floor(time.absolute);
+	lastAccountingQuarter = time.quarter;
 	setSpeedMode(root->IntAttribute("speed"));
 	sky.rainyDay = root->BoolAttribute("rainy");
 	selectTool(root->Attribute("tool"));

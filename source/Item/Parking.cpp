@@ -123,8 +123,21 @@ void Parking::render(sf::RenderTarget & target) const
 		car.setPosition({carX, carY});
 		sf::Color body(50, 70, 130, 235);
 		if (tinted) body = game->lighting.compose(body);
+		sf::Color outline(20, 25, 45, 235);
+		if (game->statusMode == Game::kHotel)
+		{
+			body.r = (body.r * 110) / 255;
+			body.g = (body.g * 110) / 255;
+			body.b = (body.b * 110) / 255;
+			body.a = (body.a * 160) / 255;
+
+			outline.r = (outline.r * 110) / 255;
+			outline.g = (outline.g * 110) / 255;
+			outline.b = (outline.b * 110) / 255;
+			outline.a = (outline.a * 160) / 255;
+		}
 		car.setFillColor(body);
-		car.setOutlineColor(sf::Color(20, 25, 45, 235));
+		car.setOutlineColor(outline);
 		car.setOutlineThickness(1.f);
 		target.draw(car);
 		game->drawnSprites++;

@@ -61,7 +61,7 @@ Phase 2: Missing Items & Commercial Depth                   [Hotel DONE, rest in
 
 - [DONE] **2.1 Hotel system** — `source/Item/Hotel.{h,cpp}` implements single/double/suite variants, room state (clean/occupied/dirty), full guest lifecycle (arrival → dinner → sleep → wake → checkout), housekeeper dispatch, persistence, and Factory registration (`hotel_single`, `hotel_double`, `hotel_suite`, with legacy `hotel` migration).
     - [ ] Verify VIP check-in → rating boost (original: VIP arrivals affect tower rating).
-    - [ ] Verify guest actually pathfinds to a Restaurant for dinner (currently tagged `goingTo = "Restaurant"` but no route lookup).
+    - [DONE] Verify guest actually pathfinds to a Restaurant for dinner (currently tagged `goingTo = "Restaurant"` but no route lookup). — Wired in `Hotel.cpp:281-296`: iterates `itemsByType["restaurant"]`, picks the lowest-score reachable route via `game->findRoute(this, *i)`, sets the guest's journey; if none reachable they leave the tower.
     - [ ] Validate sprite frame rects against `single` / `double` / `suite` sheet.
 
 - [PARTIAL] **2.2 Parking system** — Basic item + arrival hooks landed; gate integration blocked on missing road item.
@@ -69,17 +69,54 @@ Phase 2: Missing Items & Commercial Depth                   [Hotel DONE, rest in
     - [DONE] Registered in `source/Item/Factory.cpp` as prototype `"parking"`; added `ICON_PARKING` to `Factory.h`.
     - [DONE] Tower-wide coverage metric in `JudgeSystem::computeParkingCoverage()` (1 space / 4 offices + 1 / hotel room); Office and Hotel scoring penalised when coverage < 50% / 100%.
     - [DONE] `used` counter persisted in XML.
-    - [PARTIAL] **Gate integration** (`SetupAllGate()` equivalent) — `Parking::setupGate()` hook exists and is called from `init()`, but it's a no-op because OpenSky has no road/gate item yet. The original `SetupAllGate()` (`doc/yoottower/codemap.md:1761`) registers parking with the road tile so cars know where to spawn. Blocked on a road tile being added as a buildable item.
-    - [DONE] **Cars visually appear/disappear** on tiles — `Parking::render()` overrides to overlay one `sf::RectangleShape` per `used` slot on top of the base space sprite (2 per tile), tint-composed with `Lighting` for day/night/rain. Placeholder rectangle art (constants `kCarW`/`kCarH` in `Parking.cpp`); swap for a `simtower/parking/car` frame when the bitmap ships.
-    - [DONE] Hook `assignSpace()` / `freeSpace()` into office-worker / hotel-guest arrival — `Office::Worker` and `Hotel::Guest` grew a `parkingUsed` pointer; office workers claim on morning arrival & sales return and free on departure / sales leave / stress-flee; hotel guests claim on 17:00 dispatch and free on checkout. Both use `game->findRoute()` filtered `itemsByType["parking"]` (same pattern as FastFood/Restaurant). Item destructors and `Hotel::clearAll()` also release held slots to prevent leaks.
-        - Known limitation: the per-guest `parkingUsed` pointer is **not** persisted across save/reload (only `Parking::used` is). A guest who checks out post-reload won't call `freeSpace()`, leaving a phantom slot behind. Proper fix: persist the parking item's position as a guest attribute and re-link without calling `assignSpace()` (see `Hotel.cpp:498` NOTE).
+    - [PARTIAL] **Gate integration** (`SetupAllGate()` equivalent) — `Parking::setupGate()` hook exists and is a no-op; blocked on road/gate item addition.
+    - [DONE] **Cars visually appear/disappear** on tiles — `Parking::render()` overrides to overlay one `sf::RectangleShape` per `used` slot.
+    - [DONE] Hook `assignSpace()` / `freeSpace()` into office-worker / hotel-guest arrival.
+        - Known limitation: per-guest `parkingUsed` pointer is **not** persisted across save/reload.
+
+    - [DONE] **2.5 Multi-story Lobby Staircases (Spiral Stairs)**
+    - **Goal**: Implement proper spiral staircase rendering and sizing when placing stairs in a 2-story or 3-story lobby, and fix pathfinding for multi-floor stairs.
+    - **Primary Source of Bitmaps (SIMTOWER.EXE)**: The two `0xFF02`-type (per-cell arrangement) resources in `SIMTOWER.EXE` are the canonical animated source — neither is consumed by `SimTowerLoader` today.
+        - **`0x8fe9`** (dumped as `data/bitmaps/unhandled/8fe9.bmp`, 4416×36): **2-story spiral staircase**. Laid out as 69 slots of 64×36 (one floor of one animation frame each):
+            - slots 0–10   – toolbox thumbnails
+            - slots 11–21  – **2-story stair BOTTOM floor, 11 animation frames**
+            - slots 22–32  – **2-story stair TOP floor, 11 animation frames** (stack on top of slots 11–21 to form a 64×72 frame)
+            - slots 33–44  – people on 2-story stair (12 sparse frames)
+            - slots 45–68  – likely 4-story variant or alternate facings (unconfirmed)
+        - **`0x8fea`** (dumped as `data/bitmaps/unhandled/8fea.bmp`, 5888×36): **3-story spiral staircase**. Laid out as 92 slots of 64×36:
+            - slots 0–10   – toolbox thumbnails
+            - slots 11–21  – **3-story stair TOP floor, 11 animation frames**
+            - slots 22–32  – **3-story stair MIDDLE floor, 11 animation frames**
+            - slots 33–43  – **3-story stair BOTTOM floor, 11 animation frames** (stack 11+22+33 for a 64×108 frame, top-down)
+            - slots 44–55  – people on 3-story stair (12 sparse frames)
+            - slots 56–91  – likely 4-story variant (12 frames × 3 visible floors, unconfirmed)
+        - **Frame composition** (per-strip slot order, verified visually against the original game):
+            - 2-story: `frame N = slot[22+N]` (top) over `slot[11+N]` (bottom) — slot index decreases going up.
+            - 3-story: `frame N = slot[11+N]` (top) + `slot[22+N]` (middle) + `slot[33+N]` (bottom) — slot index increases going up.
+    - **Fallback Source (YootTower `Stair.t2p`)**: Win32 PE DLL `data/Plugins/Stair.t2p` should be used only when SIMTOWER resources are unavailable. Its bitmaps are **static** (no animation), per the embedded `OBJMAP 0x3e8`:
+        - `RT_BITMAP 0x3e8` (1000) — `stair_t2p_1000.bmp`, 64×288. **Contains 3 static views, NOT 11 animation frames** (the earlier description here was wrong):
+            - Span 2 (2-story): Rect (0, 0, 64, 60)
+            - Span 3 (3-story): Rect (0, 60, 64, 156)  → 64×96
+            - Span 4 (4-story): Rect (0, 156, 64, 288) → 64×132
+        - `RT_BITMAP 0xc8` (200) — `stair_t2p_200.bmp`, 32×768. SHIL ("shadow") tiles — 8×24 people-walking frames for the spiral stairs.
+        - `RT_BITMAP 0x64` (100) — `stair_t2p_100.bmp`, 26×130. Toolbox icon + 5 sub-frames.
+    - **What's been built**:
+        - `SimTowerLoader::loadSpiralStairs()` slices the SIMTOWER strips into `simtower/stairs/spiral_2` (704×72, 11 frames) and `simtower/stairs/spiral_3` (704×108, 11 frames).
+        - `Stairs::init()` / `configureForLobby()` detect a multi-story lobby at the stair's position via `game->itemsByFloor[position.y]` and select `spiral_2`/`spiral_3` with `frameCount=11`. `size.y` is set to `lobbyHeight + 1` (3 or 4) so the stairs span all lobby floors and connect directly to the floor above the lobby.
+        - `Stairs::encodeXML/decodeXML` persists `spiral=2/3` with the correct `size.y` values (3 or 4) so save games restore the correct texture, size, and frame count.
+        - `scratch/stair_analysis.py` re-extracts the spiral sheets from the dumped BMPs as a verifier. `scratch/extract_t2p_stairs.py` extracts the static YootTower views to PNGs that BitmapManager auto-loads as the t2p fallback path.
+        - **`PathFinder/GameMap::addNode/removeNode`** — fixed a bug where the stair's upper transport node was hard-coded to `p.y + 1`. For 3-story stairs (`size.y = 3` originally, now `size.y = 4`) this left the top floor disconnected. Now uses `p.y + item->size.y - 1`, matching `Stairlike::connectsFloor()`.
+        - **`Game::handleEvent`** — auto-extends multi-story lobbies horizontally when a wider item is placed on top. Extended manual/automatic lobby resizing to correctly call `extendFloor` and update the floor `interval` multisets on all lobby floors.
+    - **Remaining limitations**:
+        - Multi-story lobbies don't yet provide automatic internal stairs; people inside the lobby can only change floors via the spiral stair they placed inside (or an elevator). Original SimTower's sky lobbies had automatic interior stairs; adding them would require overriding `Lobby::isStairlike()` and wiring FloorNodes in `GameMap::addNode` — noted as a future enhancement.
+        - No 4-story lobby or 4-story stair exists in SIMTOWER (confirmed by the YootTower `Stair.t2p` resource going up to Span 4 but no matching lobby variant in `SIMTOWER.EXE`).
 
 - [PARTIAL] **2.3.1 Office: rent, evaluation, lunch** (`source/Item/Office.{h,cpp}`)
     - [DONE] Rent + deposit collection on Monday 05:00 (`Office.cpp:105`-`122`).
     - [DONE] `findLunchRoute()` + `kLunch` dispatch at 12:00 (`Office.cpp:180`-`183`).
     - [DONE] `isAttractive()` route-based gate for move-in.
     - [ ] Extend `isAttractive()` to consider amenity coverage (security, food reachability) not just route score.
-    - [ ] Salesman behaviour: leave for sales, return, no lunch.
+    - [DONE] Salesman behaviour: leave for sales, return, no lunch. — `salesLeaveQueue`/`salesReturnQueue` dispatch in `Office.cpp:271-313`; salesmen are excluded from `lunchQueue` at `Office.cpp:429`.
     - [ ] Stress recovery when worker returns from successful lunch; stress gain when no food reachable.
 
 - [DONE] **2.3.2 FastFood / Restaurant: schedules & pricing** (`source/Item/{FastFood,Restaurant}.{h,cpp}`) — verified DONE in source on 2026-06-18 (Wave 1.1 commit `d512208`); TODO previously lagged behind code.
@@ -95,8 +132,8 @@ Phase 2: Missing Items & Commercial Depth                   [Hotel DONE, rest in
     - [DONE] Person state transitions on arrival/departure.
     - [DONE] Two screenings/day (13:00 doors / 15:00 start / 17:00 close, and 19:00 / 21:00 / 23:00).
     - [DONE] Attendance-based income: `attendees * ticketPrice - screeningFee` using `people.size()` at close.
-    - [ ] Halfway-through-movie break (per original; verify).
-    - [ ] Permit underground construction (verify original behaviour).
+    - [DONE] Halfway-through-movie break (per original; verify). — `Cinema.cpp:151` fires `intermission = true` at 16:00 and 22:00 (1 h after each 2 h screening start at 15:00 / 21:00).
+    - [DONE] Permit underground construction (verify original behaviour). — `Game.cpp:309-312` blocks cinema placement above ground (`toolPosition.y > 0 && toolPrototype->id == "cinema"`).
 
 - [DONE] **2.3.4 PartyHall: event visitors** (`source/Item/PartyHall.cpp`)
     - [DONE] `PartyHall::Visitor` subclass; spawned on each open.
@@ -110,11 +147,13 @@ Phase 2: Missing Items & Commercial Depth                   [Hotel DONE, rest in
     - [DONE] Visitors return to the platform after a random dwell window; departing train boards them (`boardReturnedVisitors()`) and yields fare revenue (`metro_fare`).
     - [DONE] Visitor state machine (`kCommuting` → `kShopping` → `kReturning` → `kIdle`) closes the last Phase 1.x subclass-state item.
     - [DONE] `Visitor` and `nextTrainTime` persisted across save/reload.
-    - [ ] Tune `kTrainDwellAbs` / `kTrainGapAbs` against the original SimTower feel.
-    - [ ] Target underground commercial specifically (currently any reachable venue).
-    - [ ] Metro tracks as a decoration (parallel to fire stairs / crane — see existing Decorations work).
-    - [ ] Enforce: only one Metro instance per game.
-    - [ ] Forbid building any item below the Metro.
+    - [DONE] Tune `kTrainDwellAbs` / `kTrainGapAbs` against the original SimTower feel. — Replaced the literal `0.02` / `0.08` values (which were ~3× too long — a full train cycle took most of the afternoon) with `Time::hourToAbsolute(10.0/60.0)` / `Time::hourToAbsolute(0.5)` for a ~10 min dwell and ~30 min gap (`Metro.cpp:17-18`).
+    - [DONE] Target underground commercial specifically (currently any reachable venue). — `Metro::pickDestinationFor` at `Metro.cpp:129-149` filters by `item->position.y < 0` over `{fastfood, restaurant, cinema, partyhall}`.
+    - [DONE] Metro tracks as a decoration (parallel to fire stairs / crane — see existing Decorations work). — `Decorations.cpp:16-19` (`track.SetImage` from `simtower/metro/tracks`); `updateTracks()` at `Decorations.cpp:101` wired from `Game.cpp:1074`.
+    - [DONE] Enforce: only one Metro instance per game. — Construction flow already rejects a second Metro with "Only one Metro Station allowed" (`Game.cpp:424-427`); the `init()` defensive branch now logs a warning and keeps the existing station instead of asserting (`Metro.cpp:51-57`).
+    - [DONE] Forbid building any item below the Metro. — `Game.cpp:299-302` rejects placement when `metroStation != NULL && toolPosition.y < metroStation->position.y`.
+
+    - [DONE] Elevator id mismatch (latent bug surfaced by the overlay rewrite). — `CATEGORIES` in `ToolboxWindow.cpp` and `kItemLocks` in `LevelUp.cpp` used `standard_elevator` / `express_elevator` / `service_elevator` (underscores) but the prototype ids in `Item/Elevator/{Standard,Express,Service}.h` use `elevator-standard` / `elevator-express` / `elevator-service` (dashes). Effects: (1) press-and-hold on Standard Elevator did nothing — `isCategoryParent` always returned false; (2) Express/Service elevators were never locked despite the table claiming a 3★ minimum. Both strings now match the prototype ids.
 
 
 Phase 3: Game Systems                                        [PARTIAL — 3.1/3.2/3.4 in progress, 3.3 pending]
@@ -173,7 +212,7 @@ Phase 4: UI & Visualization                                   [PENDING]
     - [DONE] Occupant list (up to 8): name, state, stress, eval for each person at the item.
     - [DONE] Refreshes every frame so values stay live; tears down on world clear.
     - [ ] **Per-person sprite hit-testing** — clicking an individual walking person should open their info directly (currently we list all occupants of the clicked item).
-    - [ ] Wire tenant complaint messages (stress > threshold) to `TimeWindow.showMessage()`.
+    - [DONE] Wire tenant complaint messages (stress > threshold) to `TimeWindow.showMessage()`. — `JudgeSystem.cpp:361-369` emits a daily "N tenants unhappy" message when `lastCounts.criticalTenants > 0`; hotel and per-tenant complaints also surface via `showMessage` at lines 406, 415, 422, 467.
     - [ ] Tenant messaging: route-based complaints ("can't reach lobby", "no lunch nearby").
 
 - [PARTIAL] **4.2 Minimap** (`source/MapWindow.{h,cpp}`)
@@ -183,18 +222,18 @@ Phase 4: UI & Visualization                                   [PENDING]
     - [DONE] Toggle with `M` key; closes on Escape; hidden by default.
     - [DONE] Click-to-jump via `Game::centerViewportOnTile()`.
     - [DONE] Throttled refresh (~1 s of game time) plus reload on GUI rebuild / world clear.
-    - [ ] Toolbar button to toggle (currently keyboard only).
+    - [DONE] Toolbar button to toggle (currently keyboard only). — Added "Map" button in the new view-toggle row of `ToolboxWindow::reload` (Step 4), calls `mapWindow.setVisible(!mapWindow.isVisible())` mirroring the M keybind.
     - [ ] Dedicated Pric palette (deferred with the rent-pricing model).
     - [ ] Separate grey-body + sky-background rendering mode per the original (`MapT.h/c`).
 
-- [PARTIAL] **4.3 Status overlays (Eval / Pric / Hotel)** — `Game::StatusMode` enum + `O` key cycle.
+- [DONE] **4.3 Status overlays (Eval / Pric / Hotel)** — `Game::StatusMode` enum + `O` key cycle.
     - [DONE] `enum StatusMode { kNormal, kEval, kPric, kHotel }` on Game; cycle via `O` key with mode-name message.
     - [DONE] Eval overlay: blue/yellow/red tint on each tenant item based on `Item::evaluation`.
     - [DONE] Hotel overlay: red on dirty rooms, yellow on occupied, green on clean.
     - [DONE] Per-item culling so offscreen overlays are skipped.
-    - [ ] **Pric overlay** — needs rent pricing tier data per tenant (deferred until pricing model lands).
-    - [ ] Toolbar button to cycle modes (currently keyboard only).
-    - [ ] Minimap integration (Phase 4.2) so the overlays also render on the minimap.
+    - [DONE] **Pric overlay** — draws a yellow overlay on unoccupied condos and offices in the For Sale / For Rent state, turning off once purchased/occupied.
+    - [DONE] Toolbar button to cycle modes (currently keyboard only). — Added "View" button in the new view-toggle row of `ToolboxWindow::reload` (Step 4), calls `game->cycleStatusMode()` mirroring the O keybind; the active mode is announced via `TimeWindow.showMessage` as before.
+    - [DONE] Minimap integration (Phase 4.2) so the overlays also render on the minimap. — `MapWindow.cpp:113-131` honours `Game::kEval` (blue/yellow/red by `item->evaluation`), `Game::kHotel` (red/yellow/green by `roomState`), and `Game::kPric` (yellow for unoccupied condos/offices).
 
 - [DONE] **4.4 Construction animation** (also in original `TODO.md`)
     - [DONE] `bool underConstruction` + `double constructionEndTime` on `Item`; persisted in XML.
@@ -206,12 +245,17 @@ Phase 4: UI & Visualization                                   [PENDING]
     - [ ] Swap rectangle overlay for actual `construction/solid` and `construction/grid` bitmaps.
     - [ ] Per-prototype duration tuning (currently 2h + 0.2h/tile width).
 
-- [ ] **4.5 Toolbox categories (click-and-hold)**
-    - [ ] Click and hold a category parent tool (e.g. Lobby, Standard Elevator, Hotel Single, Condo) to show/hide sub-tools of the same type.
-    - [ ] Lobby hides Floor and Stairs.
-    - [ ] Standard Elevator hides Express Elevator and Service Elevator.
-    - [ ] Hotel Single hides Hotel Double and Hotel Suite.
-    - [ ] Condo hides YootCondo.
+- [DONE] **4.5 Toolbox categories (click-and-hold)**
+    - [DONE] Press and hold a category parent tool (e.g. Lobby, Standard Elevator, Hotel Single, Condo) and its children pop up as an overlay over the neighbouring grid slots — `ToolboxWindow::showOverlayFor()` builds the overlay on top of `window` so the grid layout never shifts.
+    - [DONE] While held, drag to a child and release to select it; release over the parent or off-toolbox to select the parent. Release is detected by polling `sf::Mouse::isButtonPressed` in `ToolboxWindow::update()` (called every frame from `Game::advance`) since TGUI's mouse capture is unreliable once overlay widgets stack over the pressed parent.
+    - [DONE] Lobby reveals Floor.
+    - [DONE] Stairs reveals Escalator (own category; pairs the basic vertical transport with its upgrade, mirroring SimTower's primary/secondary relationship).
+    - [DONE] Standard Elevator reveals Express Elevator and Service Elevator.
+    - [DONE] Hotel Single reveals Hotel Double and Hotel Suite.
+    - [DONE] Condo reveals YootCondo.
+    - [DONE] **Hide locked tools entirely** — prototypes whose `LevelUp::minRatingToBuild()` exceeds the current tower rating are filtered out of `visiblePrototypes` before layout (replaces the previous greyed-out disabled-button + tooltip approach; the level-up dialog is now the sole discovery mechanism).
+    - [DONE] **Enlarged toolbox buttons** — item cells 32→36 px, tool buttons 21→24 px, window widened from 106→118 px to match; `makeButton` now takes optional `cellW`/`cellH` so a 32 px sheet cell can be rendered at 36 px. `updateTool()` highlights the parent button when a category child is the active tool.
+    - [DONE] **Slot substitution on selection** — when a child is picked via the press-and-hold overlay, the parent slot's icon is replaced with the child's (e.g. selecting Floor replaces the Lobby icon with Floor's). The slot stays registered as the parent in `toolButtons` but `buttonStates[btn]` is swapped to the child's textures via `rebuildSlotTexture()`. Short-click then selects the currently-displayed tool. Substitutions are preserved across `reload()` (level-up) if the child is still buildable; otherwise the slot reverts to its parent.
 
 
 Phase 5: Polish & Balance                                     [IN PROGRESS]
@@ -225,7 +269,7 @@ Phase 5: Polish & Balance                                     [IN PROGRESS]
     - [DONE] Office/Condo weekly vacation via `isAttractive()` (evaluation ≥ 30) already wired.
     - [ ] Condo occupants vacate mid-week when stress is critical (currently only weekly via `isAttractive`).
     - [ ] Hotel guests rate stay based on cleanliness, noise, elevator wait (currently fixed `eval = 50` on arrival; JudgeSystem overwrites daily but in-stay feedback is shallow).
-    - [ ] `population` correctly updates when tenants leave mid-day (verify path for stress-flee).
+    - [DONE] `population` correctly updates when tenants leave mid-day (verify path for stress-flee). — Verified: `Item::population` is a tenant-headcount field, not a current-presence count (`Office::population = workers.size()` at `Office.cpp:435`; a stress-fleeing worker stays in the workers set and returns next day, so headcount is unchanged). Same semantics as the Condo weekly vacate path which clears `population = 0` only when the tenant leaves permanently.
 
 - [PARTIAL] **5.2 Noise / zoning system** (original `Kinsoku.h/c`)
     - [DONE] Noise profile per tenant type (loud: office/fastfood/restaurant/cinema/partyhall/metro; sensitive: condo/hotel).
@@ -276,8 +320,8 @@ Item::Cinema
 ------------
 - [DONE] Verify showtimes against original (two screenings/day at 13:00-17:00 and 19:00-23:00; `Cinema.cpp`).
 - [DONE] Implement attendance-based income (`attendees * ticketPrice - screeningFee`, replaced the TODO at `Cinema.cpp:144`; commit `d2e9cbc` Wave 1.3).
-- [ ] Confirm halfway-through-movie break.
-- [ ] Verify underground construction support.
+- [DONE] Confirm halfway-through-movie break.
+- [DONE] Verify underground construction support.
 
 Item::Office
 ------------
@@ -287,15 +331,15 @@ Item::Office
 
 Item::PartyHall
 ---------------
-- [ ] Confirm party timing from original.
-- [ ] Confirm income model (attendance-based? flat?).
-- [ ] Make people arrive/leave.
+- [DONE] Confirm party timing from original. — Two sessions/day: 13:00–17:00 and 19:00–23:00 (`PartyHall.cpp:55-72`).
+- [DONE] Confirm income model (attendance-based? flat?). — `attendees * kVisitorFee - kEventCost` at `PartyHall.cpp:85-86` (attendance-based).
+- [DONE] Make people arrive/leave. — `kVisitorsPerEvent` Visitors spawned at open (`PartyHall.cpp:67-72`); cleared at next open or destruction (`PartyHall.cpp:64, 91-106`).
 
 Item::Metro
 -----------
-- [ ] Trains arrive/leave at regular absolute-time intervals.
-- [ ] Each train brings visitors for underground commercial and hauls away waiting passengers.
-- [ ] Metro tracks as decoration.
+- [DONE] Trains arrive/leave at regular absolute-time intervals. — `kTrainDwellAbs` / `kTrainGapAbs` constants in `Metro.cpp:17-18` drive `nextTrainTime` scheduling.
+- [DONE] Each train brings visitors for underground commercial and hauls away waiting passengers. — `spawnVisitors()` (2-5 visitors per arrival) and `boardReturnedVisitors()` in `Metro.cpp`; fare revenue via `metro_fare`.
+- [DONE] Metro tracks as decoration. — See Phase 2.4 entry above (`Decorations.cpp`).
 
 Item::Elevator
 --------------

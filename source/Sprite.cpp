@@ -12,10 +12,10 @@ using namespace OT;
 void Sprite::SetImage(const sf::Image& image)
 {
 	texture.loadFromImage(image);
-	setTexture(texture);
+	setTexture(texture, true);
 }
 
 void Sprite::SetImage(const sf::Texture& texture)
 {
-	setTexture(texture);
+	setTexture(texture, true);
 }

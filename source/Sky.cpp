@@ -252,8 +252,9 @@ void Sky::render(sf::RenderTarget &target) const
 	if (-dmax.y <= 96 && -dmin.y >= 0)
 	{
 		Sprite city;
-		city.setTexture(app->bitmaps["simtower/deco/skyline"]);
+		city.setTexture(app->bitmaps["simtower/deco/skyline"], true);
 		city.setOrigin({0.f, 55.f});
+		city.setColor(game->lighting.compose(sf::Color::White));
 		for (int x = floor(dmin.x / 96); x < ceil(dmax.x / 96); x++)
 		{
 			city.setPosition({(float)x * 96, 0.f});

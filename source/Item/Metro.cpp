@@ -12,10 +12,11 @@ using OT::Math::randd;
 
 // Train cadence in absolute-time units. A train dwells at the platform for
 // roughly 10 minutes, then is absent for ~30 minutes before the next arrives.
-// TODO(Phase 2.4): tune against the original SimTower interval. The plan
-// suggests 0.1 absolute between trains; that feels too frequent in practice.
-static const double kTrainDwellAbs = 0.02;
-static const double kTrainGapAbs   = 0.08;
+// Tuned from initial values (0.02 / 0.08) which were ~3x too long — at 1x
+// speed a full cycle took most of the afternoon, so visitors never got a
+// second train to leave on. 0.007/0.020 maps to ~10 min / ~30 min.
+static const double kTrainDwellAbs = Time::hourToAbsolute(10.0 / 60.0);
+static const double kTrainGapAbs   = Time::hourToAbsolute(0.5);
 
 // Dwell window the visitor spends at a commercial venue before heading back.
 static const double kVisitorMinDwell = Time::hourToAbsolute(0.25);
@@ -47,8 +48,16 @@ void Metro::init()
 	addSprite(&platform);
 	spriteNeedsUpdate = true;
 
-	assert(game->metroStation == NULL);
-	game->metroStation = this;
+	// The construction flow already rejects a second Metro (Game.cpp:424-427
+	// with "Only one Metro Station allowed"). This branch is defensive for
+	// save/reload and any future code paths that bypass the construction
+	// gate; in that case log and refuse to clobber the existing station.
+	if (game->metroStation != NULL) {
+		LOG(WARNING, "Metro::init() called while metroStation already set; "
+		             "keeping the existing station and ignoring this one");
+	} else {
+		game->metroStation = this;
+	}
 
 	updateSprite();
 }

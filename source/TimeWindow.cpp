@@ -63,10 +63,12 @@ static sf::Image makeModernHeaderBackground(const TimeWindowLayout &layout)
     fillRect(image, image.getSize().x - 1, 0, 1, image.getSize().y, sf::Color(4, 8, 14, 230));
     fillRect(image, 2, 2, 4, image.getSize().y - 4, accent);
 
-    // Common Y coordinates for all three cards: Y = s(6) to s(50) (height s(44))
-    const unsigned int cY = static_cast<unsigned int>(layout.clientHeight * 6 / 56);
-    const unsigned int cH = static_cast<unsigned int>(layout.clientHeight * 44 / 56);
-    const unsigned int midY = layout.tooltipBackgroundY;
+    // Card content area: Y = s(6) to s(74) (height s(68)), split into 3 rows.
+    const unsigned int cY = static_cast<unsigned int>(layout.clientHeight * 6 / 80);
+    const unsigned int cH = static_cast<unsigned int>(layout.clientHeight * 68 / 80);
+    const unsigned int row1End = layout.tooltipBackgroundY;
+    const unsigned int row2End = layout.messageBackgroundY;
+    const unsigned int row3End = cY + cH;
 
     // Helper lambda to draw a card's 1-pixel border
     auto drawCardBorder = [&](unsigned int x, unsigned int y, unsigned int w, unsigned int h) {
@@ -76,28 +78,34 @@ static sf::Image makeModernHeaderBackground(const TimeWindowLayout &layout)
         fillRect(image, x + w - 1, y, 1, h, line);  // Right
     };
 
-    // 3. Draw Watch Card (X = s(8) to s(46))
+    // Watch Card (spans full height)
     const unsigned int watchCardX = layout.watchX - (layout.watchX - 8) * (layout.watchX > 8);
     const unsigned int watchCardW = layout.watchSize + (layout.watchX - watchCardX) * 2;
     fillRect(image, watchCardX, cY, watchCardW, cH, sf::Color(9, 14, 22, 170));
     drawCardBorder(watchCardX, cY, watchCardW, cH);
 
-    // 4. Draw Middle Card (X = layout.tooltipBackgroundX to layout.tooltipBackgroundWidth)
-    // Top Half: Star rating and Date/Time (panel background)
-    fillRect(image, layout.tooltipBackgroundX, cY, layout.tooltipBackgroundWidth, midY - cY, panel);
-    // Bottom Half: Tooltip and Ledger (light-blue background)
-    fillRect(image, layout.tooltipBackgroundX, midY, layout.tooltipBackgroundWidth, cY + cH - midY, sf::Color(232, 240, 248, 220));
-    // Middle divider separating top and bottom halves
-    fillRect(image, layout.tooltipBackgroundX, midY, layout.tooltipBackgroundWidth, 1, line);
+    // Middle Card: 3 rows (Stars/Date | Tool+Speed | Message)
+    const unsigned int midCardX = layout.tooltipBackgroundX;
+    const unsigned int midCardW = layout.tooltipBackgroundWidth;
+    // Row 1: dark panel (stars + date)
+    fillRect(image, midCardX, cY, midCardW, row1End - cY, panel);
+    // Row 2: light blue (tool + speed)
+    fillRect(image, midCardX, row1End, midCardW, row2End - row1End, sf::Color(232, 240, 248, 220));
+    // Row 3: light blue (error / message)
+    fillRect(image, midCardX, row2End, midCardW, row3End - row2End, sf::Color(232, 240, 248, 220));
+    // Divider lines between rows
+    fillRect(image, midCardX, row1End, midCardW, 1, line);
+    fillRect(image, midCardX, row2End, midCardW, 1, line);
     // Outer border
-    drawCardBorder(layout.tooltipBackgroundX, cY, layout.tooltipBackgroundWidth, cH);
+    drawCardBorder(midCardX, cY, midCardW, cH);
 
-    // 5. Draw Metrics Card (X = layout.tooltipBackgroundX + layout.tooltipBackgroundWidth to clientWidth - s(8))
+    // Metrics Card: 3 rows (FUND | POP | Money stats)
     const unsigned int metricsCardX = layout.tooltipBackgroundX + layout.tooltipBackgroundWidth;
     const unsigned int metricsCardW = layout.clientWidth - metricsCardX - (layout.clientWidth - 512) * (layout.clientWidth > 512);
     fillRect(image, metricsCardX, cY, metricsCardW, cH, panel);
-    // Horizontal divider inside metrics card (aligned with the middle card's divider)
-    fillRect(image, metricsCardX, midY, metricsCardW, 1, sf::Color(74, 91, 112, 125));
+    // Divider lines aligned with the middle card
+    fillRect(image, metricsCardX, row1End, metricsCardW, 1, sf::Color(74, 91, 112, 125));
+    fillRect(image, metricsCardX, row2End, metricsCardW, 1, sf::Color(74, 91, 112, 125));
     // Outer border
     drawCardBorder(metricsCardX, cY, metricsCardW, cH);
 
@@ -182,23 +190,32 @@ void TimeWindow::reload() {
     setLabelColor(lblPopulation, sf::Color(244, 248, 252));
     window->add(lblPopulation);
 
-    lblMoneyStats = tgui::Label::create();
+lblMoneyStats = tgui::Label::create();
     lblMoneyStats->setHorizontalAlignment(tgui::HorizontalAlignment::Right);
     lblMoneyStats->setTextSize(10 * app->uiScale);
-    lblMoneyStats->setSize(126 * app->uiScale, 12 * app->uiScale);
-    lblMoneyStats->setPosition(layout.metricsX - 140 * app->uiScale, 35 * app->uiScale);
+    lblMoneyStats->setSize(layout.moneyStatsWidth, 12 * app->uiScale);
+    lblMoneyStats->setPosition(layout.moneyStatsX, layout.moneyStatsY);
     lblMoneyStats->getScrollbar()->setPolicy(tgui::Scrollbar::Policy::Never);
-    setLabelColor(lblMoneyStats, sf::Color(61, 71, 82));
+    setLabelColor(lblMoneyStats, sf::Color(170, 195, 215));
     window->add(lblMoneyStats);
 
-    // message
+    // tool + speed (row 2 of middle card)
     lblTooltip = tgui::Label::create();
     lblTooltip->setPosition(layout.tooltipX, layout.tooltipY);
     lblTooltip->setTextSize(11 * app->uiScale);
-    lblTooltip->setSize(layout.tooltipWidth, 14 * app->uiScale);
+    lblTooltip->setSize(layout.tooltipWidth, layout.tooltipHeight);
     lblTooltip->getScrollbar()->setPolicy(tgui::Scrollbar::Policy::Never);
     setLabelColor(lblTooltip, sf::Color(30, 36, 43));
     window->add(lblTooltip);
+
+    // dedicated error / message row (row 3 of middle card)
+    lblMessage = tgui::Label::create();
+    lblMessage->setPosition(layout.messageX, layout.messageY);
+    lblMessage->setTextSize(11 * app->uiScale);
+    lblMessage->setSize(layout.messageWidth, layout.messageHeight);
+    lblMessage->getScrollbar()->setPolicy(tgui::Scrollbar::Policy::Never);
+    setLabelColor(lblMessage, sf::Color(170, 40, 40));
+    window->add(lblMessage);
 
     // date, Time
     lblDate = tgui::Label::create();
@@ -271,13 +288,10 @@ void TimeWindow::updateTooltip() {
 		case 3: str << "Speed 4x"; break;
 		default: break;
 	}
-	if (!message.empty()) {
-		if (!str.str().empty()) str << "  |  ";
-		str << message;
-	}
-    if (str.str() != "") {
-        lblTooltip->setText(str.str());
-    }
+    lblTooltip->setText(str.str());
+
+    if (lblMessage)
+        lblMessage->setText(message);
 }
 
 void TimeWindow::showMessage(std::string msg)

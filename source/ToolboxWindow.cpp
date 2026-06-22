@@ -23,11 +23,26 @@
 using namespace OT;
 
 static const std::map<std::string, std::vector<std::string>> CATEGORIES = {
-    {"lobby", {"floor", "stairs"}},
-    {"standard_elevator", {"express_elevator", "service_elevator"}},
-    {"hotel_single", {"hotel_double", "hotel_suite"}},
-    {"condo", {"yoot_condo"}}
+    // Vertical-transport category. Stairs is the grid slot; press-and-hold
+    // reveals the Escalator as an overlay child. In SimTower this is the
+    // natural primary/secondary pairing: Stairs are the basic transport,
+    // Escalator is the upgrade.
+    {"stairs",            {"escalator"}},
+    {"lobby",             {"floor"}},
+    {"elevator-standard", {"elevator-express", "elevator-service"}},
+    {"hotel_single",      {"hotel_double", "hotel_suite"}},
+    {"condo",             {"yoot_condo"}}
 };
+
+// Toolbox layout constants (source pixels; scaled by app->uiScale at render time).
+namespace {
+    constexpr int kCellW       = 36;   ///< item cell width (rendered; sheet cells are 32)
+    constexpr int kCellH       = 36;   ///< item cell height
+    constexpr int kPadX        = 5;    ///< horizontal padding around the 3-column grid
+    constexpr int kItemsTopY   = 30;   ///< y offset where the item grid begins
+    constexpr int kCols        = 3;    ///< grid column count
+    constexpr int kHoldMs      = 300;  ///< press-and-hold threshold before the overlay pops
+}
 
 bool ToolboxWindow::isChildTool(const std::string& toolId, std::string& outParentId) const {
     for (auto const& pair : CATEGORIES) {
@@ -47,11 +62,6 @@ bool ToolboxWindow::isCategoryParent(const std::string& toolId) const {
 
 ToolboxWindow::ToolboxWindow(Game *game) : GameObject(game)
 {
-    expandedCategories["lobby"] = false;
-    expandedCategories["standard_elevator"] = false;
-    expandedCategories["hotel_single"] = false;
-    expandedCategories["condo"] = false;
-
     window = tgui::ChildWindow::create();
     auto renderer = window->getRenderer();
     renderer->setTitleBarHeight(10 * app->uiScale);
@@ -60,7 +70,7 @@ ToolboxWindow::ToolboxWindow(Game *game) : GameObject(game)
     renderer->setBorderColor(sf::Color(80, 80, 90));
     renderer->setBorders(1);
 
-    window->setClientSize({106 * app->uiScale, app->uiScale * 220});
+    window->setClientSize({118 * app->uiScale, app->uiScale * 252});
     window->setPosition(0, 24 * app->uiScale);
 
     reload();
@@ -159,57 +169,76 @@ static bool loadGeneratedSpeedTexture(sf::Texture &texture)
 
 void ToolboxWindow::reload()
 {
+    // Drop any in-flight overlay state — the widgets are about to be rebuilt.
+    holdingParent.clear();
+    overlayVisible = false;
+    overlayButtons.clear();
+    overlayButtonStates.clear();
+    overlayToolFor.clear();
+    parentSlotIndex.clear();
+
+    // Preserve slot substitutions across reload (e.g. a level-up triggers
+    // reload). If a swapped-in child is now locked or missing, drop it; the
+    // slot will revert to its parent on the next render pass.
+    std::map<std::string, std::string> savedSubs;
+    for (auto& kv : parentActiveChild) {
+        if (LevelUp::minRatingToBuild(kv.second) <= game->rating)
+            savedSubs[kv.first] = kv.second;
+    }
+    parentActiveChild.clear();
+
     window->removeAllWidgets();
     buttons.clear();
     toolButtons.clear();
     speedButtons.clear();
     buttonStates.clear();
 
-    // Auto-expand category of selected tool if it is a child
-    std::string selectedProtoId = "";
-    if (game->selectedTool.rfind("item-", 0) == 0) {
-        selectedProtoId = game->selectedTool.substr(5);
-    }
-    std::string parentId;
-    if (!selectedProtoId.empty() && isChildTool(selectedProtoId, parentId)) {
-        expandedCategories[parentId] = true;
-    }
-
-    // Filter prototypes to only include visible ones
+    // Build the grid: only unlocked parents and standalone tools are shown.
+    // Category children (floor, escalator, elevator-express, etc.) never
+    // occupy a grid slot — they pop up as an overlay while their parent is
+    // held. See CATEGORIES above for the full parent→children mapping.
     std::vector<Item::AbstractPrototype*> visiblePrototypes;
     for (int i = 0; i < game->itemFactory.prototypes.size(); i++)
     {
         Item::AbstractPrototype *prototype = game->itemFactory.prototypes[i];
-        
+
+        if (LevelUp::minRatingToBuild(prototype->id) > game->rating)
+            continue;
+
         std::string parent;
-        if (isChildTool(prototype->id, parent)) {
-            if (expandedCategories[parent]) {
-                visiblePrototypes.push_back(prototype);
-            }
-        } else {
-            visiblePrototypes.push_back(prototype);
-        }
+        if (isChildTool(prototype->id, parent))
+            continue; // children are overlay-only
+
+        visiblePrototypes.push_back(prototype);
     }
 
-    // Calculate total rows and sizes dynamically to prevent overlapping when new items are registered
     int numItems = visiblePrototypes.size();
-    int totalRows = (numItems + 2) / 3;
-    int speedY = 25 + totalRows * 32 + 8;
-    int clientHeight = speedY + 24 + 3;
+    int totalRows = (numItems + kCols - 1) / kCols;
+    int speedY = kItemsTopY + totalRows * kCellH + 8;
+    int viewY  = speedY + 24 + 4;  // view-toggle row sits below speed controls
+    int clientHeight = viewY + 24 + 3;
 
-    window->setClientSize({106 * app->uiScale, clientHeight * app->uiScale});
+    window->setClientSize({(kPadX * 2 + kCellW * kCols) * app->uiScale, clientHeight * app->uiScale});
 
-    // STEP 1: MOVE TOOL BUTTONS TO THE TOP (Bulldoze, Finger, Inspect)
+    // STEP 1: TOOL BUTTONS AT THE TOP (Bulldoze, Finger, Inspect).
+    // Source cells are 21x21; render at 24x24 for a chunkier look that
+    // matches the enlarged item cells below.
+    const int kToolCell = 24;
     auto toolsLayout = tgui::HorizontalLayout::create();
     window->add(toolsLayout);
-    toolsLayout->setSize(63 * app->uiScale, 21 * app->uiScale);
-    toolsLayout->setPosition(21 * app->uiScale, 2 * app->uiScale);
+    toolsLayout->setSize((kToolCell * 3) * app->uiScale, kToolCell * app->uiScale);
+    {
+        int toolsLayoutW = kToolCell * 3;
+        int windowW = kPadX * 2 + kCellW * kCols;
+        int toolsX = (windowW - toolsLayoutW) / 2;
+        toolsLayout->setPosition(toolsX * app->uiScale, 3 * app->uiScale);
+    }
 
     sf::Texture toolsTexture = app->bitmaps["simtower/ui/toolbox/tools"];
 
     // Bulldozer
     ButtonState bulldozeState;
-    auto bulldozeButton = makeButton(21, 21, toolsTexture, 0, bulldozeState);
+    auto bulldozeButton = makeButton(kToolCell, kToolCell, toolsTexture, 0, bulldozeState);
     buttonStates[bulldozeButton] = bulldozeState;
     toolsLayout->add(bulldozeButton);
     toolButtons["bulldozer"] = bulldozeButton;
@@ -217,7 +246,7 @@ void ToolboxWindow::reload()
 
     // Finger (Resize)
     ButtonState fingerState;
-    auto fingerButton = makeButton(21, 21, toolsTexture, 1, fingerState);
+    auto fingerButton = makeButton(kToolCell, kToolCell, toolsTexture, 1, fingerState);
     buttonStates[fingerButton] = fingerState;
     toolsLayout->add(fingerButton);
     toolButtons["finger"] = fingerButton;
@@ -225,100 +254,65 @@ void ToolboxWindow::reload()
 
     // Inspector
     ButtonState inspectState;
-    auto inspectButton = makeButton(21, 21, toolsTexture, 2, inspectState);
+    auto inspectButton = makeButton(kToolCell, kToolCell, toolsTexture, 2, inspectState);
     buttonStates[inspectButton] = inspectState;
     toolsLayout->add(inspectButton);
     toolButtons["inspector"] = inspectButton;
     inspectButton->onPress([this] { game->selectTool("inspector"); });
 
-    // STEP 2: BUILDING ITEMS
+    // STEP 2: BUILDING ITEMS (parents + standalone tools only)
     int row = 0;
-    sf::Texture itemTexture = app->bitmaps["simtower/ui/toolbox/items"];
-    for (int i = 0; i < visiblePrototypes.size(); i++)
+    for (int i = 0; i < (int)visiblePrototypes.size(); i++)
     {
         Item::AbstractPrototype *prototype = visiblePrototypes[i];
 
         char toolname[128];
         snprintf(toolname, 128, "item-%s", prototype->id.c_str());
+        std::string toolnameStr(toolname);
 
         ButtonState state;
-        tgui::Button::Ptr button;
-        if (prototype->id == "yoot_condo")
-        {
-            sf::Texture yootIconTexture;
-            std::string pathStr;
-            DataManager::Paths possiblePaths = app->data.paths("Plugins/Condo.t2p");
-            for (const auto &p : possiblePaths) {
-                std::ifstream f(p.c_str());
-                if (f.good()) {
-                    pathStr = p.str();
-                    break;
-                }
-            }
-            if (!pathStr.empty()) {
-                Item::YootCondo::loadPEBitmap(pathStr, 100, yootIconTexture, sf::Color(255, 255, 255));
-            }
-            button = makeButton(26, 26, yootIconTexture, 0, state);
-        }
-        else
-        {
-            button = makeButton(32, 32, itemTexture, prototype->icon, state);
-        }
-        int xpos = (5 + 32 * (i % 3)) * app->uiScale;
-        int ypos = (25 + row * 32) * app->uiScale;
+        tgui::Button::Ptr button = makeItemButton(prototype, state);
 
+        int xpos = (kPadX + kCellW * (i % kCols)) * app->uiScale;
+        int ypos = (kItemsTopY + row * kCellH) * app->uiScale;
         button->setPosition(xpos, ypos);
-
-        // Star-rating gate: disable buttons for prototypes the player can't
-        // build yet. Attach a tooltip explaining the unlock requirement.
-        int minRating = LevelUp::minRatingToBuild(prototype->id);
-        if (minRating > game->rating)
-        {
-            button->setEnabled(false);
-            auto tip = tgui::Label::create();
-            tip->setText(prototype->name + " unlocks at " +
-                         std::to_string(minRating + 1) + " stars");
-            tip->setTextSize(12);
-            button->setToolTip(tip);
-        }
 
         window->add(button);
         buttons.insert(button);
-        toolButtons[toolname] = button;
+        toolButtons[toolnameStr] = button;
         buttonStates[button] = state;
 
-        std::string toolnameStr(toolname);
-        
-        button->onMousePress([this, toolnameStr](tgui::Vector2f pos) {
-            pressedTool = toolnameStr;
-            pressTime = std::chrono::steady_clock::now();
-        });
+        const std::string protoId = prototype->id;
+        if (isCategoryParent(protoId)) {
+            // Category parent: press-and-hold reveals its children as an
+            // overlay over the neighbouring slots. Selection (parent or a
+            // hovered child) is resolved on release in update().
+            parentSlotIndex[protoId] = i;
+            button->onMousePress([this, protoId](tgui::Vector2f) {
+                holdingParent = protoId;
+                holdPressTime = std::chrono::steady_clock::now();
+                overlayVisible = false;
+            });
+        } else {
+            // Standalone tool: select immediately.
+            button->onPress([this, toolnameStr] { onToolButtonPress(toolnameStr.c_str()); });
+        }
 
-        button->onMouseRelease([this, toolnameStr](tgui::Vector2f pos) {
-            if (pressedTool == toolnameStr) {
-                auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-                    std::chrono::steady_clock::now() - pressTime
-                ).count();
-
-                std::string protoId = (toolnameStr.rfind("item-", 0) == 0) ? toolnameStr.substr(5) : "";
-                if (elapsed >= 300 && !protoId.empty() && isCategoryParent(protoId)) {
-                    expandedCategories[protoId] = !expandedCategories[protoId];
-                    reload();
-                } else {
-                    onToolButtonPress(toolnameStr.c_str());
-                }
-            }
-        });
-
-        if (i % 3 >= 2)
+        if (i % kCols >= kCols - 1)
             row++;
     }
 
-    // STEP 3: MOVE SPEED CONTROLS TO THE BOTTOM
+    // STEP 3: SPEED CONTROLS AT THE BOTTOM (horizontally centered)
+    const int kSpeedW = 92;
+    const int kSpeedH = 24;
     auto speedLayout = tgui::HorizontalLayout::create();
     window->add(speedLayout);
-    speedLayout->setSize(92 * app->uiScale, 24 * app->uiScale);
-    speedLayout->setPosition(7 * app->uiScale, speedY * app->uiScale);
+    speedLayout->setSize(kSpeedW * app->uiScale, kSpeedH * app->uiScale);
+    {
+        int windowW = kPadX * 2 + kCellW * kCols;
+        int speedX = (windowW - kSpeedW) / 2;
+        speedLayout->setPosition(speedX * app->uiScale, speedY * app->uiScale);
+    }
 
     sf::Texture speedTexture = app->bitmaps["simtower/ui/toolbox/speed"];
     if (speedTexture.getSize() == sf::Vector2u(256, 32))
@@ -333,30 +327,261 @@ void ToolboxWindow::reload()
         button->onPress([this, i] { onSpeedButtonPress(i); });
     }
 
+    // STEP 4: VIEW TOGGLES at the very bottom (minimap M, finance F, status O).
+    // Mirrors the keyboard shortcuts in Game.cpp so the toolbox is
+    // self-contained — no need to remember the keybinds.
+    const int kViewBtnW = 30;
+    const int kViewBtnH = 24;
+    const int kViewBtnGap = 4;
+    auto makeViewButton = [&](const std::string& label, int offsetX, auto onClick) -> tgui::Button::Ptr {
+        auto btn = tgui::Button::create(label);
+        btn->setSize(kViewBtnW * app->uiScale, kViewBtnH * app->uiScale);
+        btn->setTextSize(10 * app->uiScale);
+        btn->getRenderer()->setBackgroundColor(sf::Color(60, 60, 65));
+        btn->getRenderer()->setBackgroundColorHover(sf::Color(85, 85, 90));
+        btn->getRenderer()->setBackgroundColorDown(sf::Color(40, 40, 45));
+        btn->getRenderer()->setTextColor(sf::Color::White);
+        btn->getRenderer()->setBorderColor(sf::Color(40, 40, 45));
+        btn->getRenderer()->setBorders(1);
+        btn->setPosition(offsetX * app->uiScale, viewY * app->uiScale);
+        btn->onPress(onClick);
+        window->add(btn);
+        return btn;
+    };
+    {
+        int windowW = kPadX * 2 + kCellW * kCols;
+        int totalW = kViewBtnW * 3 + kViewBtnGap * 2;  // 3 buttons with gaps
+        int startX = (windowW - totalW) / 2;
+        mapButton = makeViewButton("Map", startX, [this] {
+            game->mapWindow.setVisible(!game->mapWindow.isVisible());
+        });
+        financeButton = makeViewButton("Fin", startX + kViewBtnW + kViewBtnGap, [this] {
+            game->financeWindow.setVisible(!game->financeWindow.isVisible());
+        });
+        statusButton = makeViewButton("View", startX + (kViewBtnW + kViewBtnGap) * 2, [this] {
+            game->cycleStatusMode();
+        });
+    }
+
+    // Restore slot substitutions that survived the rating filter.
+    for (auto& kv : savedSubs) {
+        parentActiveChild[kv.first] = kv.second;
+        rebuildSlotTexture(kv.first, kv.second);
+    }
+
     updateTool();
     updateSpeed();
 }
 
 void ToolboxWindow::updateTool()
 {
-    // Auto-expand category of selected tool if it is a child
-    std::string selectedProtoId = "";
+    // Determine which grid button should highlight. If the selected tool is
+    // a category child, highlight its parent — the child only exists as a
+    // transient overlay, so the parent slot represents it in the grid.
+    std::string highlightTool = game->selectedTool;
+    std::string selectedProtoId;
     if (game->selectedTool.rfind("item-", 0) == 0) {
         selectedProtoId = game->selectedTool.substr(5);
     }
     std::string parentId;
     if (!selectedProtoId.empty() && isChildTool(selectedProtoId, parentId)) {
-        if (!expandedCategories[parentId]) {
-            expandedCategories[parentId] = true;
-            reload();
-            return;
-        }
+        highlightTool = std::string("item-") + parentId;
     }
 
     for (auto &pair : toolButtons) {
         auto it = buttonStates.find(pair.second);
         if (it != buttonStates.end())
-            setButtonVisuals(pair.second, it->second, pair.first == game->selectedTool);
+            setButtonVisuals(pair.second, it->second, pair.first == highlightTool);
+    }
+}
+
+tgui::Button::Ptr ToolboxWindow::makeItemButton(Item::AbstractPrototype* proto, ButtonState& state)
+{
+    if (proto->id == "yoot_condo")
+    {
+        sf::Texture yootIconTexture;
+        std::string pathStr;
+        DataManager::Paths possiblePaths = app->data.paths("Plugins/Condo.t2p");
+        for (const auto &p : possiblePaths) {
+            std::ifstream f(p.c_str());
+            if (f.good()) {
+                pathStr = p.str();
+                break;
+            }
+        }
+        if (!pathStr.empty()) {
+            Item::YootCondo::loadPEBitmap(pathStr, 100, yootIconTexture, sf::Color(255, 255, 255));
+        }
+        return makeButton(kCellW, kCellH, yootIconTexture, 0, state);
+    }
+    sf::Texture itemTexture = app->bitmaps["simtower/ui/toolbox/items"];
+    return makeButton(kCellW, kCellH, itemTexture, proto->icon, state, 32, 32);
+}
+
+void ToolboxWindow::showOverlayFor(const std::string& parentId)
+{
+    hideOverlay();
+
+    auto catIt = CATEGORIES.find(parentId);
+    if (catIt == CATEGORIES.end()) return;
+
+    int slot = parentSlotIndex.count(parentId) ? parentSlotIndex[parentId] : 0;
+
+    int childIdx = 1;
+    for (const std::string& childId : catIt->second)
+    {
+        // Skip children the player can't build yet.
+        if (LevelUp::minRatingToBuild(childId) > game->rating)
+            continue;
+
+        auto pit = game->itemFactory.prototypesById.find(childId);
+        if (pit == game->itemFactory.prototypesById.end())
+            continue;
+        Item::AbstractPrototype* proto = pit->second;
+
+        ButtonState state;
+        tgui::Button::Ptr btn = makeItemButton(proto, state);
+
+        // Place the child over the slot immediately following the parent
+        // (wrapping within the kCols-wide grid), overlapping whatever
+        // parent/standalone tool normally lives there.
+        int cslot = slot + childIdx;
+        int ccol = cslot % kCols;
+        int crow = cslot / kCols;
+        int xpos = (kPadX + kCellW * ccol) * app->uiScale;
+        int ypos = (kItemsTopY + crow * kCellH) * app->uiScale;
+        btn->setPosition(xpos, ypos);
+
+        // Added after the grid widgets, so it renders on top. No signal
+        // handlers — selection is resolved by hit-testing in update().
+        window->add(btn);
+
+        overlayButtons.push_back(btn);
+        overlayButtonStates[btn] = state;
+        overlayToolFor[btn] = std::string("item-") + childId;
+        childIdx++;
+    }
+}
+
+void ToolboxWindow::hideOverlay()
+{
+    for (tgui::Button::Ptr btn : overlayButtons) {
+        window->remove(btn);
+    }
+    overlayButtons.clear();
+    overlayButtonStates.clear();
+    overlayToolFor.clear();
+}
+
+void ToolboxWindow::rebuildSlotTexture(const std::string& parentId, const std::string& displayedProtoId)
+{
+    auto btnIt = toolButtons.find("item-" + parentId);
+    if (btnIt == toolButtons.end()) return;
+    tgui::Button::Ptr btn = btnIt->second;
+
+    auto protoIt = game->itemFactory.prototypesById.find(displayedProtoId);
+    if (protoIt == game->itemFactory.prototypesById.end()) return;
+    Item::AbstractPrototype* proto = protoIt->second;
+
+    // Build a fresh ButtonState from the displayed prototype's icon.
+    ButtonState newState;
+    tgui::Button::Ptr tmp = makeItemButton(proto, newState);
+
+    // Swap the textures onto the existing button widget.
+    buttonStates[btn] = newState;
+
+    // Determine the highlighted state by matching the displayed tool name
+    // against the currently selected one (which may be a child, in which
+    // case updateTool() maps it back to the parent for highlighting).
+    std::string displayedTool = "item-" + displayedProtoId;
+    bool checked = (game->selectedTool == displayedTool);
+    setButtonVisuals(btn, newState, checked);
+}
+
+void ToolboxWindow::update()
+{
+    if (holdingParent.empty())
+        return;
+
+    const bool mouseDown = sf::Mouse::isButtonPressed(sf::Mouse::Button::Left);
+
+    // Reveal the overlay once the hold threshold has elapsed.
+    if (!overlayVisible) {
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - holdPressTime).count();
+        if (elapsed >= kHoldMs) {
+            showOverlayFor(holdingParent);
+            overlayVisible = true;
+        }
+    }
+
+    // Refresh the hover highlight on whichever child the cursor is over.
+    if (overlayVisible) {
+        sf::Vector2i mpi = sf::Mouse::getPosition(app->window);
+        sf::Vector2f mp(static_cast<float>(mpi.x), static_cast<float>(mpi.y));
+        for (tgui::Button::Ptr btn : overlayButtons) {
+            sf::Vector2f pos = btn->getAbsolutePosition();
+            sf::Vector2f size = btn->getSize();
+            const bool over = (mp.x >= pos.x && mp.x < pos.x + size.x &&
+                               mp.y >= pos.y && mp.y < pos.y + size.y);
+            auto it = overlayButtonStates.find(btn);
+            if (it != overlayButtonStates.end())
+                setButtonVisuals(btn, it->second, over);
+        }
+    }
+
+    // Resolve the press when the mouse button is released. We poll the
+    // physical button state rather than relying on TGUI's onMouseRelease
+    // (which is unreliable once overlay widgets are stacked on top of the
+    // pressed parent).
+    if (!mouseDown) {
+        // Decide what was selected:
+        //  - Short click (no overlay): select whatever the slot currently
+        //    shows (the parent, or the child previously swapped in).
+        //  - Press+hold then release on an overlay child: select that child
+        //    and swap the slot to display it.
+        //  - Press+hold then release off any overlay child: same as short
+        //    click (select the currently displayed tool).
+        std::string selectedProto;
+        if (overlayVisible) {
+            sf::Vector2i mpi = sf::Mouse::getPosition(app->window);
+            sf::Vector2f mp(static_cast<float>(mpi.x), static_cast<float>(mpi.y));
+            for (tgui::Button::Ptr btn : overlayButtons) {
+                sf::Vector2f pos = btn->getAbsolutePosition();
+                sf::Vector2f size = btn->getSize();
+                if (mp.x >= pos.x && mp.x < pos.x + size.x &&
+                    mp.y >= pos.y && mp.y < pos.y + size.y) {
+                    auto tit = overlayToolFor.find(btn);
+                    if (tit != overlayToolFor.end()) {
+                        // Strip the "item-" prefix to get the proto id.
+                        const std::string& toolname = tit->second;
+                        selectedProto = (toolname.rfind("item-", 0) == 0)
+                                          ? toolname.substr(5) : toolname;
+                        break;
+                    }
+                }
+            }
+        }
+        if (selectedProto.empty()) {
+            // Short click or release off-overlay: select whatever the slot
+            // currently displays (parent, or previously swapped child).
+            auto it = parentActiveChild.find(holdingParent);
+            selectedProto = (it != parentActiveChild.end()) ? it->second : holdingParent;
+        }
+
+        // Swap the slot's texture if the displayed tool changed.
+        std::string& displayed = parentActiveChild[holdingParent];
+        if (displayed != selectedProto) {
+            displayed = selectedProto;
+            rebuildSlotTexture(holdingParent, selectedProto);
+        }
+
+        hideOverlay();
+        overlayVisible = false;
+        holdingParent.clear();
+
+        std::string toolname = std::string("item-") + selectedProto;
+        onToolButtonPress(toolname.c_str());
     }
 }
 
@@ -391,7 +616,7 @@ void ToolboxWindow::onSpeedButtonPress(int speedMode)
     }
 }
 
-tgui::Button::Ptr ToolboxWindow::makeButton(int width, int height, sf::Texture textureMap, int index, ButtonState &state)
+tgui::Button::Ptr ToolboxWindow::makeButton(int width, int height, sf::Texture textureMap, int index, ButtonState &state, int cellW, int cellH)
 {
     int scaledWidth = width * app->uiScale;
     int scaledHeight = height * app->uiScale;
@@ -427,12 +652,17 @@ tgui::Button::Ptr ToolboxWindow::makeButton(int width, int height, sf::Texture t
         // Each button is 23x24 located at X = 20, Y = 4 relative to resource start
         normalRect = sf::IntRect({index * 64 + 20, 4}, {23, 24});
     }
-    // Default logic (e.g. building items or fallbacks)
+    // Default logic (e.g. building items or fallbacks). The source texture
+    // is sliced into cells of size (cellW x cellH); if the caller did not
+    // override them they default to the target render size. This lets us
+    // slice a 32px-cell sheet but render the button at e.g. 36px.
     else {
-        normalRect = sf::IntRect({index * width, 0}, {width, height});
-        bool hasCheckedRow = (texHeight >= static_cast<unsigned>(height * 2));
+        int cw = cellW > 0 ? cellW : width;
+        int ch = cellH > 0 ? cellH : height;
+        normalRect = sf::IntRect({index * cw, 0}, {cw, ch});
+        bool hasCheckedRow = (texHeight >= static_cast<unsigned>(ch * 2));
         if (hasCheckedRow) {
-            checkedRect = sf::IntRect({index * width, height}, {width, height});
+            checkedRect = sf::IntRect({index * cw, ch}, {cw, ch});
             customChecked = true;
         }
     }

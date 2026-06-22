@@ -68,6 +68,18 @@ bool Stairlike::connectsFloor(int floor) const
 	return position.y == floor || position.y + size.y - 1 == floor;
 }
 
+bool Stairlike::containsPoint(const double2 & pt)
+{
+	// Use the sprite's actual global bounds rather than the full tile
+	// footprint. Stairs and escalators occupy a narrow strip at the left
+	// edge of their logical size.x-wide footprint; the rest should pass
+	// clicks through to the tenant behind.
+	sf::FloatRect b = sprite.getGlobalBounds();
+	// Convert screen-space bounds (Y down) to tower-space (Y up).
+	rectd r(b.position.x, -b.position.y - b.size.y, b.size.x, b.size.y);
+	return r.containsPoint(pt);
+}
+
 void Stairlike::addPerson(Person *p)
 {
 	transitionTimes[p] = 0;

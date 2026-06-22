@@ -496,6 +496,9 @@ void SimTowerLoader::loadBitmaps()
 	loadMerged(images["simtower/stairs"], 'x', &stairs[0], &stairs[1], NULL);
 	images["simtower/stairs"].createMaskFromColor(sf::Color(0xFF, 0xFF, 0xFF));
 
+	//Multi-story spiral stairs (used inside 2- and 3-story lobbies)
+	loadSpiralStairs();
+
 	//Escalator
 	loadMergedByID(images["simtower/escalator"], 'y', 0x8AA8, 0x8AE8, 0);
 	images["simtower/escalator"].createMaskFromColor(sf::Color(0xFF, 0xFF, 0xFF));
@@ -1101,6 +1104,82 @@ void SimTowerLoader::loadBitmap(int id, sf::Image & img)
 		LOG(ERROR, "unable to load bitmap 0x%x from memory", id);
 	}
 	// rawBitmaps.erase(id);
+}
+
+/** Build the 2- and 3-story spiral staircase sprite sheets from the custom
+ *  0xFF02-type resources 0x8fe9 (4416x36 strip) and 0x8fea (5888x36 strip).
+ *
+ *  Each strip is a horizontal row of 64x36 "slots" where each slot holds one
+ *  floor of one animation frame. A multi-story frame is built by stacking
+ *  N slots vertically; the per-strip slot order differs and was determined
+ *  empirically (visual validation against the original game):
+ *
+ *    2-story frame N = slot[22+N] (top floor) + slot[11+N] (bottom floor)
+ *    3-story frame N = slot[11+N] (top floor) + slot[22+N] (middle)
+ *                                            + slot[33+N] (bottom floor)
+ *
+ *  Producing:
+ *    simtower/stairs/spiral_2  = 11 frames x 64x72 (one frame per animation step)
+ *    simtower/stairs/spiral_3  = 11 frames x 64x108
+ *
+ *  See scratch/stair_analysis.py for an offline verifier. */
+void SimTowerLoader::loadSpiralStairs()
+{
+	const int kSpiralFrames = 11;
+	const int kSlotOffset   = 11;
+	const int kSlotW        = 64;
+	const int kSlotH        = 36;
+	const unsigned int kStripH = 36;
+
+	sf::Image strip2;
+	loadBitmap(0x8fe9, strip2);
+	if (strip2.getSize() == sf::Vector2u{0, 0}) {
+		LOG(WARNING, "8fe9 (2-story spiral stair source) missing; spiral_2 will fall back");
+	} else if (strip2.getSize().y == kStripH &&
+	           strip2.getSize().x >= (22u + kSpiralFrames) * kSlotW) {
+		sf::Image & spiral2 = images["simtower/stairs/spiral_2"];
+		spiral2.resize(toVector2u(kSlotW * kSpiralFrames, kSlotH * 2));
+		for (int n = 0; n < kSpiralFrames; n++) {
+			spiral2.copy(strip2, toVector2u(n * kSlotW, 0),
+			             toIntRect((22 + n) * kSlotW, 0, kSlotW, kSlotH));
+			spiral2.copy(strip2, toVector2u(n * kSlotW, kSlotH),
+			             toIntRect((11 + n) * kSlotW, 0, kSlotW, kSlotH));
+		}
+		spiral2.createMaskFromColor(sf::Color(0xFF, 0xFF, 0xFF));
+		LOG(INFO, "loaded simtower/stairs/spiral_2 (%ux%u, %d frames)",
+		    spiral2.getSize().x, spiral2.getSize().y, kSpiralFrames);
+	} else {
+		LOG(WARNING, "8fe9 has unexpected size %ux%u; spiral_2 will fall back",
+		    strip2.getSize().x, strip2.getSize().y);
+	}
+
+	sf::Image strip3;
+	loadBitmap(0x8fea, strip3);
+	if (strip3.getSize() == sf::Vector2u{0, 0}) {
+		LOG(WARNING, "8fea (3-story spiral stair source) missing; spiral_3 will fall back");
+	} else if (strip3.getSize().y == kStripH &&
+	           strip3.getSize().x >= (33u + kSpiralFrames) * kSlotW) {
+		sf::Image & spiral3 = images["simtower/stairs/spiral_3"];
+		spiral3.resize(toVector2u(kSlotW * kSpiralFrames, kSlotH * 3));
+		for (int n = 0; n < kSpiralFrames; n++) {
+			// Top-down order is floor 3 / 2 / 1 (top floor at top of sprite).
+			// Within 8fea, slot index increases from top to bottom of the
+			// rendered stair, so we reverse the y placement relative to the
+			// 2-story layout below.
+			spiral3.copy(strip3, toVector2u(n * kSlotW, 0),
+			             toIntRect((11 + n) * kSlotW, 0, kSlotW, kSlotH));
+			spiral3.copy(strip3, toVector2u(n * kSlotW, kSlotH),
+			             toIntRect((22 + n) * kSlotW, 0, kSlotW, kSlotH));
+			spiral3.copy(strip3, toVector2u(n * kSlotW, 2 * kSlotH),
+			             toIntRect((33 + n) * kSlotW, 0, kSlotW, kSlotH));
+		}
+		spiral3.createMaskFromColor(sf::Color(0xFF, 0xFF, 0xFF));
+		LOG(INFO, "loaded simtower/stairs/spiral_3 (%ux%u, %d frames)",
+		    spiral3.getSize().x, spiral3.getSize().y, kSpiralFrames);
+	} else {
+		LOG(WARNING, "8fea has unexpected size %ux%u; spiral_3 will fall back",
+		    strip3.getSize().x, strip3.getSize().y);
+	}
 }
 
 /** Certain bitmaps in SimTower are animated by swapping colors in the color table. The following colors are rotated to achieve animation:

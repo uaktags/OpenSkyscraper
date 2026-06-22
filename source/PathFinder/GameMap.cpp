@@ -75,10 +75,16 @@ MapNode* GameMap::addNode(const MapNode::Point &p, Item::Item *item) {
 	}
 
 	if(item->isStairlike() && p.y == item->position.y) {
-		// If stairlike, automatically create pair node above and link accordingly
+		// If stairlike, automatically create pair node above and link accordingly.
+		// Multi-story spiral stairs (size.y > 2) span more than two floors, so
+		// the pair node is at the top of the stair's footprint, not just one
+		// floor above the entry. People entering at position.y exit at
+		// position.y + size.y - 1 (intermediate floors are skipped, matching
+		// the original game where a spiral stair is one continuous spiral).
+		const int upper_y = p.y + item->size.y - 1;
 		assert(n->neighbours[MapNode::UP] == NULL);
 		assert(n->transportItems[MapNode::UP] == NULL);
-		MapNode *n_upper = addNode(MapNode::Point(p.x, p.y + 1), item);
+		MapNode *n_upper = addNode(MapNode::Point(p.x, upper_y), item);
 
 		n->neighbours[MapNode::UP] = n_upper;
 		n->transportItems[MapNode::UP] = item;
@@ -149,7 +155,7 @@ void GameMap::removeNode(const MapNode::Point &p, Item::Item *item) {
 		n->neighbours[MapNode::UP] = NULL;
 		n->transportItems[MapNode::UP] = NULL;
 		
-		removeNode(MapNode::Point(p.x, p.y + 1), item);
+		removeNode(MapNode::Point(p.x, p.y + item->size.y - 1), item);
 	} else if(item->isElevator()) {
 		assert(n->hasElevator == true);
 		n->hasElevator = false;

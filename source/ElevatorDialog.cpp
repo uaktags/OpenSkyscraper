@@ -25,6 +25,7 @@ void ElevatorDialog::close()
 		window.reset();
 		panel.reset();
 		header.reset();
+		showToggleBtn.reset();
 		floorButtons.clear();
 	}
 	currentElevator = NULL;
@@ -38,6 +39,18 @@ std::string ElevatorDialog::buttonLabel(int floor) const
 	char buf[32];
 	snprintf(buf, sizeof(buf), "F%d  %s", floor, served ? "[ON]" : "[OFF]");
 	return buf;
+}
+
+std::string ElevatorDialog::showToggleLabel() const
+{
+	if (!currentElevator) return "Show: Yes";
+	return currentElevator->showShaft ? "Show: Yes" : "Show: No";
+}
+
+void ElevatorDialog::updateShowToggle()
+{
+	if (showToggleBtn)
+		showToggleBtn->setText(showToggleLabel());
 }
 
 void ElevatorDialog::buildWindow()
@@ -70,9 +83,23 @@ void ElevatorDialog::buildWindow()
 	panel->setSize({168 * app->uiScale, 210 * app->uiScale});
 	window->add(panel);
 
+	// "Show: Yes/No" toggle — flips the elevator's shaft visibility.
+	// When No, the shaft interior is transparent (only rails + cars +
+	// motors are drawn) so tenants behind show through.
+	showToggleBtn = tgui::Button::create("Show: Yes");
+	showToggleBtn->setSize(85 * app->uiScale, 18 * app->uiScale);
+	showToggleBtn->setPosition({6 * app->uiScale, 260 * app->uiScale});
+	showToggleBtn->setTextSize(10 * app->uiScale);
+	showToggleBtn->onPress([this] {
+		if (!currentElevator) return;
+		currentElevator->showShaft = !currentElevator->showShaft;
+		updateShowToggle();
+	});
+	window->add(showToggleBtn);
+
 	auto closeBtn = tgui::Button::create("Close");
 	closeBtn->setSize(60 * app->uiScale, 18 * app->uiScale);
-	closeBtn->setPosition({60 * app->uiScale, 260 * app->uiScale});
+	closeBtn->setPosition({96 * app->uiScale, 260 * app->uiScale});
 	closeBtn->setTextSize(11 * app->uiScale);
 	closeBtn->onPress([this] { close(); });
 	window->add(closeBtn);
@@ -130,6 +157,7 @@ void ElevatorDialog::showForElevator(Item::Elevator::Elevator * elevator)
 	header->setText(s.str());
 
 	rebuildFloorButtons();
+	updateShowToggle();
 }
 
 void ElevatorDialog::refresh()

@@ -68,12 +68,26 @@ void Car::draw(sf::RenderTarget & target, sf::RenderStates states) const
 
 void Car::render(sf::RenderTarget & target) const
 {
+	sf::Color statusTint = sf::Color::White;
+	if (game->statusMode == Game::kHotel)
+	{
+		statusTint = sf::Color(110, 110, 110, 160);
+	}
+
 	const sf::Color tint = game->lighting.tint();
-	const bool tinted = (tint != sf::Color(255, 255, 255, 255));
+	const bool tinted = (tint != sf::Color(255, 255, 255, 255) || statusTint != sf::Color::White);
 
 	if (tinted) {
 		Sprite tmp = sprite;
-		tmp.setColor(game->lighting.compose(sprite.getColor()));
+		sf::Color composed = game->lighting.compose(sprite.getColor());
+		if (statusTint != sf::Color::White)
+		{
+			composed.r = (composed.r * statusTint.r) / 255;
+			composed.g = (composed.g * statusTint.g) / 255;
+			composed.b = (composed.b * statusTint.b) / 255;
+			composed.a = (composed.a * statusTint.a) / 255;
+		}
+		tmp.setColor(composed);
 		target.draw(tmp);
 	} else {
 		target.draw(sprite);
@@ -98,7 +112,15 @@ void Car::render(sf::RenderTarget & target) const
 		}
 
 		//Draw the person.
-		s.setColor(sf::Color::Black);
+		sf::Color bodyColor = sf::Color::Black;
+		if (statusTint != sf::Color::White)
+		{
+			bodyColor.r = (bodyColor.r * statusTint.r) / 255;
+			bodyColor.g = (bodyColor.g * statusTint.g) / 255;
+			bodyColor.b = (bodyColor.b * statusTint.b) / 255;
+			bodyColor.a = (bodyColor.a * statusTint.a) / 255;
+		}
+		s.setColor(bodyColor);
 		s.setTextureRect(sr);
 		s.setPosition({elevator->shaft.getPosition().x, sprite.getPosition().y});
 		target.draw(s);

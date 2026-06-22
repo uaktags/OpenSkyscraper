@@ -65,18 +65,61 @@ void Elevator::render(sf::RenderTarget &target) const
 	d.setTexture(app->bitmaps["simtower/elevator/digits"]);
 	d.setOrigin({5, 8});
 
+	sf::Color statusTint = sf::Color::White;
+	if (game->statusMode == Game::kHotel)
+	{
+		statusTint = sf::Color(110, 110, 110, 160);
+	}
+
 	const sf::Color tint = game->lighting.tint();
-	const bool tinted = (tint != sf::Color(255, 255, 255, 255));
-	if (tinted) s.setColor(game->lighting.compose(s.getColor()));
+	const bool tinted = (tint != sf::Color(255, 255, 255, 255) || statusTint != sf::Color::White);
+	if (tinted)
+	{
+		sf::Color composed = game->lighting.compose(s.getColor());
+		if (statusTint != sf::Color::White)
+		{
+			composed.r = (composed.r * statusTint.r) / 255;
+			composed.g = (composed.g * statusTint.g) / 255;
+			composed.b = (composed.b * statusTint.b) / 255;
+			composed.a = (composed.a * statusTint.a) / 255;
+		}
+		s.setColor(composed);
+	}
 
 	int minY = position.y;
 	int maxY = size.y + minY - 1;
 
+	// When the shaft is hidden ("Show: No"), draw just the two vertical
+	// border rails so the player can still see the shaft outline while
+	// tenants behind it show through. Drawn before the per-floor loop so
+	// digits and cars render on top.
+	if (!showShaft)
+	{
+		const float railX0 = static_cast<float>(position.x * 8);
+		const float railX1 = static_cast<float>((position.x + size.x) * 8 - 1);
+		const float railY0 = static_cast<float>(-(position.y + size.y) * 36); // top (screen)
+		const float railY1 = static_cast<float>(-position.y * 36);             // bottom (screen)
+		const float railH  = railY1 - railY0;
+		sf::Color railCol(20, 20, 20);
+		if (tinted) railCol = game->lighting.compose(railCol);
+		sf::RectangleShape leftRail({1.f, railH});
+		leftRail.setPosition({railX0, railY0});
+		leftRail.setFillColor(railCol);
+		target.draw(leftRail);
+		sf::RectangleShape rightRail({1.f, railH});
+		rightRail.setPosition({railX1, railY0});
+		rightRail.setFillColor(railCol);
+		target.draw(rightRail);
+	}
+
 	for (int y = minY; y <= maxY; y++)
 	{
-		s.setPosition({static_cast<float>(position.x * 8), static_cast<float>(-y * 36)});
 		d.setPosition({static_cast<float>(position.x * 8), static_cast<float>(-y * 36)});
-		target.draw(s);
+		if (showShaft)
+		{
+			s.setPosition({static_cast<float>(position.x * 8), static_cast<float>(-y * 36)});
+			target.draw(s);
+		}
 
 		int flr = y;
 		if (!connectsFloor(flr))
@@ -90,8 +133,22 @@ void Elevator::render(sf::RenderTarget &target) const
 			}
 		}
 		sf::Color digitColor = isHome ? sf::Color(255, 100, 100) : sf::Color::White; // Pinkish-red for home floor, white otherwise
-		if (tinted) digitColor = game->lighting.compose(digitColor);
-		d.setColor(digitColor);
+		if (tinted)
+		{
+			sf::Color composed = game->lighting.compose(digitColor);
+			if (statusTint != sf::Color::White)
+			{
+				composed.r = (composed.r * statusTint.r) / 255;
+				composed.g = (composed.g * statusTint.g) / 255;
+				composed.b = (composed.b * statusTint.b) / 255;
+				composed.a = (composed.a * statusTint.a) / 255;
+			}
+			d.setColor(composed);
+		}
+		else
+		{
+			d.setColor(digitColor);
+		}
 
 		char c[8];
 		int len = snprintf(c, 8, "%i", flr);
@@ -155,6 +212,7 @@ void Elevator::encodeXML(tinyxml2::XMLPrinter &xml)
 {
 	Item::encodeXML(xml);
 	xml.PushAttribute("height", size.y);
+	xml.PushAttribute("showShaft", showShaft);
 	for (std::set<int>::iterator i = unservicedFloors.begin(); i != unservicedFloors.end(); i++)
 	{
 		xml.OpenElement("unserviced");
@@ -174,6 +232,7 @@ void Elevator::decodeXML(tinyxml2::XMLElement &xml)
 	clearCars();
 	Item::decodeXML(xml);
 	size.y = xml.IntAttribute("height");
+	showShaft = xml.BoolAttribute("showShaft", true);
 	for (tinyxml2::XMLElement *e = xml.FirstChildElement("unserviced"); e; e = e->NextSiblingElement("unserviced"))
 	{
 		unservicedFloors.insert(e->IntAttribute("floor"));
@@ -199,6 +258,22 @@ rectd Elevator::getMouseRegion()
 	int2 p = getPositionPixels();
 	sf::Vector2u s = getSizePixels();
 	return rectd(p.x, p.y - (int)s.y, s.x, s.y * 3);
+}
+
+bool Elevator::containsPoint(const double2 & pt)
+{
+	// Only the motor gearboxes (top and bottom) are clickable, matching
+	// SimTower where you grab the black motor box to resize the shaft.
+	// Clicks on the shaft interior pass through to the tenant behind.
+	sf::FloatRect tb = topMotor.getGlobalBounds();
+	rectd topRect(tb.position.x, -tb.position.y - tb.size.y, tb.size.x, tb.size.y);
+	if (topRect.containsPoint(pt)) return true;
+
+	sf::FloatRect bb = bottomMotor.getGlobalBounds();
+	rectd botRect(bb.position.x, -bb.position.y - bb.size.y, bb.size.x, bb.size.y);
+	if (botRect.containsPoint(pt)) return true;
+
+	return false;
 }
 
 bool Elevator::repositionMotor(int motor, int y)

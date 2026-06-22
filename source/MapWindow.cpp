@@ -20,6 +20,7 @@ MapWindow::MapWindow(Game * game)
 	towerMinX = towerMinY = 0;
 	towerMaxX = towerMaxY = 0;
 	scale = 1.f;
+	desiredVisible = true; // visible by default; close/reopen with 'M'
 }
 
 void MapWindow::close()
@@ -34,9 +35,8 @@ void MapWindow::close()
 
 void MapWindow::reload()
 {
-	bool wasVisible = isVisible();
 	close();
-	if (!wasVisible) return; // hidden by default - toggle with 'M'
+	if (!desiredVisible) return; // user closed it; reopen with 'M'
 
 	window = tgui::ChildWindow::create();
 	window->setTitle("Map");
@@ -72,7 +72,13 @@ void MapWindow::reload()
 
 void MapWindow::setVisible(bool visible)
 {
-	if (visible == isVisible()) return;
+	desiredVisible = visible;
+	if (visible == isVisible()) {
+		// Even when already in the right live state, make sure the widget
+		// exists if the player wants it visible.
+		if (visible && !window) reload();
+		return;
+	}
 	if (visible)
 	{
 		// Force the rebuild path to take the "show" branch.
@@ -110,6 +116,18 @@ sf::Color MapWindow::colorForItem(Item::Item * item) const
 	    item->prototype->id == "escalator")  return sf::Color(70, 70, 80);
 
 	// StatusMode tinting matches the main viewport so the two views agree.
+	if (game->statusMode != Game::kNormal)
+	{
+		bool isTenant = (id == "office" || id == "condo" || id == "yoot_condo" ||
+		                 id == "hotel_single" || id == "hotel_double" ||
+		                 id == "hotel_suite" || id == "hotel" ||
+		                 id == "fastfood" || id == "restaurant" ||
+		                 id == "cinema"    || id == "partyhall");
+
+		if (!isTenant || item->underConstruction)
+			return sf::Color(60, 65, 75);
+	}
+
 	if (game->statusMode == Game::kEval)
 	{
 		double e = item->evaluation;
@@ -127,6 +145,16 @@ sf::Color MapWindow::colorForItem(Item::Item * item) const
 			else                                                return sf::Color( 80, 200, 90);
 		}
 		// Non-hotels shown faintly so dirty rooms stand out.
+		return sf::Color(60, 65, 75);
+	}
+	if (game->statusMode == Game::kPric)
+	{
+		if (id == "condo" || id == "yoot_condo" || id == "office")
+		{
+			if (!item->isOccupied())
+				return sf::Color(230, 180, 40);
+		}
+		// Non-priced/occupied items shown faintly.
 		return sf::Color(60, 65, 75);
 	}
 

@@ -47,6 +47,13 @@ namespace OT
 		tgui::ChildWindow::Ptr window;
 		tgui::CanvasSFML::Ptr  canvas;
 
+		/// Desired visibility. True by default so the map shows on first
+		/// load; flipped to false when the user closes the window and back
+		/// to true on reopen. Decoupled from the live widget state so that
+		/// reload() (called on F1 / UI-scale changes) rebuilds the window
+		/// exactly when the player expects to see it.
+		bool desiredVisible;
+
 		/// Computed each render pass; used to invert click coordinates.
 		int   towerMinX, towerMinY;
 		int   towerMaxX, towerMaxY;

@@ -35,9 +35,17 @@ namespace OT {
 				virtual void encodeXML(tinyxml2::XMLPrinter& xml);
 				virtual void decodeXML(tinyxml2::XMLElement& xml);
 
-				virtual rectd getMouseRegion() override;
-				bool repositionMotor(int motor, int y);
-				std::set<int> unservicedFloors;
+			virtual rectd getMouseRegion() override;
+			virtual bool containsPoint(const double2 & pt) override;
+			bool repositionMotor(int motor, int y);
+			std::set<int> unservicedFloors;
+
+			/// Shaft visibility toggle ("Show: Yes/No" in the elevator
+			/// dialog). When false the shaft interior is transparent —
+			/// only the left/right border lines, the cars, and the motor
+			/// gearboxes are drawn, so tenants behind the shaft show
+			/// through. Mirrors SimTower's elevator Show toggle.
+			bool showShaft = true;
 
 				typedef std::set<Car *> Cars;
 			Cars cars;

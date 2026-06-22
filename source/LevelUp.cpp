@@ -27,8 +27,8 @@ namespace
 		// 3 stars (rating >= 2): security, restaurants, express elevators
 		{ "security",          2 },
 		{ "restaurant",        2 },
-		{ "elevator_express",  2 },
-		{ "elevator_service",  2 },
+		{ "elevator-express",  2 },
+		{ "elevator-service",  2 },
 		// 4 stars (rating >= 3): hotel + medical
 		{ "hotel_single",  3 },
 		{ "hotel_double",  3 },

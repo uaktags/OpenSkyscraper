@@ -80,8 +80,17 @@ OT::Item::Item * Factory::make(AbstractPrototype * prototype, int2 position)
 	// Mark fresh placements as under construction. Saved games call
 	// make() too, but their decodeXML() run immediately afterwards and
 	// restore the persisted underConstruction flag, overriding this.
-	item->underConstruction = true;
-	item->constructionEndTime = game->time.absolute + item->constructionDuration();
+	double duration = item->constructionDuration();
+	if (duration > 0.0)
+	{
+		item->underConstruction = true;
+		item->constructionEndTime = game->time.absolute + duration;
+	}
+	else
+	{
+		item->underConstruction = false;
+		item->constructionEndTime = 0.0;
+	}
 	return item;
 }
 

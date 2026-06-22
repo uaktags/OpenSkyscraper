@@ -31,6 +31,7 @@ namespace OT
 
 			virtual void advance(double dt) override;
 			virtual int dailyMaintenanceCost() const override { return 250; }
+			virtual bool isOccupied() const override { return occupied; }
 			bool isAttractive();
 
 			virtual void addPerson(Person *p) override;

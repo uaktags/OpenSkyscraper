@@ -30,6 +30,9 @@ void InspectorDialog::close()
 		floorsButton.reset();
 	}
 	currentItem = NULL;
+	// Clear the debug route overlay so the green line doesn't linger
+	// after the inspector is dismissed.
+	game->visualizeRoute.clear();
 }
 
 void InspectorDialog::buildWindow()

@@ -24,6 +24,7 @@
 #include "ElevatorDialog.h"
 #include "LevelUpDialog.h"
 #include "MapWindow.h"
+#include "FinanceWindow.h"
 #include "JudgeSystem.h"
 #include "LevelUp.h"
 #include "VipSystem.h"
@@ -81,26 +82,36 @@ namespace OT {
 		void setPopulation(int p);
 		void ratingMayIncrease();
 
-		ToolboxWindow toolboxWindow;
+		// State read by ToolboxWindow during construction (it calls updateTool()/
+	// updateSpeed() inside its constructor, which read these fields). They
+	// must be default-constructed BEFORE the ToolboxWindow constructor runs,
+	// so they are declared above toolboxWindow below. Reading them while
+	// still raw uninitialised memory is UB: copying `selectedTool` allocates
+	// a buffer of the source length, which is garbage → std::length_error.
+	// The latent bug surfaced when ToolboxWindow::updateTool() started
+	// copying the string instead of merely comparing against it.
+	std::string selectedTool = "inspector";
+	int speedMode = 1;
+	void setSpeedMode(int sm);
+
+	// Status overlay mode cycled with 'O'. Mirrors StatusMode.h/c from the
+	// Yoot source. Read by ToolboxWindow's "View" button click handler (not
+	// at construction time), but declared here for proximity to the related
+	// state.
+	enum StatusMode { kNormal, kEval, kPric, kHotel };
+	StatusMode statusMode;
+	void cycleStatusMode();
+
+	ToolboxWindow toolboxWindow;
 		TimeWindow    timeWindow;
 		InspectorDialog inspectorDialog;
 		ElevatorDialog  elevatorDialog;
 		LevelUpDialog   levelUpDialog;
 		MapWindow     mapWindow;
+		FinanceWindow financeWindow;
 
 		Time time;
-		int speedMode;
-		void setSpeedMode(int sm);
 
-		/// Status overlay mode for the main viewport. Cycled with the 'O' key.
-		/// Mirrors StatusMode.h/c from the Yoot source. Eval tint uses the
-		/// cached Item::evaluation from JudgeSystem; Hotel tint flags dirty
-		/// rooms. Pric is a placeholder until the rent-pricing model lands.
-		enum StatusMode { kNormal, kEval, kPric, kHotel };
-		StatusMode statusMode;
-		void cycleStatusMode();
-
-		std::string selectedTool;
 		int2 toolPosition;
 		Item::AbstractPrototype * toolPrototype;
 		Item::Item * itemBelowCursor;
@@ -169,6 +180,10 @@ namespace OT {
 		void settleDailyAccounting();
 		int calculateDailyMaintenanceCost() const;
 		int lastAccountingDay;
+		/// Quarter value at the last settleDailyAccounting. When the live
+		/// time.quarter advances past this, we call Money::finalizeQuarter
+		/// so the finance window's quarterly accumulators reset.
+		int lastAccountingQuarter;
 		double zoom;
 		double2 poi;
 		enum class ViewportDrag { None, Vertical, Horizontal };
