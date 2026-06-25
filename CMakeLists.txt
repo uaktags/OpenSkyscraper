@@ -167,6 +167,10 @@ target_link_libraries(${EXECUTABLE_NAME} PRIVATE
   OpenGL::GL
 )
 
+if(WIN32)
+  target_link_libraries(${EXECUTABLE_NAME} PRIVATE Comdlg32)
+endif()
+
 ###  TESTS
 ###  ======
 # The test target compiles the pure-logic seam files directly. We avoid
@@ -190,4 +194,3 @@ target_compile_definitions(OpenSkyTests PRIVATE OPEN_SKY_ROUTE_SEAM_ONLY)
 # available to the test target without pulling in the rest of the engine.
 target_link_libraries(OpenSkyTests PRIVATE SFML::Graphics)
 add_test(NAME OpenSkyTests COMMAND OpenSkyTests)
-

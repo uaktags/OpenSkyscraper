@@ -26,6 +26,7 @@
 #include "Application.h"
 #include "Game.h"
 #include "MainMenu.h"
+#include "NativeFileDialog.h"
 #include "SimTowerLoader.h"
 #include "OpenGL.h"
 #include "tinyxml2.h"
@@ -251,6 +252,29 @@ static void ensureDirExists(const std::string &dir)
 #endif
 }
 
+static bool isAbsoluteOrQualifiedPath(const std::string &filename)
+{
+    if (filename.empty())
+        return false;
+    if (filename[0] == '/' || filename[0] == '\\')
+        return true;
+    return filename.find('/') != std::string::npos || filename.find('\\') != std::string::npos;
+}
+
+static std::string userDataPath(const std::string &filename)
+{
+    if (isAbsoluteOrQualifiedPath(filename))
+        return filename;
+
+    std::string userDir = getUserDataDir();
+    ensureDirExists(userDir);
+#ifdef _WIN32
+    return userDir + "\\" + filename;
+#else
+    return userDir + "/" + filename;
+#endif
+}
+
 void Application::saveGameToFile(const std::string &filename)
 {
     if (states.empty())
@@ -260,16 +284,8 @@ void Application::saveGameToFile(const std::string &filename)
         return;
     std::string outPath = filename;
     // If filename is not absolute, save in user data dir
-    if (filename.find('/') == std::string::npos && filename.find('\\') == std::string::npos)
-    {
-        std::string userDir = getUserDataDir();
-        ensureDirExists(userDir);
-#ifdef _WIN32
-        outPath = userDir + "\\" + filename;
-#else
-        outPath = userDir + "/" + filename;
-#endif
-    }
+    if (!isAbsoluteOrQualifiedPath(filename))
+        outPath = userDataPath(filename);
     LOG(DEBUG, "Saving to %s", outPath.c_str());
     FILE *f = fopen(outPath.c_str(), "w");
     if (!f)
@@ -432,7 +448,19 @@ void Application::saveGameAs()
     Game *game = dynamic_cast<Game *>(states.top());
     if (!game)
         return;
-    showFilenameDialog("Save Tower As", "default.tower", [this, game](const std::string &filename)
+    std::string filename;
+    const std::string defaultName = game->saveFilename.empty() ? "default.tower" : game->saveFilename;
+    const std::string defaultPath = userDataPath(defaultName);
+    NativeFileDialog::Result result = NativeFileDialog::saveTowerFile("Save Tower As", defaultPath, filename);
+    if (result == NativeFileDialog::Result::Selected)
+    {
+        saveGameToFile(filename);
+        return;
+    }
+    if (result == NativeFileDialog::Result::Cancelled)
+        return;
+
+    showFilenameDialog("Save Tower As", defaultName, [this, game](const std::string &filename)
                        { saveGameToFile(filename); });
 }
 
@@ -849,6 +877,16 @@ void Application::loadGame()
 {
     if (states.empty())
         return;
+    std::string filename;
+    NativeFileDialog::Result result = NativeFileDialog::openTowerFile("Load Tower", userDataPath("default.tower"), filename);
+    if (result == NativeFileDialog::Result::Selected)
+    {
+        loadGameFromFile(filename);
+        return;
+    }
+    if (result == NativeFileDialog::Result::Cancelled)
+        return;
+
     showFilenameDialog("Load Game", "default.tower", [this](const std::string &filename)
                        { loadGameFromFile(filename); });
 }

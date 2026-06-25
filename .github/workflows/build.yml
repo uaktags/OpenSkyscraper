@@ -1,0 +1,109 @@
+name: Build
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x86-64
+            os: ubuntu-latest
+            triplet: x64-linux
+            exe: OpenSkyscraper
+          - name: Windows x86-64
+            os: windows-latest
+            triplet: x64-windows
+            exe: OpenSkyscraper.exe
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Linux build prerequisites
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            ninja-build \
+            pkg-config \
+            libgl1-mesa-dev \
+            libudev-dev \
+            libx11-dev \
+            libxcursor-dev \
+            libxrandr-dev \
+            libxi-dev \
+            libopenal-dev \
+            libflac-dev \
+            libvorbis-dev
+
+      - name: Install Windows build prerequisites
+        if: runner.os == 'Windows'
+        run: choco install ninja -y
+
+      - name: Bootstrap vcpkg
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          git clone https://github.com/microsoft/vcpkg "$RUNNER_TEMP/vcpkg"
+          "$RUNNER_TEMP/vcpkg/bootstrap-vcpkg.sh" -disableMetrics
+
+      - name: Bootstrap vcpkg
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          git clone https://github.com/microsoft/vcpkg "$env:RUNNER_TEMP/vcpkg"
+          & "$env:RUNNER_TEMP/vcpkg/bootstrap-vcpkg.bat" -disableMetrics
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          VCPKG_EXE="$RUNNER_TEMP/vcpkg/vcpkg"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            VCPKG_EXE="$RUNNER_TEMP/vcpkg/vcpkg.exe"
+          fi
+          "$VCPKG_EXE" install \
+            sfml \
+            tgui \
+            tinyxml2 \
+            freetype \
+            --triplet "${{ matrix.triplet }}"
+
+      - name: Configure
+        shell: bash
+        run: |
+          cmake -S . -B build-ci -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_WITH_DOCS=OFF \
+            -DCMAKE_TOOLCHAIN_FILE="$RUNNER_TEMP/vcpkg/scripts/buildsystems/vcpkg.cmake" \
+            -DVCPKG_TARGET_TRIPLET="${{ matrix.triplet }}"
+
+      - name: Build
+        run: cmake --build build-ci --config Release --parallel
+
+      - name: Test
+        run: ctest --test-dir build-ci --build-config Release --output-on-failure
+
+      - name: Bundle artifact
+        shell: bash
+        run: |
+          mkdir -p "dist/OpenSkyscraper-${{ matrix.triplet }}"
+          cp "build-ci/${{ matrix.exe }}" "dist/OpenSkyscraper-${{ matrix.triplet }}/"
+          cp -R data "dist/OpenSkyscraper-${{ matrix.triplet }}/"
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            cp "$RUNNER_TEMP/vcpkg/installed/${{ matrix.triplet }}/bin/"*.dll "dist/OpenSkyscraper-${{ matrix.triplet }}/" || true
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenSkyscraper-${{ matrix.triplet }}
+          path: dist/OpenSkyscraper-${{ matrix.triplet }}
