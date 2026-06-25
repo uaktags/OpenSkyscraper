@@ -375,16 +375,19 @@ void ToolboxWindow::reload()
 
 void ToolboxWindow::updateTool()
 {
-    // Determine which grid button should highlight. If the selected tool is
-    // a category child, highlight its parent — the child only exists as a
-    // transient overlay, so the parent slot represents it in the grid.
     std::string highlightTool = game->selectedTool;
     std::string selectedProtoId;
     if (game->selectedTool.rfind("item-", 0) == 0) {
         selectedProtoId = game->selectedTool.substr(5);
     }
+
     std::string parentId;
     if (!selectedProtoId.empty() && isChildTool(selectedProtoId, parentId)) {
+        auto activeIt = parentActiveChild.find(parentId);
+        if (activeIt == parentActiveChild.end() || activeIt->second != selectedProtoId) {
+            parentActiveChild[parentId] = selectedProtoId;
+            rebuildSlotTexture(parentId, selectedProtoId);
+        }
         highlightTool = std::string("item-") + parentId;
     }
 
@@ -550,12 +553,11 @@ void ToolboxWindow::update()
     // pressed parent).
     if (!mouseDown) {
         // Decide what was selected:
-        //  - Short click: select the parent tool. This keeps the visible parent
-        //    slot from staying highlighted while a child such as Floor remains
-        //    selected, which made Lobby placement look broken.
+        //  - Short click: select whatever the slot currently displays.
         //  - Press+hold then release on an overlay alternative: select it and
         //    swap the slot to display it.
-        //  - Press+hold then release off any overlay alternative: select parent.
+        //  - Press+hold then release off any overlay alternative: same as short
+        //    click.
         std::string selectedProto;
         if (overlayVisible) {
             sf::Vector2i mpi = sf::Mouse::getPosition(app->window);
@@ -577,7 +579,8 @@ void ToolboxWindow::update()
             }
         }
         if (selectedProto.empty()) {
-            selectedProto = holdingParent;
+            auto it = parentActiveChild.find(holdingParent);
+            selectedProto = (it != parentActiveChild.end()) ? it->second : holdingParent;
         }
 
         // Swap the slot's texture if the displayed tool changed. When the
