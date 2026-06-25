@@ -550,12 +550,12 @@ void ToolboxWindow::update()
     // pressed parent).
     if (!mouseDown) {
         // Decide what was selected:
-        //  - Short click (no overlay): select whatever the slot currently
-        //    shows (the parent, or the child previously swapped in).
-        //  - Press+hold then release on an overlay alternative: select it
-        //    and swap the slot to display it.
-        //  - Press+hold then release off any overlay alternative: same as short
-        //    click (select the currently displayed tool).
+        //  - Short click: select the parent tool. This keeps the visible parent
+        //    slot from staying highlighted while a child such as Floor remains
+        //    selected, which made Lobby placement look broken.
+        //  - Press+hold then release on an overlay alternative: select it and
+        //    swap the slot to display it.
+        //  - Press+hold then release off any overlay alternative: select parent.
         std::string selectedProto;
         if (overlayVisible) {
             sf::Vector2i mpi = sf::Mouse::getPosition(app->window);
@@ -577,10 +577,7 @@ void ToolboxWindow::update()
             }
         }
         if (selectedProto.empty()) {
-            // Short click or release off-overlay: select whatever the slot
-            // currently displays (parent, or previously swapped child).
-            auto it = parentActiveChild.find(holdingParent);
-            selectedProto = (it != parentActiveChild.end()) ? it->second : holdingParent;
+            selectedProto = holdingParent;
         }
 
         // Swap the slot's texture if the displayed tool changed. When the
