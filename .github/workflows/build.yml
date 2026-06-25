@@ -20,9 +20,9 @@ jobs:
             exe: OpenSkyscraper
           - name: Windows x86-64
             os: windows-latest
-            triplet: x64-windows
-            generator: Visual Studio 17 2022
-            exe: Release/OpenSkyscraper.exe
+            triplet: x64-mingw-dynamic
+            generator: Ninja
+            exe: OpenSkyscraper.exe
 
     steps:
       - name: Check out source
@@ -91,9 +91,6 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE="$RUNNER_TEMP/vcpkg/scripts/buildsystems/vcpkg.cmake"
             -DVCPKG_TARGET_TRIPLET="${{ matrix.triplet }}"
           )
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            CMAKE_ARGS+=(-A x64)
-          fi
           cmake "${CMAKE_ARGS[@]}"
 
       - name: Build
