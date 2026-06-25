@@ -120,11 +120,33 @@ jobs:
       - name: Bundle artifact
         shell: bash
         run: |
-          mkdir -p "dist/OpenSkyscraper-${{ matrix.triplet }}"
-          cp "build-ci/${{ matrix.exe }}" "dist/OpenSkyscraper-${{ matrix.triplet }}/"
-          cp -R data "dist/OpenSkyscraper-${{ matrix.triplet }}/"
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            cp "$RUNNER_TEMP/vcpkg/installed/${{ matrix.triplet }}/bin/"*.dll "dist/OpenSkyscraper-${{ matrix.triplet }}/" || true
+          DIST="dist/OpenSkyscraper-${{ matrix.triplet }}"
+          mkdir -p "$DIST"
+
+          cp "build-ci/${{ matrix.exe }}" "$DIST/"
+          cp -R data "$DIST/"
+
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            # Copy vcpkg DLLs: SFML, TGUI, tinyxml2, freetype, audio deps, etc.
+            cp "$RUNNER_TEMP/vcpkg/installed/${{ matrix.triplet }}/bin/"*.dll "$DIST/" || true
+
+            # Copy any DLLs CMake/vcpkg already deployed next to the exe.
+            cp build-ci/*.dll "$DIST/" || true
+
+            # Copy MinGW runtime DLLs from the actual compiler directory.
+            CXX_COMPILER="$(grep '^CMAKE_CXX_COMPILER:FILEPATH=' build-ci/CMakeCache.txt | cut -d= -f2-)"
+            MINGW_BIN="$(dirname "$CXX_COMPILER")"
+
+            for dll in libgcc_s_seh-1.dll libstdc++-6.dll libwinpthread-1.dll; do
+              if [ -f "$MINGW_BIN/$dll" ]; then
+                cp "$MINGW_BIN/$dll" "$DIST/"
+              else
+                echo "Warning: $dll not found in $MINGW_BIN"
+              fi
+            done
+
+            echo "Bundled Windows DLLs:"
+            ls -la "$DIST"/*.dll
           fi
 
       - name: Upload artifact
