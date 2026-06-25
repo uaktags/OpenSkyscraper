@@ -7,8 +7,8 @@
 #include <string>
 
 #ifdef _WIN32
-#include <commdlg.h>
 #include <windows.h>
+#include <commdlg.h>
 #endif
 
 namespace OT
