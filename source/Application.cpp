@@ -384,7 +384,6 @@ void Application::showFilenameDialog(const std::string &title, const std::string
     editBox->getRenderer()->setCaretColorHover(sf::Color::White);
     editBox->getRenderer()->setBorderColor(sf::Color(80, 80, 90));
     editBox->getRenderer()->setBorders(1);
-    editBox->getRenderer()->setRoundedBorderRadius(4 * uiScale);
     dialog->add(editBox);
 
     auto okButton = tgui::Button::create("OK");
