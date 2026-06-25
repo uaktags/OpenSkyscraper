@@ -6,11 +6,14 @@
 #include "MapWindow.h"
 
 #include <algorithm>
+#include <cmath>
 
 using namespace OT;
 
-static const int kCanvasW = 180;
-static const int kCanvasH = 220;
+static const int kCanvasW = 200;
+static const int kCanvasH = 288;
+static const int kMapSkyH = 264;
+static const int kMapGroundH = 24;
 
 MapWindow::MapWindow(Game * game)
 	: GameObject(game)
@@ -104,6 +107,8 @@ void MapWindow::computeTowerBounds()
 		towerMaxY = std::max(towerMaxY, item->position.y + item->size.y);
 	}
 	if (towerMinX > towerMaxX) { towerMinX = towerMinY = 0; towerMaxX = towerMaxY = 0; }
+	towerMinY = std::min(towerMinY, -1);
+	towerMaxY = std::max(towerMaxY, 6);
 }
 
 sf::Color MapWindow::colorForItem(Item::Item * item) const
@@ -158,17 +163,9 @@ sf::Color MapWindow::colorForItem(Item::Item * item) const
 		return sf::Color(60, 65, 75);
 	}
 
-	// Normal category palette.
-	if (id == "lobby" || id == "floor")       return sf::Color(150, 150, 160);
-	if (id == "office")                       return sf::Color( 90, 130, 220);
-	if (id == "condo" || id == "yoot_condo")  return sf::Color(110, 210, 130);
-	if (id.find("hotel") != std::string::npos) return sf::Color(220, 170, 110);
-	if (id == "fastfood" || id == "restaurant") return sf::Color(230, 210, 90);
-	if (id == "cinema" || id == "partyhall")  return sf::Color(190, 110, 210);
-	if (id == "metro")                        return sf::Color(120, 200, 230);
-	if (id == "security" || id == "medicalcenter") return sf::Color(220, 90, 110);
-	if (id == "parking")                      return sf::Color(120, 120, 130);
-	return sf::Color(100, 100, 110);
+	// Normal mode mirrors the original map: a restrained grey silhouette.
+	if (id == "lobby" || id == "floor") return sf::Color(155, 155, 165);
+	return sf::Color(175, 175, 185);
 }
 
 void MapWindow::renderMap()
@@ -177,25 +174,50 @@ void MapWindow::renderMap()
 
 	computeTowerBounds();
 	int w = std::max(1, towerMaxX - towerMinX);
-	int h = std::max(1, towerMaxY - towerMinY);
+	int hAboveGround = std::max(1, towerMaxY);
+	int hBelowGround = std::max(0, -towerMinY);
 	float sx = (static_cast<float>(kCanvasW * app->uiScale) - 8.f) / w;
-	float sy = (static_cast<float>(kCanvasH * app->uiScale) - 8.f) / h;
+	float syAbove = (static_cast<float>(kMapSkyH * app->uiScale) - 4.f) / hAboveGround;
+	float syBelow = (static_cast<float>(kMapGroundH * app->uiScale) - 2.f) / std::max(1, hBelowGround);
+	float sy = hBelowGround > 0 ? std::min(syAbove, syBelow) : syAbove;
 	scale = std::min(sx, sy);
 
-	canvas->clear(sf::Color(8, 12, 20));
+	canvas->clear(sf::Color(135, 210, 235));
+
+	sf::Texture &skyTexture = app->bitmaps["simtower/ui/map/sky"];
+	sf::Texture &groundTexture = app->bitmaps["simtower/ui/map/ground"];
+	int skyFrame = std::max(0, std::min(3, game->sky.from));
+	int skyOffset = static_cast<int>(std::floor(std::fmod(game->time.absolute * 200.0, 200.0)));
+	if (skyOffset < 0) skyOffset += 200;
+
+	Sprite sky;
+	sky.setTexture(skyTexture);
+	sky.setScale({app->uiScale, app->uiScale});
+	int firstSkyWidth = 200 - skyOffset;
+	sky.setTextureRect(sf::IntRect({skyFrame * 200 + skyOffset, 0}, {firstSkyWidth, kMapSkyH}));
+	sky.setPosition({0.f, 0.f});
+	canvas->draw(sky);
+	if (skyOffset > 0)
+	{
+		sky.setTextureRect(sf::IntRect({skyFrame * 200, 0}, {skyOffset, kMapSkyH}));
+		sky.setPosition({firstSkyWidth * app->uiScale, 0.f});
+		canvas->draw(sky);
+	}
+
+	Sprite ground;
+	ground.setTexture(groundTexture);
+	ground.setTextureRect(sf::IntRect({0, 0}, {kCanvasW, kMapGroundH}));
+	ground.setScale({app->uiScale, app->uiScale});
+	ground.setPosition({0.f, static_cast<float>(kMapSkyH * app->uiScale)});
+	canvas->draw(ground);
 
 	// 4-pixel margin so items don't touch the canvas edge.
 	const float margin = 4.f;
-	for (Game::ItemSet::iterator it = game->items.begin(); it != game->items.end(); ++it)
-	{
-		Item::Item * item = *it;
-		// Skip floor items - they'd cover everything else. The lobbies
-		// already convey the floor extent in grey.
-		if (item->prototype->id == "floor") continue;
-
+	const float groundY = kMapSkyH * app->uiScale;
+	auto drawItem = [&](Item::Item *item) {
 		float px = margin + (item->position.x - towerMinX) * scale;
-		// Y is inverted in screen space (positive Y = up in tower).
-		float py = margin + (towerMaxY - (item->position.y + item->size.y)) * scale;
+		// Positive tower Y rises above the map's ground line.
+		float py = groundY - (item->position.y + item->size.y) * scale;
 		float pw = std::max(1.f, item->size.x * scale);
 		float ph = std::max(1.f, item->size.y * scale);
 
@@ -203,6 +225,19 @@ void MapWindow::renderMap()
 		r.setPosition({px, py});
 		r.setFillColor(colorForItem(item));
 		canvas->draw(r);
+	};
+
+	for (Game::ItemSet::iterator it = game->items.begin(); it != game->items.end(); ++it)
+	{
+		Item::Item * item = *it;
+		if (item->prototype->id == "floor")
+			drawItem(item);
+	}
+	for (Game::ItemSet::iterator it = game->items.begin(); it != game->items.end(); ++it)
+	{
+		Item::Item * item = *it;
+		if (item->prototype->id != "floor")
+			drawItem(item);
 	}
 
 	canvas->display();
@@ -214,7 +249,7 @@ void MapWindow::handleClick(float canvasX, float canvasY)
 	const float margin = 4.f;
 	// Invert the projection done in renderMap.
 	float tileX = (canvasX - margin) / scale + towerMinX;
-	float tileY = (towerMaxY) - (canvasY - margin) / scale - 1; // approximate
+	float tileY = (kMapSkyH * app->uiScale - canvasY) / scale - 1; // approximate
 
 	// Centre the main viewport on this tower coordinate. Game's poi is in
 	// pixel space (8 px per tile horizontally, 36 px per floor vertically).
