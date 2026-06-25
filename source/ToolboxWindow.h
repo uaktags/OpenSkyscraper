@@ -76,7 +76,7 @@ namespace OT {
             bool overlayVisible = false;
             std::vector<tgui::Button::Ptr> overlayButtons;
             std::map<tgui::Button::Ptr, ButtonState> overlayButtonStates;
-            std::map<tgui::Button::Ptr, std::string> overlayToolFor;   ///< overlay button -> "item-<childId>"
+            std::map<tgui::Button::Ptr, std::string> overlayToolFor;   ///< overlay button -> "item-<protoId>"
             std::map<std::string, int> parentSlotIndex;                ///< parent proto id -> grid slot
 
             // Slot substitution. When a category child is selected via the

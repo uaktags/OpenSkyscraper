@@ -359,7 +359,13 @@ void Application::showFilenameDialog(const std::string &title, const std::string
                          18 * uiScale);
     editBox->setText(defaultName);
     editBox->getRenderer()->setBackgroundColor(sf::Color(45, 45, 50));
+    editBox->getRenderer()->setBackgroundColorHover(sf::Color(50, 50, 56));
     editBox->getRenderer()->setTextColor(sf::Color(240, 240, 240));
+    editBox->getRenderer()->setDefaultTextColor(sf::Color(160, 160, 165));
+    editBox->getRenderer()->setSelectedTextColor(sf::Color::White);
+    editBox->getRenderer()->setSelectedTextBackgroundColor(sf::Color(0, 122, 204));
+    editBox->getRenderer()->setCaretColor(sf::Color::White);
+    editBox->getRenderer()->setCaretColorHover(sf::Color::White);
     editBox->getRenderer()->setBorderColor(sf::Color(80, 80, 90));
     editBox->getRenderer()->setBorders(1);
     editBox->getRenderer()->setRoundedBorderRadius(4 * uiScale);

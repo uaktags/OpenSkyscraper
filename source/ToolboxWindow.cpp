@@ -427,14 +427,28 @@ void ToolboxWindow::showOverlayFor(const std::string& parentId)
 
     int slot = parentSlotIndex.count(parentId) ? parentSlotIndex[parentId] : 0;
 
-    int childIdx = 1;
-    for (const std::string& childId : catIt->second)
+    std::string displayedProtoId = parentId;
+    auto activeIt = parentActiveChild.find(parentId);
+    if (activeIt != parentActiveChild.end() && !activeIt->second.empty())
+        displayedProtoId = activeIt->second;
+
+    std::vector<std::string> alternatives;
+    alternatives.push_back(parentId);
+    alternatives.insert(alternatives.end(), catIt->second.begin(), catIt->second.end());
+
+    int altIdx = 1;
+    for (const std::string& protoId : alternatives)
     {
-        // Skip children the player can't build yet.
-        if (LevelUp::minRatingToBuild(childId) > game->rating)
+        // The held slot already represents this tool. The overlay shows the
+        // other choices in the category, including the displaced parent.
+        if (protoId == displayedProtoId)
             continue;
 
-        auto pit = game->itemFactory.prototypesById.find(childId);
+        // Skip tools the player can't build yet.
+        if (LevelUp::minRatingToBuild(protoId) > game->rating)
+            continue;
+
+        auto pit = game->itemFactory.prototypesById.find(protoId);
         if (pit == game->itemFactory.prototypesById.end())
             continue;
         Item::AbstractPrototype* proto = pit->second;
@@ -442,10 +456,10 @@ void ToolboxWindow::showOverlayFor(const std::string& parentId)
         ButtonState state;
         tgui::Button::Ptr btn = makeItemButton(proto, state);
 
-        // Place the child over the slot immediately following the parent
+        // Place the alternative over the slot immediately following the parent
         // (wrapping within the kCols-wide grid), overlapping whatever
         // parent/standalone tool normally lives there.
-        int cslot = slot + childIdx;
+        int cslot = slot + altIdx;
         int ccol = cslot % kCols;
         int crow = cslot / kCols;
         int xpos = (kPadX + kCellW * ccol) * app->uiScale;
@@ -458,8 +472,8 @@ void ToolboxWindow::showOverlayFor(const std::string& parentId)
 
         overlayButtons.push_back(btn);
         overlayButtonStates[btn] = state;
-        overlayToolFor[btn] = std::string("item-") + childId;
-        childIdx++;
+        overlayToolFor[btn] = std::string("item-") + protoId;
+        altIdx++;
     }
 }
 
@@ -538,9 +552,9 @@ void ToolboxWindow::update()
         // Decide what was selected:
         //  - Short click (no overlay): select whatever the slot currently
         //    shows (the parent, or the child previously swapped in).
-        //  - Press+hold then release on an overlay child: select that child
+        //  - Press+hold then release on an overlay alternative: select it
         //    and swap the slot to display it.
-        //  - Press+hold then release off any overlay child: same as short
+        //  - Press+hold then release off any overlay alternative: same as short
         //    click (select the currently displayed tool).
         std::string selectedProto;
         if (overlayVisible) {
@@ -569,10 +583,15 @@ void ToolboxWindow::update()
             selectedProto = (it != parentActiveChild.end()) ? it->second : holdingParent;
         }
 
-        // Swap the slot's texture if the displayed tool changed.
-        std::string& displayed = parentActiveChild[holdingParent];
+        // Swap the slot's texture if the displayed tool changed. When the
+        // parent is selected again, remove the substitution entirely.
+        auto displayedIt = parentActiveChild.find(holdingParent);
+        std::string displayed = (displayedIt != parentActiveChild.end()) ? displayedIt->second : holdingParent;
         if (displayed != selectedProto) {
-            displayed = selectedProto;
+            if (selectedProto == holdingParent)
+                parentActiveChild.erase(holdingParent);
+            else
+                parentActiveChild[holdingParent] = selectedProto;
             rebuildSlotTexture(holdingParent, selectedProto);
         }
 
