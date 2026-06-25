@@ -77,6 +77,12 @@ jobs:
           restore-keys: |
             vcpkg-${{ runner.os }}-${{ matrix.triplet }}-
 
+      - name: Prepare vcpkg cache directories
+        shell: bash
+        run: |
+          mkdir -p "$VCPKG_DEFAULT_BINARY_CACHE"
+          mkdir -p "$RUNNER_TEMP/vcpkg/downloads"
+
       - name: Install dependencies
         shell: bash
         run: |
