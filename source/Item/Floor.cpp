@@ -1,4 +1,6 @@
 #include <cassert>
+#include <algorithm>
+#include <vector>
 #include "../Game.h"
 #include "Floor.h"
 
@@ -49,9 +51,6 @@ void Floor::updateSprite() {}
 
 void Floor::render(sf::RenderTarget &target) const
 {
-	bool drawBackground = true;
-	int left = 0;
-	int right = 0;
 	Sprite b = background;
 	Sprite c = ceiling;
 	// Compose floor sprites with the global Lighting tint (Phase 3.4).
@@ -65,41 +64,60 @@ void Floor::render(sf::RenderTarget &target) const
 		b.setColor(game->lighting.compose(b.getColor()));
 		c.setColor(game->lighting.compose(c.getColor()));
 	}
-	for (std::multiset<int>::const_iterator i = interval.begin(); i != interval.end();)
+
+	struct Span
 	{
-		if (drawBackground)
+		int left;
+		int right;
+	};
+	std::vector<Span> occupied;
+	Game::ItemSetByInt::const_iterator floorItems = game->itemsByFloor.find(position.y);
+	if (floorItems != game->itemsByFloor.end())
+	{
+		const int floorLeft = getRect().minX();
+		const int floorRight = getRect().maxX();
+		for (Game::ItemSet::const_iterator it = floorItems->second.begin(); it != floorItems->second.end(); ++it)
 		{
-			// Draw full floor sprite
-			drawBackground = false;
-			left = *i;
-			++i;
-			if (i == interval.end())
-				break;
-			right = *i;
-			if (left == right)
+			Item *item = *it;
+			if (item->canHaulPeople())
 				continue;
-
-			b.setScale({(right - left) * 8.0f / b.getTextureRect().size.x, 1.f});
-			b.setPosition({left * 8.0f, static_cast<float>(-getPosition().y * 36)});
-			target.draw(b);
+			const int left = std::max(floorLeft, item->getRect().minX());
+			const int right = std::min(floorRight, item->getRect().maxX());
+			if (left < right)
+				occupied.push_back({left, right});
 		}
-		else
-		{
-			// Draw only ceiling sprite
-			drawBackground = true;
-			left = *i;
-			++i;
-			if (i == interval.end())
-				break;
-			right = *i;
-			if (left == right)
-				continue;
-
-			c.setScale({(right - left) * 8.0f / c.getTextureRect().size.x, 1.f});
-			c.setPosition({left * 8.0f, static_cast<float>(-getPosition().y * 36)});
-			target.draw(c);
-		}
-
-		game->drawnSprites++;
 	}
+
+	std::sort(occupied.begin(), occupied.end(), [](const Span &a, const Span &b) {
+		return (a.left == b.left) ? a.right < b.right : a.left < b.left;
+	});
+
+	std::vector<Span> merged;
+	for (std::vector<Span>::const_iterator it = occupied.begin(); it != occupied.end(); ++it)
+	{
+		if (merged.empty() || it->left > merged.back().right)
+			merged.push_back(*it);
+		else if (it->right > merged.back().right)
+			merged.back().right = it->right;
+	}
+
+	auto drawSpan = [&](Sprite &sprite, int left, int right) {
+		if (left >= right)
+			return;
+		sprite.setScale({(right - left) * 8.0f / sprite.getTextureRect().size.x, 1.f});
+		sprite.setPosition({left * 8.0f, static_cast<float>(-getPosition().y * 36)});
+		target.draw(sprite);
+		game->drawnSprites++;
+	};
+
+	const int floorLeft = getRect().minX();
+	const int floorRight = getRect().maxX();
+	int cursor = floorLeft;
+	for (std::vector<Span>::const_iterator it = merged.begin(); it != merged.end(); ++it)
+	{
+		drawSpan(b, cursor, it->left);
+		drawSpan(c, it->left, it->right);
+		cursor = it->right;
+	}
+	drawSpan(b, cursor, floorRight);
 }

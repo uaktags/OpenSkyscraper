@@ -7,7 +7,7 @@
 using namespace OT;
 
 
-PathFinder::PathFinder() {}
+PathFinder::PathFinder() : SearchState(AStarSearch< MapSearchNode >::SEARCH_STATE_NOT_INITIALISED) {}
 
 PathFinder::~PathFinder() { clear(); }
 
@@ -40,6 +40,7 @@ Route PathFinder::findRoute(const MapNode *start_mapnode, const MapNode *end_map
 void PathFinder::clear() {
 	if(SearchState == AStarSearch< MapSearchNode >::SEARCH_STATE_SUCCEEDED) astarsearch.FreeSolutionNodes();
 	astarsearch.EnsureMemoryFreed();
+	SearchState = AStarSearch< MapSearchNode >::SEARCH_STATE_NOT_INITIALISED;
 }
 
 void PathFinder::buildRoute(Route &r, Item::Item *start_item, Item::Item *end_item) {
@@ -59,29 +60,29 @@ void PathFinder::buildRoute(Route &r, Item::Item *start_item, Item::Item *end_it
 	if(start_node->IsSameState(*end_node)) {
 		r.add(start_item, start_node->mapNode->position.y);
 		r.add(end_item, end_node->mapNode->position.y);
-		return;
 	}
-	
-	MapSearchNode *n = start_node;
-	MapSearchNode *n_child;
-	r.add(start_item, n->mapNode->position.y);
-	n = astarsearch.GetSolutionNext();
-	while(n != end_node) {
-		n_child = astarsearch.GetSolutionNext();
-		Item::Item *i = n_child->parent_item;
-		if(i) {
-			int toFloor;
-			if(i->canHaulPeople()) toFloor = n_child->mapNode->position.y;
-			else				   toFloor = n->mapNode->position.y;
+	else {
+		MapSearchNode *n = start_node;
+		MapSearchNode *n_child;
+		r.add(start_item, n->mapNode->position.y);
+		n = astarsearch.GetSolutionNext();
+		while(n != end_node) {
+			n_child = astarsearch.GetSolutionNext();
+			Item::Item *i = n_child->parent_item;
+			if(i) {
+				int toFloor;
+				if(i->canHaulPeople()) toFloor = n_child->mapNode->position.y;
+				else				   toFloor = n->mapNode->position.y;
 
-			Route::Node &rn_prev = r.nodes.back();
-			if(i->isElevator() && rn_prev.item->isElevator() && i == rn_prev.item) {
-				// Moving along same elevator
-				rn_prev.toFloor = toFloor;
-			} else r.add(i, toFloor);
-		}
-		n = n_child;
-	};
-	r.add(end_item, n->mapNode->position.y);
+				Route::Node &rn_prev = r.nodes.back();
+				if(i->isElevator() && rn_prev.item->isElevator() && i == rn_prev.item) {
+					// Moving along same elevator
+					rn_prev.toFloor = toFloor;
+				} else r.add(i, toFloor);
+			}
+			n = n_child;
+		};
+		r.add(end_item, n->mapNode->position.y);
+	}
 	r.updateScore((int)std::abs(end_node->g + end_node->h));
 }

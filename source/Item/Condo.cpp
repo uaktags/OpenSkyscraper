@@ -15,6 +15,7 @@ void Condo::init()
 
 	variant = rand() % 3;
 	occupied = false;
+	spriteNeedsUpdate = false;
 	updateLighting(game->time.getHour());
 	rent = 5000;
 	rentDeposit = rent;
@@ -79,8 +80,6 @@ void Condo::updateSprite()
 			break;
 		}
 	}
-
-	LOG(DEBUG, "Updating sprite to index %d and variant %d", index, variant);
 	sprite.setTextureRect(sf::IntRect({index * 128, variant * 24}, {128, 24}));
 }
 
@@ -221,7 +220,6 @@ void Condo::addPerson(Person *p)
 {
 	Item::addPerson(p);
 	p->state = Person::kHome;
-	spriteNeedsUpdate = true;
 }
 
 void Condo::createOccupants()
@@ -285,7 +283,6 @@ void Condo::removeOccupants()
 void Condo::removePerson(Person *p)
 {
 	Item::removePerson(p);
-	spriteNeedsUpdate = true;
 }
 
 /** Returns whether the item will be vacated at the next month. */
