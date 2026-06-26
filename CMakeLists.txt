@@ -195,6 +195,7 @@ add_executable(OpenSkyTests
   source/Logger.cpp
   source/NameManager.cpp
   source/LevelUp.cpp
+  source/PluginManager.cpp
 )
 target_compile_definitions(OpenSkyTests PRIVATE OPEN_SKY_ROUTE_SEAM_ONLY)
 # Lighting.h pulls in <SFML/Graphics/Color.hpp> for the tint color. We only

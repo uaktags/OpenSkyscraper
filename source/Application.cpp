@@ -547,10 +547,9 @@ void Application::makeMenu()
 
 // YootTower plugins that map onto the item prototypes registered in
 // Item/Factory.cpp. A genuine YootTower installation ships all of these as
-// .t2p files under Plugins/. We use this list to detect whether the user
-// has the YootTower assets available (a silent bonus fallback that lets
-// the game run without SIMTOWER.EXE, at the cost of synthetic placeholder
-// bitmaps for anything the plugins don't cover).
+// .t2p files under Plugins/. The catalog is built by PluginManager during
+// Application::init(); this list is the policy that decides whether the
+// YootTower tier is usable as a standalone asset source.
 static const char *const kEssentialYootPlugins[] = {
     "Condo.t2p",            // Condo + YootCondo
     "Floor.t2p",            // Floor
@@ -584,15 +583,28 @@ static const char *const kEssentialYootPlugins[] = {
 // to avoid a single stray .t2p file silently enabling the bonus path.
 static const int kMinEssentialPlugins = 8;
 
-static int countYootTowerPlugins(const Application *app)
+// Builds the PluginManager catalog by scanning every configured data dir
+// for a Plugins/ subdirectory. Idempotent across re-scans (PluginManager
+// de-duplicates). After this returns, app.pluginManager reflects every
+// .t2p discoverable through the runtime search path.
+static void catalogPlugins(Application * app)
 {
-    int count = 0;
-    for (const char *name : kEssentialYootPlugins)
+    for (const Path & base : app->data.searchDirs())
     {
-        if (app->data.exists(Path("Plugins") + name))
-            count++;
+        Path plugins = base + "Plugins";
+        app->pluginManager.addPluginDirectory(plugins);
     }
-    return count;
+}
+
+// Returns the kEssentialYootPlugins list as a vector so PluginManager can
+// consume it without exposing the array length calculation at every call.
+static std::vector<std::string> essentialPluginNames()
+{
+    std::vector<std::string> out;
+    out.reserve(sizeof(kEssentialYootPlugins) / sizeof(kEssentialYootPlugins[0]));
+    for (const char * name : kEssentialYootPlugins)
+        out.emplace_back(name);
+    return out;
 }
 
 void Application::init()
@@ -646,8 +658,16 @@ void Application::init()
             data.exists("sounds/cock.wav");
     }
 
-    // Detect YootTower plugins (silent bonus).
-    const int pluginCount = countYootTowerPlugins(this);
+    // Build the plugin catalog from every search dir's Plugins/ subfolder.
+    // The catalog is consulted below to decide whether the YootTower tier
+    // is usable, and is later reused by BitmapManager::loadFromPlugin and
+    // the upcoming item-descriptor layer.
+    catalogPlugins(this);
+    LOG(DEBUG, "PluginManager cataloged %zu plugin(s)", pluginManager.enumerate().size());
+
+    // Detect YootTower plugins (silent bonus) via the PluginManager catalog.
+    const std::vector<std::string> essential = essentialPluginNames();
+    const int pluginCount = pluginManager.countEssential(essential);
     const bool usingPlugins = (pluginCount >= kMinEssentialPlugins);
 
     // Last resort: nothing usable on disk. Offer to locate SIMTOWER.EXE.

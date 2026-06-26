@@ -14,6 +14,7 @@
 #include "../source/Lighting.h"
 #include "../source/JudgeSystem.h"
 #include "../source/LevelUp.h"
+#include "../source/PluginManager.h"
 
 static int g_failures = 0;
 
@@ -356,6 +357,123 @@ static void testWindowsSPExecutable()
     }
 }
 
+// PluginManager seam: catalog every .t2p under data/Plugins, lazy-load
+// one plugin, and confirm the resource layout matches what the existing
+// WindowsPEExecutable test expects. This is the foundation for Phase A.2
+// (loadFromPlugin) and Phase D (OBJMAP parser + coverage audit).
+static void testPluginManager()
+{
+    using OT::Plugin;
+    using OT::PluginManager;
+
+    PluginManager pm;
+    const int added = pm.addPluginDirectory("../data/Plugins");
+    // 156 plugins are vendored under data/Plugins. Allow some slack in
+    // case future pruning drops a few, but require the bulk of them.
+    EXPECT(added >= 100);
+
+    EXPECT(pm.has("Condo.t2p"));
+    EXPECT(pm.has("Stair.t2p"));
+    EXPECT(!pm.has("DoesNotExist.t2p"));
+
+    // Idempotent: re-adding the same dir discovers nothing new.
+    EXPECT(pm.addPluginDirectory("../data/Plugins") == 0);
+
+    // enumerate() is sorted alphabetically.
+    std::vector<std::string> names = pm.enumerate();
+    EXPECT(names.size() >= 100);
+    bool sorted = true;
+    for (size_t i = 1; i < names.size(); ++i)
+        if (names[i - 1] > names[i]) { sorted = false; break; }
+    EXPECT(sorted);
+
+    // Lazy load: a freshly-cataloged plugin hasn't been PE-parsed yet.
+    Plugin * condo = pm.get("Condo.t2p");
+    EXPECT(condo != nullptr);
+    if (condo) {
+        EXPECT(!condo->isLoaded());
+        EXPECT(condo->ensureLoaded());
+        EXPECT(condo->isLoaded());
+        // ensureLoaded is idempotent.
+        EXPECT(condo->ensureLoaded());
+
+        // Same resource layout as testWindowsPEExecutable checks for.
+        EXPECT(condo->hasResource("ATTR", 128));
+        EXPECT(condo->hasResource("OBJMAP", 1000));
+        EXPECT(condo->hasResource("2", 1000));  // RT_BITMAP id 1000
+
+        // Missing resources return nullptr, not a crash.
+        EXPECT(condo->getResource("NOPE", 9999) == nullptr);
+        EXPECT(condo->getResource("OBJMAP", 9999) == nullptr);
+
+        // enumerateResources returns the same data the manager exposes.
+        std::vector<Plugin::ResourceKey> res = condo->enumerateResources();
+        EXPECT(!res.empty());
+    }
+
+    // countEssential: a curated subset of plugins that OpenSkyscraper
+    // considers load-bearing for the YootTower fallback tier. All of
+    // these are vendored, so the count must match the input size.
+    std::vector<std::string> essential = {
+        "Condo.t2p", "Floor.t2p", "Stair.t2p", "Office.t2p",
+        "StdElev.t2p", "Burger.t2p", "Subway.t2p",
+    };
+    EXPECT(pm.countEssential(essential) == static_cast<int>(essential.size()));
+
+    // countEssential with a fake entry counts only the real ones.
+    std::vector<std::string> withFake = essential;
+    withFake.push_back("NotAReal.t2p");
+    EXPECT(pm.countEssential(withFake) == static_cast<int>(essential.size()));
+
+    // Every cataloged plugin that loads must declare both ATTR and DESC
+    // metadata resources (true for both formats - see below). Beyond
+    // that, plugins split into two families that the OBJMAP spike (D.1)
+    // will need to handle separately:
+    //
+    //   PE-format (.t2p built as PE32): bitmaps under RT_BITMAP (type
+    //     "2"), object descriptors under OBJMAP. ~105 plugins including
+    //     every gameplay item (Burger, Condo, Stair, Office, etc.).
+    //
+    //   SP-format (.t2p built as 16-bit MZ/LE): bitmaps under RAW,
+    //     object descriptors under ADDF (or just RAW alone). ~51 plugins
+    //     including the MV_* movie-villain pack, Pl* party pack, Yoot,
+    //     Ob9003, SandalBeachResort, Segapc, AirJamaica.
+    //
+    // Both formats parse via WindowsPEExecutable::load's auto-detection.
+    int loadedCount = 0;
+    int wellFormed = 0;
+    int peFormat = 0;
+    int spFormat = 0;
+    int total = 0;
+    for (const std::string & name : names) {
+        Plugin * p = pm.get(name);
+        if (!p) continue;
+        ++total;
+        if (!p->ensureLoaded()) continue;
+        ++loadedCount;
+
+        bool hasAttr = false, hasDesc = false;
+        bool hasRtBitmap = false, hasRaw = false;
+        for (const auto & rk : p->enumerateResources()) {
+            if (rk.type == "ATTR") hasAttr = true;
+            if (rk.type == "DESC") hasDesc = true;
+            if (rk.type == "2")    hasRtBitmap = true;  // RT_BITMAP
+            if (rk.type == "RAW")  hasRaw = true;        // SP-format bitmap
+        }
+        if (hasAttr && hasDesc) ++wellFormed;
+        if (hasRtBitmap) ++peFormat;
+        if (hasRaw)      ++spFormat;
+    }
+    EXPECT(total >= 100);
+    // Most plugins load; the few that don't are tracked separately.
+    EXPECT(loadedCount >= total - 20);
+    // Every loaded plugin has ATTR + DESC (metadata every plugin needs).
+    EXPECT(wellFormed == loadedCount);
+    // Both formats are represented in the vendored catalog.
+    EXPECT(peFormat >= 80);
+    EXPECT(spFormat >= 30);
+}
+
 int main()
 {
 	testSmoke();
@@ -369,6 +487,7 @@ int main()
 	testLevelUpRules();
 	testWindowsPEExecutable();
 	testWindowsSPExecutable();
+	testPluginManager();
 
     if (g_failures > 0)
     {

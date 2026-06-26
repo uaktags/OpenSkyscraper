@@ -12,6 +12,7 @@
 #include "FontManager.h"
 #include "Logger.h"
 #include "Path.h"
+#include "PluginManager.h"
 #include "State.h"
 #include "SoundManager.h"
 
@@ -64,6 +65,7 @@ namespace OT
 		BitmapManager bitmaps;
 		FontManager   fonts;
 		SoundManager  sounds;
+		PluginManager pluginManager;
 
 		void pushState(State * state);
 		void popState();
