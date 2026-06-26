@@ -45,6 +45,14 @@ namespace OT
 		/// Empty if the plugin failed to load.
 		std::vector<ResourceKey> enumerateResources() const;
 
+		/// Resources grouped by type. Each key is a resource type name
+		/// (e.g. "OBJMAP", "ATTR", "2" for RT_BITMAP) and each value is
+		/// the sorted list of resource ids under that type. The natural
+		/// shape for the upcoming coverage audit, which spends most of
+		/// its time asking "which plugins have OBJMAP id 1000?" without
+		/// caring about other types.
+		std::map<std::string, std::vector<int>> resourcesByType() const;
+
 	private:
 		std::string name_;
 		Path path_;

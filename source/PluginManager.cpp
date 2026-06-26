@@ -45,6 +45,22 @@ namespace OT
 		return out;
 	}
 
+	std::map<std::string, std::vector<int>> Plugin::resourcesByType() const
+	{
+		std::map<std::string, std::vector<int>> out;
+		if (!ensureLoaded()) return out;
+		for (const auto & tp : exe_->resources) {
+			std::vector<int> & ids = out[tp.first];
+			ids.reserve(tp.second.size());
+			// WindowsPEExecutable::Resources is a std::map<int, ...>,
+			// so iteration already yields ascending ids. We copy in
+			// that order so callers can binary-search the result.
+			for (const auto & ip : tp.second)
+				ids.push_back(ip.first);
+		}
+		return out;
+	}
+
 	static std::string lowerExt(const std::string & s)
 	{
 		std::string out;

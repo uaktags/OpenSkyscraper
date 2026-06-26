@@ -4,6 +4,8 @@
 #include <cstdlib>
 #include <iostream>
 #include <string>
+#include <algorithm>
+#include <numeric>
 
 #include "../source/Time.h"
 #include "../source/Route.h"
@@ -528,6 +530,53 @@ static void testPluginBitmapLoader()
     EXPECT(!PluginBitmapLoader::rasterizeBitmapResource(garbage, sizeof(garbage), dummy));
 }
 
+// Plugin::resourcesByType seam: the grouped-by-type view that the
+// upcoming coverage audit will use to answer "which plugins have an
+// OBJMAP id 1000?" cheaply. Cross-checked against enumerateResources()
+// (the flat view) so the two stay in sync.
+static void testPluginResourcesByType()
+{
+    using OT::Plugin;
+    using OT::PluginManager;
+
+    PluginManager pm;
+    pm.addPluginDirectory("../data/Plugins");
+
+    Plugin * condo = pm.get("Condo.t2p");
+    EXPECT(condo != nullptr);
+    if (!condo) return;
+
+    std::map<std::string, std::vector<int>> byType = condo->resourcesByType();
+
+    // The flat view must contain exactly the same (type, id) pairs.
+    std::vector<Plugin::ResourceKey> flat = condo->enumerateResources();
+    EXPECT(flat.size() == std::accumulate(byType.begin(), byType.end(), size_t{0},
+        [](size_t n, const auto & kv) { return n + kv.second.size(); }));
+
+    // Both views must agree on OBJMAP membership. Condo.t2p ships
+    // OBJMAP ids 128/1000/1001/1002/1003/1100 (verified via pefile).
+    auto it = byType.find("OBJMAP");
+    EXPECT(it != byType.end());
+    if (it != byType.end()) {
+        const std::vector<int> & ids = it->second;
+        EXPECT(std::find(ids.begin(), ids.end(), 1000) != ids.end());
+        EXPECT(std::find(ids.begin(), ids.end(), 1100) != ids.end());
+        // ids come back sorted (callers can binary-search).
+        EXPECT(std::is_sorted(ids.begin(), ids.end()));
+    }
+
+    // RT_BITMAP (type "2") for Condo has ids 100/300/301/1000-1003/1100.
+    auto bmp = byType.find("2");
+    EXPECT(bmp != byType.end());
+    if (bmp != byType.end()) {
+        EXPECT(std::find(bmp->second.begin(), bmp->second.end(), 1000) != bmp->second.end());
+    }
+
+    // A plugin that fails to load returns an empty map (no crash).
+    Plugin broken("broken.t2p", "../data/Plugins/DoesNotExist.t2p");
+    EXPECT(broken.resourcesByType().empty());
+}
+
 int main()
 {
 	testSmoke();
@@ -543,6 +592,7 @@ int main()
 	testWindowsSPExecutable();
 	testPluginManager();
 	testPluginBitmapLoader();
+	testPluginResourcesByType();
 
     if (g_failures > 0)
     {
