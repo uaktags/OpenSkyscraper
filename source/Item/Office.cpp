@@ -97,6 +97,7 @@ void Office::encodeXML(tinyxml2::XMLPrinter &xml)
 	xml.PushAttribute("variant", variant);
 	xml.PushAttribute("occupied", occupied);
 	xml.PushAttribute("lit", lit);
+	xml.PushAttribute("population", population);
 }
 
 void Office::decodeXML(tinyxml2::XMLElement &xml)
@@ -107,6 +108,7 @@ void Office::decodeXML(tinyxml2::XMLElement &xml)
 	variant = xml.IntAttribute("variant");
 	occupied = xml.BoolAttribute("occupied");
 	lit = xml.BoolAttribute("lit");
+	population = xml.IntAttribute("population", occupied ? (int)workers.size() : 0);
 	updateSprite();
 }
 

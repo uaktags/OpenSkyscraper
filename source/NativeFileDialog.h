@@ -16,5 +16,6 @@ namespace OT
 
 		Result openTowerFile(const std::string &title, const std::string &defaultName, std::string &path);
 		Result saveTowerFile(const std::string &title, const std::string &defaultName, std::string &path);
+		Result openExecutableFile(const std::string &title, std::string &path);
 	}
 }

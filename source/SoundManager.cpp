@@ -27,7 +27,9 @@ bool SoundManager::load(Path name, sf::SoundBuffer & dst)
 	bool success = false;
 	for (int i = 0; i < paths.size() && !success; i++) {
 		success = dst.loadFromFile(paths[i].c_str());
-		if (!success && paths[i].str().find('.') == std::string::npos) {
+		// Only append .wav when the filename leaf has no extension. Checking
+		// the whole path is wrong: parent dirs like "../data" contain a dot.
+		if (!success && paths[i].name().find('.') == std::string::npos) {
 			success = dst.loadFromFile((paths[i].str() + ".wav").c_str());
 		}
 	}

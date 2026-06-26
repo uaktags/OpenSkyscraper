@@ -545,6 +545,56 @@ void Application::makeMenu()
     gui.add(menu);
 }
 
+// YootTower plugins that map onto the item prototypes registered in
+// Item/Factory.cpp. A genuine YootTower installation ships all of these as
+// .t2p files under Plugins/. We use this list to detect whether the user
+// has the YootTower assets available (a silent bonus fallback that lets
+// the game run without SIMTOWER.EXE, at the cost of synthetic placeholder
+// bitmaps for anything the plugins don't cover).
+static const char *const kEssentialYootPlugins[] = {
+    "Condo.t2p",            // Condo + YootCondo
+    "Floor.t2p",            // Floor
+    "Stair.t2p",            // Stairs
+    "Escalator.t2p",        // Escalator
+    "StdElev.t2p",          // Elevator::Standard
+    "ServElev.t2p",         // Elevator::Service
+    "BigElev.t2p",          // Elevator::Express
+    "Office.t2p",           // Office
+    "Parking.t2p",          // Parking
+    "Securityroom.t2p",     // Security
+    "Doctor's.t2p",         // MedicalCenter
+    "TrashFacility.t2p",    // Recycling
+    "Subway.t2p",           // Metro
+    "ClassicTheater.t2p",   // Cinema
+    "GatheringArea.t2p",    // PartyHall
+    "Singleroom.t2p",       // Hotel single
+    "Twinroom.t2p",         // Hotel double
+    "Suiteroom.t2p",        // Hotel suite
+    "Burger.t2p",           // FastFood
+    "Chinese.t2p",          // Restaurant
+    "DefaultToolPalette.t2p",// toolbox UI
+    "Front.t2p",            // lobby/front desk
+    "Maintenance.t2p",      // infrastructure
+    "PowerRoom.t2p",        // infrastructure
+    "FireDepartment.t2p",   // infrastructure
+};
+// Minimum number of essential plugins that must be present for the YootTower
+// path to be considered usable. Deliberately lenient: a partial install still
+// lets the game start (missing items fall back to placeholders), but we want
+// to avoid a single stray .t2p file silently enabling the bonus path.
+static const int kMinEssentialPlugins = 8;
+
+static int countYootTowerPlugins(const Application *app)
+{
+    int count = 0;
+    for (const char *name : kEssentialYootPlugins)
+    {
+        if (app->data.exists(Path("Plugins") + name))
+            count++;
+    }
+    return count;
+}
+
 void Application::init()
 {
     data.init();
@@ -561,47 +611,89 @@ void Application::init()
     //TODO: make this dependent on a command line switch --dump-simtower <path>.
     exe.dump("~/SimTower Raw");*/
 
-    SimTowerLoader *simtower = new SimTowerLoader(this);
-    const bool loadedSimTowerResources = simtower->load();
-    if (!loadedSimTowerResources)
-    {
-        sf::Texture skyProbe;
-        sf::Texture toolboxProbe;
-        sf::SoundBuffer cockProbe;
-        const bool haveDumpedResources =
-            bitmaps.load("simtower/sky", skyProbe) &&
-            bitmaps.load("simtower/ui/toolbox/tools", toolboxProbe) &&
-            sounds.load("simtower/cock", cockProbe);
-        if (!haveDumpedResources)
-        {
-            LOG(ERROR, "unable to load SimTower resources");
-            LOG(ERROR, "place SIMTOWER.EXE in the data directory or provide dumped bitmaps/sounds under data/bitmaps and data/sounds");
-            delete simtower;
-            exitCode = 1;
-            return;
-        }
-        if (bitmaps.usedFallback || sounds.usedFallback)
-            LOG(WARNING, "using synthetic placeholder resources because SimTower resources are unavailable");
-        else
-            LOG(WARNING, "using dumped SimTower resources from the data directory");
-    }
+    // --dump-resources is a CLI-only mode that extracts assets from
+    // SIMTOWER.EXE and exits. No window, no fallbacks, no dialogs.
     if (dumpResources)
     {
-        if (loadedSimTowerResources)
-        {
-            simtower->dump(dumpResourcesPath);
-        }
+        SimTowerLoader simtower(this);
+        if (simtower.load())
+            simtower.dump(dumpResourcesPath);
         else
-        {
             LOG(WARNING, "resource dumping requires SIMTOWER.EXE or SIMTOWER.EX_");
-        }
-        delete simtower;
-        simtower = NULL;
         return;
     }
-    delete simtower;
-    simtower = NULL;
-    // exitCode = 1;
+
+    // Acquire game resources one of three ways, in order of preference:
+    //   1. Extract from SIMTOWER.EXE / SIMTOWER.EX_
+    //   2. Pre-dumped bitmaps/sounds under data/bitmaps and data/sounds
+    //   3. YootTower plugins under data/Plugins (silent bonus fallback)
+    // If none are available we prompt the user to locate SIMTOWER.EXE.
+    bool loadedSimTowerResources = false;
+    {
+        SimTowerLoader simtower(this);
+        loadedSimTowerResources = simtower.load();
+    }
+
+    // Detect pre-dumped resources by real file presence. Note that
+    // BitmapManager/SoundManager always "succeed" by synthesising placeholder
+    // assets, so we can't use their return value to gate startup.
+    bool usingDumpedResources = false;
+    if (!loadedSimTowerResources)
+    {
+        usingDumpedResources =
+            data.exists("bitmaps/sky.png") &&
+            data.exists("bitmaps/ui/toolbox/tools.png") &&
+            data.exists("sounds/cock.wav");
+    }
+
+    // Detect YootTower plugins (silent bonus).
+    const int pluginCount = countYootTowerPlugins(this);
+    const bool usingPlugins = (pluginCount >= kMinEssentialPlugins);
+
+    // Last resort: nothing usable on disk. Offer to locate SIMTOWER.EXE.
+    if (!loadedSimTowerResources && !usingDumpedResources && !usingPlugins)
+    {
+        LOG(ERROR, "unable to locate SimTower resources, dumped bitmaps, or YootTower plugins");
+        for (;;)
+        {
+            std::string exePath;
+            NativeFileDialog::Result r = NativeFileDialog::openExecutableFile(
+                "OpenSkyscraper needs SIMTOWER.EXE - please locate it", exePath);
+            if (r != NativeFileDialog::Result::Selected)
+            {
+                LOG(ERROR, "no SIMTOWER.EXE selected. Place SIMTOWER.EXE in the data directory, "
+                           "provide dumped bitmaps/sounds under data/bitmaps and data/sounds, "
+                           "or YootTower plugins under data/Plugins");
+                exitCode = 1;
+                return;
+            }
+            Path dir = Path(exePath).up();
+            data.addSearchPath(dir);
+            SimTowerLoader simtower(this);
+            loadedSimTowerResources = simtower.load();
+            if (loadedSimTowerResources)
+                break;
+            LOG(WARNING, "selected file did not load as a SimTower executable: %s", exePath.c_str());
+        }
+    }
+
+    // Report which resource path we ended up on.
+    if (loadedSimTowerResources)
+    {
+        LOG(INFO, "loaded resources from SIMTOWER.EXE");
+    }
+    else if (usingDumpedResources)
+    {
+        LOG(WARNING, "using dumped SimTower resources from the data directory");
+    }
+    else
+    {
+        LOG(WARNING, "using YootTower plugins (%d/%zu essential found) with synthetic fallbacks "
+                     "for missing SimTower resources", pluginCount, sizeof(kEssentialYootPlugins)/sizeof(kEssentialYootPlugins[0]));
+    }
+    if (usingPlugins && (loadedSimTowerResources || usingDumpedResources))
+        LOG(INFO, "YootTower plugins also available (%d/%zu essential) - bonus content enabled",
+            pluginCount, sizeof(kEssentialYootPlugins)/sizeof(kEssentialYootPlugins[0]));
 
     videoMode = sf::VideoMode({static_cast<unsigned>(1280 * uiScale), static_cast<unsigned>(768 * uiScale)});
 

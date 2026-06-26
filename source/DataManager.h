@@ -12,6 +12,8 @@ namespace OT
 		typedef std::vector<Path> Paths;
 		
 		Paths paths(Path resource) const;
+		bool exists(Path resource) const;
+		void addSearchPath(Path dir, bool front = true);
 		
 	protected:
 		friend class Application;

@@ -44,7 +44,7 @@ void MainMenu::reloadGUI()
 
     tgui::Texture bgTx = tgui::Texture();
     {
-        const sf::Texture &bgTex = app.bitmaps["simtower/ui/menubg"];
+        const sf::Texture &bgTex = app.bitmaps["splashscreen"];
         bgTx.loadFromPixelData(bgTex.getSize(), bgTex.copyToImage().getPixelsPtr());
     }
     bgPicture = tgui::Picture::create(bgTx);

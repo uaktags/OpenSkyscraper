@@ -154,16 +154,27 @@ void YootCondo::encodeXML(tinyxml2::XMLPrinter &xml)
 	xml.PushAttribute("variant", variant);
 	xml.PushAttribute("lighting", lighting);
 	xml.PushAttribute("occupied", occupied);
+	xml.PushAttribute("population", population);
 }
 
 void YootCondo::decodeXML(tinyxml2::XMLElement &xml)
 {
 	Item::decodeXML(xml);
+	const bool hasPopulation = (xml.FindAttribute("population") != NULL);
 	rent = xml.IntAttribute("rent");
 	rentDeposit = xml.IntAttribute("rentDeposit");
 	variant = xml.IntAttribute("variant");
 	lighting = (LightingConditions)xml.IntAttribute("lighting");
 	occupied = xml.BoolAttribute("occupied");
+	if (occupied)
+	{
+		createOccupants();
+		population = hasPopulation ? xml.IntAttribute("population") : population;
+	}
+	else
+	{
+		population = 0;
+	}
 	updateSprite();
 }
 

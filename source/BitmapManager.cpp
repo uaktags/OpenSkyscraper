@@ -120,13 +120,22 @@ bool BitmapManager::load(Path name, sf::Texture & dst)
 		DataManager::Paths strippedPaths = app->data.paths(Path("bitmaps") + name.str().substr(internal_path.size()));
 		paths.insert(paths.end(), strippedPaths.begin(), strippedPaths.end());
 	}
+	// Top-level data assets (e.g. splashscreen.png shipped alongside the
+	// data/ dir rather than under data/bitmaps/) are searched next, so a
+	// request for "splashscreen" finds data/splashscreen.png.
+	{
+		DataManager::Paths topLevel = app->data.paths(name);
+		paths.insert(paths.end(), topLevel.begin(), topLevel.end());
+	}
 	paths.push_back(name);
 
 	// Try to load the bitmap.
 	bool success = false;
 	for (int i = 0; i < paths.size() && !success; i++) {
 		success = dst.loadFromFile(paths[i].c_str());
-		if (!success && paths[i].str().find('.') == std::string::npos) {
+		// Only append .png when the filename leaf has no extension. Checking
+		// the whole path is wrong: parent dirs like "../data" contain a dot.
+		if (!success && paths[i].name().find('.') == std::string::npos) {
 			success = dst.loadFromFile((paths[i].str() + ".png").c_str());
 		}
 	}

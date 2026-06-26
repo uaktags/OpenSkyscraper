@@ -22,19 +22,63 @@ namespace OT
 			return value;
 		}
 
+		// Filter description used by the platform dialogs. kind selects the
+		// extensions and default extension offered to the user.
+		enum class FileKind { Tower, Executable };
+		struct FilterInfo
+		{
+			std::string winFilter; // double-NUL terminated pair list for Win32
+			std::string defExt;
+			std::string zenityFilter;
+			std::string kdialogFilter;
+			std::string appleType;
+		};
+		// Build a Win32 lpstrFilter buffer (desc\0spec\0...\0\0) from pairs.
+		static std::string buildWinFilter(const char *desc, const char *spec)
+		{
+			std::string out;
+			out += desc;  out += '\0';
+			out += spec;  out += '\0';
+			out += "All files"; out += '\0';
+			out += "*.*"; out += '\0';
+			out += '\0';
+			return out;
+		}
+		static FilterInfo makeFilter(FileKind kind)
+		{
+			if (kind == FileKind::Executable)
+			{
+				FilterInfo f;
+				f.winFilter = buildWinFilter("Executables (*.exe;*.EX_)", "*.exe;*.EX_");
+				f.defExt = "exe";
+				f.zenityFilter = "Executables (*.exe *.EX_) | *.exe *.EX_";
+				f.kdialogFilter = "*.exe *.EX_|SimTower executable";
+				f.appleType = "";
+				return f;
+			}
+			FilterInfo f;
+			f.winFilter = buildWinFilter("Tower saves (*.tower)", "*.tower");
+			f.defExt = "tower";
+			f.zenityFilter = "Tower saves (*.tower) | *.tower";
+			f.kdialogFilter = "*.tower|Tower saves";
+			f.appleType = "tower";
+			return f;
+		}
+
 #ifdef _WIN32
-		static Result showWindowsDialog(const std::string &title, const std::string &defaultName, bool save, std::string &path)
+		static Result showWindowsDialog(const std::string &title, const std::string &defaultName, bool save, FileKind kind, std::string &path)
 		{
 			char filename[MAX_PATH] = {0};
 			strncpy(filename, defaultName.c_str(), sizeof(filename) - 1);
 
+			const FilterInfo filter = makeFilter(kind);
 			OPENFILENAMEA ofn;
 			memset(&ofn, 0, sizeof(ofn));
 			ofn.lStructSize = sizeof(ofn);
 			ofn.hwndOwner = GetActiveWindow();
 			ofn.lpstrTitle = title.c_str();
-			ofn.lpstrFilter = "Tower saves (*.tower)\0*.tower\0All files (*.*)\0*.*\0";
-			ofn.lpstrDefExt = "tower";
+			ofn.lpstrFilter = filter.winFilter.c_str();
+			ofn.lpstrDefExt = filter.defExt.c_str();
 			ofn.lpstrFile = filename;
 			ofn.nMaxFile = sizeof(filename);
 			ofn.Flags = OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
@@ -104,11 +148,12 @@ namespace OT
 			return path.empty() ? Result::Cancelled : Result::Selected;
 		}
 
-		static Result showAppleDialog(const std::string &title, const std::string &defaultName, bool save, std::string &path)
+		static Result showAppleDialog(const std::string &title, const std::string &defaultName, bool save, FileKind kind, std::string &path)
 		{
 			if (!commandExists("osascript"))
 				return Result::Unavailable;
 
+			const FilterInfo filter = makeFilter(kind);
 			std::string command = "osascript -e ";
 			if (save)
 			{
@@ -117,25 +162,29 @@ namespace OT
 			}
 			else
 			{
-				command += shellQuote("set f to choose file with prompt " + appleScriptQuote(title) +
-					" of type {\"tower\"}");
+				std::string typeClause;
+				if (!filter.appleType.empty())
+					typeClause = " of type {\"" + filter.appleType + "\"}";
+				command += shellQuote("set f to choose file with prompt " + appleScriptQuote(title) + typeClause);
 			}
 			command += " -e ";
 			command += shellQuote("POSIX path of f");
 			return runSelectionCommand(command, path);
 		}
 
-		static Result showUnixDialog(const std::string &title, const std::string &defaultName, bool save, std::string &path)
+		static Result showUnixDialog(const std::string &title, const std::string &defaultName, bool save, FileKind kind, std::string &path)
 		{
 #ifdef __APPLE__
-			return showAppleDialog(title, defaultName, save, path);
+			return showAppleDialog(title, defaultName, save, kind, path);
 #else
+			const FilterInfo filter = makeFilter(kind);
 			if (commandExists("zenity"))
 			{
-				std::string command = "zenity --file-selection --title=" + shellQuote(title) +
-					" --filename=" + shellQuote(defaultName) +
-					" --file-filter=" + shellQuote("Tower saves (*.tower) | *.tower") +
-					" --file-filter=" + shellQuote("All files | *");
+				std::string command = "zenity --file-selection --title=" + shellQuote(title);
+				if (!defaultName.empty())
+					command += " --filename=" + shellQuote(defaultName);
+				command += " --file-filter=" + shellQuote(filter.zenityFilter);
+				command += " --file-filter=" + shellQuote("All files | *");
 				if (save)
 					command += " --save --confirm-overwrite";
 				return runSelectionCommand(command, path);
@@ -145,9 +194,9 @@ namespace OT
 			{
 				std::string command = "kdialog ";
 				command += save ? "--getsavefilename " : "--getopenfilename ";
-				command += shellQuote(defaultName);
+				command += shellQuote(defaultName.empty() ? "." : defaultName);
 				command += " ";
-				command += shellQuote("*.tower|Tower saves");
+				command += shellQuote(filter.kdialogFilter);
 				command += " --title ";
 				command += shellQuote(title);
 				return runSelectionCommand(command, path);
@@ -161,18 +210,27 @@ namespace OT
 		Result openTowerFile(const std::string &title, const std::string &defaultName, std::string &path)
 		{
 #ifdef _WIN32
-			return showWindowsDialog(title, defaultName, false, path);
+			return showWindowsDialog(title, defaultName, false, FileKind::Tower, path);
 #else
-			return showUnixDialog(title, defaultName, false, path);
+			return showUnixDialog(title, defaultName, false, FileKind::Tower, path);
 #endif
 		}
 
 		Result saveTowerFile(const std::string &title, const std::string &defaultName, std::string &path)
 		{
 #ifdef _WIN32
-			return showWindowsDialog(title, defaultName, true, path);
+			return showWindowsDialog(title, defaultName, true, FileKind::Tower, path);
 #else
-			return showUnixDialog(title, defaultName, true, path);
+			return showUnixDialog(title, defaultName, true, FileKind::Tower, path);
+#endif
+		}
+
+		Result openExecutableFile(const std::string &title, std::string &path)
+		{
+#ifdef _WIN32
+			return showWindowsDialog(title, "SIMTOWER.EXE", false, FileKind::Executable, path);
+#else
+			return showUnixDialog(title, "", false, FileKind::Executable, path);
 #endif
 		}
 	}
