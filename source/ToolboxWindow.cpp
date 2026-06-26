@@ -402,19 +402,11 @@ tgui::Button::Ptr ToolboxWindow::makeItemButton(Item::AbstractPrototype* proto, 
 {
     if (proto->id == "yoot_condo")
     {
+        // Toolbox icon for the YootCondo is RT_BITMAP 100 inside the
+        // cataloged Condo.t2p plugin. Loads through BitmapManager's
+        // canonical plugin path (previously a bespoke YootCondo helper).
         sf::Texture yootIconTexture;
-        std::string pathStr;
-        DataManager::Paths possiblePaths = app->data.paths("Plugins/Condo.t2p");
-        for (const auto &p : possiblePaths) {
-            std::ifstream f(p.c_str());
-            if (f.good()) {
-                pathStr = p.str();
-                break;
-            }
-        }
-        if (!pathStr.empty()) {
-            Item::YootCondo::loadPEBitmap(pathStr, 100, yootIconTexture, sf::Color(255, 255, 255));
-        }
+        app->bitmaps.loadFromPlugin("Condo.t2p", 100, yootIconTexture, sf::Color(255, 255, 255));
         return makeButton(kCellW, kCellH, yootIconTexture, 0, state);
     }
     sf::Texture itemTexture = app->bitmaps["simtower/ui/toolbox/items"];

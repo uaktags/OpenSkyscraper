@@ -81,9 +81,6 @@ namespace OT
 			virtual void addPerson(Person *p) override;
 			virtual void removePerson(Person *p) override;
 
-		public:
-			static bool loadPEBitmap(const std::string &pluginPath, int resourceId, sf::Texture &texture, const sf::Color &maskColor = sf::Color::Transparent);
-
 		protected:
 			void generateJitters();
 			void moveOccupants();

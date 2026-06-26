@@ -1,11 +1,7 @@
 #include "YootCondo.h"
+#include "../BitmapManager.h"
 #include "../Game.h"
 #include "../Math/Rand.h"
-#include "../WindowsPEExecutable.h"
-#include <fstream>
-#include <iostream>
-#include <vector>
-#include <cstring>
 
 using namespace OT;
 using namespace OT::Item;
@@ -19,104 +15,24 @@ YootCondo::~YootCondo()
 	removeOccupants();
 }
 
-bool YootCondo::loadPEBitmap(const std::string &pluginPath, int resourceId, sf::Texture &texture, const sf::Color &maskColor)
-{
-	WindowsPEExecutable exe;
-	if (!exe.load(pluginPath)) {
-		LOG(ERROR, "Failed to load PE DLL: %s", pluginPath.c_str());
-		return false;
-	}
-
-	auto typeIt = exe.resources.find("2");
-	if (typeIt == exe.resources.end()) {
-		LOG(ERROR, "No RT_BITMAP resources in %s", pluginPath.c_str());
-		return false;
-	}
-
-	auto resIt = typeIt->second.find(resourceId);
-	if (resIt == typeIt->second.end()) {
-		LOG(ERROR, "Resource %d not found in %s", resourceId, pluginPath.c_str());
-		return false;
-	}
-
-	const auto &res = resIt->second;
-	if (!res.data || res.length < 40) {
-		LOG(ERROR, "Invalid resource data for %d in %s", resourceId, pluginPath.c_str());
-		return false;
-	}
-
-	// Prepend BMP file header (14 bytes) to DIB bytes
-	uint32_t header_size = *reinterpret_cast<const uint32_t *>(res.data);
-	uint16_t bit_count = *reinterpret_cast<const uint16_t *>(res.data + 14);
-
-	uint32_t clr_used = 0;
-	if (res.length >= 36) {
-		clr_used = *reinterpret_cast<const uint32_t *>(res.data + 32);
-	}
-
-	uint32_t palette_size = 0;
-	if (bit_count <= 8) {
-		if (clr_used == 0) {
-			palette_size = (1 << bit_count) * 4;
-		} else {
-			palette_size = clr_used * 4;
-		}
-	}
-
-	uint32_t bfOffBits = 14 + header_size + palette_size;
-	uint32_t bfSize = 14 + res.length;
-
-	std::vector<char> bmp_data(bfSize);
-	bmp_data[0] = 'B';
-	bmp_data[1] = 'M';
-	*reinterpret_cast<uint32_t *>(&bmp_data[2]) = bfSize;
-	*reinterpret_cast<uint16_t *>(&bmp_data[6]) = 0;
-	*reinterpret_cast<uint16_t *>(&bmp_data[8]) = 0;
-	*reinterpret_cast<uint32_t *>(&bmp_data[10]) = bfOffBits;
-
-	std::memcpy(&bmp_data[14], res.data, res.length);
-
-	sf::Image img;
-	if (!img.loadFromMemory(bmp_data.data(), bmp_data.size())) {
-		LOG(ERROR, "Failed to load image from memory for resource %d", resourceId);
-		return false;
-	}
-
-	if (maskColor != sf::Color::Transparent) {
-		img.createMaskFromColor(maskColor);
-	}
-
-	return texture.loadFromImage(img);
-}
-
 bool YootCondo::loadTextures(Game *game)
 {
 	if (texturesLoaded)
 		return true;
 
-	std::string pathStr;
-	DataManager::Paths possiblePaths = game->app.data.paths("Plugins/Condo.t2p");
-	for (const auto &p : possiblePaths) {
-		std::ifstream f(p.c_str());
-		if (f.good()) {
-			pathStr = p.str();
-			break;
-		}
-	}
+	// BitmapManager::loadFromPlugin is the canonical PE-bitmap loader
+	// (used to live here as YootCondo::loadPEBitmap). The plugin is
+	// resolved through PluginManager's catalog, so we no longer need to
+	// walk data search paths manually.
+	const std::string pluginName = "Condo.t2p";
+	LOG(INFO, "Loading YootTower Condo textures from plugin %s", pluginName.c_str());
 
-	if (pathStr.empty()) {
-		LOG(ERROR, "Could not find Condo.t2p plugin in any data directories!");
+	if (!game->app.bitmaps.loadFromPlugin(pluginName, 1000, emptyCondoTexture, sf::Color(105, 33, 104))) {
+		LOG(ERROR, "Failed to load empty condo texture (1000) from %s", pluginName.c_str());
 		return false;
 	}
-
-	LOG(INFO, "Loading YootTower Condo textures from: %s", pathStr.c_str());
-
-	if (!loadPEBitmap(pathStr, 1000, emptyCondoTexture, sf::Color(105, 33, 104))) {
-		LOG(ERROR, "Failed to load empty condo texture (1000)");
-		return false;
-	}
-	if (!loadPEBitmap(pathStr, 1100, residentTexture, sf::Color(255, 255, 255))) {
-		LOG(ERROR, "Failed to load resident texture (1100)");
+	if (!game->app.bitmaps.loadFromPlugin(pluginName, 1100, residentTexture, sf::Color(255, 255, 255))) {
+		LOG(ERROR, "Failed to load resident texture (1100) from %s", pluginName.c_str());
 		return false;
 	}
 

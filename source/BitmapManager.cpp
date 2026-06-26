@@ -2,6 +2,9 @@
 #include "Application.h"
 #include "BitmapManager.h"
 #include "DataManager.h"
+#include "PluginBitmapLoader.h"
+#include "PluginManager.h"
+
 #include <SFML/Graphics/Image.hpp>
 
 using namespace OT;
@@ -149,4 +152,22 @@ bool BitmapManager::load(Path name, sf::Texture & dst)
 		LOG(WARNING, "using fallback bitmap '%s'", name.c_str());
 	}
 	return success;
+}
+
+bool BitmapManager::loadFromPlugin(const std::string & pluginName, int resourceId,
+                                   sf::Texture & dst,
+                                   const sf::Color & maskColor)
+{
+	Plugin * plugin = app->pluginManager.get(pluginName);
+	if (!plugin) {
+		LOG(WARNING, "BitmapManager: plugin '%s' not cataloged", pluginName.c_str());
+		return false;
+	}
+	if (!PluginBitmapLoader::loadFromPlugin(*plugin, resourceId, dst, maskColor)) {
+		LOG(WARNING, "BitmapManager: RT_BITMAP id %d missing in %s",
+		    resourceId, pluginName.c_str());
+		return false;
+	}
+	LOG(DEBUG, "loaded plugin bitmap %s/%d", pluginName.c_str(), resourceId);
+	return true;
 }

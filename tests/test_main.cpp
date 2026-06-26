@@ -15,6 +15,7 @@
 #include "../source/JudgeSystem.h"
 #include "../source/LevelUp.h"
 #include "../source/PluginManager.h"
+#include "../source/PluginBitmapLoader.h"
 
 static int g_failures = 0;
 
@@ -474,6 +475,59 @@ static void testPluginManager()
     EXPECT(spFormat >= 30);
 }
 
+// PluginBitmapLoader seam: rasterize RT_BITMAP resources from PE/SP
+// plugins. Lifted from YootCondo::loadPEBitmap; the calibration oracle
+// is scratch/extract_t2p_stairs.py, which knows the exact dimensions
+// of the Stair.t2p spiral-staircase resource.
+static void testPluginBitmapLoader()
+{
+    using OT::Plugin;
+    using OT::PluginBitmapLoader;
+
+    // Condo.t2p RT_BITMAP 1000 is the YootCondo empty-room sheet. The
+    // YootCondo class loads it at runtime via the previous loadPEBitmap;
+    // verify the loader produces a valid texture of the expected size.
+    // Known dimensions (verified against the actual sheet): the sheet
+    // holds 3 variants x 5 lighting states = 15 frames of 128x24 stacked
+    // vertically, for a total of 128 wide x 360 tall. The YootCondo
+    // rendering code indexes it as IntRect(0, frameIndex * 24, 128, 24).
+    sf::Texture condo;
+    bool ok = PluginBitmapLoader::loadFromPEFile("../data/Plugins/Condo.t2p", 1000, condo);
+    EXPECT(ok);
+    if (ok) {
+        const sf::Vector2u sz = condo.getSize();
+        EXPECT(sz.x == 128);
+        EXPECT(sz.y == 360);
+    }
+
+    // Stair.t2p RT_BITMAP 1000 is the spiral-staircase sheet. Per
+    // scratch/extract_t2p_stairs.py:11-13, it is a single 64x288 sheet
+    // containing three vertical slices:
+    //   Span 2 (2-story): (0, 0,   64, 60)
+    //   Span 3 (3-story): (0, 60,  64, 156)
+    //   Span 4 (4-story): (0, 156, 64, 288)
+    // The total dimensions are the calibration target.
+    sf::Texture stair;
+    ok = PluginBitmapLoader::loadFromPEFile("../data/Plugins/Stair.t2p", 1000, stair);
+    EXPECT(ok);
+    if (ok) {
+        const sf::Vector2u sz = stair.getSize();
+        EXPECT(sz.x == 64);
+        EXPECT(sz.y == 288);
+    }
+
+    // Missing resource / file return false cleanly.
+    sf::Texture dummy;
+    EXPECT(!PluginBitmapLoader::loadFromPEFile("../data/Plugins/Condo.t2p", 99999, dummy));
+    EXPECT(!PluginBitmapLoader::loadFromPEFile("../data/Plugins/DoesNotExist.t2p", 1000, dummy));
+
+    // rasterizeBitmapResource on null/garbage fails cleanly without
+    // crashing. This is the lower-level seam that takes raw DIB bytes.
+    EXPECT(!PluginBitmapLoader::rasterizeBitmapResource(nullptr, 0, dummy));
+    const char garbage[40] = {0};
+    EXPECT(!PluginBitmapLoader::rasterizeBitmapResource(garbage, sizeof(garbage), dummy));
+}
+
 int main()
 {
 	testSmoke();
@@ -488,6 +542,7 @@ int main()
 	testWindowsPEExecutable();
 	testWindowsSPExecutable();
 	testPluginManager();
+	testPluginBitmapLoader();
 
     if (g_failures > 0)
     {
