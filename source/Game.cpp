@@ -29,6 +29,7 @@ Game::Game(Application & app)
 	lighting(this),
 	decorations(this),
 	vipSystem(this),
+	eventSystem(this),
 	levelUpDialog(this)
 {
 	//mapWindow     = NULL;
@@ -127,6 +128,7 @@ void Game::clearWorld()
 	playingSounds.clear();
 	soundPlayTimes.clear();
 	vipSystem.reset();
+	eventSystem.reset();
 	levelUpDialog.close();
 }
 
@@ -242,6 +244,14 @@ bool Game::handleEvent(sf::Event & event)
 		case EventType::MouseButtonPressed: {
 			if (toolboxWindow.window && toolboxWindow.window->isMouseOnWidget(tgui::Vector2f(mousePosition.x, mousePosition.y)))
 				return false;
+
+			// Emergency events take priority over all other click actions.
+			// If a fire or bomb is active, clicking the event location
+			// dispatches the helicopter / defuses the bomb.
+			if (eventSystem.isActive()) {
+				if (eventSystem.handleClick(toolPosition))
+					return true;
+			}
 
 			float2 mousePoint(mousePosition.x, mousePosition.y);
 			//rectf toolboxWindowRect(float2(toolboxWindow.window->getAbsolutePosition().x, toolboxWindow.window->getAbsolutePosition().y), float2(toolboxWindow.window->GetClientWidth(), toolboxWindow.window->GetClientHeight()));
@@ -849,6 +859,7 @@ void Game::advance(double dt)
 	sky.advance(dt);
 	lighting.advance(dt);
 	vipSystem.advance(dt);
+	eventSystem.advance(dt);
 	toolboxWindow.update();
 
 	for (ItemSet::iterator i = items.begin(); i != items.end(); i++) {
@@ -1045,6 +1056,10 @@ void Game::advance(double dt)
 			drawnSprites++;
 		}
 	}
+
+	// Draw active emergency events (fire, bomb alerts) on top of everything
+	// so the player can always see and click them.
+	win.draw(eventSystem);
 
 	//Highlight the item below the cursor.
 	if (!toolPrototype && itemBelowCursor) {
@@ -1364,6 +1379,9 @@ void Game::encodeXML(tinyxml2::XMLPrinter & xml)
 	// Persist VIP scheduling state so visits don't reset on save/reload.
 	vipSystem.encodeXML(xml);
 
+	// Persist event scheduling state (next event time).
+	eventSystem.encodeXML(xml);
+
 	xml.OpenElement("money");
 	xml.PushAttribute("todayIncome", money.todayIncome);
 	xml.PushAttribute("todayExpenses", money.todayExpenses);
@@ -1468,6 +1486,9 @@ void Game::decodeXML(tinyxml2::XMLDocument & xml)
 	// Restore VIP scheduling state (no-op on older saves - all fields
 	// default to fresh-tower values inside decodeXML).
 	vipSystem.decodeXML(*root);
+
+	// Restore event scheduling state (no-op on older saves).
+	eventSystem.decodeXML(*root);
 
 	tinyxml2::XMLElement * e = root->FirstChildElement("item");
 	while (e) {

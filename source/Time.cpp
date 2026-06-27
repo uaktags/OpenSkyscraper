@@ -6,14 +6,10 @@ using namespace OT;
 const static double kDayDuration = 3.2; // minutes / game day
 const double Time::kBaseSpeed    = 1.0 / 60 / kDayDuration; // game days / second
 
-const static double kNightStartHour = 19.0;
-const static double kNightEndHour   = 7.0;
-const static double kNightSpeedMultiplier = 2.0;
-
-static bool isNightHour(double hour)
-{
-	return hour >= kNightStartHour || hour < kNightEndHour;
-}
+// Time-constant (seconds) for the speed ramp. With a frame-rate-independent
+// exponential approach this converges ~63% in tau seconds regardless of fps,
+// eliminating the rubberbanding the old dt-weighted blend produced.
+const static double kSpeedRampTau = 0.25;
 
 
 double Time::absoluteToHour(double a)
@@ -90,17 +86,26 @@ void Time::set(double t)
 
 void Time::advance(double dt)
 {
+	// Frame-rate-independent exponential ramp toward the target speed.
+	// The old formula (speed*dt + sa*0.1)/(dt+0.1) coupled the convergence
+	// rate to the frame delta, so hitches and vsync drift made the apparent
+	// game speed oscillate ("rubberband"). (1 - exp(-dt/tau)) is the exact
+	// discrete-time first-order filter and is identical for any fixed fps.
 	if (speed_animated != speed) {
 		if (speed < 1) {
-			speed_animated = speed;
+			speed_animated = speed; // pause is instant
 		} else {
-			speed_animated = (speed * dt + speed_animated * 0.1) / (dt + 0.1);
+			double alpha = 1.0 - exp(-dt / kSpeedRampTau);
+			speed_animated += (speed - speed_animated) * alpha;
 			if (fabs(speed_animated - speed) < 1e-2) speed_animated = speed;
 		}
 	}
-	
-	double multiplier = isNightHour(hour) ? kNightSpeedMultiplier : 1.0;
-	set(absolute + dt * kBaseSpeed * speed_animated * multiplier);
+
+	// No night multiplier: absoluteToHour already maps absolute time
+	// non-linearly (night hours occupy far fewer frames than daytime ones),
+	// so night visibly passes faster without a hard 2x binary switch that
+	// caused the jarring speed jump at 19:00 / 07:00.
+	set(absolute + dt * kBaseSpeed * speed_animated);
 }
 
 /** Returns the current time in a fraction of hours in a day. */

@@ -20,10 +20,12 @@ namespace
 {
 	// Tunables. Keep these in one place so they're easy to find when
 	// balancing the system against the SimTower original.
-	const double kMinPopForVip     = 100;       // tower needs some momentum
+	const double kMinPopForVip     = 150;       // tower needs real momentum
 	const int    kMinRatingForVip  = 1;         // 2-star tower minimum
-	const double kVisitGapMinDays  = 3.0;       // earliest gap between visits
-	const double kVisitGapMaxDays  = 8.0;       // latest gap
+	// VIPs are rare special occasions in the original, not weekly. A game
+	// "year" is 12 days, so ~3-7 week gaps make visits feel earned.
+	const double kVisitGapMinDays  = 21.0;      // ~3 weeks in-game
+	const double kVisitGapMaxDays  = 50.0;      // ~7 weeks in-game
 	const double kVisitDurationAbs = 2.0 / 24;  // ~2 game-hours on premises
 	const int    kSatisfiedReward  = 50000;     // cash bonus on positive review
 	const double kGoodEvalThreshold  = 55.0;    // avg eval above this = positive
@@ -127,7 +129,7 @@ void VipSystem::endVisit()
 	// Schedule the next visit. A bad review pushes the next VIP further out
 	// so the player has time to fix issues before being re-judged.
 	const double baseGapDays = randDays(kVisitGapMinDays, kVisitGapMaxDays);
-	const double extraGapDays = (score < kGoodEvalThreshold) ? 3.0 : 0.0;
+	const double extraGapDays = (score < kGoodEvalThreshold) ? 14.0 : 0.0;
 	nextVisitTime = game->time.absolute + Time::hourToAbsolute(24.0 * (baseGapDays + extraGapDays));
 
 	game->ratingMayIncrease();

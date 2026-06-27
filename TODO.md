@@ -18,8 +18,10 @@ General / Cross-cutting
 ### [DONE] Pausing doesn't affect elevators
 When pausing the game, elevators keep moving as if the game was unpaused. They react to speedup by moving faster — investigate why they don't react to the speeddown.
 
-### Game Speed
+### [DONE] Game Speed
 Game speed seems rather fast compared to elevator movements. Cinema customers hardly arrive at the theatre in time. Slow down time, or speed up elevators?
+
+**[DONE] Speed rubberbanding fixed** — the old `speed_animated` smoothing `(speed*dt + sa*0.1)/(dt+0.1)` coupled convergence to frame delta, and a binary `kNightSpeedMultiplier=2.0` caused a jarring 2× speed jump at 19:00 / 07:00. Fixed: smoothing is now frame-rate-independent exponential `(1-exp(-dt/tau))`; the night multiplier was removed entirely (the non-linear `absoluteToHour` mapping already makes night hours pass faster without a hard binary switch). Tests updated accordingly.
 
 ### [DONE] Different Access Floors for Items
 People enter all items on floor 0 (relative to the item). Certain items (Metro station, Cinema) are accessed via floor 1. The item prototype should carry a field that enables a relative shift of the access floor.
@@ -177,17 +179,20 @@ Phase 3: Game Systems                                        [PARTIAL — 3.1/3.
     - [DONE] Construction handler rejects placement below `LevelUp::minRatingToBuild()` with a clear reason.
     - [DONE] `ToolboxWindow` greys out locked items with "Unlocks at N stars" tooltip; reloads on promotion.
     - [DONE] Promotion message via `TimeWindow.showMessage()`.
-    - [DONE] **VIP visits** — `source/VipSystem.{h,cpp}` schedules random VIP visits once the tower hits 2★ / 100+ population (3–8 day gaps, longer after a bad review). Each ~2h visit evaluates the latest judge pass and grants a cash bonus (full $50k for excellent, half for content) or a complaint. State persists across save/reload via `vipNextVisit` / `vipVisiting` attributes; `positiveReviews()` is intended to gate the Cathedral ending.
+    - [DONE] **VIP visits** — `source/VipSystem.{h,cpp}` schedules random VIP visits once the tower hits 2★ / 150+ population (21–50 day gaps, 14 extra days after a bad review — tuned down from the original 3–8 days which was far too frequent). Each ~2h visit evaluates the latest judge pass and grants a cash bonus (full $50k for excellent, half for content) or a complaint. State persists across save/reload via `vipNextVisit` / `vipVisiting` attributes; `positiveReviews()` is intended to gate the Cathedral ending.
     - [DONE] **Level-up dialog window** — `source/LevelUpDialog.{h,cpp}` TGUI modal pops up on every promotion showing the new star count and the comma-separated list of freshly-unlocked prototypes (driven by `LevelUp::minRatingToBuild`). Closes on OK button, title-bar X, or Escape; auto-closed on `clearWorld()`.
     - [ ] **Cathedral "Tower of the Year"** ending — needs a Cathedral item (none exists yet); the VIP `positiveReviews` counter is plumbed for future gating.
     - [ ] Spawn an actual walking VIP sprite (currently the visit is abstract).
 
-- [ ] **3.3 Fire / Emergency / Thief events** — No files exist. Priority LOW.
-    - [ ] `EventScheduler` randomly triggers events based on time + rating.
-    - [ ] Fire: floor-to-floor spreading, helicopter extinguish, water spray.
-    - [ ] Terror: bomb threats, player defusal minigame.
+- [PARTIAL] **3.3 Fire / Emergency / Terror events** — `source/EventSystem.{h,cpp}` landed. Art (fire/large, fire/small, fire/chopper, fire/destroyed, alerts/fire, alerts/terrorist, alerts/chopper) was already loaded by SimTowerLoader but unused; now wired up.
+    - [DONE] `EventSystem` scheduler — randomly triggers fire (70%) or terror (30%) based on time + 2★ rating. Events spaced 30–90 in-game days apart (first at 15 days).
+    - [DONE] Fire: ignites at a random tenant, spreads floor-to-floor every ~15 game-min, applies stress + eval penalty to occupants. Click the blaze to dispatch helicopter ($10k), arrives after ~30 game-min and extinguishes.
+    - [DONE] Terror: bomb threat with ~2 game-hour countdown. Click the blinking alert to defuse. Detonation damages nearby tenants ($80k + heavy stress).
+    - [DONE] Rendering — fire animation (4-frame cycle), helicopter fly-in sweep, alert icons. Drawn on top of all items.
+    - [DONE] Save/load — `nextEventTime` persisted; active events cleared on reload (intentional).
     - [ ] Thief: targets tenants, calls police, existing `Security` item becomes functional (currently STUB).
     - [ ] Emergency mode: reset all person states, evacuate.
+    - [ ] Water spray effect (player extinguishing with fire extinguisher).
 
 - [PARTIAL] **3.4 Weather / Environment (CLUT equivalent)** — `source/Lighting.{h,cpp}` landed.
     - [DONE] `Lighting` manager class — extends `GameObject`, refreshed once per frame from `Game::advance()` after `Sky::advance()`.
@@ -380,12 +385,12 @@ Reference Index (codemap.md → implementation)
 | Count/Statistics                  | codemap.md:414-447    | —                               | MISSING  |
 | Draw utilities                    | codemap.md:518-550    | source/Sprite.*                 | REIMPL   |
 | Dust/Cleaning                     | codemap.md:586-618    | —                               | MISSING  |
-| Emergency                         | codemap.md:749-773    | —                               | MISSING  |
+| Emergency                         | codemap.md:749-773    | source/EventSystem.*            | PARTIAL  |
 | End/Cleanup                       | codemap.md:775-801    | source/Game::clearWorld         | PORTED   |
-| Event/Fire/Terror                 | codemap.md:833-862    | —                               | MISSING  |
+| Event/Fire/Terror                 | codemap.md:833-862    | source/EventSystem.*            | PARTIAL  |
 | File operations                   | codemap.md:864-893    | source/Game encode/decode XML   | PARTIAL  |
 | Find dialogs                      | codemap.md:895-956    | —                               | MISSING  |
-| Fire                              | codemap.md:958-990    | —                               | MISSING  |
+| Fire                              | codemap.md:958-990    | source/EventSystem.*            | PARTIAL  |
 | Guard/Security                    | codemap.md:1020-1049  | source/Item/Security.*          | STUB     |
 | Hotel                             | codemap.md:1051-1098  | source/Item/Hotel.*             | PORTED   |
 | Info destination                  | codemap.md:1124-1146  | —                               | MISSING  |

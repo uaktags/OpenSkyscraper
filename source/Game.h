@@ -28,6 +28,7 @@
 #include "JudgeSystem.h"
 #include "LevelUp.h"
 #include "VipSystem.h"
+#include "EventSystem.h"
 
 namespace OT {
 	namespace Item { class AbstractPrototype; }
@@ -169,6 +170,12 @@ namespace OT {
 		/// visits once the tower reaches 2 stars / 100+ population, and
 		/// grants bonuses (or complaints) based on the latest judge pass.
 		VipSystem vipSystem;
+
+		/// Emergency event system (Phase 3.3). Schedules rare fire and
+		/// terror (bomb) events that require player intervention. Art is
+		/// loaded by SimTowerLoader (fire/large, fire/chopper, alerts/*);
+		/// this system renders and drives the event lifecycle.
+		EventSystem eventSystem;
 
 	public:
 		void encodeXML(tinyxml2::XMLPrinter & xml);

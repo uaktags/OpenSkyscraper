@@ -17,6 +17,7 @@
 #include "../source/JudgeSystem.h"
 #include "../source/LevelUp.h"
 #include "../source/PluginManager.h"
+#include "../source/PluginResources.h"
 #include "../source/PluginBitmapLoader.h"
 
 static int g_failures = 0;
@@ -113,13 +114,17 @@ static void testNightSpeedMultiplier()
     const double nightStart = night.absolute;
     night.advance(dt);
     const double nightDelta = night.absolute - nightStart;
-    EXPECT(nightDelta > dayDelta * 1.5);
+    // Without the old binary night multiplier, absolute time advances at a
+    // uniform rate (no rubberbanding). The non-linear absoluteToHour mapping
+    // still makes PERCEIVED night hours pass faster.
+    EXPECT_NEAR(nightDelta, dayDelta, 1e-12);
 
     TestTime at19;
     at19.set(Time::hourToAbsolute(19.0));
     const double at19Start = at19.absolute;
     at19.advance(dt);
-    EXPECT(at19.absolute - at19Start > dayDelta * 1.5);
+    // 19:00 was the old binary switch boundary; verify no speed jump now.
+    EXPECT_NEAR(at19.absolute - at19Start, dayDelta, 1e-12);
 
     TestTime at7;
     at7.set(Time::hourToAbsolute(7.0));
@@ -577,6 +582,260 @@ static void testPluginResourcesByType()
     EXPECT(broken.resourcesByType().empty());
 }
 
+// PluginResources seam: typed parsers for the HIGH-confidence resource
+// types documented in doc/yoottower/resource-formats.md. Tests run at two
+// levels:
+//   (a) byte-level: hand-crafted buffers from the calibration hex dumps
+//       (the proof that the layouts reproduce known game data).
+//   (b) integration: Plugin::getAttr/getDesc/getDpdf on real vendored
+//       plugins (the proof that PluginManager wires the parsers correctly).
+static void testFourCC()
+{
+    using OT::FourCC;
+    FourCC f;
+    f.c[0]='G'; f.c[1]='R'; f.c[2]='U'; f.c[3]='B';
+    EXPECT(f == "GRUB");
+    EXPECT(f != "BURG");
+    // A 5-char string must not match a 4-char code.
+    EXPECT(f != "GRUBX");
+    // Short string doesn't match either.
+    EXPECT(f != "GRU");
+    EXPECT(f.str() == "GRUB");
+    // lPnT as bytes == 0x546E506C, the literal ConstructProgramPlugin passes.
+    FourCC lpnt; lpnt.c[0]='l'; lpnt.c[1]='P'; lpnt.c[2]='n'; lpnt.c[3]='T';
+    EXPECT(lpnt.toUint32LE() == 0x546E506Cu);
+
+    FourCC a, b;
+    a.c[0]='A'; a.c[1]='B'; a.c[2]='C'; a.c[3]='D';
+    b = a;
+    EXPECT(a == b);
+}
+
+static void testParseAttrBinary()
+{
+    using OT::PluginAttr;
+    // Exact bytes of Coin.t2p ATTR id=128 (49 B incl. trailing pad NUL):
+    //   v=1 mItemType=ADEM f5=16 "****" gameLevel=3 mustItem=0 mID=1683
+    //   name="Coin Press Machine"
+    static const unsigned char kCoin[] = {
+        0x01,
+        'A','D','E','M',
+        0x10,0x00,0x00,0x00,
+        '*','*','*','*',
+        0x03,0x00,0x00,0x00,
+        0x00,0x00,0x00,0x00,
+        0x93,0x06,0x00,0x00,
+        0x00,0x00,0x00,0x00,
+        0x12,
+        'C','o','i','n',' ','P','r','e','s','s',' ','M','a','c','h','i','n','e',
+        0x00  // trailing pad
+    };
+    PluginAttr a;
+    const bool ok = OT::parsePluginAttr(reinterpret_cast<const char *>(kCoin),
+                                        int(sizeof(kCoin)), a);
+    EXPECT(ok);
+    if (ok) {
+        EXPECT(a.valid);
+        EXPECT(!a.isTextForm);
+        EXPECT(a.version == 1);
+        EXPECT(a.itemType == "ADEM");
+        EXPECT(a.marker == "****");
+        EXPECT(a.gameLevel == 3u);      // Coin unlocks at Star 3
+        EXPECT(a.mustItem == 0u);
+        EXPECT(a.id == 1683u);
+        EXPECT(a.name == "Coin Press Machine");
+    }
+
+    // The marker field is variable: "****" on most plugins, "NORF" on the
+    // hotel-room family (Singleroom/Suiteroom/Twinroom/Maintenance). The
+    // parser must accept either (discovered in the population sweep).
+    static const unsigned char kNorf[] = {
+        0x01, 'N','E','R','H',              // Apartment-style itemType
+        0x02,0x00,0x00,0x00,
+        'N','O','R','F',                    // hotel-room marker
+        0x01,0x00,0x00,0x00, 0,0,0,0, 0x4e,0x04,0,0, 0,0,0,0,
+        0x09, 'R','o','o','m',' ','t','e','s','t'
+    };
+    PluginAttr norf;
+    const bool norfOk = OT::parsePluginAttr(reinterpret_cast<const char *>(kNorf),
+                                            int(sizeof(kNorf)), norf);
+    EXPECT(norfOk);
+    if (norfOk) {
+        EXPECT(norf.marker == "NORF");
+        EXPECT(norf.name == "Room test");
+    }
+
+    // Truncated / null input is rejected cleanly (no crash).
+    PluginAttr bad;
+    EXPECT(!OT::parsePluginAttr(nullptr, 0, bad));
+    EXPECT(!OT::parsePluginAttr(reinterpret_cast<const char *>(kCoin), 5, bad));
+}
+
+static void testParseAttrText()
+{
+    using OT::PluginAttr;
+    // DefaultToolPalette's text-form ATTR. The integer mItemType decodes
+    // back to the "LPOT" 4cc (the same value as its DESC classTag).
+    static const char kText[] =
+        "(mID)\t\t1000\r\n"
+        "(mAttrib)\t16777215\r\n"
+        "(mDependID)\t0\r\n"
+        "(mGameLevel)\t1\r\n"
+        "(mSecretItem)\t0\r\n"
+        "(mItemType)\t1414484044\r\n"
+        "(mMustItem)\t1\r\n"
+        "(mPluginName)\tDefault Tool palette\r\n";
+    PluginAttr a;
+    const bool ok = OT::parsePluginAttr(kText, int(sizeof(kText) - 1), a);
+    EXPECT(ok);
+    if (ok) {
+        EXPECT(a.valid);
+        EXPECT(a.isTextForm);
+        EXPECT(a.id == 1000u);
+        EXPECT(a.attrib == 16777215u);
+        EXPECT(a.gameLevel == 1u);
+        EXPECT(a.mustItem == 1u);
+        EXPECT(a.itemType == "LPOT");              // 1414484044 == 0x544F504C
+        EXPECT(a.name == "Default Tool palette");
+    }
+}
+
+static void testParseDesc()
+{
+    using OT::PluginDesc;
+    auto check = [](const char * bytes, int len, const char * tag,
+                    PluginDesc::Kind kind) {
+        PluginDesc d;
+        const bool ok = OT::parsePluginDesc(bytes, len, d);
+        EXPECT(ok);
+        if (ok) {
+            EXPECT(d.valid);
+            EXPECT(d.version == 1);
+            EXPECT(d.classTag == tag);
+            EXPECT(d.value == 3u);
+            EXPECT(d.kind == kind);
+        }
+    };
+    // lPnT (0x546E506C) -> TenantPlugin
+    static const char kTenant[] = {0x01,'l','P','n','T', 3,0,0,0};
+    check(kTenant, 9, "lPnT", PluginDesc::TenantPlugin);
+    // lPvM (0x4D76506C) -> MoverPlugin
+    static const char kMover[]  = {0x01,'l','P','v','M', 3,0,0,0};
+    check(kMover, 9, "lPvM", PluginDesc::MoverPlugin);
+    // LPOT (0x544F504C) -> ToolPalette
+    static const char kPalette[]= {0x01,'L','P','O','T', 3,0,0,0};
+    check(kPalette, 9, "LPOT", PluginDesc::ToolPalette);
+
+    // Unknown tag still parses; kind stays Unknown (forward-compatible for
+    // plugin kinds we haven't calibrated yet, e.g. T2EquipPlugin).
+    static const char kUnk[] = {0x01,'l','P','e','Q', 3,0,0,0};
+    PluginDesc u;
+    EXPECT(OT::parsePluginDesc(kUnk, 9, u));
+    EXPECT(u.kind == PluginDesc::Unknown);
+    EXPECT(u.classTag == "lPeQ");
+
+    // Truncation is rejected.
+    PluginDesc bad;
+    EXPECT(!OT::parsePluginDesc(nullptr, 0, bad));
+    EXPECT(!OT::parsePluginDesc(kTenant, 5, bad));
+}
+
+static void testParseDpdf()
+{
+    using OT::PluginDpdf;
+    // Coin.t2p / Burger.t2p DPDF id=128: 70, 50, 100, 80.
+    static const char kCoin[] = {
+        0x01,
+        70,0,0,0, 50,0,0,0, 100,0,0,0, 80,0,0,0
+    };
+    PluginDpdf d;
+    const bool ok = OT::parsePluginDpdf(kCoin, int(sizeof(kCoin)), d);
+    EXPECT(ok);
+    if (ok) {
+        EXPECT(d.valid);
+        EXPECT(d.version == 1);
+        EXPECT(d.w == 70u);
+        EXPECT(d.h == 50u);
+        EXPECT(d.baseX == 100u);
+        EXPECT(d.baseY == 80u);
+    }
+    // Truncation.
+    PluginDpdf bad;
+    EXPECT(!OT::parsePluginDpdf(nullptr, 0, bad));
+    EXPECT(!OT::parsePluginDpdf(kCoin, 10, bad));
+}
+
+// Integration: the Plugin accessors reach into the real vendored plugins
+// and reproduce the calibration values end-to-end.
+static void testPluginTypedAccessors()
+{
+    using OT::Plugin;
+    using OT::PluginDesc;
+    using OT::PluginAttr;
+    using OT::PluginDpdf;
+
+    Plugin condo("Condo.t2p", "../data/Plugins/Condo.t2p");
+    EXPECT(condo.ensureLoaded());
+
+    PluginAttr a;
+    EXPECT(condo.getAttr(a));
+    if (a.valid) {
+        EXPECT(a.itemType == "TRPA");
+        EXPECT(a.id == 1101u);
+        EXPECT(a.gameLevel == 1u);
+        EXPECT(a.name == "Condo");
+    }
+    PluginDesc d;
+    EXPECT(condo.getDesc(d));
+    EXPECT(d.kind == PluginDesc::TenantPlugin);
+
+    Plugin stair("Stair.t2p", "../data/Plugins/Stair.t2p");
+    EXPECT(stair.ensureLoaded());
+    PluginAttr sa;
+    EXPECT(stair.getAttr(sa));
+    if (sa.valid) {
+        EXPECT(sa.itemType == "RATS");
+        EXPECT(sa.id == 1800u);
+        EXPECT(sa.name == "Stairs");
+    }
+    PluginDesc sd;
+    EXPECT(stair.getDesc(sd));
+    EXPECT(sd.kind == PluginDesc::MoverPlugin);
+
+    // Coin carries DPDF; Stair does not (transport uses MVDF instead).
+    Plugin coin("Coin.t2p", "../data/Plugins/Coin.t2p");
+    EXPECT(coin.ensureLoaded());
+    PluginDpdf dp;
+    EXPECT(coin.getDpdf(dp));
+    if (dp.valid) {
+        EXPECT(dp.w == 70u);
+        EXPECT(dp.h == 50u);
+    }
+    PluginDpdf nodp;
+    EXPECT(!stair.getDpdf(nodp));
+
+    // Text-form ATTR integration: DefaultToolPalette.
+    Plugin pal("DefaultToolPalette.t2p", "../data/Plugins/DefaultToolPalette.t2p");
+    EXPECT(pal.ensureLoaded());
+    PluginAttr pa;
+    EXPECT(pal.getAttr(pa));
+    if (pa.valid) {
+        EXPECT(pa.isTextForm);
+        EXPECT(pa.itemType == "LPOT");
+        EXPECT(pa.id == 1000u);
+    }
+    PluginDesc pd;
+    EXPECT(pal.getDesc(pd));
+    EXPECT(pd.kind == PluginDesc::ToolPalette);
+
+    // Broken plugin: accessors return false, no crash.
+    Plugin broken("broken.t2p", "../data/Plugins/DoesNotExist.t2p");
+    PluginAttr ba; PluginDesc bb; PluginDpdf bc;
+    EXPECT(!broken.getAttr(ba));
+    EXPECT(!broken.getDesc(bb));
+    EXPECT(!broken.getDpdf(bc));
+}
+
 int main()
 {
 	testSmoke();
@@ -593,6 +852,12 @@ int main()
 	testPluginManager();
 	testPluginBitmapLoader();
 	testPluginResourcesByType();
+	testFourCC();
+	testParseAttrBinary();
+	testParseAttrText();
+	testParseDesc();
+	testParseDpdf();
+	testPluginTypedAccessors();
 
     if (g_failures > 0)
     {
