@@ -202,10 +202,6 @@ void Item::render(sf::RenderTarget &target) const
 	// background) and distribute people across the item's footprint.
 	if (!people.empty() && !underConstruction)
 	{
-		static sf::Texture * peopleTex = nullptr;
-		if (!peopleTex)
-			peopleTex = &app->bitmaps["simtower/people"];
-
 		const int itemWidthPx = size.x * 8;
 		const int frameW = 16;
 		const int frameH = 24;
@@ -216,8 +212,32 @@ void Item::render(sf::RenderTarget &target) const
 		for (People::iterator ip = people.begin(); ip != people.end(); ++ip, ++idx)
 		{
 			Person * p = *ip;
-			// 6 walking frames, cycling with per-person offset.
-			int frame = static_cast<int>(game->time.absolute * 400.0 + p->animOffset * 6.0) % 6;
+			const char *sheet = "simtower/people";
+			const std::string &id = prototype->id;
+			if (p->type == Person::kHousekeeper) {
+				sheet = "simtower/animpeple/housekeeper";
+			} else if (id == "office") {
+				sheet = "simtower/animpeple/office";
+			} else if (id == "condo" || id == "yoot_condo") {
+				sheet = "simtower/animpeple/condo";
+			} else if (id == "hotel" || id == "hotel_single" || id == "hotel_double" || id == "hotel_suite") {
+				sheet = "simtower/animpeple/hotel";
+			} else if (id == "restaurant" || id == "fastfood") {
+				sheet = "simtower/animpeple/restaurant";
+			} else if (id == "cinema" || id == "partyhall") {
+				sheet = "simtower/animpeple/event";
+			}
+
+			sf::Texture *peopleTex = &app->bitmaps[sheet];
+			// If the named extraction hasn't been regenerated yet, BitmapManager
+			// returns a large placeholder fallback. Use the generic masked people
+			// sheet rather than raw unhandled BMPs, which lack transparency.
+			if (peopleTex->getSize().x > 1024)
+				peopleTex = &app->bitmaps["simtower/people"];
+
+			int frameCount = std::max(1u, peopleTex->getSize().x / frameW);
+			// Walking frames, cycling with per-person offset.
+			int frame = static_cast<int>(game->time.absolute * 400.0 + p->animOffset * frameCount) % frameCount;
 			// Distribute people evenly across the item footprint, including
 			// multi-story tenants. This approximates the original Draw*AP
 			// per-location placement until individual animation maps are decoded.

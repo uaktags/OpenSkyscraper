@@ -730,6 +730,17 @@ void SimTowerLoader::loadBitmaps()
 		{0x8E29, "construction/solid"},
 		{0x85EA, "construction/worker", sf::Color::White},
 
+		// AnimPeple occupant strips from the original. These are 16x24 frame
+		// horizontal sheets used by the Draw*AP family; names are based on
+		// visual/resource audit and can be refined as more strips are mapped.
+		{0x85E8, "animpeple/office",       sf::Color::White},
+		{0x85E9, "animpeple/condo",        sf::Color::White},
+		{0x85EA, "animpeple/construction", sf::Color::White},
+		{0x85EB, "animpeple/hotel",        sf::Color::White},
+		{0x85EC, "animpeple/restaurant",   sf::Color::White},
+		{0x85ED, "animpeple/event",        sf::Color::White},
+		{0x85EE, "animpeple/housekeeper",  sf::Color::White},
+
 		{0x87A8, "housekeeping"},
 
 		{0x8F6C, "fire/small"},
