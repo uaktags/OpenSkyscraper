@@ -228,12 +228,15 @@ void Item::render(sf::RenderTarget &target) const
 				sheet = "simtower/animpeple/event";
 			}
 
+			bool genericPeopleSheet = (std::string(sheet) == "simtower/people");
 			sf::Texture *peopleTex = &app->bitmaps[sheet];
 			// If the named extraction hasn't been regenerated yet, BitmapManager
 			// returns a large placeholder fallback. Use the generic masked people
 			// sheet rather than raw unhandled BMPs, which lack transparency.
-			if (peopleTex->getSize().x > 1024)
+			if (peopleTex->getSize().x > 1024) {
 				peopleTex = &app->bitmaps["simtower/people"];
+				genericPeopleSheet = true;
+			}
 
 			int frameCount = std::max(1u, peopleTex->getSize().x / frameW);
 			// Walking frames, cycling with per-person offset.
@@ -251,10 +254,14 @@ void Item::render(sf::RenderTarget &target) const
 			ps.setOrigin({0.f, static_cast<float>(frameH)});
 			ps.setPosition({px, py});
 
-			// Stress coloring: black normally, pink/red for high stress.
-			sf::Color color = sf::Color::Black;
-			if (p->stress > 80) color = sf::Color(255, 0, 0);
-			else if (p->stress > 40) color = sf::Color(255, 128, 128);
+			// Full-color AnimPeple sheets should keep their original palette.
+			// Only the generic silhouette fallback is stress-colored.
+			sf::Color color = sf::Color::White;
+			if (genericPeopleSheet) {
+				color = sf::Color::Black;
+				if (p->stress > 80) color = sf::Color(255, 0, 0);
+				else if (p->stress > 40) color = sf::Color(255, 128, 128);
+			}
 			color = game->lighting.compose(color);
 			if (statusTint != sf::Color::White)
 			{
