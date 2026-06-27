@@ -1,5 +1,6 @@
 /* Copyright (c) 2012-2015 Fabian Schuiki */
 #include <cassert>
+#include <algorithm>
 #include <string>
 #include "../Game.h"
 #include "../Time.h"
@@ -209,15 +210,21 @@ void Item::render(sf::RenderTarget &target) const
 		const int frameW = 16;
 		const int frameH = 24;
 		const int N = static_cast<int>(people.size());
+		const int stories = std::max(1, size.y);
+		const int slotsPerStory = std::max(1, (N + stories - 1) / stories);
 		int idx = 0;
 		for (People::iterator ip = people.begin(); ip != people.end(); ++ip, ++idx)
 		{
 			Person * p = *ip;
 			// 6 walking frames, cycling with per-person offset.
 			int frame = static_cast<int>(game->time.absolute * 400.0 + p->animOffset * 6.0) % 6;
-			// Distribute people evenly across the item width.
-			float px = position.x * 8 + (N > 1 ? (idx + 0.5f) * itemWidthPx / N : itemWidthPx / 2.0f) - frameW / 2.0f;
-			float py = -position.y * 36;
+			// Distribute people evenly across the item footprint, including
+			// multi-story tenants. This approximates the original Draw*AP
+			// per-location placement until individual animation maps are decoded.
+			int story = idx % stories;
+			int slot = idx / stories;
+			float px = position.x * 8 + (slot + 0.5f) * itemWidthPx / slotsPerStory - frameW / 2.0f;
+			float py = -(position.y + story) * 36;
 
 			sf::Sprite ps(*peopleTex);
 			ps.setTextureRect(sf::IntRect({frame * frameW, 0}, {frameW, frameH}));
