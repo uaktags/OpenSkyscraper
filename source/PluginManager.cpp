@@ -61,6 +61,27 @@ namespace OT
 		return out;
 	}
 
+	bool Plugin::getAttr(PluginAttr & out) const
+	{
+		const WindowsPEExecutable::Resource * r = getResource("ATTR", 128);
+		if (!r) return false;
+		return parsePluginAttr(r->data, r->length, out);
+	}
+
+	bool Plugin::getDesc(PluginDesc & out) const
+	{
+		const WindowsPEExecutable::Resource * r = getResource("DESC", 128);
+		if (!r) return false;
+		return parsePluginDesc(r->data, r->length, out);
+	}
+
+	bool Plugin::getDpdf(PluginDpdf & out) const
+	{
+		const WindowsPEExecutable::Resource * r = getResource("DPDF", 128);
+		if (!r) return false;
+		return parsePluginDpdf(r->data, r->length, out);
+	}
+
 	static std::string lowerExt(const std::string & s)
 	{
 		std::string out;

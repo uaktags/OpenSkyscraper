@@ -196,6 +196,7 @@ add_executable(OpenSkyTests
   source/NameManager.cpp
   source/LevelUp.cpp
   source/PluginManager.cpp
+  source/PluginResources.cpp
   source/PluginBitmapLoader.cpp
 )
 target_compile_definitions(OpenSkyTests PRIVATE OPEN_SKY_ROUTE_SEAM_ONLY)

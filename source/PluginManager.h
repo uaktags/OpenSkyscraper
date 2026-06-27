@@ -1,6 +1,7 @@
 /* Copyright (c) 2026 OpenSkyscraper contributors */
 #pragma once
 #include "Path.h"
+#include "PluginResources.h"
 #include "WindowsPEExecutable.h"
 #include <map>
 #include <memory>
@@ -52,6 +53,15 @@ namespace OT
 		/// its time asking "which plugins have OBJMAP id 1000?" without
 		/// caring about other types.
 		std::map<std::string, std::vector<int>> resourcesByType() const;
+
+		/// Typed accessors. Each fetches the corresponding resource at
+		/// id 128 (the conventional id for an item's metadata) and runs
+		/// it through the parsers in PluginResources. Returns false if
+		/// the plugin failed to load or the resource is absent/malformed.
+		/// Field layouts: see doc/yoottower/resource-formats.md.
+		bool getAttr(PluginAttr & out) const;  /// ATTR id=128
+		bool getDesc(PluginDesc & out) const;  /// DESC id=128
+		bool getDpdf(PluginDpdf & out) const;  /// DPDF id=128
 
 	private:
 		std::string name_;
