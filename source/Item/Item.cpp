@@ -240,7 +240,7 @@ void Item::render(sf::RenderTarget &target) const
 
 			int frameCount = std::max(1u, peopleTex->getSize().x / frameW);
 			// Walking frames, cycling with per-person offset.
-			int frame = static_cast<int>(game->time.absolute * 400.0 + p->animOffset * frameCount) % frameCount;
+			int frame = static_cast<int>(game->time.absolute * 100.0 + p->animOffset * frameCount) % frameCount;
 			// Distribute people evenly across the item footprint, including
 			// multi-story tenants. This approximates the original Draw*AP
 			// per-location placement until individual animation maps are decoded.

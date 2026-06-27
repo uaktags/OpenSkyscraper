@@ -1614,12 +1614,12 @@ void Game::setSpeedMode(int sm)
 	if (speedMode != sm) {
 		speedMode = sm;
 		double speed = 0;
-		switch (speedMode) {
-			case 0: speed = 0; break;
-			case 1: speed = 1; break;
-			case 2: speed = 2; break;
-			case 3: speed = 4; break;
-		}
+			switch (speedMode) {
+				case 0: speed = 0; break;
+				case 1: speed = 1; break;
+				case 2: speed = 4; break;
+				case 3: speed = 12; break;
+			}
 		time.speed = speed;
 		toolboxWindow.updateSpeed();
 	}
