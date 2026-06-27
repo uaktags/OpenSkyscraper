@@ -195,6 +195,52 @@ void Item::render(sf::RenderTarget &target) const
 		}
 	}
 
+	// --- AnimPeple: render occupants as animated person sprites ---
+	// The `simtower/people` texture is a 96x120 sheet: 6 walking frames
+	// (16px each) x 5 color rows (24px each). We use row 0 (transparent
+	// background) and distribute people across the item's footprint.
+	if (!people.empty() && !underConstruction)
+	{
+		static sf::Texture * peopleTex = nullptr;
+		if (!peopleTex)
+			peopleTex = &app->bitmaps["simtower/people"];
+
+		const int itemWidthPx = size.x * 8;
+		const int N = static_cast<int>(people.size());
+		int idx = 0;
+		for (People::iterator ip = people.begin(); ip != people.end(); ++ip, ++idx)
+		{
+			Person * p = *ip;
+			int w = p->getWidth();
+			// 6 walking frames, cycling with per-person offset.
+			int frame = static_cast<int>(game->time.absolute * 400.0 + p->animOffset * 6.0) % 6;
+			// Distribute people evenly across the item width.
+			float px = position.x * 8 + (N > 1 ? (idx + 0.5f) * itemWidthPx / N : itemWidthPx / 2.0f) - w / 2.0f;
+			float py = -position.y * 36;
+
+			sf::Sprite ps(*peopleTex);
+			ps.setTextureRect(sf::IntRect({frame * 16, 0}, {w, 24}));
+			ps.setOrigin({0.f, 24.f});
+			ps.setPosition({px, py});
+
+			// Stress coloring: black normally, pink/red for high stress.
+			sf::Color color = sf::Color::Black;
+			if (p->stress > 80) color = sf::Color(255, 0, 0);
+			else if (p->stress > 40) color = sf::Color(255, 128, 128);
+			color = game->lighting.compose(color);
+			if (statusTint != sf::Color::White)
+			{
+				color.r = (color.r * statusTint.r) / 255;
+				color.g = (color.g * statusTint.g) / 255;
+				color.b = (color.b * statusTint.b) / 255;
+				color.a = (color.a * statusTint.a) / 255;
+			}
+			ps.setColor(color);
+			target.draw(ps);
+			game->drawnSprites++;
+		}
+	}
+
 	if (!canHaulPeople() && position.y != 0 && prototype->icon != ICON_FLOOR && lobbyRoute.empty())
 	{
 		Sprite noroute;

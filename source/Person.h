@@ -80,6 +80,9 @@ namespace OT {
 		double stress;
 		double eval;
 
+		/// Random per-person offset so walking animations don't sync.
+		double animOffset;
+
 		int getWidth();
 	};
 }

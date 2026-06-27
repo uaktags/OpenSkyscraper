@@ -376,7 +376,7 @@ Reference Index (codemap.md → implementation)
 | Module                            | Doc Source            | Impl File                       | Status   |
 |-----------------------------------|-----------------------|---------------------------------|----------|
 | Animation / CLUT                  | codemap.md:72-107     | source/Sky.*, source/Lighting.* | PARTIAL  |
-| People animation                  | codemap.md:108-141    | —                               | MISSING  |
+| People animation                  | codemap.md:108-141    | source/Item/Item.cpp (AnimPeple)| PARTIAL  |
 | Bitmap loading                    | codemap.md:207-237    | source/BitmapManager.*          | PORTED   |
 | Blocks                            | codemap.md:238-272    | source/Item/Floor.*             | REIMPL   |
 | Church                            | codemap.md:274-312    | —                               | MISSING  |

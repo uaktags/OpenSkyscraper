@@ -16,6 +16,7 @@ Person::Person(Game * game, Type type)
 	state  = kWandering;
 	stress = 0.0;
 	eval   = 0.0;
+	animOffset = (double)(rand() % 1000) / 1000.0;
 	name   = NameManager::makeName((int)type);
 	if (game) game->people.insert(this);
 }
