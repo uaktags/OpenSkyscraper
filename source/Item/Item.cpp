@@ -206,21 +206,22 @@ void Item::render(sf::RenderTarget &target) const
 			peopleTex = &app->bitmaps["simtower/people"];
 
 		const int itemWidthPx = size.x * 8;
+		const int frameW = 16;
+		const int frameH = 24;
 		const int N = static_cast<int>(people.size());
 		int idx = 0;
 		for (People::iterator ip = people.begin(); ip != people.end(); ++ip, ++idx)
 		{
 			Person * p = *ip;
-			int w = p->getWidth();
 			// 6 walking frames, cycling with per-person offset.
 			int frame = static_cast<int>(game->time.absolute * 400.0 + p->animOffset * 6.0) % 6;
 			// Distribute people evenly across the item width.
-			float px = position.x * 8 + (N > 1 ? (idx + 0.5f) * itemWidthPx / N : itemWidthPx / 2.0f) - w / 2.0f;
+			float px = position.x * 8 + (N > 1 ? (idx + 0.5f) * itemWidthPx / N : itemWidthPx / 2.0f) - frameW / 2.0f;
 			float py = -position.y * 36;
 
 			sf::Sprite ps(*peopleTex);
-			ps.setTextureRect(sf::IntRect({frame * 16, 0}, {w, 24}));
-			ps.setOrigin({0.f, 24.f});
+			ps.setTextureRect(sf::IntRect({frame * frameW, 0}, {frameW, frameH}));
+			ps.setOrigin({0.f, static_cast<float>(frameH)});
 			ps.setPosition({px, py});
 
 			// Stress coloring: black normally, pink/red for high stress.
