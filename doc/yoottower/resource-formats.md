@@ -27,8 +27,9 @@ A `.t2p` file is a **Win32 PE32 DLL** (~200–400 KB), not a passive asset blob.
 Each plugin:
 
 1. **Imports** ~400–480 mangled C++ symbols from `T2DLL.dll` — the game's
-   plugin runtime / SDK. **We do not have `T2DLL.dll`**; its ABI is
-   reconstructed here from the import names plus the plugin's own code.
+   plugin runtime / SDK. Its ABI is reconstructed here from the import names
+   plus the plugin's own code; the key parts are now **confirmed against the
+   real `T2DLL.dll`** (loaded in Ghidra — see §9).
 2. **Exports** 867–920 symbols: a statically-linked framework (MetroWerks
    **PowerPlant** Mac class library — the `L`-prefixed classes — plus the
    `T2`/`C`-prefixed YootTower framework) and the plugin's own item classes.
@@ -160,7 +161,7 @@ is the rosetta stone for the field names.
 offset  type     field          notes
 0       u8       version        always 1
 1       char[4]  mItemType      item sub-type 4cc, e.g. "GRUB" (see table)
-5       u32      field5         16 (Coin), 2 (Condo/Apt), 1 (Burger/transport) — see note
+5       u32      mAttrib        16 (Coin), 2 (Condo/Apt), 1 (Burger/transport) — packed bitfield; see §9.1
 9       char[4]  marker         usually "****"; "NORF" on the hotel-room family
                                 (Singleroom/Suiteroom/Twinroom/Maintenance). A
                                 category/group code, NOT a fixed sentinel.
@@ -175,7 +176,7 @@ offset  type     field          notes
 
 **Calibration (binary form):**
 
-| Plugin        | mItemType | field5 | mGameLevel | mID   | mPluginName        |
+| Plugin        | mItemType | mAttrib | mGameLevel | mID   | mPluginName        |
 |---------------|-----------|--------|------------|-------|--------------------|
 | Coin          | `ADEM`    | 16     | 3          | 1683  | Coin Press Machine |
 | Condo         | `TRPA`    | 2      | 1          | 1101  | Condo              |
@@ -200,10 +201,12 @@ offset  type     field          notes
 `mItemType` coincides with the DESC/plugin-class tag. This is the field-name
 oracle: the binary-form columns above are named by analogy to these keys.
 
-> **Open question:** `field5` (16/2/1) has no obvious analogue in the text form
-> and may be a packed `mAttrib`/`mSecretItem` or a per-class variant selector.
-> Confirm when implementing by reading `CFilePlugin::GetAttrib` in a plugin
-> that has a richer ATTR. Does not block type detection (mItemType suffices).
+> **Open question:** ~~`field5` (16/2/1) has no obvious analogue in the text
+> form…~~ **RESOLVED.** `field5` is **`mAttrib`** — confirmed by
+> `CFilePlugin::GetAttrib` in `T2DLL.dll` (§9.1). The text form's
+> `(mAttrib) 16777215` was the oracle all along; the binary value is a packed
+> attribute bitfield (Coin=0x10, Condo/Apt=0x02, Burger/transport=0x01).
+> `mItemType` suffices for type detection regardless.
 
 ### 3.2 `DESC` — plugin-class discriminator (HIGH)
 
@@ -254,6 +257,13 @@ Calibration: Coin and Burger both → `[70, 50, 100, 80]`. These feed
 `T2TenantDef`'s `GetEntranceH`/`GetEntranceV` (offsets 0x168/0x164) and the
 placement cursor. Only present on placement-driven items (Coin, Burger);
 absent on transport (Stair/StdElev use `MVDF` instead).
+
+> **CORRECTED in §10.5.** Decompiling `T2PlaceParamDef`'s accessors shows
+> DPDF is a per-`EPlace` scoring table (`{Percent, Score, Rate}`, 0xc stride),
+> not w/h/baseX/baseY. The `[70,50,100,80]` above are the leading u32s before
+> the EPlace array. A richer DPDF is also nested inside the `FDmT` member
+> table (§10.4). The w/h/baseX/baseY reading here was a byte-pattern guess
+> that happened to align; prefer §10.5 for new code.
 
 ### 3.4 `T2DLG` — dialog layout (HIGH, already text)
 
@@ -325,6 +335,16 @@ A counted list of character roles the tenant generates (waiters, residents…).
 Calibration: Condo → `[1000 "Elementary school student", 1001 …]`;
 Burger → `[1004 "Waiter", 1005 "Waitress", …]`. Present on tenants that emit
 walking people; absent on transport/venue plugins.
+
+> **CORRECTED in §10.4.** Decompiling `T2TenantMemberTableDef`
+> (`T2DLL.dll @ 0x100631e0`) shows this "SLDF" is actually the **`FDmT`
+> member table** opened from inside the Tenant Def constructor, and each
+> entry is a 0x30-byte `T2TenantMemberDef` whose real fields are
+> `DemandType / StartSilhouetteType / EndSilhouetteType / OptionType /
+> NumOfPeople / Rate(float) / Name / Percent` — not roleId/f1/f2/f3. The
+> "roleId 1000+" above was `StartSilhouetteType`; "f3=300" was `Percent`.
+> Prefer §10.4 for new code; the byte offsets here are a coincidental
+> alignment of the first member.
 
 ### 3.8 `TNDF` — tenant category / toolbox group (MEDIUM)
 
@@ -473,16 +493,21 @@ plugin's `.text`.
 
 ## 7. Open questions (non-blocking)
 
-- **ATTR `field5`** (16/2/1): no clean analogue in the text form. Likely a
-  packed attrib/variant byte. Read `CFilePlugin::GetAttrib` to confirm.
-  *(Marker field resolved: it's "****" for most plugins, "NORF" for hotel
-  rooms — a category code, not a sentinel. The C++ parser records it.)*
+- ~~**ATTR `field5`** (16/2/1): no clean analogue in the text form.~~
+  **RESOLVED in §9.1** — it is `mAttrib`, confirmed by `CFilePlugin::GetAttrib`
+  in `T2DLL.dll`. A packed attribute bitfield.
 - **WODF `cond`/`color`**: the per-entry u32 pair (always 3 / 0xFF) needs an
-  enum sweep across more plugins.
-- **MVDF flag u32s**: capacity / max-floors / speed for transport. Map when
-  implementing the elevator/stair sim.
+  enum sweep across more plugins. *(Loading path now known: WODF reaches the
+  engine via the `T2WordDef`/`T2WordDefArray` readers; the TNDF/SLDF/member
+  data is parsed by `T2TenantMemberTableDef` — see §10.3/§10.4.)*
+- **MVDF flag u32s**: capacity / max-floors / speed for transport. *(The Mover
+  Def parser is `T2MoverDef`, opened as `"FDvM"` id 1 by `LoadT2MoverDef`
+  `0x100420c0`; its constructor is the target for field-mapping — see §10.)*
+  Map when implementing the elevator/stair sim.
 - **TMDF / PADF**: binary structs deferred; OBJMAP already covers static
   rendering. Revisit when animating shop interiors.
+- ~~**SLDF/DPDF byte layouts (§3.3, §3.7)**:~~ **CORRECTED in §10.4/§10.5.**
+  The Def constructors in `T2DLL.dll` are now the source of truth.
 - ~~**Population sweep**:~~ **DONE.** `scratch/plugin_resource_audit.py`
   parses ATTR/DESC/DPDF across all 105 PE plugins; 105/105 parse cleanly.
   Two new DESC kinds (`lPdW` World, `lPoO` OuterObj) fell out of the sweep
@@ -495,34 +520,341 @@ plugin's `.text`.
 
 ## 8. Implementation status
 
-The HIGH-confidence resource types are now parsed in C++:
+The HIGH-confidence resource types are parsed in C++:
 
 - `source/PluginResources.{h,cpp}` — `FourCC` helper + `PluginAttr` /
-  `PluginDesc` / `PluginDpdf` POD structs + `parsePlugin{Attr,Desc,Dpdf}`
-  functions. Pure functions over a byte buffer (no Plugin/PE dependency),
-  so they unit-test with hand-crafted inputs.
-- `Plugin::getAttr()/getDesc()/getDpdf()` — thin accessors that fetch
+  `PluginDesc` / `PluginDpdf` / `PluginPldf` POD structs +
+  `parsePlugin{Attr,Desc,Dpdf,Pldf}` functions. Pure functions over a byte
+  buffer (no Plugin/PE dependency), so they unit-test with hand-crafted inputs.
+- `Plugin::getAttr()/getDesc()/getDpdf()/getPldf()` — thin accessors that fetch
   resource id 128 and call the parsers. Lazy via `ensureLoaded()`.
+- `source/PluginObjmap.{h,cpp}` — the OBJMAP sprite-layout parser + writer
+  (`parsePluginObjmap` / `writePluginObjmap` / `findObjmapBlock`). Implements
+  the line-based algorithm in `objmap-format.md` §"Implementation guidance".
+  Parse → write → parse is identity (covered by `testObjmapRoundTrip`).
+- `source/OspPlugin.{h,cpp}` — the OpenSkyscraper plugin format: reader
+  (`loadOspPlugin`), writer (`saveOspPlugin`), and the read-only t2p bridge
+  (`convertT2pToOsp`). See `doc/openskyscraper/plugin-format.md`.
+- `source/PluginBitmapLoader` — gained `decodeBitmapResource` (Image-returning
+  variant) for the editor's PNG export path.
 - `tests/test_main.cpp` — byte-level parser tests (calibration hex) plus
-  integration tests against the real vendored plugins.
+  integration tests against the real vendored plugins, including OBJMAP
+  (Stair spiral-staircase oracle) and the OSP round-trip.
 - `scratch/plugin_resource_audit.py` — population-wide validator; sweeps
   all 105 PE plugins, reports DESC-kind / mItemType distribution, exits
   non-zero on any parse failure.
 
+**Standalone plugin editor** (`tools/PluginEditor/`, `PluginEditor` target):
+loads `.t2p` read-only or `.osp-plugin` directories, edits the Tenant-class
+fields (identity / price / sprites / transparent color), and saves only to
+the OSP format. Tenant vertical slice; see `doc/openskyscraper/plugin-format.md`.
+
 What remains for full data-driven item loading (future phases):
 
-1. **Medium-confidence parsers** (MVDF/WODF/SLDF/TNDF/PLDF): structure is
-   documented in §3.6–§3.10; promote to C++ the same way once a consumer
-   needs them (e.g. MVDF when wiring transport pricing, WODF for speech).
-2. **Replace hardcoded plugin-name matching.** `YootCondo.cpp` currently
+1. **Remaining medium-confidence parsers** (MVDF/WODF/SLDF/TNDF): structure is
+   documented in §3.6–§3.9; promote to C++ once a consumer needs them (e.g.
+   MVDF when wiring transport pricing, WODF for speech). PLDF is now done.
+2. **OBJMAP 200/1100 (SHIL walking frames):** the parser handles them, but the
+   editor doesn't yet expose directional-frame editing (Mover slice).
+3. **Replace hardcoded plugin-name matching.** `YootCondo.cpp` currently
    hardcodes `"Condo.t2p"`; the DESC kind + ATTR mItemType now let the item
    registry pick plugins data-drivenally. Do this together with the
-   transparent-color table (§3.1 of `objmap-format.md`).
-3. **TMDF/PADF** (LOW): revisit when animating shop interiors.
-4. **Delete the broken non-suffixed Ghidra misimports** (see Ghidra notes).
+   transparent-color table (§"Open questions" of `objmap-format.md`).
+4. **Wire OSP plugins into `Factory::loadPrototypes`** so the game consumes
+   the native format instead of the hardcoded prototype registry.
+5. **TMDF/PADF** (LOW): revisit when animating shop interiors.
+6. **Delete the broken non-suffixed Ghidra misimports** (see Ghidra notes).
+
+## 9. T2DLL.dll confirmation pass (Ghidra, the real runtime)
+
+> **Breakthrough:** OpenSky now has the actual `T2DLL.dll` (the game's plugin
+> runtime/SDK) loaded in Ghidra. The earlier sections of this doc were
+> reconstructed *without* it — purely from plugin import names and the
+> plugins' own code. The decompilation below confirms those inferences and
+> resolves the two oldest open questions. Every offset in this section is
+> read straight from the disassembly; `✓` marks a claim from §1–§8 that the
+> binary proves exactly.
+
+### 9.1 Open question #1 RESOLVED — ATTR `field5` is `mAttrib`
+
+The mysterious ATTR byte (values 1/2/16 across the calibration set, "no clean
+analogue in the text form") is **`mAttrib`**. `CFilePlugin::GetAttrib`
+(`T2DLL.dll @ 0x10003680`) is a one-liner:
+
+```c
+uint CFilePlugin::GetAttrib(CFilePlugin *this) { return *(uint*)(this + 0x4c); }
+```
+
+The text form of ATTR in `DefaultToolPalette.t2p` even lists it:
+`(mAttrib) 16777215` (= `0xFFFFFF`). So the ATTR binary layout (§3.1) is now
+fully named — `field5` should be relabelled **`mAttrib`**. The low bits are a
+packed attribute bitfield (Coin=0x10, Condo/Apt=0x02, Burger/transport=0x01).
+
+### 9.2 `CFilePlugin` struct layout (confirmed)
+
+Decompiling every `CFilePlugin::Get*` accessor pins down the in-memory layout
+that `Load` (§5 step 3) populates from the ATTR resource. This is the
+definitive field map; the ATTR byte offsets in §3.1 map 1:1 onto these:
+
+| `CFilePlugin` offset | Accessor (T2DLL addr)        | ATTR field        |
+|----------------------|------------------------------|-------------------|
+| `+0x48`              | `GetID` (`0x10003670`)        | `mID`             |
+| `+0x4c`              | `GetAttrib` (`0x10003680`)    | `mAttrib` (was field5) |
+| `+0x50`              | `GetDependID` (`0x10003690`)  | `mDependID`       |
+| `+0x54`              | `GetGameLevel` (`0x100036a0`) | `mGameLevel`      |
+| `+0x58`              | `GetSecretItem` (`0x100036b0`)| `mSecretItem`     |
+| `+0x5c`              | `GetItemType` (`0x100036c0`)  | `mItemType` (4cc) |
+| `+0x60`              | `GetMustItem` (`0x100036d0`)  | `mMustItem`       |
+
+### 9.3 `T2TenantDef` accessor offsets confirmed ✓
+
+The §2.3 offsets (inferred without T2DLL) are **byte-for-byte correct**:
+
+| Accessor                        | T2DLL addr  | Offset | ✓ |
+|---------------------------------|-------------|--------|---|
+| `T2TenantDef::GetNumOfPattern`  | `0x100054f0`| `0x15c` | ✓ |
+| `T2TenantDef::GetEntranceV`     | `0x100054b0`| `0x164` | ✓ |
+| `T2TenantDef::GetEntranceH`     | `0x100054c0`| `0x168` | ✓ |
+
+### 9.4 `GetRsrcType` proves the DESC↔class identity
+
+`T2*Plugin::GetRsrcType()` returns the class's own DESC 4cc. Sample
+(`T2AdvertisePlugin::GetRsrcType @ 0x10003f00`):
+
+```c
+uint T2AdvertisePlugin::GetRsrcType(...) { return 0x4164506c; } // "lPdA"
+```
+
+This is the inverse of the §2.2 calibration proof: the engine asks a plugin
+"what DESC tag are you?" and the plugin answers with the literal constant it
+was constructed with. `lPdA` = `0x4164506c` (little-endian) decodes to the
+Advertise-plugin class tag — the same byte-reversed mnemonic scheme as the
+other `lPnT`/`lPvM`/`lPdW`/`lPoO` tags in §3.2.
+
+### 9.5 OBJMAP parser is `T2ImageObj::AddObject` (the reference implementation)
+
+The single xref to the `"OBJMAP"` string (`0x100c7938`) is inside
+`T2ImageObj::AddObject(HMODULE, uint id, T2BitImage*)` at `0x100391c0`. This
+is the engine's own OBJMAP parser, and it **confirms and extends** the
+grammar in `objmap-format.md`:
+
+- It calls `FindResourceA(hMod, MAKEINTRESOURCE(id), "OBJMAP")` then
+  `LoadResource`/`LockResource`/`SizeofResource`, copies the bytes to a
+  malloc'd buffer, and tokenizes with **`strtok`** on the delimiter set at
+  `0x100c7910`. Tokens are matched case-insensitively (`_stricmp`).
+- **Each DefParts block is `0x68` (104) bytes** in the parsed struct array
+  (`GlobalReAlloc(..., (count+1)*0x68, ...)`). This is the per-block record
+  size OpenSky's `ObjmapBlock` should mirror for byte-fidelity.
+- Token keywords confirmed (string addrs in `.rsrc`/`.data`):
+  `DefParts`, `Name`/`ID`, `Pattern`, `Grade`, `Offset`, `Floor`, `Parts`,
+  and rect flags `Transparent` / `Halftone` (plus two more flag names). Rect
+  coords are parsed via `sscanf(buf, "%hd %hd %hd %hd", ...)` after commas
+  are rewritten to spaces — i.e. **`Rect a,b,c,d`** as documented. ✓
+- `#<n>` after `Parts` is a numeric part id; a bare name after `Parts`
+  resolves to a previously-defined part by linear scan (the `Parts`/child
+  reference mechanism).
+- Unknown tokens and undefined-part references raise `MessageBoxA` errors
+  (`"Undefined token: %s"`, `"Undefined parts:%s"`), so a malformed OBJMAP
+  is loud-fail, not silent.
+
+> Net: the OBJMAP text format is now backed by the parser source, not just
+> by hex inspection. The §"Implementation guidance" line-based parser in
+> `objmap-format.md` remains correct (strtok-on-whitespace is equivalent to
+> the tab/CRLF split described there).
+
+### 9.6 Binary resource reader: `T2Archive`
+
+The binary resources (ATTR/DPDF/WODF/MVDF/PLDF/...) are not parsed ad-hoc;
+they go through a stream object, **`T2Archive`** (`T2DLL.dll`), which wraps
+the resource bytes. Key primitives (all confirmed by decompilation):
+
+| Primitive (`T2Archive::`) | Addr        | Reads |
+|---------------------------|-------------|-------|
+| `operator>>(uint&)`       | (stream op) | one little-endian u32 |
+| `operator>>(ushort&)`     | (stream op) | one little-endian u16 |
+| `operator>>(uchar&)`      | (stream op) | one byte |
+| `ReadPStr(char*)`         | `0x100171c0`| 1-byte length `n`, then `n` bytes (Pascal string — matches §3 pstr convention ✓) |
+| `ReadSRect(RECT&)`        | `0x10017360`| four little-endian **short** (left/top/right/bottom) |
+| `LArray::ReadAsDWord`      | `0x100136b0`| count + count×u32 (array form) |
+| `LArray::ReadAsWord`       | `0x100134f0`| header + count×u16 |
+| `LArray::ReadAsChar`       | `0x10013720`| header + count×u8 |
+
+This confirms the "version byte then fixed/ counted fields" pattern assumed
+throughout §3: the leading `01` is just the first `operator>>` these readers
+consume. `ReadPStr` precisely validates the pstr convention used by
+WODF/SLDF/TNDF/MVDF (§3.6–§3.9). `ReadSRect` shows OBJMAP rects and any
+embedded `SRect` use **16-bit** coordinates.
+
+### 9.7 `CPEFile` — how the engine enumerates `.t2p` resources
+
+`CPEFile::GetResourceName` (`0x1000f120`) decodes `_IMAGE_RESOURCE_DIRECTORY`
+name entries (handling the high-bit "name-offset vs ID" flag, converting
+UTF-16 resource names to ANSI). This is the PE-walker the engine uses to
+discover the custom resource types generically — i.e. it does **not**
+hardcode `FindResource(...,"ATTR")` for every type; it walks the directory
+and dispatches by name. `CResFile::GetResourceInfo` (`0x10001700`) hands back
+the cached `HINSTANCE`/`HRSRC` pair a parsed resource is bound to.
+
+### 9.8 What this changes for OpenSky
+
+- **Relabel `field5` → `mAttrib`** in `PluginAttr` / the OSP schema / tests.
+- **Trust the §2.3 / §3.1 field maps**: they were right without T2DLL, and
+  T2DLL confirms them. No rework needed.
+- The OBJMAP parser can be tightened to mirror the engine's record size
+  (`0x68`/block) if we ever want bit-exact fidelity (not required for
+  rendering, useful for a future round-trip-to-t2p goal).
+- Future medium-confidence work (MVDF/WODF/SLDF field-mapping, §3.6–§3.9)
+  should target the typed `T2*Def` constructors (§10) now that their addresses
+  are known, rather than continuing to byte-guess. **The Def constructors live
+  in `T2DLL.dll`, not the plugins** — see §10.2.
+
+## 10. The plugin-resource loading architecture (T2DLL, authoritative)
+
+> §9 confirmed individual facts; this section documents the **mechanism** by
+> which the engine turns a `.t2p`'s `.rsrc` blob into typed `T2*Def` objects.
+> All addresses are in `T2DLL.dll` unless noted. This supersedes the §5 step-4
+> guess ("ConstructTemplatePlugin builds the T2*Def").
+
+### 10.1 There are TWO resource-type naming families
+
+Decompiling every `CResFile::OpenResource` call site reveals that resource
+types are addressed by a **4cc packed big-endian into a u32** (i.e. the type
+name's ASCII bytes, MSB first). Two families exist:
+
+**Family A — identity resources (id 0x80).** Type name is the literal 4cc.
+These are read once, in `CFilePlugin::CFilePlugin` (§9.2), to populate the
+shared identity fields:
+
+| u32 tag        | bytes (LE)   | type name | parsed by                |
+|----------------|--------------|-----------|--------------------------|
+| `0x41545452`   | `52 54 54 41`| `ATTR`    | `CFilePlugin` ctor       |
+
+(The `DAT_100c7028` default-resource path uses the string `"Attr"`; the
+file-backed path uses the u32 `0x41545452`. Same resource.)
+
+**Family B — template/Def resources (id 1).** Type name is **`"FD" + <class
+mnemonic>`**, where the mnemonic mirrors the DESC tag's suffix. These carry
+the per-class behavior data (the TNDF/SLDF/WODF/MVDF/DPDF content):
+
+| u32 tag        | type name | mnemonic | class           | opened by            |
+|----------------|-----------|----------|-----------------|----------------------|
+| `0x546e4466`   | `FDnT`    | `nT`     | Tenant          | `LoadT2TenantDef` `0x10063840` |
+| `0x4d764466`   | `FDvM`    | `vM`     | Mover           | `LoadT2MoverDef`  `0x100420c0` |
+| `0x4164506c`   | `lPdA`*   | —        | Advertise       | `T2AdvertisePlugin::LoadSelf` `0x10015d60` |
+| `0x48454446`   | `FDEH`*   | —        | HallEvent       | `T2HallEventPlugin::LoadSelf` `0x10038300` |
+
+\* Advertise/HallEvent use a slightly different tag shape (`"lPdA"`, `"FDEH"`)
+because they are leaf plugins that load their own body directly rather than
+spawning a `T2*Def`. The Tenant/Mover `FDxx` tags are the load-bearing ones
+for item plugins.
+
+> **Naming rosetta stone:** `"FD"` = "Field/Format Def"; the suffix reuses the
+> DESC mnemonic (`nT`=te**N**a**T**, `vM`=mo**V**e**M**). This is why the
+> doc's §3.6–§3.9 never found "WODF"/"SLDF"/"TNDF" strings in T2DLL — those
+> resource-type **names** only appear in the `.t2p` PE directory; the engine
+> addresses the data through the typed `FDxx` Def constructor instead.
+
+### 10.2 The Def constructors live in T2DLL, not the plugins
+
+`LoadT2TenantDef` / `LoadT2MoverDef` do **not** parse bytes. They:
+1. `OpenResource(hMod, id=1, type="FDnT"/"FDvM")` → a `CResFile` stream;
+2. `GetProcAddress(hMod, "ConstructTemplatePlugin")`;
+3. call the **plugin's** `ConstructTemplatePlugin(specifier, resFile)`.
+
+But the plugin's `ConstructTemplatePlugin` (verified in `Burger.t2p`) just
+`operator new(0x1b8)`s the Def and **delegates to T2DLL's
+`T2TenantDef::T2TenantDef`** (a thunk the plugin imports). So the actual
+byte-level parsing of TNDF/SLDF/WODF/DPDF lives in `T2DLL.dll` at
+`0x100623c0` (`T2TenantDef::T2TenantDef`). The plugin's only real job is to
+**declare which class** (via the 4cc it passes) — confirming §2.2's thesis
+that DESC is the class discriminator.
+
+`ConstructProgramPlugin` (Burger `0x1000b900`) allocates `0x6c` and passes
+`0x546e506c` (`"lPnT"`); `ConstructTemplatePlugin` (Burger `0x1000b970`)
+allocates **`0x1b8` (440)** and passes `0x546e4466` (`"FDnT"`). The 440-byte
+size **confirms the doc's §2.3 "T2TenantDef is 0x1b8 (440) bytes" claim
+exactly**. ✓
+
+### 10.3 `T2TenantDef::T2TenantDef` — the master TNDF/SLDF/DPDF parser
+
+`0x100623c0`. Reads the `FDnT` stream sequentially via `CResFile::operator>>`
+and, partway through, opens two **nested** Family-B resources. Inheritance
+chain: `T2TenantDef` → `T2EquipDef` (`0x1002f240`) → `T2ToolDef` → base; each
+constructor reads its own slice of the same stream. Field order written into
+the struct (offsets cross-checked against §9.3 accessors):
+
+```
+T2EquipDef slice:  +0x11c, +0x120, (loop NumOfInMoney × {+0x154,u,u}),
+                   +0x134, +0x138, +0x13c (count), +0x144[×count≤4]
+T2TenantDef slice: +0x19c, +0x1a0, +0x158, +0x15c (NumOfPattern ✓),
+                   +0x160, +0x1a4, +0x164 (EntranceV ✓), +0x168 (EntranceH ✓),
+                   +0x16c, +0x170, +0x174, +0x178, +0x17c, +0x104,
+                   (3 discarded u32), +0x184 (CString name)
+then opens nested resources:
+  "FDmT" (id 1) → T2TenantMemberTableDef (0x28 B)  → stored at +0x18c  [SLDF]
+  "FDaP" (id 1) → T2PeopleAnimeDef     (0x18 B)  → stored at +0x1a8  [people anim]
+```
+
+So the doc's standalone "SLDF"/"TNDF" resources are actually the **`FDmT`
+member table** opened from inside the Tenant Def constructor. This corrects
+§3.7/§3.8: SLDF and TNDF are not two independent top-level resources; they
+are sub-blocks of the `FDnT` Tenant template, parsed by
+`T2TenantMemberTableDef`.
+
+### 10.4 `T2TenantMemberTableDef` — the real SLDF/member parser (corrects §3.7)
+
+`0x100631e0`. This is what the doc called "SLDF". Layout it reads:
+
+```
++0x08  int          (table kind / category)
++0x0c  uint         specialFlag   (matches GetSpecialFlag ✓)
+optional DayParamDef*  +0x14     (present if a leading count ≠ 0)
+optional PlaceParamDef* +0x18    (present if a leading count ≠ 0)  [DPDF lives here]
++0x20  int          NumOfElem     (matches GetNumOfElem ✓)
++0x24  T2TenantMemberDef[count]   (each 0x30 / 48 bytes)
+```
+
+**Two corrections to the doc:**
+1. **DPDF is embedded here**, not a standalone id-128 resource. The
+   `T2PlaceParamDef` (§10.5) is an optional sub-block referenced by the
+   member table. (The doc's §3.3 standalone DPDF at id 128 is the
+   *default-placement* variant used by the placement cursor; the richer
+   per-EPlace DPDF is nested in the member table.)
+2. The §3.7 "SLDF entry = `{roleId, f1, f2, f3, pstr}`" was a byte-pattern
+   guess. The real entry is a **`T2TenantMemberDef` (0x30 B)** whose
+   accessors (Burger ordinals) are: `GetDemandType`, `GetStartSilhouetteType`,
+   `GetEndSilhouetteType`, `GetOptionType`, `GetNumOfPeople`, `GetRate(float)`,
+   `GetName(CString)`, `GetPercent`. The doc's "roleId 1000+" was actually
+   `StartSilhouetteType`; "f3=300" was likely `Percent`.
+
+### 10.5 `T2PlaceParamDef` — DPDF corrected (replaces §3.3's w/h/baseX/baseY)
+
+`0x100045d0`. Accessors (§9.3-area) reveal DPDF is **not** the simple
+`w/h/baseX/baseY` the doc guessed. It is an array indexed by `EPlace` with a
+**0xc (12) byte stride**:
+
+```
+per EPlace entry (at base + EPlace*0xc):
+  +0x04  uint    Percent
+  +0x08  short   Score
+  +0x0c  float   Rate
+```
+
+`GetPercent(EPlace)`→`*(u32*)(this + e*0xc + 4)`;
+`GetScore(EPlace)` →`*(short*)(this + e*0xc + 8)`;
+`GetRate(EPlace)`  →`*(float*)(this + e*0xc + 0xc)`.
+
+The doc's §3.3 "`[70,50,100,80]`" were the first four raw u32s of this
+structure (the leading fields before the EPlace array), not w/h/baseX/baseY.
+The placement footprint (w/h) is read elsewhere; DPDF is a placement-scoring
+table.
 
 ## Ghidra project notes
 
+- **`T2DLL.dll` is now loaded** (`x86:LE:32:default`, image base `0x10000000`,
+  6460 functions, 25025 symbols). It is the authoritative source for every
+  claim in §9. The earlier "we do not have T2DLL.dll" caveat in §1 is
+  superseded for the items §9 covers.
 - The **canonical** programs are the suffixed `.0` / `.1` / `.2` variants
   (e.g. `/Coin.t2p.0`): `x86:LE:32:default`, image base `0x10000000`, ~1100
   functions after auto-analysis, 2298 symbols.
