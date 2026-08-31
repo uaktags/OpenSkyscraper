@@ -27,7 +27,9 @@ void Elevator::init()
 	animation = 0;
 	frame = 0;
 
-	shaft.setTexture(app->bitmaps[shaftBitmap]);
+	const char *shaftEdition = shaftBitmap.find("wide") != std::string::npos
+	                         ? "elevator_wide" : "elevator_narrow";
+	shaft.setTexture(app->bitmaps.editionTexture(shaftEdition, shaftBitmap.c_str()));
 	shaft.setTextureRect(sf::IntRect({0, 0}, {size.x * 8, 36}));
 	shaft.setOrigin({0.f, 36.f});
 	shaft.setPosition({static_cast<float>(position.x * 8), static_cast<float>(-position.y * 36)});

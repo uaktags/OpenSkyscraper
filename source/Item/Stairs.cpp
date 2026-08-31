@@ -60,7 +60,6 @@ void Stairs::configureForLobby()
 		sprite.setTexture(App->bitmaps["simtower/stairs/spiral_3"]);
 	} else {
 		frameCount = 14;
-		sprite.setTexture(App->bitmaps["simtower/stairs"]);
+		sprite.setTexture(App->bitmaps.editionTexture("stairs", "simtower/stairs"));
 	}
 }
-

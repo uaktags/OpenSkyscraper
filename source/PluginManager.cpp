@@ -1,5 +1,6 @@
 /* Copyright (c) 2026 OpenSkyscraper contributors */
 #include "PluginManager.h"
+#include "DecompiledPlugin.h"
 
 #include <algorithm>
 #include <cctype>
@@ -34,7 +35,7 @@ namespace OT
 		return &iit->second;
 	}
 
-	std::vector<Plugin::ResourceKey> Plugin::enumerateResources() const
+	std::vector<AbstractPlugin::ResourceKey> Plugin::enumerateResources() const
 	{
 		std::vector<ResourceKey> out;
 		if (!ensureLoaded()) return out;
@@ -61,27 +62,6 @@ namespace OT
 		return out;
 	}
 
-	bool Plugin::getAttr(PluginAttr & out) const
-	{
-		const WindowsPEExecutable::Resource * r = getResource("ATTR", 128);
-		if (!r) return false;
-		return parsePluginAttr(r->data, r->length, out);
-	}
-
-	bool Plugin::getDesc(PluginDesc & out) const
-	{
-		const WindowsPEExecutable::Resource * r = getResource("DESC", 128);
-		if (!r) return false;
-		return parsePluginDesc(r->data, r->length, out);
-	}
-
-	bool Plugin::getDpdf(PluginDpdf & out) const
-	{
-		const WindowsPEExecutable::Resource * r = getResource("DPDF", 128);
-		if (!r) return false;
-		return parsePluginDpdf(r->data, r->length, out);
-	}
-
 	static std::string lowerExt(const std::string & s)
 	{
 		std::string out;
@@ -89,6 +69,20 @@ namespace OT
 		for (char c : s)
 			out.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
 		return out;
+	}
+
+	/// Builds the catalog key for a folder plugin discovered at `child`
+	/// whose scan root is `root`. The key is the relative path with
+	/// forward slashes (e.g. root=".../Plugins", child=".../Plugins/OpenTower/Office"
+	/// → "OpenTower/Office"). On Windows the path uses backslashes; we
+	/// normalise so the key is stable cross-platform and cannot collide
+	/// with a "*.t2p" filename (no extension).
+	static std::string folderPluginName(const fs::path & root, const fs::path & child)
+	{
+		std::string rel = fs::relative(child, root).string();
+		for (char & c : rel)
+			if (c == '\\') c = '/';
+		return rel;
 	}
 
 	int PluginManager::addPluginDirectory(const Path & dir)
@@ -106,14 +100,39 @@ namespace OT
 		for (const auto & entry : fs::directory_iterator(dirStr, ec))
 		{
 			if (ec) break;
-			if (!entry.is_regular_file()) continue;
 			auto p = entry.path();
-			if (lowerExt(p.extension().string()) != ".t2p") continue;
 
-			std::string name = p.filename().string();
-			if (plugins_.count(name)) continue;
-			plugins_.emplace(name, std::make_unique<Plugin>(name, Path(p.string())));
-			++added;
+			// .t2p PE files.
+			if (entry.is_regular_file() && lowerExt(p.extension().string()) == ".t2p")
+			{
+				std::string name = p.filename().string();
+				if (plugins_.count(name)) continue;
+				plugins_.emplace(name, std::make_unique<Plugin>(name, Path(p.string())));
+				++added;
+				continue;
+			}
+
+			// Folder plugins: a subdirectory containing plugin.json. Only
+			// nested one level deep — we don't recurse arbitrarily, to keep
+			// the catalog predictable and the key simple. Edition authors
+			// place plugins directly under <root>/<Edition>/<Plugin>.
+			if (entry.is_directory())
+			{
+				for (const auto & sub : fs::directory_iterator(p, ec))
+				{
+					if (ec) break;
+					if (!sub.is_directory()) continue;
+					fs::path manifest = sub.path() / "plugin.json";
+					std::error_code existsEc;
+					if (!fs::exists(manifest, existsEc)) continue;
+
+					std::string name = folderPluginName(dirStr, sub.path());
+					if (plugins_.count(name)) continue;
+					plugins_.emplace(name, std::make_unique<DecompiledPlugin>(
+					    name, Path(sub.path().string())));
+					++added;
+				}
+			}
 		}
 		return added;
 	}
@@ -123,7 +142,7 @@ namespace OT
 		return plugins_.count(name) > 0;
 	}
 
-	Plugin * PluginManager::get(const std::string & name) const
+	AbstractPlugin * PluginManager::get(const std::string & name) const
 	{
 		auto it = plugins_.find(name);
 		return it == plugins_.end() ? nullptr : it->second.get();

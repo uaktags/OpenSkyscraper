@@ -57,6 +57,7 @@ namespace OT
 		bool loadSettings();
 		void saveSettings();
 		void showSettingsDialog();
+		const std::string & simTowerExecutablePath() const { return simTowerExecutable; }
 
 		void setAudioVolume(float volume);
 		void setAudioMuted(bool mute);
@@ -108,6 +109,7 @@ namespace OT
 		double startupViewportScrollHorizontal;
 		double startupViewportScrollVertical;
 		bool fullscreen;
+		std::string simTowerExecutable;
 	};
 
 	extern Application * App;

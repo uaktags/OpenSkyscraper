@@ -6,6 +6,9 @@
 #include <string>
 #include <algorithm>
 #include <numeric>
+#include <cstdio>
+#include <fstream>
+#include <sstream>
 
 #include "../source/Time.h"
 #include "../source/Route.h"
@@ -16,9 +19,12 @@
 #include "../source/Lighting.h"
 #include "../source/JudgeSystem.h"
 #include "../source/LevelUp.h"
+#include "../source/SaveHash.h"
 #include "../source/PluginManager.h"
 #include "../source/PluginResources.h"
+#include "../source/PluginObjmap.h"
 #include "../source/PluginBitmapLoader.h"
+#include "../source/OspPlugin.h"
 
 static int g_failures = 0;
 
@@ -280,19 +286,42 @@ static void testLevelUpRules()
 	using OT::LevelUp;
 	using OT::JudgeSystem;
 
-	// 1 star -> 2 stars needs 300 population.
+	// Authentic SimTower progression (SimTower wiki, OpenSkyWeb 46372a2):
+	// 1->2: 300 pop; 2->3: 1000 + security; 3->4: 5000 + medical + VIP;
+	// 4->5: 10000 + metro.
 	const LevelUp::Requirements * r1to2 = LevelUp::advancementRequirements(0);
 	EXPECT(r1to2 != nullptr);
 	EXPECT(r1to2->population == 300);
 
-	// 2 stars -> 3 stars needs 1000 + security.
 	const LevelUp::Requirements * r2to3 = LevelUp::advancementRequirements(1);
 	EXPECT(r2to3 != nullptr);
 	EXPECT(r2to3->population == 1000);
 	EXPECT(r2to3->needsSecurity);
+	EXPECT(!r2to3->needsVip); // VIP approval moved to the 4-star gate
 
-	// 5 stars is the max - no advancement from rating 4.
-	const LevelUp::Requirements * rMax = LevelUp::advancementRequirements(4);
+	const LevelUp::Requirements * r3to4 = LevelUp::advancementRequirements(2);
+	EXPECT(r3to4 != nullptr);
+	EXPECT(r3to4->population == 5000);
+	EXPECT(r3to4->needsSecurity);
+	EXPECT(r3to4->needsMedical);
+	EXPECT(r3to4->needsVip);
+
+	const LevelUp::Requirements * r4to5 = LevelUp::advancementRequirements(3);
+	EXPECT(r4to5 != nullptr);
+	EXPECT(r4to5->population == 10000);
+	EXPECT(r4to5->needsMetro);
+
+	// 5 stars -> TOWER needs 15,000 population + facilities (the Cathedral
+	// itself grants TOWER instantly on completion; see Cathedral::advance).
+	const LevelUp::Requirements * rTower = LevelUp::advancementRequirements(4);
+	EXPECT(rTower != nullptr);
+	EXPECT(rTower->population == 15000);
+	EXPECT(rTower->needsSecurity);
+	EXPECT(rTower->needsMedical);
+	EXPECT(rTower->needsMetro);
+
+	// TOWER (rating 5) is the max - no advancement from rating 5.
+	const LevelUp::Requirements * rMax = LevelUp::advancementRequirements(5);
 	EXPECT(rMax == nullptr);
 
 	// meetsRequirements: pure helper, takes a Counts struct.
@@ -302,21 +331,83 @@ static void testLevelUpRules()
 	EXPECT(LevelUp::meetsRequirements(*r1to2, 300, c, 0));  // pop only
 	EXPECT(!LevelUp::meetsRequirements(*r1to2, 299, c, 0)); // pop short
 
-	// 2 -> 3 stars needs security + VIP approval.
-	EXPECT(!LevelUp::meetsRequirements(*r2to3, 1000, c, 0)); // missing security & VIP
+	// 2 -> 3 stars needs security only (no VIP since the authentic table).
+	EXPECT(!LevelUp::meetsRequirements(*r2to3, 1000, c, 0)); // missing security
 	c.securityOffices = 1;
-	EXPECT(!LevelUp::meetsRequirements(*r2to3, 1000, c, 0)); // missing VIP
-	EXPECT(LevelUp::meetsRequirements(*r2to3, 1000, c, 1));  // security + VIP present
+	EXPECT(LevelUp::meetsRequirements(*r2to3, 1000, c, 0));  // security suffices
 
-	// minRatingToBuild: locked items have explicit ratings, the rest 0.
-	EXPECT(LevelUp::minRatingToBuild("cinema")    == 4);
-	EXPECT(LevelUp::minRatingToBuild("metro")     == 4);
-	EXPECT(LevelUp::minRatingToBuild("hotel_single") == 3);
-	EXPECT(LevelUp::minRatingToBuild("security")  == 2);
-	EXPECT(LevelUp::minRatingToBuild("fastfood")  == 1);
-	EXPECT(LevelUp::minRatingToBuild("office")    == 0);
-	EXPECT(LevelUp::minRatingToBuild("lobby")     == 0);
+	// 3 -> 4 stars additionally needs medical + VIP approval.
+	EXPECT(!LevelUp::meetsRequirements(*r3to4, 5000, c, 0)); // missing medical & VIP
+	c.medicalCenters = 1;
+	EXPECT(!LevelUp::meetsRequirements(*r3to4, 5000, c, 0)); // missing VIP
+	EXPECT(LevelUp::meetsRequirements(*r3to4, 5000, c, 1));  // all present
+
+	// minRatingToBuild: authentic toolbox mapping, the rest 0.
+	EXPECT(LevelUp::minRatingToBuild("elevator-service") == 1);
+	EXPECT(LevelUp::minRatingToBuild("hotel_single")     == 1);
+	EXPECT(LevelUp::minRatingToBuild("security")         == 1);
+	EXPECT(LevelUp::minRatingToBuild("escalator")        == 2);
+	EXPECT(LevelUp::minRatingToBuild("elevator-express") == 2);
+	EXPECT(LevelUp::minRatingToBuild("restaurant")       == 2);
+	EXPECT(LevelUp::minRatingToBuild("cinema")           == 2);
+	EXPECT(LevelUp::minRatingToBuild("partyhall")        == 2);
+	EXPECT(LevelUp::minRatingToBuild("hotel_double")     == 2);
+	EXPECT(LevelUp::minRatingToBuild("hotel_suite")      == 2);
+	EXPECT(LevelUp::minRatingToBuild("medicalcenter")    == 2);
+	EXPECT(LevelUp::minRatingToBuild("recycling")        == 2);
+	EXPECT(LevelUp::minRatingToBuild("parking")          == 2);
+	EXPECT(LevelUp::minRatingToBuild("metro")            == 3);
+	EXPECT(LevelUp::minRatingToBuild("secom")            == 2);
+	EXPECT(LevelUp::minRatingToBuild("cathedral")        == 4);
+	EXPECT(LevelUp::minRatingToBuild("fastfood")         == 0);
+	EXPECT(LevelUp::minRatingToBuild("office")           == 0);
+	EXPECT(LevelUp::minRatingToBuild("lobby")            == 0);
 	EXPECT(LevelUp::minRatingToBuild("nonexistent_prototype") == 0);
+}
+
+static void testLevelUpStarReward()
+{
+	// Authentic award gift wording (OpenSkyWeb ISSUE-034).
+	EXPECT(OT::LevelUp::starRewardMessage(1).empty());
+	EXPECT(OT::LevelUp::starRewardMessage(2) == "Your tower has been given a Two-Star Award!");
+	EXPECT(OT::LevelUp::starRewardMessage(3) == "Your tower has been given a Three-Star Award!");
+	EXPECT(OT::LevelUp::starRewardMessage(4) == "Your tower has been given a Four-Star Award!");
+	EXPECT(OT::LevelUp::starRewardMessage(5) == "Your tower has been given a Five-Star Award!");
+	EXPECT(OT::LevelUp::starRewardMessage(6).empty());
+	EXPECT(OT::LevelUp::starRewardMessage(99).empty());
+}
+
+static void testSaveHash()
+{
+	namespace SH = OT::SaveHash;
+
+	// Injected hash verifies.
+	const std::string doc = "<tower funds=\"4000000\" rating=\"0\"/>\n";
+	const std::string injected = SH::injectSaveHash(doc);
+	EXPECT(injected.rfind("<tower hash=\"", 0) == 0);
+	const SH::VerifyResult ok = SH::verifySaveHash(injected);
+	EXPECT(ok.valid);
+	EXPECT(!ok.legacy);
+	EXPECT(ok.stored.size() == 8);
+
+	// Tampered content must fail.
+	std::string tampered = injected;
+	tampered.replace(tampered.find("4000000"), 7, "9999999");
+	const SH::VerifyResult bad = SH::verifySaveHash(tampered);
+	EXPECT(!bad.valid);
+	EXPECT(!bad.legacy);
+
+	// Legacy files without a hash load gracefully.
+	const SH::VerifyResult legacy = SH::verifySaveHash(doc);
+	EXPECT(legacy.valid);
+	EXPECT(legacy.legacy);
+
+	// Determinism + web parity of the FNV-1a digest itself.
+	// fnv1a("") = 811c9dc5; fnv1a("a") = e40c292c (standard test vectors).
+	EXPECT(SH::fnv1aHex("") == "811c9dc5");
+	EXPECT(SH::fnv1aHex("a") == "e40c292c");
+	EXPECT(SH::computeSaveHash("x") == SH::computeSaveHash("x"));
+	EXPECT(SH::computeSaveHash("x") != SH::computeSaveHash("y"));
 }
 
 
@@ -371,7 +462,7 @@ static void testWindowsSPExecutable()
 // (loadFromPlugin) and Phase D (OBJMAP parser + coverage audit).
 static void testPluginManager()
 {
-    using OT::Plugin;
+    using OT::AbstractPlugin;
     using OT::PluginManager;
 
     PluginManager pm;
@@ -396,7 +487,7 @@ static void testPluginManager()
     EXPECT(sorted);
 
     // Lazy load: a freshly-cataloged plugin hasn't been PE-parsed yet.
-    Plugin * condo = pm.get("Condo.t2p");
+    AbstractPlugin * condo = pm.get("Condo.t2p");
     EXPECT(condo != nullptr);
     if (condo) {
         EXPECT(!condo->isLoaded());
@@ -415,7 +506,7 @@ static void testPluginManager()
         EXPECT(condo->getResource("OBJMAP", 9999) == nullptr);
 
         // enumerateResources returns the same data the manager exposes.
-        std::vector<Plugin::ResourceKey> res = condo->enumerateResources();
+        std::vector<AbstractPlugin::ResourceKey> res = condo->enumerateResources();
         EXPECT(!res.empty());
     }
 
@@ -454,7 +545,7 @@ static void testPluginManager()
     int spFormat = 0;
     int total = 0;
     for (const std::string & name : names) {
-        Plugin * p = pm.get(name);
+        AbstractPlugin * p = pm.get(name);
         if (!p) continue;
         ++total;
         if (!p->ensureLoaded()) continue;
@@ -488,7 +579,6 @@ static void testPluginManager()
 // of the Stair.t2p spiral-staircase resource.
 static void testPluginBitmapLoader()
 {
-    using OT::Plugin;
     using OT::PluginBitmapLoader;
 
     // Condo.t2p RT_BITMAP 1000 is the YootCondo empty-room sheet. The
@@ -541,20 +631,20 @@ static void testPluginBitmapLoader()
 // (the flat view) so the two stay in sync.
 static void testPluginResourcesByType()
 {
-    using OT::Plugin;
+    using OT::AbstractPlugin;
     using OT::PluginManager;
 
     PluginManager pm;
     pm.addPluginDirectory("../data/Plugins");
 
-    Plugin * condo = pm.get("Condo.t2p");
+    AbstractPlugin * condo = pm.get("Condo.t2p");
     EXPECT(condo != nullptr);
     if (!condo) return;
 
     std::map<std::string, std::vector<int>> byType = condo->resourcesByType();
 
     // The flat view must contain exactly the same (type, id) pairs.
-    std::vector<Plugin::ResourceKey> flat = condo->enumerateResources();
+    std::vector<AbstractPlugin::ResourceKey> flat = condo->enumerateResources();
     EXPECT(flat.size() == std::accumulate(byType.begin(), byType.end(), size_t{0},
         [](size_t n, const auto & kv) { return n + kv.second.size(); }));
 
@@ -578,8 +668,79 @@ static void testPluginResourcesByType()
     }
 
     // A plugin that fails to load returns an empty map (no crash).
-    Plugin broken("broken.t2p", "../data/Plugins/DoesNotExist.t2p");
+    OT::Plugin broken("broken.t2p", "../data/Plugins/DoesNotExist.t2p");
     EXPECT(broken.resourcesByType().empty());
+}
+
+// DecompiledPlugin seam: folder-based OpenTower plugins are discovered
+// alongside .t2p files and expose the same AbstractPlugin surface. The
+// data/Plugins/OpenTower/{Office,Condo,Hotel-*} plugins are generated by
+// tools/build_opentower_sheets.py; this test verifies they load and that
+// the downscale block produces the expected engine cell-grid dimensions.
+static void testDecompiledPlugin()
+{
+    using OT::AbstractPlugin;
+    using OT::PluginBitmapLoader;
+    using OT::PluginManager;
+
+    PluginManager pm;
+    pm.addPluginDirectory("../data/Plugins");
+
+    // Folder plugins are cataloged by relative path (edition/plugin).
+    AbstractPlugin * office = pm.get("OpenTower/Office");
+    EXPECT(office != nullptr);
+    if (!office) return;
+
+    EXPECT(office->ensureLoaded());
+    EXPECT(office->isLoaded());
+    // ensureLoaded is idempotent.
+    EXPECT(office->ensureLoaded());
+
+    // The folder synthesises the same (type,id) keys a PE plugin exposes.
+    EXPECT(office->hasResource("2", 1000));      // RT_BITMAP ingame sheet
+    EXPECT(office->hasResource("OBJMAP", 1000)); // frame layout
+    EXPECT(office->hasResource("ATTR", 128));    // synthesised metadata
+    EXPECT(office->hasResource("DESC", 128));
+
+    // Typed accessors decode the synthesised metadata.
+    OT::PluginAttr attr;
+    EXPECT(office->getAttr(attr));
+    EXPECT(attr.itemType == "CFFO");
+    EXPECT(attr.name == "Office");
+
+    OT::PluginDesc desc;
+    EXPECT(office->getDesc(desc));
+    EXPECT(desc.kind == OT::PluginDesc::TenantPlugin);
+
+    // Downscale target matches the engine cell grid (144x168 = 2x7 of 72x24).
+    unsigned int dw = 0, dh = 0;
+    EXPECT(office->downscaleTarget(dw, dh));
+    EXPECT(dw == 144);
+    EXPECT(dh == 168);
+
+    // The PNG loads and is resampled to the target dimensions.
+    sf::Texture tex;
+    EXPECT(PluginBitmapLoader::loadFromPlugin(*office, 1000, tex));
+    const sf::Vector2u sz = tex.getSize();
+    EXPECT(sz.x == 144);
+    EXPECT(sz.y == 168);
+
+    // enumerateResources / resourcesByType agree.
+    std::vector<AbstractPlugin::ResourceKey> flat = office->enumerateResources();
+    EXPECT(!flat.empty());
+    auto byType = office->resourcesByType();
+    EXPECT(flat.size() == std::accumulate(byType.begin(), byType.end(), size_t{0},
+        [](size_t n, const auto & kv) { return n + kv.second.size(); }));
+
+    // The other generated plugins are present too.
+    EXPECT(pm.has("OpenTower/Condo"));
+    EXPECT(pm.has("OpenTower/Hotel-Single"));
+    EXPECT(pm.has("OpenTower/Hotel-Double"));
+    EXPECT(pm.has("OpenTower/Hotel-Suite"));
+
+    // A plain directory without plugin.json is NOT picked up as a plugin.
+    EXPECT(!pm.has("OpenTower"));
+    EXPECT(!pm.has("OpenTower/DoesNotExist"));
 }
 
 // PluginResources seam: typed parsers for the HIGH-confidence resource
@@ -765,6 +926,118 @@ static void testParseDpdf()
     EXPECT(!OT::parsePluginDpdf(kCoin, 10, bad));
 }
 
+// PLDF price list. Calibration: resource-formats.md §3.10 — Burger.t2p
+// PLDF id=128 decodes to [40, 1000, 10, 300, 50, 100], where 1000 is the
+// construction cost. The on-disk resource is 25 bytes (version + 6 u32s).
+static void testParsePldf()
+{
+    using OT::PluginPldf;
+    // Exact bytes of Burger.t2p PLDF id=128 (25 B):
+    //   v=1  f1=40  basePrice=1000  f2=10  f3=300  f4=50  f5=100
+    static const unsigned char kBurger[] = {
+        0x01,
+        0x28,0x00,0x00,0x00,                       // 40
+        0xE8,0x03,0x00,0x00,                       // 1000
+        0x0A,0x00,0x00,0x00,                       // 10
+        0x2C,0x01,0x00,0x00,                       // 300
+        0x32,0x00,0x00,0x00,                       // 50
+        0x64,0x00,0x00,0x00                        // 100
+    };
+    PluginPldf p;
+    const bool ok = OT::parsePluginPldf(reinterpret_cast<const char *>(kBurger),
+                                        int(sizeof(kBurger)), p);
+    EXPECT(ok);
+    if (ok) {
+        EXPECT(p.valid);
+        EXPECT(p.version == 1);
+        EXPECT(p.f1 == 40u);
+        EXPECT(p.basePrice == 1000u);
+        EXPECT(p.f2 == 10u);
+        EXPECT(p.f3 == 300u);
+        EXPECT(p.f4 == 50u);
+        EXPECT(p.f5 == 100u);
+    }
+    // Truncation: below the 21-byte minimum is rejected.
+    PluginPldf bad;
+    EXPECT(!OT::parsePluginPldf(nullptr, 0, bad));
+    EXPECT(!OT::parsePluginPldf(reinterpret_cast<const char *>(kBurger), 20, bad));
+
+    // Integration: Burger.t2p carries PLDF; Stair (transport) does not.
+    OT::Plugin burger("Burger.t2p", "../data/Plugins/Burger.t2p");
+    EXPECT(burger.ensureLoaded());
+    PluginPldf bp;
+    EXPECT(burger.getPldf(bp));
+    if (bp.valid) {
+        EXPECT(bp.basePrice == 1000u);
+        EXPECT(bp.f1 == 40u);
+    }
+    OT::Plugin stair("Stair.t2p", "../data/Plugins/Stair.t2p");
+    EXPECT(stair.ensureLoaded());
+    PluginPldf sp;
+    EXPECT(!stair.getPldf(sp));
+}
+
+// MVDF mover definition. The header is 18 bytes; the body carries an
+// irregular tagged-pstr array whose exact framing is confirmed by T2DLL.dll
+// disassembly (Ghidra-pending). We parse the header fields and extract the
+// body strings robustly (printable-ASCII runs) so price/name/category survive.
+// Calibration: resource-formats.md §3.9 + the known transport prices.
+static void testParseMvdf()
+{
+    using OT::PluginMvdf;
+    // Integration against the 7 vendored Mover plugins. Stair carries the
+    // simplest price ("$5000"); StdElev carries the two-part elevator price
+    // ("$150000:$50000/car") plus a quarterly ("$12000/Q").
+    {
+        OT::Plugin stair("Stair.t2p", "../data/Plugins/Stair.t2p");
+        EXPECT(stair.ensureLoaded());
+        PluginMvdf m;
+        EXPECT(stair.getMvdf(m));
+        if (m.valid) {
+            EXPECT(m.version == 1);
+            EXPECT(m.itemID == 1800u);             // == Stair's ATTR mID
+            EXPECT(!m.priceString.empty());
+            EXPECT(m.priceString == "$5000");      // Stair's construction cost
+            EXPECT(m.name == "Stairs");
+        }
+    }
+    {
+        OT::Plugin elev("StdElev.t2p", "../data/Plugins/StdElev.t2p");
+        EXPECT(elev.ensureLoaded());
+        PluginMvdf m;
+        EXPECT(elev.getMvdf(m));
+        if (m.valid) {
+            EXPECT(m.itemID == 1810u);             // == StdElev's ATTR mID
+            EXPECT(m.priceString == "$150000:$50000/car");
+            EXPECT(m.quarterlyString == "$12000/Q");
+            EXPECT(m.name == "Simple Elevator");
+        }
+    }
+    // Escalator: quarterly present ($5000/Q), no per-car price.
+    {
+        OT::Plugin esc("Escalator.t2p", "../data/Plugins/Escalator.t2p");
+        EXPECT(esc.ensureLoaded());
+        PluginMvdf m;
+        EXPECT(esc.getMvdf(m));
+        if (m.valid) {
+            EXPECT(m.priceString == "$20000");
+            EXPECT(m.quarterlyString == "$5000/Q");
+            EXPECT(m.name == "Escalators");
+        }
+    }
+    // A Tenant plugin has no MVDF (it uses PLDF instead).
+    {
+        OT::Plugin condo("Condo.t2p", "../data/Plugins/Condo.t2p");
+        EXPECT(condo.ensureLoaded());
+        PluginMvdf m;
+        EXPECT(!condo.getMvdf(m));
+    }
+    // Truncation: below the 18-byte header is rejected.
+    PluginMvdf bad;
+    EXPECT(!OT::parsePluginMvdf(nullptr, 0, bad));
+    EXPECT(!OT::parsePluginMvdf("short", 5, bad));
+}
+
 // Integration: the Plugin accessors reach into the real vendored plugins
 // and reproduce the calibration values end-to-end.
 static void testPluginTypedAccessors()
@@ -836,6 +1109,288 @@ static void testPluginTypedAccessors()
     EXPECT(!broken.getDpdf(bc));
 }
 
+// OBJMAP sprite-layout parser. Two layers:
+//   (a) byte-level: a hand-crafted block reproducing the grammar, exercising
+//       ID/Pattern/Span/List and the Rect + flags parsing.
+//   (b) integration: Stair.t2p OBJMAP 1000 reproduces the spiral-staircase
+//       calibration oracle (extract_t2p_stairs.py:11-13).
+static void testPluginObjmap()
+{
+    using OT::ObjmapBlock;
+    using OT::ObjmapRect;
+    // Hand-crafted grammar sample with two blocks: a Csr master rect and a
+    // two-state toolbox icon (unselected/selected).
+    static const char kSample[] =
+        "DefParts\tName\tCsr\r\n"
+        "\t\tID\t100\r\n"
+        "\t\tList\tRect 0,0,26,130 Halftone\r\n"
+        "\r\n"
+        "DefParts\tName\tCondo\r\n"
+        "\t\tID\t101\r\n"
+        "\t\tPattern\t0\r\n"
+        "\t\tList\tRect 0,0,26,32 Transparent\r\n"
+        "\r\n"
+        "DefParts\tName\tCondo\r\n"
+        "\t\tID\t101\r\n"
+        "\t\tPattern\t1\r\n"
+        "\t\tList\tRect 26,0,52,32 Transparent\r\n"
+        "\r\n"
+        "End\r\n";
+    std::vector<ObjmapBlock> blocks;
+    const bool ok = OT::parsePluginObjmap(kSample, int(sizeof(kSample) - 1), blocks);
+    EXPECT(ok);
+    if (ok) {
+        EXPECT(blocks.size() == 3u);
+        if (blocks.size() == 3) {
+            EXPECT(blocks[0].name == "Csr");
+            EXPECT(blocks[0].id == 100);
+            EXPECT(blocks[0].rect == (ObjmapRect{0, 0, 26, 130}));
+            EXPECT(blocks[0].flags.size() == 1u);
+            EXPECT(blocks[0].flags[0] == "Halftone");
+            EXPECT(blocks[1].name == "Condo");
+            EXPECT(blocks[1].pattern == 0);
+            EXPECT(blocks[1].rect == (ObjmapRect{0, 0, 26, 32}));
+            EXPECT(blocks[2].pattern == 1);
+            EXPECT(blocks[2].rect == (ObjmapRect{26, 0, 52, 32}));
+        }
+        // findObjmapBlock: locate the selected icon variant.
+        ObjmapBlock * sel = OT::findObjmapBlock(blocks, "Condo", 1);
+        EXPECT(sel != nullptr);
+        if (sel) EXPECT(sel->rect.right == 52);
+        EXPECT(OT::findObjmapBlock(blocks, "Condo", 99) == nullptr);
+    }
+
+    // Rejection: not an OBJMAP (no DefParts magic).
+    std::vector<ObjmapBlock> bad;
+    EXPECT(!OT::parsePluginObjmap(nullptr, 0, bad));
+    EXPECT(!OT::parsePluginObjmap("not objmap", 10, bad));
+
+    // --- Integration: Stair.t2p OBJMAP 1000 (the calibration oracle). ---
+    OT::Plugin stair("Stair.t2p", "../data/Plugins/Stair.t2p");
+    EXPECT(stair.ensureLoaded());
+    const OT::WindowsPEExecutable::Resource * res = stair.getResource("OBJMAP", 1000);
+    EXPECT(res != nullptr);
+    if (res && res->data) {
+        std::vector<ObjmapBlock> stairBlocks;
+        EXPECT(OT::parsePluginObjmap(res->data, res->length, stairBlocks));
+        // extract_t2p_stairs.py:11-13 knows three spiral-staircase spans:
+        //   Span 2: Rect(0,0,64,60)   Span 3: Rect(0,60,64,156)
+        //   Span 4: Rect(0,156,64,288)
+        // Find them by span id (names are "View").
+        auto bySpan = [&](int s) -> const ObjmapBlock * {
+            for (const auto & b : stairBlocks) if (b.span == s) return &b;
+            return nullptr;
+        };
+        const ObjmapBlock * s2 = bySpan(2);
+        const ObjmapBlock * s3 = bySpan(3);
+        const ObjmapBlock * s4 = bySpan(4);
+        EXPECT(s2 != nullptr); EXPECT(s3 != nullptr); EXPECT(s4 != nullptr);
+        if (s2) EXPECT(s2->rect == (ObjmapRect{0, 0, 64, 60}));
+        if (s3) EXPECT(s3->rect == (ObjmapRect{0, 60, 64, 156}));
+        if (s4) EXPECT(s4->rect == (ObjmapRect{0, 156, 64, 288}));
+    }
+
+    // Condo.t2p OBJMAP 100: the toolbox-icon block set. Per objmap-format.md
+    // every gameplay item carries exactly 5 blocks (3 Category + 2 item).
+    OT::Plugin condo("Condo.t2p", "../data/Plugins/Condo.t2p");
+    EXPECT(condo.ensureLoaded());
+    const OT::WindowsPEExecutable::Resource * res100 = condo.getResource("OBJMAP", 100);
+    EXPECT(res100 != nullptr);
+    if (res100 && res100->data) {
+        std::vector<ObjmapBlock> condoIcons;
+        EXPECT(OT::parsePluginObjmap(res100->data, res100->length, condoIcons));
+        EXPECT(condoIcons.size() == 5u);
+        int cats = 0;
+        for (const auto & b : condoIcons) if (b.name == "Category") ++cats;
+        EXPECT(cats == 3);
+    }
+}
+
+// parse -> write -> parse must be an identity for the attributes we model
+// (name, id, pattern, span, rect, flags). This is the round-trip guarantee
+// the OSP writer relies on when emitting meta/objmap_*.txt.
+static void testObjmapRoundTrip()
+{
+    using OT::ObjmapBlock;
+    using OT::ObjmapRect;
+    std::vector<ObjmapBlock> original;
+    ObjmapBlock a; a.name = "Csr"; a.id = 100;
+    a.rect = {0, 0, 26, 130}; a.flags = {"Halftone"};
+    original.push_back(a);
+    ObjmapBlock b; b.name = "View"; b.id = 100; b.pattern = 101;
+    b.rect = {0, 0, 128, 24}; b.flags = {"Transparent"};
+    original.push_back(b);
+    ObjmapBlock c; c.name = "View"; c.span = 3;
+    c.rect = {0, 60, 64, 156};
+    original.push_back(c);
+
+    const std::string text = OT::writePluginObjmap(original);
+    std::vector<ObjmapBlock> reparsed;
+    EXPECT(OT::parsePluginObjmap(text.data(), int(text.size()), reparsed));
+    if (reparsed.size() == original.size()) {
+        for (size_t i = 0; i < original.size(); ++i) {
+            EXPECT(reparsed[i].name == original[i].name);
+            EXPECT(reparsed[i].id == original[i].id);
+            EXPECT(reparsed[i].pattern == original[i].pattern);
+            EXPECT(reparsed[i].span == original[i].span);
+            EXPECT(reparsed[i].rect == original[i].rect);
+            EXPECT(reparsed[i].flags == original[i].flags);
+        }
+    } else {
+        EXPECT(reparsed.size() == original.size());
+    }
+}
+
+
+// OSP round-trip: convert Condo.t2p -> OspPlugin -> save to a temp dir ->
+// reload -> the metadata, sprite dimensions, and OBJMAP block counts must
+// survive the round trip. This is the editor's core correctness guarantee.
+static void testOspRoundTrip()
+{
+    using namespace OT;
+    // Source: a real vendored Tenant plugin.
+    Plugin condo("Condo.t2p", "../data/Plugins/Condo.t2p");
+    EXPECT(condo.ensureLoaded());
+
+    OspPlugin p;
+    const OspResult cr = convertT2pToOsp(condo, p);
+    EXPECT(cr.ok);
+    if (!cr.ok) return;
+
+    EXPECT(p.sourceFormat == "yoottower-t2p");
+    EXPECT(p.sourceFile == "Condo.t2p");
+    EXPECT(p.pluginClass == PluginDesc::TenantPlugin);
+    EXPECT(p.attr.valid);
+    EXPECT(p.attr.itemType == "TRPA");
+    EXPECT(p.attr.name == "Condo");
+    // Condo ships a toolbox sheet (100), primary sheet (1000), and resident
+    // overlay (1100). The known magenta/white masks come from YootCondo.cpp.
+    EXPECT(p.toolbox.present);
+    EXPECT(p.ingame.present);
+    EXPECT(p.occupants.present);
+    EXPECT(p.ingame.mask.has_value());
+    if (p.ingame.mask) EXPECT(*p.ingame.mask == sf::Color(105, 33, 104));
+    if (p.occupants.mask) EXPECT(*p.occupants.mask == sf::Color::White);
+    // Condo OBJMAP 100 has 5 blocks (3 Category + 2 item).
+    EXPECT(p.toolbox.blocks.size() == 5u);
+
+    // Save to a throwaway temp dir, then reload.
+    const std::string tmpDir = "test_osp_roundtrip.osp-plugin";
+    // Clean a previous run so the test is repeatable.
+    if (isOspPluginDir(tmpDir)) {
+        // best-effort wipe of generated files
+        std::remove((tmpDir + "/plugin.json").c_str());
+        std::remove((tmpDir + "/sprites/toolbox.png").c_str());
+        std::remove((tmpDir + "/sprites/ingame.png").c_str());
+        std::remove((tmpDir + "/sprites/occupants.png").c_str());
+        std::remove((tmpDir + "/meta/objmap_100.txt").c_str());
+        std::remove((tmpDir + "/meta/objmap_1000.txt").c_str());
+    }
+    const OspResult sr = saveOspPlugin(tmpDir, p, true);
+    EXPECT(sr.ok);
+    if (!sr.ok) return;
+    EXPECT(isOspPluginDir(tmpDir));
+
+    OspPlugin reloaded;
+    const OspResult lr = loadOspPlugin(tmpDir, reloaded);
+    EXPECT(lr.ok);
+    if (!lr.ok) return;
+
+    // Metadata round-trips.
+    EXPECT(reloaded.sourceFormat == "openskyscraper-plugin");
+    EXPECT(reloaded.sourceFile == "Condo.t2p");
+    EXPECT(reloaded.pluginClass == PluginDesc::TenantPlugin);
+    EXPECT(reloaded.attr.itemType == "TRPA");
+    EXPECT(reloaded.attr.name == "Condo");
+    EXPECT(reloaded.attr.id == p.attr.id);
+    // Sprite dimensions survive PNG encode/decode.
+    EXPECT(reloaded.ingame.image.getSize() == p.ingame.image.getSize());
+    EXPECT(reloaded.toolbox.present && reloaded.ingame.present && reloaded.occupants.present);
+    // OBJMAP block count survives parse->write->parse (already covered) + save.
+    EXPECT(reloaded.toolbox.blocks.size() == 5u);
+
+    // Refuse to load a higher format version (forward-compat guard).
+    {
+        const std::string badDir = "test_osp_badversion.osp-plugin";
+        saveOspPlugin(badDir, p, true);
+        std::string json;
+        std::ifstream f(badDir + "/plugin.json");
+        std::ostringstream ss; ss << f.rdbuf(); json = ss.str();
+        // Bump the version number in-place.
+        size_t pos = json.find("\"formatVersion\":");
+        if (pos != std::string::npos) {
+            json.replace(pos, std::string("\"formatVersion\":").size(), "\"formatVersion\": 999,");
+            std::ofstream(badDir + "/plugin.json", std::ios::trunc) << json;
+            OspPlugin dummy;
+            OspResult r = loadOspPlugin(badDir, dummy);
+            EXPECT(!r.ok);  // higher version must be rejected
+        }
+        std::remove((badDir + "/plugin.json").c_str());
+        std::remove((badDir + "/sprites/toolbox.png").c_str());
+        std::remove((badDir + "/sprites/ingame.png").c_str());
+        std::remove((badDir + "/sprites/occupants.png").c_str());
+        std::remove((badDir + "/meta/objmap_100.txt").c_str());
+        std::remove((badDir + "/meta/objmap_1000.txt").c_str());
+    }
+}
+
+// Mover-class round trip: Stair.t2p -> OspPlugin -> save -> reload. Proves the
+// Mover slice end to end: DESC class is preserved, MVDF transport pricing
+// survives, the walking-frames sheet (RT_BITMAP 200 + OBJMAP 200) round-trips.
+static void testOspRoundTripMover()
+{
+    using namespace OT;
+    Plugin stair("Stair.t2p", "../data/Plugins/Stair.t2p");
+    EXPECT(stair.ensureLoaded());
+
+    OspPlugin p;
+    const OspResult cr = convertT2pToOsp(stair, p);
+    EXPECT(cr.ok);
+    if (!cr.ok) return;
+
+    EXPECT(p.pluginClass == PluginDesc::MoverPlugin);
+    EXPECT(p.attr.itemType == "RATS");
+    EXPECT(p.attr.name == "Stairs");
+    // MVDF transport pricing came through.
+    EXPECT(p.transport.valid);
+    EXPECT(p.transport.priceString == "$5000");
+    EXPECT(p.transport.name == "Stairs");
+    // Walking-frames sheet + OBJMAP 200 (the stair SHIL) are present.
+    EXPECT(p.walking.present);
+    EXPECT(!p.walking.blocks.empty());
+    // Stairs have no PLDF (transport uses MVDF) and no occupants sheet.
+    EXPECT(!p.price.valid);
+
+    const std::string tmpDir = "test_osp_mover.osp-plugin";
+    const OspResult sr = saveOspPlugin(tmpDir, p, true);
+    EXPECT(sr.ok);
+    if (!sr.ok) return;
+
+    OspPlugin reloaded;
+    const OspResult lr = loadOspPlugin(tmpDir, reloaded);
+    EXPECT(lr.ok);
+    if (!lr.ok) return;
+
+    EXPECT(reloaded.pluginClass == PluginDesc::MoverPlugin);
+    EXPECT(reloaded.attr.name == "Stairs");
+    EXPECT(reloaded.transport.valid);
+    EXPECT(reloaded.transport.priceString == "$5000");
+    EXPECT(reloaded.walking.present);
+    EXPECT(reloaded.walking.image.getSize() == p.walking.image.getSize());
+    // OBJMAP 200 block count survives the parse->write->parse round trip.
+    EXPECT(reloaded.walking.blocks.size() == p.walking.blocks.size());
+
+    // cleanup
+    std::remove((tmpDir + "/plugin.json").c_str());
+    std::remove((tmpDir + "/sprites/toolbox.png").c_str());
+    std::remove((tmpDir + "/sprites/ingame.png").c_str());
+    std::remove((tmpDir + "/sprites/walking.png").c_str());
+    std::remove((tmpDir + "/meta/objmap_100.txt").c_str());
+    std::remove((tmpDir + "/meta/objmap_1000.txt").c_str());
+    std::remove((tmpDir + "/meta/objmap_200.txt").c_str());
+}
+
+
 int main()
 {
 	testSmoke();
@@ -847,18 +1402,26 @@ int main()
 	testNameManager();
 	testLightingColorMath();
 	testLevelUpRules();
+	testLevelUpStarReward();
+	testSaveHash();
 	testWindowsPEExecutable();
 	testWindowsSPExecutable();
 	testPluginManager();
 	testPluginBitmapLoader();
 	testPluginResourcesByType();
+	testDecompiledPlugin();
 	testFourCC();
 	testParseAttrBinary();
 	testParseAttrText();
 	testParseDesc();
 	testParseDpdf();
+	testParsePldf();
+	testParseMvdf();
 	testPluginTypedAccessors();
-
+	testPluginObjmap();
+	testObjmapRoundTrip();
+	testOspRoundTrip();
+	testOspRoundTripMover();
     if (g_failures > 0)
     {
         std::cerr << g_failures << " test(s) failed\n";

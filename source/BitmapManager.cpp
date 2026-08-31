@@ -7,6 +7,8 @@
 
 #include <SFML/Graphics/Image.hpp>
 
+#include <cstring>
+
 using namespace OT;
 
 static sf::Vector2u fallbackBitmapSize(Path name)
@@ -158,7 +160,7 @@ bool BitmapManager::loadFromPlugin(const std::string & pluginName, int resourceI
                                    sf::Texture & dst,
                                    const sf::Color & maskColor)
 {
-	Plugin * plugin = app->pluginManager.get(pluginName);
+	AbstractPlugin * plugin = app->pluginManager.get(pluginName);
 	if (!plugin) {
 		LOG(WARNING, "BitmapManager: plugin '%s' not cataloged", pluginName.c_str());
 		return false;
@@ -170,4 +172,73 @@ bool BitmapManager::loadFromPlugin(const std::string & pluginName, int resourceI
 	}
 	LOG(DEBUG, "loaded plugin bitmap %s/%d", pluginName.c_str(), resourceId);
 	return true;
+}
+
+namespace
+{
+	/// Maps a logical item id to the OpenTower folder-plugin that provides
+	/// its art. The folder plugin name is the edition/plugin path the
+	/// PluginManager catalogs (see PluginManager::addPluginDirectory).
+	struct EditionMap { const char * logical; const char * plugin; };
+	const EditionMap kEditionMap[] = {
+		{"office",        "OpenTower/Office"},
+		{"condo",         "OpenTower/Condo"},
+		{"hotel_single",  "OpenTower/Hotel-Single"},
+		{"hotel_double",  "OpenTower/Hotel-Double"},
+		{"hotel_suite",   "OpenTower/Hotel-Suite"},
+		{"floor",         "OpenTower/Floor"},
+		{"stairs",        "OpenTower/Stairs"},
+		{"escalator",     "OpenTower/Escalator"},
+		{"parking",       "OpenTower/Parking"},
+		{"parking_ramp",  "OpenTower/Parking-Ramp"},
+		{"fastfood",      "OpenTower/FastFood"},
+		{"restaurant",    "OpenTower/Restaurant"},
+		{"security",      "OpenTower/Security"},
+		{"medicalcenter", "OpenTower/MedicalCenter"},
+		{"recycling",     "OpenTower/Recycling"},
+		{"partyhall",     "OpenTower/PartyHall"},
+		{"housekeeping",  "OpenTower/Housekeeping"},
+		{"shops",         "OpenTower/Shops"},
+		{"elevator_standard", "OpenTower/Elevator-Standard"},
+		{"elevator_service",  "OpenTower/Elevator-Service"},
+		{"elevator_express",  "OpenTower/Elevator-Express"},
+		{"elevator_narrow",   "OpenTower/Elevator-Shaft-Narrow"},
+		{"elevator_wide",     "OpenTower/Elevator-Shaft-Wide"},
+		{"lobby_normal",  "OpenTower/Lobby-Normal"},
+		{"lobby_sky",     "OpenTower/Lobby-Sky"},
+		{"lobby_high",    "OpenTower/Lobby-High"},
+	};
+	const char * editionPluginFor(const char * logical)
+	{
+		for (const EditionMap & e : kEditionMap)
+			if (std::strcmp(e.logical, logical) == 0)
+				return e.plugin;
+		return nullptr;
+	}
+}
+
+sf::Texture & BitmapManager::editionTexture(const char * logicalName,
+                                            const char * simtowerKey)
+{
+	// SimTowerLoader eagerly installs extracted textures under these keys.
+	// Preserve those when an executable was loaded: an installed OpenTower
+	// edition is a fallback/alternative, not an override of an explicitly
+	// selected (or automatically discovered) SIMTOWER executable.
+	Resources & resources = getResources();
+	Resources::iterator existing = resources.find(Path(simtowerKey));
+	if (existing != resources.end() && existing->second.getSize().x != 0 &&
+	    existing->second.getSize().y != 0)
+		return existing->second;
+
+	// Cache plugin or file fallback under the key the item expects.
+	sf::Texture & dst = resources[Path(simtowerKey)];
+	const char * pluginName = editionPluginFor(logicalName);
+	if (pluginName && app->pluginManager.has(pluginName))
+	{
+		if (loadFromPlugin(pluginName, 1000, dst))
+			return dst;
+		// Fall through to the simtower path on load failure.
+	}
+	load(simtowerKey, dst);
+	return dst;
 }

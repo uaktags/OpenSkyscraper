@@ -10,6 +10,8 @@
 #include <fstream>
 #include <sys/stat.h>
 #include <cstring>
+#include <algorithm>
+#include <cctype>
 #include <stdarg.h>
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -96,8 +98,21 @@ bool SimTowerLoader::load()
 {
 	LOG(DEBUG, "loading SimTower resources");
 
-	//Find the possible paths to the SimTower executable and use the first that works.
-	DataManager::Paths paths = app->data.paths("SIMTOWER.EXE");
+	// An explicit user selection bypasses automatic discovery, including when
+	// its filename casing differs on a case-sensitive filesystem.
+	const std::string overridePath = app->simTowerExecutablePath();
+	std::string overrideLower = overridePath;
+	std::transform(overrideLower.begin(), overrideLower.end(), overrideLower.begin(),
+	               [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+	const bool overrideCompressed = overrideLower.size() >= 4 &&
+	                                overrideLower.substr(overrideLower.size() - 4) == ".ex_";
+
+	// Find the possible paths to the SimTower executable and use the first that works.
+	DataManager::Paths paths;
+	if (overridePath.empty())
+		paths = app->data.paths("SIMTOWER.EXE");
+	else if (!overrideCompressed)
+		paths.push_back(Path(overridePath));
 	bool success = false;
 	for (int i = 0; i < paths.size() && !success; i++) {
 		success = exe.load(paths[i]);
@@ -126,7 +141,10 @@ bool SimTowerLoader::load()
 		Path decompressedPath(tmp);
 
 		//Iterate through the possible locations and try to find a cached/decompressed version, or decompress if not found.
-		compressedPaths = app->data.paths("SIMTOWER.EX_");
+		if (overrideCompressed)
+			compressedPaths.push_back(Path(overridePath));
+		else if (overridePath.empty())
+			compressedPaths = app->data.paths("SIMTOWER.EX_");
 		mskwaj_decompressor * d = NULL;
 		for (int i = 0; i < compressedPaths.size() && !success; i++) {
 			const Path &path = compressedPaths[i];
@@ -740,6 +758,7 @@ void SimTowerLoader::loadBitmaps()
 		{0x85EC, "animpeple/restaurant",   sf::Color::White},
 		{0x85ED, "animpeple/event",        sf::Color::White},
 		{0x85EE, "animpeple/housekeeper",  sf::Color::White},
+		{0x8469, "animpeple/guard",        sf::Color::White},
 
 		{0x87A8, "housekeeping"},
 

@@ -14,7 +14,7 @@ void MedicalCenter::init()
 {
     Item::init();
 
-    sprite.SetImage(App->bitmaps["simtower/medicalcenter"]);
+    sprite.SetImage(App->bitmaps.editionTexture("medicalcenter", "simtower/medicalcenter"));
     sprite.setOrigin({0.f, 24.f});
     sprite.setPosition({static_cast<float>(getPosition().x * 8), static_cast<float>(-getPosition().y * 36)});
     addSprite(&sprite);

@@ -1,0 +1,95 @@
+DefParts	Name	Csr
+		ID	100
+		List	Rect 0,0,504,48 Halftone
+
+DefParts	Name	View
+		ID	1000
+		Pattern	100
+		List	Rect 0,0,56,24 Transparent
+
+DefParts	Name	View
+		ID	1000
+		Pattern	101
+		List	Rect 56,0,112,24 Transparent
+
+DefParts	Name	View
+		ID	1000
+		Pattern	102
+		List	Rect 112,0,168,24 Transparent
+
+DefParts	Name	View
+		ID	1000
+		Pattern	103
+		List	Rect 168,0,224,24 Transparent
+
+DefParts	Name	View
+		ID	1000
+		Pattern	104
+		List	Rect 224,0,280,24 Transparent
+
+DefParts	Name	View
+		ID	1000
+		Pattern	105
+		List	Rect 280,0,336,24 Transparent
+
+DefParts	Name	View
+		ID	1000
+		Pattern	106
+		List	Rect 336,0,392,24 Transparent
+
+DefParts	Name	View
+		ID	1000
+		Pattern	107
+		List	Rect 392,0,448,24 Transparent
+
+DefParts	Name	View
+		ID	1000
+		Pattern	108
+		List	Rect 448,0,504,24 Transparent
+
+DefParts	Name	View
+		ID	1000
+		Pattern	109
+		List	Rect 0,24,56,48 Transparent
+
+DefParts	Name	View
+		ID	1000
+		Pattern	110
+		List	Rect 56,24,112,48 Transparent
+
+DefParts	Name	View
+		ID	1000
+		Pattern	111
+		List	Rect 112,24,168,48 Transparent
+
+DefParts	Name	View
+		ID	1000
+		Pattern	112
+		List	Rect 168,24,224,48 Transparent
+
+DefParts	Name	View
+		ID	1000
+		Pattern	113
+		List	Rect 224,24,280,48 Transparent
+
+DefParts	Name	View
+		ID	1000
+		Pattern	114
+		List	Rect 280,24,336,48 Transparent
+
+DefParts	Name	View
+		ID	1000
+		Pattern	115
+		List	Rect 336,24,392,48 Transparent
+
+DefParts	Name	View
+		ID	1000
+		Pattern	116
+		List	Rect 392,24,448,48 Transparent
+
+DefParts	Name	View
+		ID	1000
+		Pattern	117
+		List	Rect 448,24,504,48 Transparent
+
+End

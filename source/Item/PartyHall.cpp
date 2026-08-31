@@ -22,7 +22,7 @@ void PartyHall::init()
 
 	open = false;
 
-	sprite.setTexture(App->bitmaps["simtower/partyhall"]);
+	sprite.setTexture(App->bitmaps.editionTexture("partyhall", "simtower/partyhall"));
 	sprite.setOrigin({0.f, 60.f});
 	sprite.setPosition({0.f, 0.f});
 	addSprite(&sprite);

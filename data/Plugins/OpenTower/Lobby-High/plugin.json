@@ -1,0 +1,33 @@
+{
+  "format": "openskyscraper-plugin",
+  "formatVersion": 1,
+  "sourceFormat": "scratch",
+  "class": "Tenant",
+  "attr": {
+    "itemType": "NORF",
+    "name": "Grand Lobby",
+    "gameLevel": 1,
+    "id": 1,
+    "marker": "****",
+    "attrib": 1,
+    "mustItem": 0,
+    "dependID": 0,
+    "secretItem": 0
+  },
+  "bitmaps": {
+    "ingame": {
+      "present": true,
+      "width": 312,
+      "height": 324,
+      "transparentColor": null,
+      "maskDiscovery": "none",
+      "downscale": {
+        "toW": 312,
+        "toH": 324
+      }
+    }
+  },
+  "spriteLayout": {
+    "ingame": "meta/objmap_1000.txt"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "format": "openskyscraper-plugin",
+  "formatVersion": 1,
+  "sourceFormat": "scratch",
+  "class": "Tenant",
+  "attr": {
+    "itemType": "BNOC",
+    "name": "Shops",
+    "gameLevel": 1,
+    "id": 1,
+    "marker": "****",
+    "attrib": 1,
+    "mustItem": 0,
+    "dependID": 0,
+    "secretItem": 0
+  },
+  "bitmaps": {
+    "ingame": {
+      "present": true,
+      "width": 288,
+      "height": 288,
+      "transparentColor": null,
+      "maskDiscovery": "none",
+      "downscale": {
+        "toW": 288,
+        "toH": 288
+      }
+    }
+  },
+  "spriteLayout": {
+    "ingame": "meta/objmap_1000.txt"
+  }
+}

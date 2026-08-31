@@ -253,4 +253,106 @@ namespace OT
 		out.valid = true;
 		return true;
 	}
+
+	// ---------------------------------------------------------------------------
+	// PLDF — 21-byte price list
+	//   0  u8   version  (always 1)
+	//   1  u32  f1         40   (0x28)
+	//   5  u32  basePrice  1000 (0x3E8) — construction cost
+	//   9  u32  f2         10
+	//  13  u32  f3         300  (0x12C)
+	//  17  u32  f4         50
+	//  (followed by f5=100 in observed samples; the doc's fixed layout lists
+	//  five u32 factors — we read all five when present, tolerating the 21-byte
+	//  minimum which covers version + f1..f4.)
+	// ---------------------------------------------------------------------------
+	bool parsePluginPldf(const char * data, int length, PluginPldf & out)
+	{
+		// Minimum is version + 5 u32 = 21 bytes. Some samples carry an extra
+		// factor (f5) for 25 bytes; read it opportunistically.
+		if (!data || length < 21) return false;
+		out.version   = uint8_t(data[0]);
+		bool ok = true;
+		out.f1        = readU32LE(data + 1,  data + length, ok);
+		out.basePrice = readU32LE(data + 5,  data + length, ok);
+		out.f2        = readU32LE(data + 9,  data + length, ok);
+		out.f3        = readU32LE(data + 13, data + length, ok);
+		out.f4        = readU32LE(data + 17, data + length, ok);
+		// f5 is optional (25-byte form). Only trust it if the buffer is long
+		// enough; otherwise leave it at 0.
+		if (length >= 25) out.f5 = readU32LE(data + 21, data + length, ok);
+		if (!ok) return false;
+		out.valid = true;
+		return true;
+	}
+
+	// ---------------------------------------------------------------------------
+	// MVDF — mover (transport) definition
+	//   0  u8    version        (1)
+	//   1  u32   itemID         == mID (Stair=1800, StdElev=1810, …). Matches
+	//                           the ATTR mID cross-reference key.
+	//   5  u32   field5         (8 for stairs/escalator; varies — inferred)
+	//   9  u32   field9         (2 stairs/esc, 1 elevators; inferred)
+	//  13  u32   field13        (1/2/3 — inferred capacity/variant)
+	//  17  ...   irregular tagged-pstr array (description, category, prices, name)
+	//
+	// Per resource-formats.md §3.9. The string array's framing is irregular
+	// (mix of 0x00-tagged and raw pascal strings) and its exact structure is
+	// confirmed by disassembly of T2DLL.dll's T2MoverPlugin constructor (a
+	// Ghidra task). To stay robust and never silently drop data, the body is
+	// scanned for printable-ASCII runs (>= 3 chars), which reliably yields the
+	// description, category, price strings ("$150000:$50000/car"), and the
+	// item name. The two most useful strings are also classified by their
+	// leading '$' / trailing '/Q'.
+	// ---------------------------------------------------------------------------
+	bool parsePluginMvdf(const char * data, int length, PluginMvdf & out)
+	{
+		if (!data || length < 18) return false;
+		out.version = uint8_t(data[0]);
+		bool ok = true;
+		out.itemID  = readU32LE(data + 1,  data + length, ok);
+		out.field5  = readU32LE(data + 5,  data + length, ok);
+		out.field9  = readU32LE(data + 9,  data + length, ok);
+		out.field13 = readU32LE(data + 13, data + length, ok);
+		if (!ok) return false;
+
+		// Extract printable-ASCII runs (>= 3 chars) from the body (offset 18+).
+		// Each run is one logical string; leading framing chars are stripped
+		// from the first run so the description reads cleanly.
+		const int bodyStart = 18;
+		int i = bodyStart;
+		while (i < length)
+		{
+			if (uint8_t(data[i]) >= 0x20 && uint8_t(data[i]) < 0x7f)
+			{
+				int j = i;
+				while (j < length && uint8_t(data[j]) >= 0x20 && uint8_t(data[j]) < 0x7f) ++j;
+				if (j - i >= 3) out.strings.emplace_back(data + i, data + j);
+				i = j;
+			}
+			else ++i;
+		}
+
+		// Classify the useful strings. Prices start with '$'; the recurring
+		// (quarterly) variant ends with '/Q'. The name is the last string
+		// (movers carry it twice). Skip the category line, which is always
+		// "Transit Systems" — but keep it in `strings` for completeness.
+		bool foundPrice = false;
+		for (const std::string & s : out.strings)
+		{
+			if (!s.empty() && s[0] == '$')
+			{
+				// A "$a:$b/car" or "$a,$b/car" string is the primary price;
+				// a "$n/Q" string is the quarterly maintenance cost.
+				bool isQuarterly = s.size() >= 2 && s[s.size() - 1] == 'Q' &&
+				                   s[s.size() - 2] == '/';
+				if (isQuarterly) out.quarterlyString = s;
+				else if (!foundPrice) { out.priceString = s; foundPrice = true; }
+			}
+		}
+		if (!out.strings.empty()) out.name = out.strings.back();
+
+		out.valid = true;
+		return true;
+	}
 }

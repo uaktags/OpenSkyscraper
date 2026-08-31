@@ -32,6 +32,9 @@ cmake_install.cmake
 /stdout.log
 *.png
 
+# OpenTower edition ships its art as committed folder-plugin sprites.
+!data/Plugins/OpenTower/**/*.png
+
 # Assets / binaries
 /SIMTOWER.EX_
 /SIMTOWER.EXE

@@ -15,7 +15,7 @@ void Floor::init()
 
 	layer = -1;
 
-	sf::Texture &floor = App->bitmaps["simtower/floor"];
+	sf::Texture &floor = App->bitmaps.editionTexture("floor", "simtower/floor");
 	background.setTexture(floor);
 	background.setTextureRect(sf::IntRect({0, 0}, {8, 36}));
 	background.setOrigin({0.f, static_cast<float>(floor.getSize().y)});

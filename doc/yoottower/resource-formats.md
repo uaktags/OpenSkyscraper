@@ -523,11 +523,15 @@ plugin's `.text`.
 The HIGH-confidence resource types are parsed in C++:
 
 - `source/PluginResources.{h,cpp}` — `FourCC` helper + `PluginAttr` /
-  `PluginDesc` / `PluginDpdf` / `PluginPldf` POD structs +
-  `parsePlugin{Attr,Desc,Dpdf,Pldf}` functions. Pure functions over a byte
-  buffer (no Plugin/PE dependency), so they unit-test with hand-crafted inputs.
-- `Plugin::getAttr()/getDesc()/getDpdf()/getPldf()` — thin accessors that fetch
-  resource id 128 and call the parsers. Lazy via `ensureLoaded()`.
+  `PluginDesc` / `PluginDpdf` / `PluginPldf` / `PluginMvdf` POD structs +
+  `parsePlugin{Attr,Desc,Dpdf,Pldf,Mvdf}` functions. Pure functions over a
+  byte buffer (no Plugin/PE dependency), so they unit-test with hand-crafted
+  inputs. MVDF's binary-header fields (itemID confirmed = mID; the capacity/
+  speed dwords remain inferred pending the T2DLL Ghidra pass) plus a robust
+  printable-ASCII-run extraction of the price/category/name strings.
+- `Plugin::getAttr()/getDesc()/getDpdf()/getPldf()/getMvdf()` — thin accessors
+  that fetch the resource and call the parsers (ATTR/DESC/DPDF/PLDF at id 128,
+  MVDF at id 1). Lazy via `ensureLoaded()`.
 - `source/PluginObjmap.{h,cpp}` — the OBJMAP sprite-layout parser + writer
   (`parsePluginObjmap` / `writePluginObjmap` / `findObjmapBlock`). Implements
   the line-based algorithm in `objmap-format.md` §"Implementation guidance".
@@ -551,11 +555,14 @@ the OSP format. Tenant vertical slice; see `doc/openskyscraper/plugin-format.md`
 
 What remains for full data-driven item loading (future phases):
 
-1. **Remaining medium-confidence parsers** (MVDF/WODF/SLDF/TNDF): structure is
-   documented in §3.6–§3.9; promote to C++ once a consumer needs them (e.g.
-   MVDF when wiring transport pricing, WODF for speech). PLDF is now done.
-2. **OBJMAP 200/1100 (SHIL walking frames):** the parser handles them, but the
-   editor doesn't yet expose directional-frame editing (Mover slice).
+1. **Remaining medium-confidence parsers** (WODF/SLDF/TNDF): structure is
+   documented in §3.6–§3.8; promote to C++ once a consumer needs them (e.g.
+   WODF for speech, SLDF for spawned roles). PLDF (§3.10) and MVDF (§3.9) are
+   now parsed; MVDF's capacity/speed header dwords are still field-mapped by
+   inference pending the T2DLL Ghidra pass.
+2. **OBJMAP 200/1100 (SHIL walking frames):** the parser handles them and the
+   OSP converter + editor now surface the walking-frames sheet (Mover slice).
+   Directional-frame *editing* in the UI is still a follow-up.
 3. **Replace hardcoded plugin-name matching.** `YootCondo.cpp` currently
    hardcodes `"Condo.t2p"`; the DESC kind + ATTR mItemType now let the item
    registry pick plugins data-drivenally. Do this together with the

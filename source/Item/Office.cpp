@@ -64,7 +64,7 @@ void Office::init()
 	rent = 10000;
 	rentDeposit = rent;
 
-	sprite.setTexture(App->bitmaps["simtower/office"]);
+	sprite.setTexture(App->bitmaps.editionTexture("office", "simtower/office"));
 	sprite.setOrigin({0.f, 24.f});
 	sprite.setPosition({static_cast<float>(position.x * 8), static_cast<float>(position.y * -36)});
 	addSprite(&sprite);

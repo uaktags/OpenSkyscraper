@@ -127,7 +127,7 @@ std::string InspectorDialog::typeName(Person::Type t)
 std::string InspectorDialog::describeItem(Item::Item * item)
 {
 	std::ostringstream s;
-	s << item->prototype->name << "\n";
+	s << (item->displayName.empty() ? item->prototype->name : item->displayName) << "\n";
 	s << "Floor " << item->position.y
 	  << ", x=" << item->position.x << "\n\n";
 
@@ -215,7 +215,7 @@ void InspectorDialog::showForItem(Item::Item * item)
 void InspectorDialog::refresh()
 {
 	if (!window || !content || !currentItem) return;
-	window->setTitle(currentItem->prototype->name);
+	window->setTitle(currentItem->displayName.empty() ? currentItem->prototype->name : currentItem->displayName);
 	content->setText(describeItem(currentItem));
 	// Show the "Floors..." button only when inspecting an elevator.
 	if (floorsButton)

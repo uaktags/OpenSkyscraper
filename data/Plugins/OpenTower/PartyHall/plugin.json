@@ -1,0 +1,33 @@
+{
+  "format": "openskyscraper-plugin",
+  "formatVersion": 1,
+  "sourceFormat": "scratch",
+  "class": "Tenant",
+  "attr": {
+    "itemType": "IOKI",
+    "name": "Party Hall",
+    "gameLevel": 1,
+    "id": 1,
+    "marker": "****",
+    "attrib": 1,
+    "mustItem": 0,
+    "dependID": 0,
+    "secretItem": 0
+  },
+  "bitmaps": {
+    "ingame": {
+      "present": true,
+      "width": 384,
+      "height": 60,
+      "transparentColor": null,
+      "maskDiscovery": "none",
+      "downscale": {
+        "toW": 384,
+        "toH": 60
+      }
+    }
+  },
+  "spriteLayout": {
+    "ingame": "meta/objmap_1000.txt"
+  }
+}

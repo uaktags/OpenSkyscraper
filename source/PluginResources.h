@@ -14,6 +14,7 @@
 #pragma once
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace OT
 {
@@ -116,4 +117,70 @@ namespace OT
 
 	/// Parses a DPDF resource (17-byte binary). Returns false on truncation.
 	bool parsePluginDpdf(const char * data, int length, PluginDpdf & out);
+
+	/// `PLDF` (resource id 128) — price list for commercial items.
+	///
+	/// Short fixed-layout definition: a version byte then five little-endian
+	/// u32s. Per resource-formats.md §3.10 the third field (here `basePrice`)
+	/// is the construction cost; the others are income/expense factors whose
+	/// exact semantics are inferred. Present on shops (Burger); absent on
+	/// residences and transport.
+	struct PluginPldf
+	{
+		bool valid = false;
+		int version = 0;
+		uint32_t f1 = 0;            // 40 (0x28) on Burger
+		uint32_t basePrice = 0;     // 1000 (0x3E8) — construction cost
+		uint32_t f2 = 0;            // 10
+		uint32_t f3 = 0;            // 300 (0x12C)
+		uint32_t f4 = 0;            // 50
+		uint32_t f5 = 0;            // 100
+	};
+
+	/// Parses a PLDF resource (21-byte binary: u8 version + 5 u32 LE).
+	/// Returns false on truncation.
+	bool parsePluginPldf(const char * data, int length, PluginPldf & out);
+
+	/// `MVDF` (resource id 1) — mover (transport) definition.
+	///
+	/// Used by stairs/escalators/elevators. The layout is an 18-byte binary
+	/// header followed by an irregular tagged-pascal-string array carrying
+	/// the description, category, human-readable price strings (e.g.
+	/// "$150000:$50000/car", "$12000/Q"), and the item name. The header's
+	/// per-field semantics (capacity / speed / max-floors) are documented at
+	/// MED confidence in resource-formats.md §3.9 and confirmed by disassembly
+	/// in T2DLL.dll's T2MoverPlugin constructor — several fields are therefore
+	/// exposed generically here and tagged `// inferred` until that pass lands.
+	///
+	/// The string array is extracted as a robust printable-ASCII-run scan so
+	/// the editor can always show the price/name/category regardless of the
+	/// exact framing; the two most useful price strings are also surfaced
+	/// directly as `priceString` (e.g. "$150000:$50000/car") and
+	/// `quarterlyString` (e.g. "$12000/Q").
+	struct PluginMvdf
+	{
+		bool valid = false;
+		int version = 0;
+		uint32_t itemID = 0;        // byte 1: == mID (Stair=1800, StdElev=1810, ...)
+		uint32_t field5 = 0;        // byte 5: 8 for stairs/escalator; varies (inferred)
+		uint32_t field9 = 0;        // byte 9: 2 stairs/esc, 1 elevators (inferred)
+		uint32_t field13 = 0;       // byte 13: 1/2/3 (inferred capacity/variant)
+
+		/// All printable-ASCII runs (length >= 3) found in the body, in order.
+		/// Typically: [description, category, price, (quarterly), item-desc, name, name].
+		std::vector<std::string> strings;
+
+		/// The primary price string (e.g. "$150000:$50000/car" or "$5000").
+		std::string priceString;
+		/// The recurring/quarterly price string if present (e.g. "$12000/Q").
+		std::string quarterlyString;
+		/// The display name (last non-empty string; movers carry it twice).
+		std::string name;
+	};
+
+	/// Parses an MVDF resource. Returns false if the buffer is too short for
+	/// the 18-byte header. String extraction never fails (absent strings leave
+	/// the fields empty), so a `true` result with empty strings means the body
+	/// held no printable runs.
+	bool parsePluginMvdf(const char * data, int length, PluginMvdf & out);
 }

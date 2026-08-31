@@ -1,0 +1,638 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<title>OpenSkyWeb × OpenSky — SimTower asset replacement audit</title>
+<style>
+:root{--bg:#101014;--panel:#1a1a22;--ink:#e8e8ef;--mut:#9a9aa8;--line:#2c2c38}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,sans-serif}
+header{padding:24px 28px 8px}
+h1{margin:0 0 4px;font-size:22px}
+.sub{color:var(--mut);max-width:110ch}
+.dash{display:flex;gap:10px;flex-wrap:wrap;padding:14px 28px}
+.dash div{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 14px;font-size:13px}
+.dash b{font-size:18px;display:block}
+nav{padding:0 28px 10px;display:flex;gap:8px;flex-wrap:wrap}
+nav a{color:#8fd3ff;text-decoration:none;background:var(--panel);border:1px solid var(--line);padding:4px 10px;border-radius:6px;font-size:12px}
+h2.sec{position:sticky;top:0;background:var(--bg);margin:22px 0 6px;padding:12px 28px 8px;border-bottom:2px solid var(--line);font-size:17px;z-index:2}
+.secstats{float:right;color:var(--mut);font-size:12px;font-weight:normal}
+.entry{margin:6px 28px;background:var(--panel);border:1px solid var(--line);border-left-width:4px;border-radius:8px}
+.entry.c-covered{border-left-color:#3fae5a}.entry.c-partial{border-left-color:#d9a52a}
+.entry.c-gap{border-left-color:#d94545}.entry.c-prog{border-left-color:#4aa3d9}.entry.c-na{border-left-color:#777}
+summary{cursor:pointer;padding:9px 12px;display:flex;gap:10px;align-items:center;list-style:none}
+summary::-webkit-details-marker{display:none}
+summary code{font-size:13px;color:#cfe3ff}
+summary::after{content:"▾";color:var(--mut);margin-left:auto}
+details[open] summary::after{content:"▴"}
+.chip{font-size:10px;font-weight:700;letter-spacing:.4px;padding:2px 8px;border-radius:10px;color:#0c0c10;white-space:nowrap}
+.chip.c-covered{background:#3fae5a}.chip.c-partial{background:#d9a52a}.chip.c-gap{background:#d94545;color:#fff}
+.chip.c-prog{background:#4aa3d9}.chip.c-na{background:#777;color:#eee}
+.pair{display:grid;grid-template-columns:minmax(180px,1.2fr) minmax(180px,1.2fr) minmax(220px,1.4fr);gap:14px;padding:4px 14px 14px}
+@media(max-width:1000px){.pair{grid-template-columns:1fr 1fr}.note{grid-column:1/-1}}
+.col h4{margin:4px 0 6px;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--mut)}
+a{display:inline-block;vertical-align:top;margin:0 8px 8px 0;text-decoration:none}
+img{background:
+ repeating-conic-gradient(#20202a 0% 25%, #17171e 0% 50%) 0 0/16px 16px;
+ border:1px solid var(--line);border-radius:4px;max-width:min(46vw,620px);max-height:170px;
+ image-rendering:pixelated;transition:transform .12s ease;transform-origin:top left}
+img:hover{transform:scale(1.9);z-index:5;position:relative;box-shadow:0 6px 24px #000}
+.dim{color:var(--mut);font-size:10px;margin:-4px 0 6px 2px}
+.none,.missing{color:var(--mut);font-style:italic;padding:20px 0;display:inline-block}
+.note{color:#cfcfda;font-size:13px;background:#14141b;border:1px solid var(--line);border-radius:6px;padding:10px 12px}
+table{border-collapse:collapse;margin:8px 28px 40px;font-size:13px}
+td{border:1px solid var(--line);padding:6px 10px;vertical-align:top}
+td:first-child{color:#cfe3ff}
+.legend{padding:2px 28px 4px;color:var(--mut);font-size:12px}
+footer{color:var(--mut);padding:10px 28px 40px;font-size:12px}
+</style></head><body>
+<header><h1>SimTower → custom art: replacement coverage audit</h1>
+<div class="sub">Every bitmap key the OpenSkyWeb renderer can request (<code>src/render/assets.js</code> BITMAP manifest, 84 keys), shown next to the best candidate(s) from
+OpenSky's released artwork (<code>/home/tim/Projects/OpenSky/data/SpriteSheets/originals</code>). Hover any image to zoom; click to open the file.
+SimTower references come from <code>bitmaps.hidden/</code> (the same composed sheets the web dumper rebuilds from SIMTOWER.EXE).</div></header>
+<div class="dash">
+<div><b>19</b>✅ covered — art exists, needs resize/repack</div>
+<div><b>27</b>⚠️ partial — some states/frames missing</div>
+<div><b>23</b>❌ gap — no OpenSky art at all</div>
+<div><b>12</b>🔧 programmatic — trivial code-drawn</div>
+<div><b>1</b>➖ n/a — reference sheet is blank</div>
+</div>
+<div class="legend">✅ = ship by repacking &nbsp;·&nbsp; ⚠️ = ship with reduced states or extra art &nbsp;·&nbsp; ❌ = must commission / draw / cut a feature &nbsp;·&nbsp; 🔧 = a few lines of canvas code</div>
+<nav><a href="#s0">Sky &amp; unused root sheets</a><a href="#s1">Rooms</a><a href="#s2">Rooms</a><a href="#s3">Floors &amp; lobbies</a><a href="#s4">Transport</a><a href="#s5">People &amp; animation</a><a href="#s6">Events, fire &amp; alerts</a><a href="#s7">Decorations</a><a href="#s8">UI chrome</a></nav>
+<h2 class="sec" id="s0">Sky &amp; unused root sheets<span class="secstats">0✅ 0⚠️ 0❌ 2🔧</span></h2><div class="entry c-prog">
+<details open><summary><span class="chip c-prog">PROGRAMMATIC</span>
+<code>simtower/sky</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><div class="none">— none —</div></div>
+ <div class="note">2112×360 of vertical sky bands — day/dusk/night gradients with clouds + star fields. Pure gradients; the renderer can synthesize these (it already composes textures in memory) rather than shipping art. NOTE: bands are &#x27;smeared&#x27; 24px-wide columns — a procedural gradient + noise reproduces them 1:1.</div>
+</div></details></div><div class="entry c-prog">
+<details open><summary><span class="chip c-prog">PROGRAMMATIC</span>
+<code>simtower/speed</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><div class="none">— none —</div></div>
+ <div class="note">Play/fast-forward/pause button pair set (92×48). Declared in the BITMAP manifest but NOT consumed by any web src today (the DOM speed control covers it). Draw in code if ever needed.</div>
+</div></details></div><h2 class="sec" id="s1">Rooms — residential<span class="secstats">6✅ 1⚠️ 0❌ 0🔧</span></h2><div class="entry c-covered">
+<details open><summary><span class="chip c-covered">COVERED</span>
+<code>simtower/office</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/Office/office_t0_0_0.png" title="SpriteSheets/originals/Office/office_t0_0_0.png — 160×48"><img class="ot" src="../../SpriteSheets/originals/Office/office_t0_0_0.png" style="--w:160" alt="SpriteSheets/originals/Office/office_t0_0_0.png"/></a><div class="dim">160×48</div><a href="../../SpriteSheets/originals/Office/office_t1_2_0.png" title="SpriteSheets/originals/Office/office_t1_2_0.png — 144×48"><img class="ot" src="../../SpriteSheets/originals/Office/office_t1_2_0.png" style="--w:144" alt="SpriteSheets/originals/Office/office_t1_2_0.png"/></a><div class="dim">144×48</div><a href="../../SpriteSheets/originals/Office/office_t2_4_0.png" title="SpriteSheets/originals/Office/office_t2_4_0.png — 64×48"><img class="ot" src="../../SpriteSheets/originals/Office/office_t2_4_0.png" style="--w:64" alt="SpriteSheets/originals/Office/office_t2_4_0.png"/></a><div class="dim">64×48</div><a href="../../SpriteSheets/originals/Office/damaged.png" title="SpriteSheets/originals/Office/damaged.png — 144×48"><img class="ot" src="../../SpriteSheets/originals/Office/damaged.png" style="--w:144" alt="SpriteSheets/originals/Office/damaged.png"/></a><div class="dim">144×48</div></div>
+ <div class="note">Full tenant-type (t0/t1/t2) × mood/occupancy variant set, day+occupied states, plus damaged.png. 48px-tall (2×) per-variant files; needs downscale-to-24px and repack into the 144×168 24px-tile sheet layout item.js slices.</div>
+</div></details></div><div class="entry c-covered">
+<details open><summary><span class="chip c-covered">COVERED</span>
+<code>simtower/condo</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/Condo/condo-empty1-day-0.png" title="SpriteSheets/originals/Condo/condo-empty1-day-0.png — 256×48"><img class="ot" src="../../SpriteSheets/originals/Condo/condo-empty1-day-0.png" style="--w:256" alt="SpriteSheets/originals/Condo/condo-empty1-day-0.png"/></a><div class="dim">256×48</div><a href="../../SpriteSheets/originals/Condo/condo-occupied1a-day-0.png" title="SpriteSheets/originals/Condo/condo-occupied1a-day-0.png — 256×48"><img class="ot" src="../../SpriteSheets/originals/Condo/condo-occupied1a-day-0.png" style="--w:256" alt="SpriteSheets/originals/Condo/condo-occupied1a-day-0.png"/></a><div class="dim">256×48</div><a href="../../SpriteSheets/originals/Condo/condo-empty1-night-0.png" title="SpriteSheets/originals/Condo/condo-empty1-night-0.png — 256×48"><img class="ot" src="../../SpriteSheets/originals/Condo/condo-empty1-night-0.png" style="--w:256" alt="SpriteSheets/originals/Condo/condo-empty1-night-0.png"/></a><div class="dim">256×48</div></div>
+ <div class="note">3 empty tiers (day+night) × occupied variants (1a–3h). Day/night coverage matches the web port&#x27;s diurnal occupancy (ISSUE-028). Needs 2×→1× downscale and repack into 640×72 strip.</div>
+</div></details></div><div class="entry c-covered">
+<details open><summary><span class="chip c-covered">COVERED</span>
+<code>simtower/yootcondo/empty</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/Condo/HrD_condo-0-day-0.png" title="SpriteSheets/originals/Condo/HrD_condo-0-day-0.png — 256×48"><img class="ot" src="../../SpriteSheets/originals/Condo/HrD_condo-0-day-0.png" style="--w:256" alt="SpriteSheets/originals/Condo/HrD_condo-0-day-0.png"/></a><div class="dim">256×48</div></div>
+ <div class="note">Plugin condo (Condo.t2p). OpenSky&#x27;s HrD_condo set IS the Highrise-Developer art this plugin uses — HrD_condo-0 (empty) + occupied1–4 match. Needs resize from 256×48.</div>
+</div></details></div><div class="entry c-partial">
+<details open><summary><span class="chip c-partial">PARTIAL</span>
+<code>simtower/yootcondo/resident</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/UI/OTSpritelistv2.png" title="SpriteSheets/originals/UI/OTSpritelistv2.png — 256×256"><img class="ot" src="../../SpriteSheets/originals/UI/OTSpritelistv2.png" style="--w:256" alt="SpriteSheets/originals/UI/OTSpritelistv2.png"/></a><div class="dim">256×256</div></div>
+ <div class="note">41-frame 16×24 resident walk strip extracted from PE bitmap 1100. No dedicated walk cycle in OpenSky; OTSpritelistv2 characters are a usable base but need walk-frame derivation.</div>
+</div></details></div><div class="entry c-covered">
+<details open><summary><span class="chip c-covered">COVERED</span>
+<code>simtower/single</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/Hotel/MM_Hotel-single-day-1.png" title="SpriteSheets/originals/Hotel/MM_Hotel-single-day-1.png — 64×48"><img class="ot" src="../../SpriteSheets/originals/Hotel/MM_Hotel-single-day-1.png" style="--w:64" alt="SpriteSheets/originals/Hotel/MM_Hotel-single-day-1.png"/></a><div class="dim">64×48</div><a href="../../SpriteSheets/originals/Hotel/MM_Hotel-single-day-2.png" title="SpriteSheets/originals/Hotel/MM_Hotel-single-day-2.png — 64×48"><img class="ot" src="../../SpriteSheets/originals/Hotel/MM_Hotel-single-day-2.png" style="--w:64" alt="SpriteSheets/originals/Hotel/MM_Hotel-single-day-2.png"/></a><div class="dim">64×48</div><a href="../../SpriteSheets/originals/Hotel/MM_Hotel-single-night-1.png" title="SpriteSheets/originals/Hotel/MM_Hotel-single-night-1.png — 64×48"><img class="ot" src="../../SpriteSheets/originals/Hotel/MM_Hotel-single-night-1.png" style="--w:64" alt="SpriteSheets/originals/Hotel/MM_Hotel-single-night-1.png"/></a><div class="dim">64×48</div><a href="../../SpriteSheets/originals/Hotel/MM_Hotel-single-night-2.png" title="SpriteSheets/originals/Hotel/MM_Hotel-single-night-2.png — 64×48"><img class="ot" src="../../SpriteSheets/originals/Hotel/MM_Hotel-single-night-2.png" style="--w:64" alt="SpriteSheets/originals/Hotel/MM_Hotel-single-night-2.png"/></a><div class="dim">64×48</div></div>
+ <div class="note">Two day variants + two night variants map 1:1 onto the 288×48 sheet&#x27;s 4 columns (clean/dirty day+night states). 64×48 files, needs 2×→1×.</div>
+</div></details></div><div class="entry c-covered">
+<details open><summary><span class="chip c-covered">COVERED</span>
+<code>simtower/double</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/Hotel/MM_Hotel-double-day.png" title="SpriteSheets/originals/Hotel/MM_Hotel-double-day.png — 96×48"><img class="ot" src="../../SpriteSheets/originals/Hotel/MM_Hotel-double-day.png" style="--w:96" alt="SpriteSheets/originals/Hotel/MM_Hotel-double-day.png"/></a><div class="dim">96×48</div><a href="../../SpriteSheets/originals/Hotel/MM_Hotel-double-day-1.png" title="SpriteSheets/originals/Hotel/MM_Hotel-double-day-1.png — 96×48"><img class="ot" src="../../SpriteSheets/originals/Hotel/MM_Hotel-double-day-1.png" style="--w:96" alt="SpriteSheets/originals/Hotel/MM_Hotel-double-day-1.png"/></a><div class="dim">96×48</div><a href="../../SpriteSheets/originals/Hotel/MM_Hotel-double-night.png" title="SpriteSheets/originals/Hotel/MM_Hotel-double-night.png — 96×48"><img class="ot" src="../../SpriteSheets/originals/Hotel/MM_Hotel-double-night.png" style="--w:96" alt="SpriteSheets/originals/Hotel/MM_Hotel-double-night.png"/></a><div class="dim">96×48</div><a href="../../SpriteSheets/originals/Hotel/MM_Hotel-double-night-2.png" title="SpriteSheets/originals/Hotel/MM_Hotel-double-night-2.png — 96×48"><img class="ot" src="../../SpriteSheets/originals/Hotel/MM_Hotel-double-night-2.png" style="--w:96" alt="SpriteSheets/originals/Hotel/MM_Hotel-double-night-2.png"/></a><div class="dim">96×48</div></div>
+ <div class="note">Same 4-state mapping as single. Bonus unused: Hotel_D_u/Hotel_K_u (single-tile 108×48 units).</div>
+</div></details></div><div class="entry c-covered">
+<details open><summary><span class="chip c-covered">COVERED</span>
+<code>simtower/suite</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/Hotel/hotelSuite-day-0.png" title="SpriteSheets/originals/Hotel/hotelSuite-day-0.png — 160×48"><img class="ot" src="../../SpriteSheets/originals/Hotel/hotelSuite-day-0.png" style="--w:160" alt="SpriteSheets/originals/Hotel/hotelSuite-day-0.png"/></a><div class="dim">160×48</div><a href="../../SpriteSheets/originals/Hotel/MM_Hotel-Suite-night-1.png" title="SpriteSheets/originals/Hotel/MM_Hotel-Suite-night-1.png — 160×48"><img class="ot" src="../../SpriteSheets/originals/Hotel/MM_Hotel-Suite-night-1.png" style="--w:160" alt="SpriteSheets/originals/Hotel/MM_Hotel-Suite-night-1.png"/></a><div class="dim">160×48</div><a href="../../SpriteSheets/originals/Hotel/familySuite-1-day-0.png" title="SpriteSheets/originals/Hotel/familySuite-1-day-0.png — 176×48"><img class="ot" src="../../SpriteSheets/originals/Hotel/familySuite-1-day-0.png" style="--w:176" alt="SpriteSheets/originals/Hotel/familySuite-1-day-0.png"/></a><div class="dim">176×48</div><a href="../../SpriteSheets/originals/Hotel/MM_Hotel-LoveSuite-night.png" title="SpriteSheets/originals/Hotel/MM_Hotel-LoveSuite-night.png — 160×48"><img class="ot" src="../../SpriteSheets/originals/Hotel/MM_Hotel-LoveSuite-night.png" style="--w:160" alt="SpriteSheets/originals/Hotel/MM_Hotel-LoveSuite-night.png"/></a><div class="dim">160×48</div></div>
+ <div class="note">hotelSuite-day + 3 night states cover the 720×48 sheet. Bonus room types OpenSky adds: familySuite, largeSuite, LoveSuite — future hotel tiers.</div>
+</div></details></div><h2 class="sec" id="s2">Rooms — commercial &amp; services<span class="secstats">4✅ 3⚠️ 4❌ 0🔧</span></h2><div class="entry c-partial">
+<details open><summary><span class="chip c-partial">PARTIAL</span>
+<code>simtower/fastfood</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/Commercial/MM_FastFood-burgers-night.png" title="SpriteSheets/originals/Commercial/MM_FastFood-burgers-night.png — 256×48"><img class="ot" src="../../SpriteSheets/originals/Commercial/MM_FastFood-burgers-night.png" style="--w:256" alt="SpriteSheets/originals/Commercial/MM_FastFood-burgers-night.png"/></a><div class="dim">256×48</div><a href="../../SpriteSheets/originals/Commercial/MM_FastFood-pizza-night.png" title="SpriteSheets/originals/Commercial/MM_FastFood-pizza-night.png — 256×48"><img class="ot" src="../../SpriteSheets/originals/Commercial/MM_FastFood-pizza-night.png" style="--w:256" alt="SpriteSheets/originals/Commercial/MM_FastFood-pizza-night.png"/></a><div class="dim">256×48</div><a href="../../SpriteSheets/originals/Commercial/MM_FastFood-sushi-night.png" title="SpriteSheets/originals/Commercial/MM_FastFood-sushi-night.png — 256×48"><img class="ot" src="../../SpriteSheets/originals/Commercial/MM_FastFood-sushi-night.png" style="--w:256" alt="SpriteSheets/originals/Commercial/MM_FastFood-sushi-night.png"/></a><div class="dim">256×48</div><a href="../../SpriteSheets/originals/Commercial/MM_FastFood-coffee_shop-night.png" title="SpriteSheets/originals/Commercial/MM_FastFood-coffee_shop-night.png — 256×48"><img class="ot" src="../../SpriteSheets/originals/Commercial/MM_FastFood-coffee_shop-night.png" style="--w:256" alt="SpriteSheets/originals/Commercial/MM_FastFood-coffee_shop-night.png"/></a><div class="dim">256×48</div></div>
+ <div class="note">8 named vendors (burgers/chinese/coffee/icecream/pizza/sushi/tacos/yogurt) but night-only single-state 256×48 each. Missing: day states and the seated-diner crowd frames the sheet&#x27;s later columns provide (ISSUE-037 diner overlay).</div>
+</div></details></div><div class="entry c-partial">
+<details open><summary><span class="chip c-partial">PARTIAL</span>
+<code>simtower/restaurant</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/Commercial/MM_Restaurant-French-night.png" title="SpriteSheets/originals/Commercial/MM_Restaurant-French-night.png — 384×48"><img class="ot" src="../../SpriteSheets/originals/Commercial/MM_Restaurant-French-night.png" style="--w:384" alt="SpriteSheets/originals/Commercial/MM_Restaurant-French-night.png"/></a><div class="dim">384×48</div><a href="../../SpriteSheets/originals/Commercial/MM_Restaurant-Hibachi-night.png" title="SpriteSheets/originals/Commercial/MM_Restaurant-Hibachi-night.png — 384×48"><img class="ot" src="../../SpriteSheets/originals/Commercial/MM_Restaurant-Hibachi-night.png" style="--w:384" alt="SpriteSheets/originals/Commercial/MM_Restaurant-Hibachi-night.png"/></a><div class="dim">384×48</div><a href="../../SpriteSheets/originals/Commercial/MM_Restaurant-steak-night.png" title="SpriteSheets/originals/Commercial/MM_Restaurant-steak-night.png — 384×48"><img class="ot" src="../../SpriteSheets/originals/Commercial/MM_Restaurant-steak-night.png" style="--w:384" alt="SpriteSheets/originals/Commercial/MM_Restaurant-steak-night.png"/></a><div class="dim">384×48</div><a href="../../SpriteSheets/originals/Commercial/MM_Restaurant-pub-HDv5.png" title="SpriteSheets/originals/Commercial/MM_Restaurant-pub-HDv5.png — 768×96"><img class="ot" src="../../SpriteSheets/originals/Commercial/MM_Restaurant-pub-HDv5.png" style="--w:620" alt="SpriteSheets/originals/Commercial/MM_Restaurant-pub-HDv5.png"/></a><div class="dim">768×96</div></div>
+ <div class="note">6 restaurants + pub (768×96 HD interior) — night-only, no day/empty/crowd states, no seated-diner frames. Restaurant background state pre-renders diners from the sheet today.</div>
+</div></details></div><div class="entry c-gap">
+<details open><summary><span class="chip c-gap">GAP</span>
+<code>simtower/shops</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/Commercial/MM_shop-closed.png" title="SpriteSheets/originals/Commercial/MM_shop-closed.png — 192×48"><img class="ot" src="../../SpriteSheets/originals/Commercial/MM_shop-closed.png" style="--w:192" alt="SpriteSheets/originals/Commercial/MM_shop-closed.png"/></a><div class="dim">192×48</div><a href="../../SpriteSheets/originals/Commercial/MM_SodaMachines.png" title="SpriteSheets/originals/Commercial/MM_SodaMachines.png — 48×48"><img class="ot" src="../../SpriteSheets/originals/Commercial/MM_SodaMachines.png" style="--w:48" alt="SpriteSheets/originals/Commercial/MM_SodaMachines.png"/></a><div class="dim">48×48</div><a href="../../SpriteSheets/originals/Commercial/OT Cigarette Vending Machine.png" title="SpriteSheets/originals/Commercial/OT Cigarette Vending Machine.png — 48×48"><img class="ot" src="../../SpriteSheets/originals/Commercial/OT Cigarette Vending Machine.png" style="--w:48" alt="SpriteSheets/originals/Commercial/OT Cigarette Vending Machine.png"/></a><div class="dim">48×48</div></div>
+ <div class="note">BIGGEST ROOM GAP. Sheet = 12 retail types × 3 crowd frames (ForRent, boutique, bank, pet shop, pharmacy, toys, florist, gift, bookstore, jewelry, market…). OpenSky has only a closed-shutter tile + 3 vending kiosks — 10 shop interiors have no replacement. Retail variant system (retail.js rows 1..11) would need new art or feature reduction.</div>
+</div></details></div><div class="entry c-covered">
+<details open><summary><span class="chip c-covered">COVERED</span>
+<code>simtower/partyhall</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/Facility/partyhall-0-day-0.png" title="SpriteSheets/originals/Facility/partyhall-0-day-0.png — 384×144"><img class="ot" src="../../SpriteSheets/originals/Facility/partyhall-0-day-0.png" style="--w:384" alt="SpriteSheets/originals/Facility/partyhall-0-day-0.png"/></a><div class="dim">384×144</div><a href="../../SpriteSheets/originals/Facility/partyhall-0-night-0.png" title="SpriteSheets/originals/Facility/partyhall-0-night-0.png — 384×144"><img class="ot" src="../../SpriteSheets/originals/Facility/partyhall-0-night-0.png" style="--w:384" alt="SpriteSheets/originals/Facility/partyhall-0-night-0.png"/></a><div class="dim">384×144</div><a href="../../SpriteSheets/originals/Facility/MM_PartyHall-night.png" title="SpriteSheets/originals/Facility/MM_PartyHall-night.png — 384×120"><img class="ot" src="../../SpriteSheets/originals/Facility/MM_PartyHall-night.png" style="--w:384" alt="SpriteSheets/originals/Facility/MM_PartyHall-night.png"/></a><div class="dim">384×120</div></div>
+ <div class="note">Day + night 384×144 interiors cover the 576×60 sheet (cathedral fallback also draws from here). Cleanest-covered event room.</div>
+</div></details></div><div class="entry c-gap">
+<details open><summary><span class="chip c-gap">GAP</span>
+<code>simtower/cathedral/main</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><div class="none">— none —</div></div>
+ <div class="note">No cathedral in OpenSky; today the key is registered to partyhall.png as fallback. Needs bespoke art or dropping the wedding event&#x27;s distinct look.</div>
+</div></details></div><div class="entry c-covered">
+<details open><summary><span class="chip c-covered">COVERED</span>
+<code>simtower/housekeeping</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/Hotel/MM_housekeeping_day_0.png" title="SpriteSheets/originals/Hotel/MM_housekeeping_day_0.png — 240×48"><img class="ot" src="../../SpriteSheets/originals/Hotel/MM_housekeeping_day_0.png" style="--w:240" alt="SpriteSheets/originals/Hotel/MM_housekeeping_day_0.png"/></a><div class="dim">240×48</div><a href="../../SpriteSheets/originals/Hotel/MM_housekeeping_day_1.png" title="SpriteSheets/originals/Hotel/MM_housekeeping_day_1.png — 240×48"><img class="ot" src="../../SpriteSheets/originals/Hotel/MM_housekeeping_day_1.png" style="--w:240" alt="SpriteSheets/originals/Hotel/MM_housekeeping_day_1.png"/></a><div class="dim">240×48</div><a href="../../SpriteSheets/originals/Hotel/MM_housekeeping_night_0.png" title="SpriteSheets/originals/Hotel/MM_housekeeping_night_0.png — 240×48"><img class="ot" src="../../SpriteSheets/originals/Hotel/MM_housekeeping_night_0.png" style="--w:240" alt="SpriteSheets/originals/Hotel/MM_housekeeping_night_0.png"/></a><div class="dim">240×48</div><a href="../../SpriteSheets/originals/Facility/MM_PrivateHousekeeping-day.png" title="SpriteSheets/originals/Facility/MM_PrivateHousekeeping-day.png — 240×48"><img class="ot" src="../../SpriteSheets/originals/Facility/MM_PrivateHousekeeping-day.png" style="--w:240" alt="SpriteSheets/originals/Facility/MM_PrivateHousekeeping-day.png"/></a><div class="dim">240×48</div></div>
+ <div class="note">Day ×2 (cart positions) + night states; plus private housekeeping variants. Map onto the 120×24 2-frame sheet after downscale.</div>
+</div></details></div><div class="entry c-covered">
+<details open><summary><span class="chip c-covered">COVERED</span>
+<code>simtower/security</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/Facility/security_u.png" title="SpriteSheets/originals/Facility/security_u.png — 224×48"><img class="ot" src="../../SpriteSheets/originals/Facility/security_u.png" style="--w:224" alt="SpriteSheets/originals/Facility/security_u.png"/></a><div class="dim">224×48</div></div>
+ <div class="note">SECOM-style security center interior, 224×48 → downscale 2×. Straight replacement for the 384×24 sheet frames.</div>
+</div></details></div><div class="entry c-covered">
+<details open><summary><span class="chip c-covered">COVERED</span>
+<code>simtower/medicalcenter</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/Facility/MedicalClinic_u.png" title="SpriteSheets/originals/Facility/MedicalClinic_u.png — 256×48"><img class="ot" src="../../SpriteSheets/originals/Facility/MedicalClinic_u.png" style="--w:256" alt="SpriteSheets/originals/Facility/MedicalClinic_u.png"/></a><div class="dim">256×48</div></div>
+ <div class="note">Medical clinic with beds; single 256×48 interior vs the 624×24 multi-frame sheet (reception/beds states). Main state covered; sub-states need slicing decisions.</div>
+</div></details></div><div class="entry c-partial">
+<details open><summary><span class="chip c-partial">PARTIAL</span>
+<code>simtower/recycling</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/Facility/MM_Recycle-empty.png" title="SpriteSheets/originals/Facility/MM_Recycle-empty.png — 400×144"><img class="ot" src="../../SpriteSheets/originals/Facility/MM_Recycle-empty.png" style="--w:400" alt="SpriteSheets/originals/Facility/MM_Recycle-empty.png"/></a><div class="dim">400×144</div></div>
+ <div class="note">Only the EMPTY state (400×144). SimTower sheet 1400×60 includes filling/active states drawn as trash accumulates — fill states missing.</div>
+</div></details></div><div class="entry c-gap">
+<details open><summary><span class="chip c-gap">GAP</span>
+<code>simtower/cinema/hall</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><div class="none">— none —</div></div>
+ <div class="note">Theater lobby/hall interior (960×60, incl. ticket area). No OpenSky cinema interior; Icon-Cinema is a toolbox icon only.</div>
+</div></details></div><div class="entry c-gap">
+<details open><summary><span class="chip c-gap">GAP</span>
+<code>simtower/cinema/screens</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><div class="none">— none —</div></div>
+ <div class="note">15 movie-screen variants + red seat rows (1008×60). Nothing comparable in OpenSky — would need 15 bespoke screen paintings for the movie rotation.</div>
+</div></details></div><h2 class="sec" id="s3">Floors &amp; lobbies<span class="secstats">4✅ 0⚠️ 0❌ 1🔧</span></h2><div class="entry c-covered">
+<details open><summary><span class="chip c-covered">COVERED</span>
+<code>simtower/floor</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/Facility/floor.png" title="SpriteSheets/originals/Facility/floor.png — 64×48"><img class="ot" src="../../SpriteSheets/originals/Facility/floor.png" style="--w:64" alt="SpriteSheets/originals/Facility/floor.png"/></a><div class="dim">64×48</div><a href="../../SpriteSheets/originals/Lobbies/emptyfloor.png" title="SpriteSheets/originals/Lobbies/emptyfloor.png — 16×48"><img class="ot" src="../../SpriteSheets/originals/Lobbies/emptyfloor.png" style="--w:16" alt="SpriteSheets/originals/Lobbies/emptyfloor.png"/></a><div class="dim">16×48</div><a href="../../SpriteSheets/originals/Lobbies/carpeted hallway.png" title="SpriteSheets/originals/Lobbies/carpeted hallway.png — 16×48"><img class="ot" src="../../SpriteSheets/originals/Lobbies/carpeted hallway.png" style="--w:16" alt="SpriteSheets/originals/Lobbies/carpeted hallway.png"/></a><div class="dim">16×48</div><a href="../../SpriteSheets/originals/Lobbies/carpeted_hallway-modern.png" title="SpriteSheets/originals/Lobbies/carpeted_hallway-modern.png — 16×48"><img class="ot" src="../../SpriteSheets/originals/Lobbies/carpeted_hallway-modern.png" style="--w:16" alt="SpriteSheets/originals/Lobbies/carpeted_hallway-modern.png"/></a><div class="dim">16×48</div></div>
+ <div class="note">Blank floor tile + three carpeted-hallway colorways + reinforcedspace/spacebetweenfloors for structural tiles. Rich coverage for the 8×36 strip.</div>
+</div></details></div><div class="entry c-covered">
+<details open><summary><span class="chip c-covered">COVERED</span>
+<code>simtower/lobby/normal</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/Lobbies/MM_GrandLobby-1star.png" title="SpriteSheets/originals/Lobbies/MM_GrandLobby-1star.png — 624×216"><img class="ot" src="../../SpriteSheets/originals/Lobbies/MM_GrandLobby-1star.png" style="--w:620" alt="SpriteSheets/originals/Lobbies/MM_GrandLobby-1star.png"/></a><div class="dim">624×216</div><a href="../../SpriteSheets/originals/Lobbies/MM_Grandlobby-2star.png" title="SpriteSheets/originals/Lobbies/MM_Grandlobby-2star.png — 624×216"><img class="ot" src="../../SpriteSheets/originals/Lobbies/MM_Grandlobby-2star.png" style="--w:620" alt="SpriteSheets/originals/Lobbies/MM_Grandlobby-2star.png"/></a><div class="dim">624×216</div></div>
+ <div class="note">1★/2★ grand lobbies (624×216 each) replace the 312×108 standard lobby. Star-tiered like the original system; 2× downscale + possible height trim (216 vs 108×2=216 ✓ exactly 2×).</div>
+</div></details></div><div class="entry c-covered">
+<details open><summary><span class="chip c-covered">COVERED</span>
+<code>simtower/lobby/sky</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/Lobbies/MM_SkyLobby-1star.png" title="SpriteSheets/originals/Lobbies/MM_SkyLobby-1star.png — 624×48"><img class="ot" src="../../SpriteSheets/originals/Lobbies/MM_SkyLobby-1star.png" style="--w:620" alt="SpriteSheets/originals/Lobbies/MM_SkyLobby-1star.png"/></a><div class="dim">624×48</div><a href="../../SpriteSheets/originals/Lobbies/MM_SkyLobby-3star.png" title="SpriteSheets/originals/Lobbies/MM_SkyLobby-3star.png — 624×48"><img class="ot" src="../../SpriteSheets/originals/Lobbies/MM_SkyLobby-3star.png" style="--w:620" alt="SpriteSheets/originals/Lobbies/MM_SkyLobby-3star.png"/></a><div class="dim">624×48</div><a href="../../SpriteSheets/originals/Lobbies/MM_SkyLobby-5star.png" title="SpriteSheets/originals/Lobbies/MM_SkyLobby-5star.png — 624×48"><img class="ot" src="../../SpriteSheets/originals/Lobbies/MM_SkyLobby-5star.png" style="--w:620" alt="SpriteSheets/originals/Lobbies/MM_SkyLobby-5star.png"/></a><div class="dim">624×48</div><a href="../../SpriteSheets/originals/Lobbies/MM_SkyLobby-tower.png" title="SpriteSheets/originals/Lobbies/MM_SkyLobby-tower.png — 624×48"><img class="ot" src="../../SpriteSheets/originals/Lobbies/MM_SkyLobby-tower.png" style="--w:620" alt="SpriteSheets/originals/Lobbies/MM_SkyLobby-tower.png"/></a><div class="dim">624×48</div></div>
+ <div class="note">Sky lobbies for 1–5★ + tower tier (624×48 each = exact 2× of a 312×24 row; sheet&#x27;s taller 108px rows include multi-floor variants — trim/slice needed).</div>
+</div></details></div><div class="entry c-covered">
+<details open><summary><span class="chip c-covered">COVERED</span>
+<code>simtower/lobby/high</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/Lobbies/MM_lobbyandMezz-3star.png" title="SpriteSheets/originals/Lobbies/MM_lobbyandMezz-3star.png — 624×360"><img class="ot" src="../../SpriteSheets/originals/Lobbies/MM_lobbyandMezz-3star.png" style="--w:620" alt="SpriteSheets/originals/Lobbies/MM_lobbyandMezz-3star.png"/></a><div class="dim">624×360</div><a href="../../SpriteSheets/originals/Lobbies/MM_lobbyandMezz-5star.png" title="SpriteSheets/originals/Lobbies/MM_lobbyandMezz-5star.png — 624×360"><img class="ot" src="../../SpriteSheets/originals/Lobbies/MM_lobbyandMezz-5star.png" style="--w:620" alt="SpriteSheets/originals/Lobbies/MM_lobbyandMezz-5star.png"/></a><div class="dim">624×360</div><a href="../../SpriteSheets/originals/Lobbies/MM_lobbyandMezz-tower.png" title="SpriteSheets/originals/Lobbies/MM_lobbyandMezz-tower.png — 624×360"><img class="ot" src="../../SpriteSheets/originals/Lobbies/MM_lobbyandMezz-tower.png" style="--w:620" alt="SpriteSheets/originals/Lobbies/MM_lobbyandMezz-tower.png"/></a><div class="dim">624×360</div></div>
+ <div class="note">Lobby+mezzanine 3/4/5★/tower (624×360 vs original 312×324 ≈ 2×, 18px height delta to reconcile). Full star-tier coverage.</div>
+</div></details></div><div class="entry c-prog">
+<details open><summary><span class="chip c-prog">PROGRAMMATIC</span>
+<code>simtower/lobby/fountain</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><div class="none">— none —</div></div>
+ <div class="note">Already synthesized at runtime (dumper paints the 624×36 blue fountain band from a palette) — not a SimTower bitmap at all. No art needed.</div>
+</div></details></div><h2 class="sec" id="s4">Transport<span class="secstats">4✅ 7⚠️ 2❌ 1🔧</span></h2><div class="entry c-covered">
+<details open><summary><span class="chip c-covered">COVERED</span>
+<code>simtower/stairs</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/Transport/MM_stairs_1story.png" title="SpriteSheets/originals/Transport/MM_stairs_1story.png — 128×88"><img class="ot" src="../../SpriteSheets/originals/Transport/MM_stairs_1story.png" style="--w:128" alt="SpriteSheets/originals/Transport/MM_stairs_1story.png"/></a><div class="dim">128×88</div><a href="../../SpriteSheets/originals/Transport/Stairwell.png" title="SpriteSheets/originals/Transport/Stairwell.png — 64×48"><img class="ot" src="../../SpriteSheets/originals/Transport/Stairwell.png" style="--w:64" alt="SpriteSheets/originals/Transport/Stairwell.png"/></a><div class="dim">64×48</div><a href="../../SpriteSheets/originals/Transport/Stairwell-hidden.png" title="SpriteSheets/originals/Transport/Stairwell-hidden.png — 64×48"><img class="ot" src="../../SpriteSheets/originals/Transport/Stairwell-hidden.png" style="--w:64" alt="SpriteSheets/originals/Transport/Stairwell-hidden.png"/></a><div class="dim">64×48</div></div>
+ <div class="note">1-story stairs incl. white &#x27;hidden&#x27; stairwell tiles. 128×88 → downscale for the 896×60 climb-frame strip; frame layout must be re-cut.</div>
+</div></details></div><div class="entry c-covered">
+<details open><summary><span class="chip c-covered">COVERED</span>
+<code>simtower/stairs/spiral_2</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/Transport/OT stairs 2 v2.png" title="SpriteSheets/originals/Transport/OT stairs 2 v2.png — 112×156"><img class="ot" src="../../SpriteSheets/originals/Transport/OT stairs 2 v2.png" style="--w:112" alt="SpriteSheets/originals/Transport/OT stairs 2 v2.png"/></a><div class="dim">112×156</div></div>
+ <div class="note">Named match — OT stairs 2 v2 (112×156) is the 2-story spiral. Needs frame-by-frame recut into the 11×64×60 strip.</div>
+</div></details></div><div class="entry c-covered">
+<details open><summary><span class="chip c-covered">COVERED</span>
+<code>simtower/stairs/spiral_3</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/Transport/OT stairs 3 v2.png" title="SpriteSheets/originals/Transport/OT stairs 3 v2.png — 112×244"><img class="ot" src="../../SpriteSheets/originals/Transport/OT stairs 3 v2.png" style="--w:112" alt="SpriteSheets/originals/Transport/OT stairs 3 v2.png"/></a><div class="dim">112×244</div></div>
+ <div class="note">Named match — OT stairs 3 v2 (112×244) is the 3-story spiral. Same recut work.</div>
+</div></details></div><div class="entry c-covered">
+<details open><summary><span class="chip c-covered">COVERED</span>
+<code>simtower/escalator</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/Transport/MM_Escalator.png" title="SpriteSheets/originals/Transport/MM_Escalator.png — 118×84"><img class="ot" src="../../SpriteSheets/originals/Transport/MM_Escalator.png" style="--w:118" alt="SpriteSheets/originals/Transport/MM_Escalator.png"/></a><div class="dim">118×84</div><a href="../../SpriteSheets/originals/Transport/OT-2storyescalator.png" title="SpriteSheets/originals/Transport/OT-2storyescalator.png — 124×152"><img class="ot" src="../../SpriteSheets/originals/Transport/OT-2storyescalator.png" style="--w:124" alt="SpriteSheets/originals/Transport/OT-2storyescalator.png"/></a><div class="dim">124×152</div><a href="../../SpriteSheets/originals/Transport/OT-3storyescalator.png" title="SpriteSheets/originals/Transport/OT-3storyescalator.png — 126×228"><img class="ot" src="../../SpriteSheets/originals/Transport/OT-3storyescalator.png" style="--w:126" alt="SpriteSheets/originals/Transport/OT-3storyescalator.png"/></a><div class="dim">126×228</div></div>
+ <div class="note">1/2/3-story escalators. The SimTower 512×72 sheet holds rise-descent frames; OT gives static per-height art — motion frames need derivation or the 2/3-story pieces used directly.</div>
+</div></details></div><div class="entry c-partial">
+<details open><summary><span class="chip c-partial">PARTIAL</span>
+<code>simtower/elevator/standard</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/Transport/MM_Elevator-local.png" title="SpriteSheets/originals/Transport/MM_Elevator-local.png — 52×56"><img class="ot" src="../../SpriteSheets/originals/Transport/MM_Elevator-local.png" style="--w:52" alt="SpriteSheets/originals/Transport/MM_Elevator-local.png"/></a><div class="dim">52×56</div><a href="../../SpriteSheets/originals/Transport/MM_Elevator-hydrolic.png" title="SpriteSheets/originals/Transport/MM_Elevator-hydrolic.png — 52×56"><img class="ot" src="../../SpriteSheets/originals/Transport/MM_Elevator-hydrolic.png" style="--w:52" alt="SpriteSheets/originals/Transport/MM_Elevator-hydrolic.png"/></a><div class="dim">52×56</div><a href="../../SpriteSheets/originals/Transport/elevatorshafts.png" title="SpriteSheets/originals/Transport/elevatorshafts.png — 368×364"><img class="ot" src="../../SpriteSheets/originals/Transport/elevatorshafts.png" style="--w:368" alt="SpriteSheets/originals/Transport/elevatorshafts.png"/></a><div class="dim">368×364</div></div>
+ <div class="note">Car interiors exist (local/hydrolic 52×56) but only as single empty cars: missing the 5 crowd-fill states and red &#x27;F&#x27; full indicator. Shaft art (elevatorshafts.png, 368×364 vertical) doesn&#x27;t match the horizontal 140×30 shaft+machinery strip layout.</div>
+</div></details></div><div class="entry c-partial">
+<details open><summary><span class="chip c-partial">PARTIAL</span>
+<code>simtower/elevator/service</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/Transport/MM_Elevator-service.png" title="SpriteSheets/originals/Transport/MM_Elevator-service.png — 52×56"><img class="ot" src="../../SpriteSheets/originals/Transport/MM_Elevator-service.png" style="--w:52" alt="SpriteSheets/originals/Transport/MM_Elevator-service.png"/></a><div class="dim">52×56</div></div>
+ <div class="note">Service car exists (52×56); crowd states + F indicator missing, same as standard.</div>
+</div></details></div><div class="entry c-partial">
+<details open><summary><span class="chip c-partial">PARTIAL</span>
+<code>simtower/elevator/express</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/Transport/MM_Elevator-express.png" title="SpriteSheets/originals/Transport/MM_Elevator-express.png — 84×56"><img class="ot" src="../../SpriteSheets/originals/Transport/MM_Elevator-express.png" style="--w:84" alt="SpriteSheets/originals/Transport/MM_Elevator-express.png"/></a><div class="dim">84×56</div><a href="../../SpriteSheets/originals/Transport/MM_Elevator-large.png" title="SpriteSheets/originals/Transport/MM_Elevator-large.png — 84×56"><img class="ot" src="../../SpriteSheets/originals/Transport/MM_Elevator-large.png" style="--w:84" alt="SpriteSheets/originals/Transport/MM_Elevator-large.png"/></a><div class="dim">84×56</div></div>
+ <div class="note">Express/large glass cars (84×56) match; crowd states + F indicator missing.</div>
+</div></details></div><div class="entry c-partial">
+<details open><summary><span class="chip c-partial">PARTIAL</span>
+<code>simtower/elevator/narrow</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/Transport/elevatorshafts.png" title="SpriteSheets/originals/Transport/elevatorshafts.png — 368×364"><img class="ot" src="../../SpriteSheets/originals/Transport/elevatorshafts.png" style="--w:368" alt="SpriteSheets/originals/Transport/elevatorshafts.png"/></a><div class="dim">368×364</div></div>
+ <div class="note">Narrow shaft strip (224×36, motor/pulley frames) — elevatorshafts.png is a vertical composition; needs recut/redraw of the horizontal machinery band.</div>
+</div></details></div><div class="entry c-partial">
+<details open><summary><span class="chip c-partial">PARTIAL</span>
+<code>simtower/elevator/wide</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/Transport/elevatorshafts.png" title="SpriteSheets/originals/Transport/elevatorshafts.png — 368×364"><img class="ot" src="../../SpriteSheets/originals/Transport/elevatorshafts.png" style="--w:368" alt="SpriteSheets/originals/Transport/elevatorshafts.png"/></a><div class="dim">368×364</div></div>
+ <div class="note">Wide shaft strip (336×36) — same vertical-vs-horizontal mismatch as narrow.</div>
+</div></details></div><div class="entry c-prog">
+<details open><summary><span class="chip c-prog">PROGRAMMATIC</span>
+<code>simtower/elevator/digits</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><div class="none">— none —</div></div>
+ <div class="note">LCD floor digits 0–9+B (two colorways). Trivially redrawn with canvas text or a tiny handmade strip — low-value pixel art to commission.</div>
+</div></details></div><div class="entry c-na">
+<details open><summary><span class="chip c-na">N/A (blank ref)</span>
+<code>simtower/elevator/people</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><div class="none">— none —</div></div>
+ <div class="note">Queue-crowd sheet is BLANK in the reference dump (fully transparent after unmasking) — nothing to replace; web port renders queues from walker sprites instead.</div>
+</div></details></div><div class="entry c-partial">
+<details open><summary><span class="chip c-partial">PARTIAL</span>
+<code>simtower/parking/space</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/Transport/OT-parking.png" title="SpriteSheets/originals/Transport/OT-parking.png — 64×48"><img class="ot" src="../../SpriteSheets/originals/Transport/OT-parking.png" style="--w:64" alt="SpriteSheets/originals/Transport/OT-parking.png"/></a><div class="dim">64×48</div></div>
+ <div class="note">Single empty space tile (64×48). Missing: parked-car color variants and the red-X blocked marker (20 frames in the original 480×24 strip).</div>
+</div></details></div><div class="entry c-partial">
+<details open><summary><span class="chip c-partial">PARTIAL</span>
+<code>simtower/parking/ramp</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/Transport/opentowerparkingramp2.png" title="SpriteSheets/originals/Transport/opentowerparkingramp2.png — 256×192"><img class="ot" src="../../SpriteSheets/originals/Transport/opentowerparkingramp2.png" style="--w:256" alt="SpriteSheets/originals/Transport/opentowerparkingramp2.png"/></a><div class="dim">256×192</div></div>
+ <div class="note">Ramp corridor art exists (256×192 composed w/ EXIT signage) but original 384×24 is 16 animated car-transit frames incl. blocked-X — animation frames missing.</div>
+</div></details></div><div class="entry c-gap">
+<details open><summary><span class="chip c-gap">GAP</span>
+<code>simtower/metro/station</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><div class="none">— none —</div></div>
+ <div class="note">Subway station platform (720×96, art-deco columns, stair wells). No OpenSky metro art; Icon-Subway is an icon only. Public-transport feature would need bespoke art.</div>
+</div></details></div><div class="entry c-gap">
+<details open><summary><span class="chip c-gap">GAP</span>
+<code>simtower/metro/tracks</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><div class="none">— none —</div></div>
+ <div class="note">Track tile strip (32×36). Same — no OpenSky equivalent.</div>
+</div></details></div><h2 class="sec" id="s5">People &amp; animation<span class="secstats">0✅ 8⚠️ 1❌ 0🔧</span></h2><div class="entry c-partial">
+<details open><summary><span class="chip c-partial">PARTIAL</span>
+<code>simtower/people</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/UI/OTSpritelistv2.png" title="SpriteSheets/originals/UI/OTSpritelistv2.png — 256×256"><img class="ot" src="../../SpriteSheets/originals/UI/OTSpritelistv2.png" style="--w:256" alt="SpriteSheets/originals/UI/OTSpritelistv2.png"/></a><div class="dim">256×256</div></div>
+ <div class="note">Generic 4-colorway walker sheet (96×120, 16×24 frames). OTSpritelistv2.png (256×256) is the key lead: ~60 character sprites at 2× (guests, families w/ strollers, bellhops w/ luggage, waiters, guards, doormen, kids, dogs). They are mostly 1–2 POSED frames, not walk cycles — deriving 6-frame walks (item.js generic cycle) and activity pair-frames is the work. Cut + downscale to 16×24 frames.</div>
+</div></details></div><div class="entry c-partial">
+<details open><summary><span class="chip c-partial">PARTIAL</span>
+<code>simtower/animpeple/office</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/UI/OTSpritelistv2.png" title="SpriteSheets/originals/UI/OTSpritelistv2.png — 256×256"><img class="ot" src="../../SpriteSheets/originals/UI/OTSpritelistv2.png" style="--w:256" alt="SpriteSheets/originals/UI/OTSpritelistv2.png"/></a><div class="dim">256×256</div></div>
+ <div class="note">Office worker multi-activity pairs (sit/type/idle). White-collar seated poses absent from OTSpritelist; business-suit standing figures usable for idle/walk only. OTSpritelistv2.png (256×256) is the key lead: ~60 character sprites at 2× (guests, families w/ strollers, bellhops w/ luggage, waiters, guards, doormen, kids, dogs). They are mostly 1–2 POSED frames, not walk cycles — deriving 6-frame walks (item.js generic cycle) and activity pair-frames is the work. Cut + downscale to 16×24 frames.</div>
+</div></details></div><div class="entry c-partial">
+<details open><summary><span class="chip c-partial">PARTIAL</span>
+<code>simtower/animpeple/condo</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/UI/OTSpritelistv2.png" title="SpriteSheets/originals/UI/OTSpritelistv2.png — 256×256"><img class="ot" src="../../SpriteSheets/originals/UI/OTSpritelistv2.png" style="--w:256" alt="SpriteSheets/originals/UI/OTSpritelistv2.png"/></a><div class="dim">256×256</div></div>
+ <div class="note">Resident walk strip; fallback today = people.png. Casual-clothes sprites available in OTSpritelist.</div>
+</div></details></div><div class="entry c-partial">
+<details open><summary><span class="chip c-partial">PARTIAL</span>
+<code>simtower/animpeple/hotel</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/UI/OTSpritelistv2.png" title="SpriteSheets/originals/UI/OTSpritelistv2.png — 256×256"><img class="ot" src="../../SpriteSheets/originals/UI/OTSpritelistv2.png" style="--w:256" alt="SpriteSheets/originals/UI/OTSpritelistv2.png"/></a><div class="dim">256×256</div></div>
+ <div class="note">Guest activity pairs; bellhop/suitcase sprites exist in OTSpritelist (perfect fit), sleep/bed poses missing (see ISSUE-037).</div>
+</div></details></div><div class="entry c-partial">
+<details open><summary><span class="chip c-partial">PARTIAL</span>
+<code>simtower/animpeple/restaurant</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/UI/OTSpritelistv2.png" title="SpriteSheets/originals/UI/OTSpritelistv2.png — 256×256"><img class="ot" src="../../SpriteSheets/originals/UI/OTSpritelistv2.png" style="--w:256" alt="SpriteSheets/originals/UI/OTSpritelistv2.png"/></a><div class="dim">256×256</div></div>
+ <div class="note">Waiter + diner activity frames; OTSpritelist has waiter-with-tray poses ✓, seated diners ✗.</div>
+</div></details></div><div class="entry c-partial">
+<details open><summary><span class="chip c-partial">PARTIAL</span>
+<code>simtower/animpeple/housekeeper</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/UI/OTSpritelistv2.png" title="SpriteSheets/originals/UI/OTSpritelistv2.png — 256×256"><img class="ot" src="../../SpriteSheets/originals/UI/OTSpritelistv2.png" style="--w:256" alt="SpriteSheets/originals/UI/OTSpritelistv2.png"/></a><div class="dim">256×256</div></div>
+ <div class="note">Maid activity frames; closest OTSpritelist figures are apron dresses — usable but not a maid uniform. Icon-Housekeeping exists for the toolbox.</div>
+</div></details></div><div class="entry c-partial">
+<details open><summary><span class="chip c-partial">PARTIAL</span>
+<code>simtower/animpeple/guard</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/UI/OTSpritelistv2.png" title="SpriteSheets/originals/UI/OTSpritelistv2.png — 256×256"><img class="ot" src="../../SpriteSheets/originals/UI/OTSpritelistv2.png" style="--w:256" alt="SpriteSheets/originals/UI/OTSpritelistv2.png"/></a><div class="dim">256×256</div></div>
+ <div class="note">Security guard pairs; OTSpritelist HAS guard-with-flashlight figures ✓ (red + dark uniforms). Best-covered staff type.</div>
+</div></details></div><div class="entry c-partial">
+<details open><summary><span class="chip c-partial">PARTIAL</span>
+<code>simtower/animpeple/event</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/UI/OTSpritelistv2.png" title="SpriteSheets/originals/UI/OTSpritelistv2.png — 256×256"><img class="ot" src="../../SpriteSheets/originals/UI/OTSpritelistv2.png" style="--w:256" alt="SpriteSheets/originals/UI/OTSpritelistv2.png"/></a><div class="dim">256×256</div></div>
+ <div class="note">Party/event guests; party-dress figures exist, dancing pairs don&#x27;t.</div>
+</div></details></div><div class="entry c-gap">
+<details open><summary><span class="chip c-gap">GAP</span>
+<code>simtower/animpeple/construction</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><div class="none">— none —</div></div>
+ <div class="note">Construction crew activity frames — no construction-worker art anywhere in OpenSky (only the worker strip in SimTower&#x27;s own construction/worker.png, which is itself a gap).</div>
+</div></details></div><h2 class="sec" id="s6">Events, fire &amp; alerts<span class="secstats">0✅ 0⚠️ 11❌ 2🔧</span></h2><div class="entry c-gap">
+<details open><summary><span class="chip c-gap">GAP</span>
+<code>simtower/fire/small</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><div class="none">— none —</div></div>
+ <div class="note">Small flame animation (4 frames). No fire art in OpenSky.</div>
+</div></details></div><div class="entry c-gap">
+<details open><summary><span class="chip c-gap">GAP</span>
+<code>simtower/fire/large</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><div class="none">— none —</div></div>
+ <div class="note">Large flame animation (4 frames, 384×36). No equivalent.</div>
+</div></details></div><div class="entry c-gap">
+<details open><summary><span class="chip c-gap">GAP</span>
+<code>simtower/fire/chopper</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><div class="none">— none —</div></div>
+ <div class="note">Red fire-crew helicopter (96×36). No equivalent.</div>
+</div></details></div><div class="entry c-gap">
+<details open><summary><span class="chip c-gap">GAP</span>
+<code>simtower/fire/destroyed</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><div class="none">— none —</div></div>
+ <div class="note">Burned-out rubble strip (248×24). No equivalent — charred-tile variants could be derived from office/condo art with a scorch filter as a shortcut.</div>
+</div></details></div><div class="entry c-gap">
+<details open><summary><span class="chip c-gap">GAP</span>
+<code>simtower/alerts/fire</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><div class="none">— none —</div></div>
+ <div class="note">News-alert popup (burning tower photo, 76×60). No equivalent.</div>
+</div></details></div><div class="entry c-gap">
+<details open><summary><span class="chip c-gap">GAP</span>
+<code>simtower/alerts/terrorist</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><div class="none">— none —</div></div>
+ <div class="note">Bomber portrait alert (76×67) for ISSUE-033&#x27;s terrorist event. No equivalent.</div>
+</div></details></div><div class="entry c-gap">
+<details open><summary><span class="chip c-gap">GAP</span>
+<code>simtower/alerts/chopper</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><div class="none">— none —</div></div>
+ <div class="note">Chopper-with-banner alert (124×67). No equivalent.</div>
+</div></details></div><div class="entry c-gap">
+<details open><summary><span class="chip c-gap">GAP</span>
+<code>simtower/alerts/vip</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><div class="none">— none —</div></div>
+ <div class="note">VIP limousine + red carpet alert (100×41). No equivalent.</div>
+</div></details></div><div class="entry c-gap">
+<details open><summary><span class="chip c-gap">GAP</span>
+<code>simtower/alerts/treasure</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><div class="none">— none —</div></div>
+ <div class="note">Buried-treasure chest alert (84×80) for ISSUE-034. No equivalent.</div>
+</div></details></div><div class="entry c-gap">
+<details open><summary><span class="chip c-gap">GAP</span>
+<code>simtower/alerts/starup</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><div class="none">— none —</div></div>
+ <div class="note">Gold star + NEW! ribbon alert (100×100) for rating increases. No equivalent (GUI_Highrise bar has a static star, not this popup).</div>
+</div></details></div><div class="entry c-prog">
+<details open><summary><span class="chip c-prog">PROGRAMMATIC</span>
+<code>simtower/construction/grid</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><div class="none">— none —</div></div>
+ <div class="note">Scaffold lattice strip (328×36) — a regular X-lattice pattern; trivially generated procedurally (the renderer already composes textures in memory).</div>
+</div></details></div><div class="entry c-prog">
+<details open><summary><span class="chip c-prog">PROGRAMMATIC</span>
+<code>simtower/construction/solid</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><div class="none">— none —</div></div>
+ <div class="note">Solid scaffold variant (328×24) — same, procedural.</div>
+</div></details></div><div class="entry c-gap">
+<details open><summary><span class="chip c-gap">GAP</span>
+<code>simtower/construction/worker</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><div class="none">— none —</div></div>
+ <div class="note">6-frame hard-hat worker animation (96×24). No construction-worker art in OpenSky.</div>
+</div></details></div><h2 class="sec" id="s7">Decorations<span class="secstats">1✅ 2⚠️ 3❌ 4🔧</span></h2><div class="entry c-prog">
+<details open><summary><span class="chip c-prog">PROGRAMMATIC</span>
+<code>simtower/deco/cloud/0</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><div class="none">— none —</div></div>
+ <div class="note">Soft white cloud puffs (96×164 … 292×152). Trivial procedural (the dumper already masks them from a white fill).</div>
+</div></details></div><div class="entry c-prog">
+<details open><summary><span class="chip c-prog">PROGRAMMATIC</span>
+<code>simtower/deco/cloud/1</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><div class="none">— none —</div></div>
+ <div class="note">See cloud/0.</div>
+</div></details></div><div class="entry c-prog">
+<details open><summary><span class="chip c-prog">PROGRAMMATIC</span>
+<code>simtower/deco/cloud/2</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><div class="none">— none —</div></div>
+ <div class="note">See cloud/0.</div>
+</div></details></div><div class="entry c-prog">
+<details open><summary><span class="chip c-prog">PROGRAMMATIC</span>
+<code>simtower/deco/cloud/3</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><div class="none">— none —</div></div>
+ <div class="note">See cloud/0.</div>
+</div></details></div><div class="entry c-gap">
+<details open><summary><span class="chip c-gap">GAP</span>
+<code>simtower/deco/crane</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><div class="none">— none —</div></div>
+ <div class="note">Yellow excavator/crane icon (36×36) — construction-site deco + basis of the noroute marker. No equivalent; 36px icon, cheap to hand-draw.</div>
+</div></details></div><div class="entry c-covered">
+<details open><summary><span class="chip c-covered">COVERED</span>
+<code>simtower/deco/fireladder</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/Facility/fire_escape_r.png" title="SpriteSheets/originals/Facility/fire_escape_r.png — 96×144"><img class="ot" src="../../SpriteSheets/originals/Facility/fire_escape_r.png" style="--w:96" alt="SpriteSheets/originals/Facility/fire_escape_r.png"/></a><div class="dim">96×144</div></div>
+ <div class="note">X-brace fire-escape stairs — fire_escape_r (96×144) is the same structure at 2×. Downscale or keep 2× and scale draw.</div>
+</div></details></div><div class="entry c-partial">
+<details open><summary><span class="chip c-partial">PARTIAL</span>
+<code>simtower/deco/skyline</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/UI/OT_skyline.png" title="SpriteSheets/originals/UI/OT_skyline.png — 1024×629"><img class="ot" src="../../SpriteSheets/originals/UI/OT_skyline.png" style="--w:620" alt="SpriteSheets/originals/UI/OT_skyline.png"/></a><div class="dim">1024×629</div></div>
+ <div class="note">OT_skyline.png (1024×629) is a full backdrop scene incl. ground band; the game needs a 96×55 tiling strip — crop/retile from the upper building band.</div>
+</div></details></div><div class="entry c-partial">
+<details open><summary><span class="chip c-partial">PARTIAL</span>
+<code>simtower/deco/entrances</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/Lobbies/MM_awning-blue.png" title="SpriteSheets/originals/Lobbies/MM_awning-blue.png — 108×62"><img class="ot" src="../../SpriteSheets/originals/Lobbies/MM_awning-blue.png" style="--w:108" alt="SpriteSheets/originals/Lobbies/MM_awning-blue.png"/></a><div class="dim">108×62</div></div>
+ <div class="note">Entrance awning strip (&#x27;OPEN&#x27; canopies, 112×36). MM_awning-blue (108×62, red+blue awnings) is a close cousin; recut into 2-tile segments.</div>
+</div></details></div><div class="entry c-gap">
+<details open><summary><span class="chip c-gap">GAP</span>
+<code>simtower/deco/santa</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><div class="none">— none —</div></div>
+ <div class="note">Santa + sleigh + reindeer team (140×48) for the Christmas event (santa.wav exists in the sound set). No equivalent — seasonal event would ship without art.</div>
+</div></details></div><div class="entry c-gap">
+<details open><summary><span class="chip c-gap">GAP</span>
+<code>noroute.png</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4></div>
+ <div class="note">Yellow crane &#x27;no route&#x27; marker (36×36; same art as deco/crane). No OpenSky icon; tiny — reuse a hand-drawn icon or the toolbox warning glyph.</div>
+</div></details></div><h2 class="sec" id="s8">UI chrome<span class="secstats">0✅ 6⚠️ 2❌ 2🔧</span></h2><div class="entry c-partial">
+<details open><summary><span class="chip c-partial">PARTIAL</span>
+<code>simtower/ui/toolbox/items</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/UI/Icon-Office.png" title="SpriteSheets/originals/UI/Icon-Office.png — 48×48"><img class="ot" src="../../SpriteSheets/originals/UI/Icon-Office.png" style="--w:48" alt="SpriteSheets/originals/UI/Icon-Office.png"/></a><div class="dim">48×48</div><a href="../../SpriteSheets/originals/UI/Icon-Hotel-Single.png" title="SpriteSheets/originals/UI/Icon-Hotel-Single.png — 48×48"><img class="ot" src="../../SpriteSheets/originals/UI/Icon-Hotel-Single.png" style="--w:48" alt="SpriteSheets/originals/UI/Icon-Hotel-Single.png"/></a><div class="dim">48×48</div><a href="../../SpriteSheets/originals/UI/Icon-Elevator.png" title="SpriteSheets/originals/UI/Icon-Elevator.png — 48×48"><img class="ot" src="../../SpriteSheets/originals/UI/Icon-Elevator.png" style="--w:48" alt="SpriteSheets/originals/UI/Icon-Elevator.png"/></a><div class="dim">48×48</div><a href="../../SpriteSheets/originals/UI/Icon-FastFood.png" title="SpriteSheets/originals/UI/Icon-FastFood.png — 48×48"><img class="ot" src="../../SpriteSheets/originals/UI/Icon-FastFood.png" style="--w:48" alt="SpriteSheets/originals/UI/Icon-FastFood.png"/></a><div class="dim">48×48</div><a href="../../SpriteSheets/originals/UI/Icon_Cinema.png" title="SpriteSheets/originals/UI/Icon_Cinema.png — 48×48"><img class="ot" src="../../SpriteSheets/originals/UI/Icon_Cinema.png" style="--w:48" alt="SpriteSheets/originals/UI/Icon_Cinema.png"/></a><div class="dim">48×48</div><a href="../../SpriteSheets/originals/UI/Icon-Subway.png" title="SpriteSheets/originals/UI/Icon-Subway.png — 48×48"><img class="ot" src="../../SpriteSheets/originals/UI/Icon-Subway.png" style="--w:48" alt="SpriteSheets/originals/UI/Icon-Subway.png"/></a><div class="dim">48×48</div></div>
+ <div class="note">~40 named 48×48 item icons cover nearly every buildable (incl. OT-only extras). Work = downscale to the 32×24 grid cells, add the hand/magnifier hover+selected states items.png carries, and fill missing ones (housekeeping ✓, recycling ✓…).</div>
+</div></details></div><div class="entry c-partial">
+<details open><summary><span class="chip c-partial">PARTIAL</span>
+<code>simtower/ui/toolbox/tools</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/UI/Icon-Bar.png" title="SpriteSheets/originals/UI/Icon-Bar.png — 48×48"><img class="ot" src="../../SpriteSheets/originals/UI/Icon-Bar.png" style="--w:48" alt="SpriteSheets/originals/UI/Icon-Bar.png"/></a><div class="dim">48×48</div><a href="../../SpriteSheets/originals/UI/Icon-Garbage.png" title="SpriteSheets/originals/UI/Icon-Garbage.png — 48×48"><img class="ot" src="../../SpriteSheets/originals/UI/Icon-Garbage.png" style="--w:48" alt="SpriteSheets/originals/UI/Icon-Garbage.png"/></a><div class="dim">48×48</div></div>
+ <div class="note">6 micro-icons (pointer/open-hand/magnifier×2, drag, bulldoze). Icon-Bar (arrow/hand/magnify) + Icon-Garbage cover the semantics at 48×48; needs 32×21 recut + states.</div>
+</div></details></div><div class="entry c-prog">
+<details open><summary><span class="chip c-prog">PROGRAMMATIC</span>
+<code>simtower/ui/toolbox/speed</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><div class="none">— none —</div></div>
+ <div class="note">Play/fast-forward/pause glyphs (256×32, 4 buttons) — trivial vector/canvas redraw; also mostly superseded by the DOM speed controls.</div>
+</div></details></div><div class="entry c-partial">
+<details open><summary><span class="chip c-partial">PARTIAL</span>
+<code>simtower/ui/time/bg</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/UI/GUI_Highrise-Developer.png" title="SpriteSheets/originals/UI/GUI_Highrise-Developer.png — 1280×150"><img class="ot" src="../../SpriteSheets/originals/UI/GUI_Highrise-Developer.png" style="--w:620" alt="SpriteSheets/originals/UI/GUI_Highrise-Developer.png"/></a><div class="dim">1280×150</div></div>
+ <div class="note">Time/status bar (431×41: clock, date, Fund/Pop). GUI_Highrise-Developer.png is a full 1280×150 top bar with the same fields (12:00 AM, star row, date, funds, population, announcements) — re-slice or adopt as HUD redesign source.</div>
+</div></details></div><div class="entry c-partial">
+<details open><summary><span class="chip c-partial">PARTIAL</span>
+<code>simtower/ui/time/rating</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/UI/GUI_Highrise-Developer.png" title="SpriteSheets/originals/UI/GUI_Highrise-Developer.png — 1280×150"><img class="ot" src="../../SpriteSheets/originals/UI/GUI_Highrise-Developer.png" style="--w:620" alt="SpriteSheets/originals/UI/GUI_Highrise-Developer.png"/></a><div class="dim">1280×150</div></div>
+ <div class="note">Star-grid rating faces (108×132, 6 tiers × half-star steps). The GUI bar&#x27;s star row gives static stars only; half-star/filled grid needs redraw.</div>
+</div></details></div><div class="entry c-prog">
+<details open><summary><span class="chip c-prog">PROGRAMMATIC</span>
+<code>simtower/ui/map/sky</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><div class="none">— none —</div></div>
+ <div class="note">4 minimap sky squares (200×54 region) — gradients; trivial procedural.</div>
+</div></details></div><div class="entry c-partial">
+<details open><summary><span class="chip c-partial">PARTIAL</span>
+<code>simtower/ui/map/ground</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/UI/OT_skyline.png" title="SpriteSheets/originals/UI/OT_skyline.png — 1024×629"><img class="ot" src="../../SpriteSheets/originals/UI/OT_skyline.png" style="--w:620" alt="SpriteSheets/originals/UI/OT_skyline.png"/></a><div class="dim">1024×629</div></div>
+ <div class="note">Minimap dirt/ground band (200×24). Croppable from OT_skyline&#x27;s ground band or OT_textures-2.</div>
+</div></details></div><div class="entry c-gap">
+<details open><summary><span class="chip c-gap">GAP</span>
+<code>simtower/ui/map/buttons</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><div class="none">— none —</div></div>
+ <div class="note">Edit/Eval/Pricing/Hotel minimap toggle buttons (200×54, 3 states). Text buttons — easy to rebuild in DOM/canvas, but no art source.</div>
+</div></details></div><div class="entry c-gap">
+<details open><summary><span class="chip c-gap">GAP</span>
+<code>simtower/ui/map/overlays</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><div class="none">— none —</div></div>
+ <div class="note">Minimap rating overlays: Excellent/Good/Terrible, High/Average/Low/VeryLow, DirtyRooms (200×60). Text chips — DOM/canvas rebuild is the natural route.</div>
+</div></details></div><div class="entry c-partial">
+<details open><summary><span class="chip c-partial">PARTIAL</span>
+<code>simtower/ui/menubg</code></summary>
+<div class="pair">
+ <div class="col"><h4>SimTower original</h4><div class="missing">missing</div></div>
+ <div class="col"><h4>OpenSky candidate</h4><a href="../../SpriteSheets/originals/UI/GUI_mainmenu3.png" title="SpriteSheets/originals/UI/GUI_mainmenu3.png — 127×66"><img class="ot" src="../../SpriteSheets/originals/UI/GUI_mainmenu3.png" style="--w:127" alt="SpriteSheets/originals/UI/GUI_mainmenu3.png"/></a><div class="dim">127×66</div><a href="../../SpriteSheets/originals/UI/OcramCorpv2.png" title="SpriteSheets/originals/UI/OcramCorpv2.png — 200×210"><img class="ot" src="../../SpriteSheets/originals/UI/OcramCorpv2.png" style="--w:200" alt="SpriteSheets/originals/UI/OcramCorpv2.png"/></a><div class="dim">200×210</div><a href="../../SpriteSheets/originals/UI/opentower3_2.png" title="SpriteSheets/originals/UI/opentower3_2.png — 180×180"><img class="ot" src="../../SpriteSheets/originals/UI/opentower3_2.png" style="--w:180" alt="SpriteSheets/originals/UI/opentower3_2.png"/></a><div class="dim">180×180</div><a href="../../SpriteSheets/originals/UI/OT_Skyscraper_logo_v3.png" title="SpriteSheets/originals/UI/OT_Skyscraper_logo_v3.png — 309×800"><img class="ot" src="../../SpriteSheets/originals/UI/OT_Skyscraper_logo_v3.png" style="--w:309" alt="SpriteSheets/originals/UI/OT_Skyscraper_logo_v3.png"/></a><div class="dim">309×800</div></div>
+ <div class="note">640×480 main-menu background with SimTower branding. OpenSky offers menu bar + 3 logos (Ocram Corp / OpenTower / Skyscraper) — a redesign, not a 1:1 swap. Web menu is DOM-based so this may simply be retired.</div>
+</div></details></div>
+<h2 class="sec">Appendix — OpenSky art with no SimTower counterpart (feature leads)</h2>
+<table><tr><td><code>UI/GUI_Highrise-Developer.png</code></td><td>Full HUD bar redesign source</td></tr><tr><td><code>Hotel/CheckInDesk-*.png</code></td><td>Hotel front desk (no SimTower counterpart in web port yet)</td></tr><tr><td><code>Hotel/MM_Hotel-LoveSuite-*.png</code></td><td>Love suite room type</td></tr><tr><td><code>Hotel/familySuite-*.png / largeSuite-*.png</code></td><td>Suite tiers</td></tr><tr><td><code>Apartment/*</code></td><td>Studio + deluxe studio apartments (residential tier above condo)</td></tr><tr><td><code>Facility/Restrooms-empty-day-0.png</code></td><td>Restroom facility (SimTower&#x27;s toilet sound exists, no room)</td></tr><tr><td><code>Lobbies/MM_awning-blue.png</code></td><td>Entrance canopies</td></tr><tr><td><code>Transport/OT-2storyescalator.png / OT-3storyescalator.png</code></td><td>Multi-floor escalators</td></tr><tr><td><code>UI/Icon-*.png</code></td><td>~40 toolbox icons incl. items the web port doesn&#x27;t build yet (mezzanine, penthouse, overpass, electricity)</td></tr><tr><td><code>originals root office.png + office.plist/.tps</code></td><td>TexturePacker-composed office sheet — an example of the target packing format</td></tr></table>
+<footer>Generated 2026-08-26 for the OpenSkyWeb custom-asset effort. Sources: bitmaps.hidden/ (reference), SpriteSheets/originals/ (candidates).
+Do not commit SimTower-derived images to any repository — this report lives inside the git-ignored bitmaps.hidden/ folder on purpose.</footer>
+</body></html>

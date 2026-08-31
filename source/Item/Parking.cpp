@@ -23,7 +23,7 @@ void Parking::init()
 
 	used = 0;
 
-	sprite.setTexture(App->bitmaps["simtower/parking/space"]);
+	sprite.setTexture(App->bitmaps.editionTexture("parking", "simtower/parking/space"));
 	sprite.setOrigin({0.f, 24.f});
 	sprite.setPosition({static_cast<float>(position.x * 8), static_cast<float>(position.y * -36)});
 	addSprite(&sprite);

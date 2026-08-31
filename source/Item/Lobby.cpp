@@ -58,8 +58,9 @@ void Lobby::updateSprite()
 		p = (groundLobby ? "simtower/lobby/normal" : "simtower/lobby/sky");
 	}
 
-	background.setTexture(App->bitmaps[p], true);
-	overlay.setTexture(App->bitmaps[p], true);
+	const char *edition = size.y > 1 ? "lobby_high" : (groundLobby ? "lobby_normal" : "lobby_sky");
+	background.setTexture(App->bitmaps.editionTexture(edition, p), true);
+	overlay.setTexture(App->bitmaps.editionTexture(edition, p), true);
 
 	entrances[0].setPosition({(float)getRect().minX() * 8.f - 16.f, (float)-position.y * 36.f});
 	entrances[1].setPosition({(float)getRect().maxX() * 8.f - 40.f, (float)-position.y * 36.f});

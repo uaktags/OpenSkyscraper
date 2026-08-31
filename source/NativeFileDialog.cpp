@@ -24,7 +24,7 @@ namespace OT
 
 		// Filter description used by the platform dialogs. kind selects the
 		// extensions and default extension offered to the user.
-		enum class FileKind { Tower, Executable };
+		enum class FileKind { Tower, Executable, Plugin, Png };
 		struct FilterInfo
 		{
 			std::string winFilter; // double-NUL terminated pair list for Win32
@@ -44,7 +44,7 @@ namespace OT
 			out += '\0';
 			return out;
 		}
-		static FilterInfo makeFilter(FileKind kind)
+			static FilterInfo makeFilter(FileKind kind)
 		{
 			if (kind == FileKind::Executable)
 			{
@@ -53,6 +53,27 @@ namespace OT
 				f.defExt = "exe";
 				f.zenityFilter = "Executables (*.exe *.EX_) | *.exe *.EX_";
 				f.kdialogFilter = "*.exe *.EX_|SimTower executable";
+				f.appleType = "";
+				return f;
+			}
+			if (kind == FileKind::Plugin)
+			{
+				// YootTower plugins ship as .t2p (Win32 PE32 DLLs).
+				FilterInfo f;
+				f.winFilter = buildWinFilter("YootTower plugins (*.t2p)", "*.t2p");
+				f.defExt = "t2p";
+				f.zenityFilter = "YootTower plugins (*.t2p) | *.t2p";
+				f.kdialogFilter = "*.t2p|YootTower plugins";
+				f.appleType = "";
+				return f;
+			}
+			if (kind == FileKind::Png)
+			{
+				FilterInfo f;
+				f.winFilter = buildWinFilter("PNG images (*.png)", "*.png");
+				f.defExt = "png";
+				f.zenityFilter = "PNG images (*.png) | *.png";
+				f.kdialogFilter = "*.png|PNG images";
 				f.appleType = "";
 				return f;
 			}
@@ -205,6 +226,44 @@ namespace OT
 			return Result::Unavailable;
 #endif
 		}
+
+		// Directory selection (no FileKind — directories have no filter).
+		static Result showUnixDirectoryDialog(const std::string &title,
+		                                      const std::string &defaultName,
+		                                      bool save, std::string &path)
+		{
+#ifdef __APPLE__
+			(void)save;
+			if (!commandExists("osascript"))
+				return Result::Unavailable;
+			std::string command = "osascript -e ";
+			command += shellQuote("set f to choose folder with prompt " + appleScriptQuote(title));
+			command += " -e ";
+			command += shellQuote("POSIX path of f");
+			return runSelectionCommand(command, path);
+#else
+			if (commandExists("zenity"))
+			{
+				std::string command = "zenity --file-selection --directory --title=" + shellQuote(title);
+				if (!defaultName.empty())
+					command += " --filename=" + shellQuote(defaultName);
+				if (save)
+					command += " --save --confirm-overwrite";
+				return runSelectionCommand(command, path);
+			}
+			if (commandExists("kdialog"))
+			{
+				// --getexistingdirectory for open; kdialog has no separate
+				// "save directory" verb, so save uses it too (caller creates).
+				std::string command = "kdialog --getexistingdirectory ";
+				command += shellQuote(defaultName.empty() ? "." : defaultName);
+				command += " --title ";
+				command += shellQuote(title);
+				return runSelectionCommand(command, path);
+			}
+			return Result::Unavailable;
+#endif
+		}
 #endif
 
 		Result openTowerFile(const std::string &title, const std::string &defaultName, std::string &path)
@@ -231,6 +290,56 @@ namespace OT
 			return showWindowsDialog(title, "SIMTOWER.EXE", false, FileKind::Executable, path);
 #else
 			return showUnixDialog(title, "", false, FileKind::Executable, path);
+#endif
+		}
+
+		Result openPluginFile(const std::string &title, std::string &path)
+		{
+#ifdef _WIN32
+			return showWindowsDialog(title, "", false, FileKind::Plugin, path);
+#else
+			return showUnixDialog(title, "", false, FileKind::Plugin, path);
+#endif
+		}
+
+		Result openDirectory(const std::string &title, std::string &path)
+		{
+			// No Win32 directory picker is wired yet (would need IFileDialog
+			// with FOS_PICKFOLDERS); fall through to the unix/apple backends,
+			// which cover the platforms the editor targets today.
+#ifndef _WIN32
+			return showUnixDirectoryDialog(title, "", false, path);
+#else
+			(void)title; (void)path;
+			return Result::Unavailable;
+#endif
+		}
+
+		Result saveDirectory(const std::string &title, const std::string &defaultName, std::string &path)
+		{
+#ifndef _WIN32
+			return showUnixDirectoryDialog(title, defaultName, true, path);
+#else
+			(void)title; (void)defaultName; (void)path;
+			return Result::Unavailable;
+#endif
+		}
+
+		Result openPngFile(const std::string &title, std::string &path)
+		{
+#ifdef _WIN32
+			return showWindowsDialog(title, "", false, FileKind::Png, path);
+#else
+			return showUnixDialog(title, "", false, FileKind::Png, path);
+#endif
+		}
+
+		Result savePngFile(const std::string &title, const std::string &defaultName, std::string &path)
+		{
+#ifdef _WIN32
+			return showWindowsDialog(title, defaultName, true, FileKind::Png, path);
+#else
+			return showUnixDialog(title, defaultName, true, FileKind::Png, path);
 #endif
 		}
 	}
