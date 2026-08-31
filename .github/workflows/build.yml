@@ -138,7 +138,11 @@ jobs:
           fi
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        # v4 of the artifact action requires GitHub's new artifact backend;
+        # Forgejo/Gitea instances serve the v3 API, and the upload is a
+        # convenience here anyway — never fail the build over it.
+        uses: actions/upload-artifact@v3
+        continue-on-error: true
         with:
           name: OpenSkyscraper-${{ matrix.triplet }}
           path: dist/OpenSkyscraper-${{ matrix.triplet }}
