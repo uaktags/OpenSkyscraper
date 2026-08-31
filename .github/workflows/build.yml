@@ -46,6 +46,7 @@ jobs:
             libxcursor-dev \
             libxrandr-dev \
             libxi-dev \
+            xvfb \
             libopenal-dev \
             libflac-dev \
             libvorbis-dev
@@ -116,7 +117,15 @@ jobs:
         run: cmake --build build-ci --config Release --parallel
 
       - name: Test
-        run: ctest --test-dir build-ci --build-config Release --output-on-failure
+        shell: bash
+        run: |
+          # AnimPeple/texture tests create SFML GL resources: headless Linux
+          # needs a virtual X display (software GL via mesa).
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            xvfb-run -a ctest --test-dir build-ci --build-config Release --output-on-failure
+          else
+            ctest --test-dir build-ci --build-config Release --output-on-failure
+          fi
 
       - name: Bundle artifact
         shell: bash
