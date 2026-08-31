@@ -11,9 +11,8 @@ namespace OT {
 			
 			virtual void init();
 			
-			Sprite sprite;
-			double animation;
-			int frame;
+Sprite sprite;
+int frame;
 			int frameCount;
 			
 			void updateSprite();

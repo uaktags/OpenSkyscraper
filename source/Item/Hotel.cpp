@@ -58,7 +58,7 @@ AbstractPrototype * Hotel::makeSinglePrototype()
 	AbstractPrototype * p = new Prototype<Hotel>;
 	p->id             = "hotel_single";
 	p->name           = "Single Hotel Room";
-	p->price          = 50000;
+	p->price          = 20000;
 	p->size           = int2(4, 1);
 	p->icon           = ICON_HOTEL_SINGLE;
 	p->variant        = kSingle;
@@ -72,7 +72,7 @@ AbstractPrototype * Hotel::makeDoublePrototype()
 	AbstractPrototype * p = new Prototype<Hotel>;
 	p->id             = "hotel_double";
 	p->name           = "Double Hotel Room";
-	p->price          = 100000;
+	p->price          = 50000;
 	p->size           = int2(6, 1);
 	p->icon           = ICON_HOTEL_DOUBLE;
 	p->variant        = kDouble;
@@ -86,7 +86,7 @@ AbstractPrototype * Hotel::makeSuitePrototype()
 	AbstractPrototype * p = new Prototype<Hotel>;
 	p->id             = "hotel_suite";
 	p->name           = "Hotel Suite";
-	p->price          = 200000;
+	p->price          = 100000;
 	p->size           = int2(7, 1);
 	p->icon           = ICON_HOTEL_SUITE;
 	p->variant        = kSuite;
@@ -99,15 +99,16 @@ void Hotel::applyVariant()
 {
 	int2 sz(8, 1);
 	const char *tex = "simtower/double";
+	const char *edition = "hotel_double";
 	int frameWidth = 48;
 	switch (variant)
 	{
-		case kSingle: sz = int2(4, 1); tex = "simtower/single"; frameWidth = 32; break;
-		case kDouble: sz = int2(6, 1); tex = "simtower/double"; frameWidth = 48; break;
-		case kSuite:  sz = int2(7, 1); tex = "simtower/suite";  frameWidth = 56; break;
+		case kSingle: sz = int2(4, 1); tex = "simtower/single"; edition = "hotel_single"; frameWidth = 32; break;
+		case kDouble: sz = int2(6, 1); tex = "simtower/double"; edition = "hotel_double"; frameWidth = 48; break;
+		case kSuite:  sz = int2(7, 1); tex = "simtower/suite";  edition = "hotel_suite";  frameWidth = 56; break;
 	}
 	size = sz;
-	sprite.setTexture(App->bitmaps[tex]);
+	sprite.setTexture(App->bitmaps.editionTexture(edition, tex));
 	sprite.setOrigin({0.f, 24.f});
 	sprite.setPosition({static_cast<float>(getPosition().x * 8), static_cast<float>(-getPosition().y * 36)});
 	(void)frameWidth;

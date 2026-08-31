@@ -14,7 +14,7 @@ namespace OT
 			{
 				p->id = "condo";
 				p->name = "Condo";
-				p->price = 200000;
+				p->price = 80000;
 				p->size = int2(16, 1);
 				p->icon = 24;
 			}
@@ -87,6 +87,10 @@ namespace OT
 			virtual void addPerson(Person *p);
 			virtual void removePerson(Person *p);
 
+			/// Night-frame gate used by the AnimPeple suppression in
+			/// Item::renderPeople (OpenSkyWeb ISSUE-037 lighting rules).
+			bool isNightLighting() const { return lighting == NIGHT; }
+			
 		protected:
 			void generateJitters();
 			void moveOccupants();

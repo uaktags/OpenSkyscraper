@@ -1,4 +1,5 @@
 #include <cmath>
+#include "../Item/Factory.h"
 #include "../Item/Item.h"
 #include "FloorNode.h"
 #include "MapSearchNode.h"
@@ -6,8 +7,9 @@ using namespace OT;
 
 
 MapSearchNode::MapSearchNode() : mapNode(NULL), parent_item(NULL), 
-								 numStairs(0), numEscalators(0), numElevators(0), 
-								 g(0), h(0), 
+numStairs(0), numEscalators(0), numElevators(0), 
+stairsSinceTransport(0), escalatorsSinceTransport(0),
+g(0), h(0), 
 								 start_point(INT_MIN, INT_MIN), end_point(INT_MIN, INT_MIN),
 								 serviceRoute(false) {}
 
@@ -22,8 +24,10 @@ float MapSearchNode::GetCost(MapSearchNode &successor) {
 	successor.parent_item = i;
 	successor.numStairs = numStairs;
 	successor.numEscalators = numEscalators;
-	successor.numElevators = numElevators;
-	successor.g = g;
+successor.numElevators = numElevators;
+successor.stairsSinceTransport = stairsSinceTransport;
+successor.escalatorsSinceTransport = escalatorsSinceTransport;
+successor.g = g;
 	
 	int traverse_cost = 0;
 	if(!i) {
@@ -45,11 +49,13 @@ float MapSearchNode::GetCost(MapSearchNode &successor) {
 			traverse_cost = std::abs(successor.mapNode->position.x - mapNode->position.x)*WALKING_COST;
 	} else if(i->isStairlike()) {
 		if(i->prototype->icon == 2) {
-			traverse_cost += STAIRS_COST;
-			successor.numStairs++;
+traverse_cost += STAIRS_COST;
+successor.numStairs++;
+successor.stairsSinceTransport++;
 		} else {
-			traverse_cost += ESCALATOR_COST;
-			successor.numEscalators++;
+traverse_cost += ESCALATOR_COST;
+successor.numEscalators++;
+successor.escalatorsSinceTransport++;
 		}
 		
 		traverse_cost += FLOOR_COST;
@@ -59,16 +65,34 @@ float MapSearchNode::GetCost(MapSearchNode &successor) {
 			// there will need to be another check here to include Service elevator costs.
 			if(i->prototype->icon == 4)
 				traverse_cost += ELEVATOR_COST;
-			else
-				traverse_cost += EXPRESS_COST;
-			successor.numElevators++;
-		}
+else
+traverse_cost += EXPRESS_COST;
+successor.numElevators++;
+}
+// Riding an elevator refills the stairlike budget (OpenSkyWeb PORT
+// NOTE 1): stairs used BELOW an elevator must not consume the budget
+// needed for stairs ABOVE it.
+successor.stairsSinceTransport = 0;
+successor.escalatorsSinceTransport = 0;
 		
-		traverse_cost += std::abs(successor.mapNode->position.y - mapNode->position.y)*FLOOR_COST;
-	} else traverse_cost = INHIBITORY_COST;	// ERROR: Should not end up here. INHIBITORY_COST should deter further expansion from this node.
+traverse_cost += std::abs(successor.mapNode->position.y - mapNode->position.y)*FLOOR_COST;
+} else if(i->prototype->icon == ICON_LOBBY) {
+// Multi-story lobby vertical traversal (OpenSkyWeb ISSUE-006): a
+// cheap internal transfer; lobby contact refills the stairlike budget.
+traverse_cost = std::abs(successor.mapNode->position.y - mapNode->position.y) * 10;
+successor.stairsSinceTransport = 0;
+successor.escalatorsSinceTransport = 0;
+} else traverse_cost = INHIBITORY_COST;// ERROR: Should not end up here. INHIBITORY_COST should deter further expansion from this node.
 
-	successor.g += (float)traverse_cost;
-	return (float)traverse_cost;
+// Arriving on any elevator node (even just walking onto its tile) counts
+// as transport contact and refills the stairlike budget (PORT NOTE 1).
+if (successor.mapNode->hasElevator) {
+successor.stairsSinceTransport = 0;
+successor.escalatorsSinceTransport = 0;
+}
+
+successor.g += (float)traverse_cost;
+return (float)traverse_cost;
 }
 
 float MapSearchNode::GoalDistanceEstimate(MapSearchNode &nodeGoal) {
@@ -209,7 +233,14 @@ bool MapSearchNode::IsGoal(MapSearchNode &nodeGoal) {
 }
 
 bool MapSearchNode::IsSameState(MapSearchNode &rhs) {
-	return (mapNode == rhs.mapNode);
+// State equivalence includes the transfer stamina counters so that a
+// path arriving with an exhausted stairlike budget does not falsely
+// prune a valid elevator path that has refilled stamina (OpenSkyWeb
+// commit 9918897).
+return (mapNode == rhs.mapNode
+&& stairsSinceTransport == rhs.stairsSinceTransport
+&& escalatorsSinceTransport == rhs.escalatorsSinceTransport
+&& numElevators == rhs.numElevators);
 }
 
 OT::Item::Item * MapSearchNode::getItemOnRoute(const MapSearchNode *successor) {
@@ -239,7 +270,7 @@ bool MapSearchNode::canTransfer(const MapSearchNode *start, const OT::MapNode *d
 		Returns false otherwise.
 		Maximum transfer limits are:
 			2 elevators (no more than 1 elevator if journey has already used stairs or escalators)
-			3 stairs
+			4 stairs
 			6 escalators
 			1 stair, 2 escalators OR 2 stairs, 1 escalator
 	*/
@@ -248,13 +279,16 @@ bool MapSearchNode::canTransfer(const MapSearchNode *start, const OT::MapNode *d
 		// Once in an elevator node, travel is allowed for as many floors available in the elevator shaft
 		if(start->mapNode->hasElevator) return true;
 
-		// Hence we only check limits for stairlike travel
-		if(start->mapNode->transportItems[dir]->prototype->icon == 2) {
-			if(start->numStairs > 2 - start->numEscalators) return false;
-		} else {
-			if(start->numEscalators > 5) return false;
-			if(start->numStairs > 0 && start->numEscalators > 2 - start->numStairs) return false;
-		}
+// Hence we only check limits for stairlike travel. The budget is
+// measured per transport segment (since the last elevator/lobby
+// contact) rather than cumulatively over the whole journey - see
+// OpenSkyWeb pathfinder.js PORT NOTE 1.
+if(start->mapNode->transportItems[dir]->prototype->icon == 2) {
+if(start->stairsSinceTransport > 3 - start->escalatorsSinceTransport) return false;
+} else {
+if(start->escalatorsSinceTransport > 5) return false;
+if(start->stairsSinceTransport > 0 && start->escalatorsSinceTransport > 2 - start->stairsSinceTransport) return false;
+}
 	} else {
 		if(dest->hasElevator) {
 			if((!start->serviceRoute && dest->hasServiceElevator) || (start->serviceRoute && !dest->hasServiceElevator)) return false;

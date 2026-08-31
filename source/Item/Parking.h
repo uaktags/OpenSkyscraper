@@ -27,9 +27,11 @@ namespace OT {
 			OT_ITEM_PROTOTYPE(Parking) {
 				p->id    = "parking";
 				p->name  = "Parking";
-				p->price = 5000;
+				p->price = 3000;
 				p->size  = int2(8, 1);
-				p->icon  = 20;
+				// Authentic toolbox cell: the "P" sign (17). The old value
+				// 20 pointed at the church dome.
+				p->icon  = 17;
 			}
 			virtual ~Parking();
 

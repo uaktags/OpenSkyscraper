@@ -10,7 +10,8 @@ namespace OT {
 				OT_ITEM_PROTOTYPE(Express) {
 					p->id    = "elevator-express";
 					p->name  = "Express Elevator";
-					p->price = 1000000;
+					p->price = 400000;
+					p->carCost = 150000;
 					p->size  = int2(6,1);
 					p->icon  = 6;
 				}

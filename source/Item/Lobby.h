@@ -11,7 +11,7 @@ namespace OT {
 			OT_ITEM_PROTOTYPE(Lobby) {
 				p->id    = "lobby";
 				p->name  = "Lobby";
-				p->price = 20000;
+				p->price = 5000;
 				p->size  = int2(4,1);
 				p->icon  = 0;
 			}

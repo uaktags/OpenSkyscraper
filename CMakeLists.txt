@@ -190,6 +190,7 @@ add_executable(OpenSkyTests
   tests/test_main.cpp
   source/Time.cpp
   source/Route.cpp
+  source/SaveHash.cpp
   source/WindowsPEExecutable.cpp
   source/Path.cpp
   source/Logger.cpp
@@ -197,7 +198,11 @@ add_executable(OpenSkyTests
   source/LevelUp.cpp
   source/PluginManager.cpp
   source/PluginResources.cpp
+  source/PluginObjmap.cpp
   source/PluginBitmapLoader.cpp
+  source/OspPlugin.cpp
+  source/AbstractPlugin.cpp
+  source/DecompiledPlugin.cpp
 )
 target_compile_definitions(OpenSkyTests PRIVATE OPEN_SKY_ROUTE_SEAM_ONLY)
 # Lighting.h pulls in <SFML/Graphics/Color.hpp> for the tint color. We only
@@ -206,3 +211,31 @@ target_compile_definitions(OpenSkyTests PRIVATE OPEN_SKY_ROUTE_SEAM_ONLY)
 # available to the test target without pulling in the rest of the engine.
 target_link_libraries(OpenSkyTests PRIVATE SFML::Graphics)
 add_test(NAME OpenSkyTests COMMAND OpenSkyTests)
+
+# ---------------------------------------------------------------------------
+# PluginEditor — standalone editor for the OpenSkyscraper plugin format.
+# Links the same SFML 3 + TGUI stack as the game plus the pure plugin seam
+# (mirroring OpenSkyTests' isolation of those files). New editor code lives
+# under tools/PluginEditor/. Tenant vertical slice only.
+# ---------------------------------------------------------------------------
+add_executable(PluginEditor
+  tools/PluginEditor/src/main.cpp
+  tools/PluginEditor/src/EditorApp.cpp
+  source/Path.cpp
+  source/Logger.cpp
+  source/WindowsPEExecutable.cpp
+  source/PluginManager.cpp
+  source/PluginResources.cpp
+  source/PluginObjmap.cpp
+  source/PluginBitmapLoader.cpp
+  source/OspPlugin.cpp
+  source/AbstractPlugin.cpp
+  source/DecompiledPlugin.cpp
+  source/NativeFileDialog.cpp
+)
+target_include_directories(PluginEditor PRIVATE source)
+target_link_libraries(PluginEditor PRIVATE
+  SFML::Graphics SFML::Window SFML::System
+  TGUI::TGUI
+)
+

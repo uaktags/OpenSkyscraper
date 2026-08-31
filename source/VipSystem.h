@@ -7,14 +7,14 @@ namespace tinyxml2 { class XMLPrinter; class XMLElement; }
 
 namespace OT
 {
-	/** Periodic VIP visit system (Phase 3.2).
+	/** VIP visit system (Phase 3.2).
 	 *
-	 * Mirrors the role of VIP arrivals in the original SimTower
-	 * (codemap.md:2653). VIPs visit the tower at random intervals once it
-	 * has some momentum, evaluate overall quality (cleanliness, tenant
-	 * satisfaction, facility coverage) and either reward the player or
-	 * lodge a complaint. Sustained good VIP reviews are intended to feed
-	 * the eventual "Tower of the Year" Cathedral ending (TODO).
+	 * Scheduling retuned to the authentic trigger model (OpenSkyWeb
+	 * ISSUE-036, docs/research/event-triggers.md): VIP visits are NOT
+	 * random. The VIP arrives when the next star promotion requires a VIP
+	 * rating and every other requirement is already met. A good review
+	 * completes the promotion gate (consumed by Game::ratingMayIncrease);
+	 * a bad review schedules a 14-day retry cooldown.
 	 *
 	 * The visit itself is abstract - we don't spawn a walking Person for
 	 * the VIP, just bookkeep a scheduled window. This keeps the system
@@ -52,10 +52,10 @@ namespace OT
 		int positiveReviews() const { return goodReviews; }
 
 	private:
-		/// Schedule the next visit a random number of days out. Only
-		/// fires once the tower is established (rating >= 1 + population
-		/// threshold). No-op otherwise - nextVisitTime stays 0.
-		void scheduleNextVisit();
+		/// True when the next promotion requires a VIP rating and every
+		/// other requirement (population, facilities) is already met — the
+		/// condition under which the VIP comes to inspect.
+		bool promotionNeedsVisit() const;
 
 		/// Begin a visit: mark visiting, capture the end time, emit an
 		/// arrival message.

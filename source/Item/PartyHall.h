@@ -12,7 +12,7 @@ namespace OT {
 			OT_ITEM_PROTOTYPE(PartyHall) {
 				p->id    = "partyhall";
 				p->name  = "Party Hall";
-				p->price = 500000;
+				p->price = 100000;
 				p->size  = int2(24,2);
 				p->icon  = 15;
 			}

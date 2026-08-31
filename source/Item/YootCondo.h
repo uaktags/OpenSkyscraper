@@ -81,6 +81,10 @@ namespace OT
 			virtual void addPerson(Person *p) override;
 			virtual void removePerson(Person *p) override;
 
+			/// Night-frame gate used by the AnimPeple suppression in
+			/// Item::renderPeople (OpenSkyWeb ISSUE-037 lighting rules).
+			bool isNightLighting() const { return lighting == NIGHT; }
+			
 		protected:
 			void generateJitters();
 			void moveOccupants();

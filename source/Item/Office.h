@@ -2,6 +2,7 @@
 #pragma once
 #include "Item.h"
 #include <queue>
+#include <vector>
 #include <set>
 
 namespace OT
@@ -32,6 +33,17 @@ namespace OT
 			virtual void advance(double dt) override;
 			virtual int dailyMaintenanceCost() const override { return 250; }
 			virtual bool isOccupied() const override { return occupied; }
+			/// Lit-state + worker access for the AnimPeple overlay in
+			/// Item::renderPeople (OpenSkyWeb office population rules).
+bool isLit() const { return lit; }
+std::vector<Person *> getWorkerPeople(int maxCount) const
+{
+std::vector<Person *> out;
+for (Workers::const_iterator w = workers.begin(); w != workers.end() && (int)out.size() < maxCount; ++w)
+out.push_back(*w);
+return out;
+}
+			
 			bool isAttractive();
 
 			virtual void addPerson(Person *p) override;

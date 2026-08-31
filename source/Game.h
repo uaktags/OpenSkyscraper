@@ -1,8 +1,12 @@
 #pragma once
 
+#include <TGUI/Widgets/ChildWindow.hpp>
+#include <functional>
 #include <tinyxml2.h>
 #include <SFML/Audio/Sound.hpp>
 #include <map>
+#include <set>
+#include <vector>
 
 #include "Item/Elevator/Elevator.h"
 #include "Item/Factory.h"
@@ -70,7 +74,12 @@ namespace OT {
 		Item::Item * metroStation;
 		void addItem(Item::Item * item);
 		void removeItem(Item::Item * item);
-		void extendFloor(int floor, int minX, int maxX);
+		void extendFloor(int floor, int minX, int maxX, bool free = false);
+		/// Mint free stub floor slabs where a loaded tower lost them
+		/// (OpenSkyWeb ISSUE-041 self-heal). Returns true when repaired.
+		bool repairFloorCoverage();
+		/// Serialize the tower (with integrity hash) to the given path.
+		bool writeTowerFile(const std::string & path);
 
 		int funds;
 		Money money;
@@ -151,6 +160,30 @@ namespace OT {
 		/// Used by the minimap click-to-jump.
 		void centerViewportOnTile(double tileX, double tileY);
 
+		/// Modal two-button choice for emergency events (fire crew /
+		/// terrorist ransom). Pauses the simulation until answered;
+		/// `onChoice(true)` = the `yesLabel` button. The pending callback
+		/// is dropped by clearWorld().
+		void askEventChoice(const std::string & title, const std::string & text,
+		                    const std::string & yesLabel, const std::string & noLabel,
+		                    const std::function<void(bool)> & onChoice);
+		/// Close any open event choice without answering it.
+		void closeEventChoice();
+
+		/// ISSUE-039 drag-to-place batching (OpenSkyWeb port): hold an item
+		/// tool and drag to lay out a whole row/column (Shift = full grid).
+		/// Nothing builds or is charged until mouse release; ghosts preview
+		/// per-cell validity. Esc cancels.
+		struct BatchCell { int x; int y; bool valid; std::string reason; };
+		bool isBatchDraggable(Item::AbstractPrototype * proto) const;
+		void startBatchDrag();
+		void updateBatchDrag();
+		void finishBatchDrag();
+		void cancelBatchDrag();
+		bool batchDragActive() const { return batchDragging; }
+		const std::vector<BatchCell> & getBatchCells() const { return batchCells; }
+		bool batchAllAffordable() const { return batchAffordable; }
+
 		/// Toggle elevator service for a floor. Encapsulates the gameMap +
 		/// cleanQueues + updateRoutes dance so UI dialogs don't need to reach
 		/// into the pathfinder directly.
@@ -187,6 +220,32 @@ namespace OT {
 		void settleDailyAccounting();
 		int calculateDailyMaintenanceCost() const;
 		int lastAccountingDay;
+		/// Autosave bookkeeping (OpenSkyWeb autosave.js policy): last in-game
+		/// day and wall-clock second we wrote a crash-recovery snapshot.
+		int lastAutosaveDay;
+		double lastAutosaveWallClock;
+		/// Throttled autosave, called when the in-game day rolls over.
+		void autosaveIfDue();
+		/// Answer + teardown for the event choice dialog.
+		void answerEventChoice(bool yes);
+		/// Validate a generic-room placement without mutating anything
+		/// (mirror of the construction branch's checks for previews).
+bool validateBatchCell(Item::AbstractPrototype * proto, int x, int y, std::string & reason, const std::set<int> & simulatedSlabs = std::set<int>()) const;
+		/// Run the full construction flow for the current tool at pos.
+		/// Returns true when a new item was added to the world.
+		bool constructToolAt(int2 pos);
+		// --- Batch drag state ---
+		bool batchDragging = false;
+		bool batchAffordable = true;
+		int batchAnchorX = 0;
+		int batchAnchorY = 0;
+		std::string batchFirstReason;
+		std::vector<BatchCell> batchCells;
+
+		// --- Event choice dialog state ---
+		tgui::ChildWindow::Ptr eventChoiceWindow;
+		std::function<void(bool)> eventChoiceCallback;
+		int eventChoiceSavedSpeed = -1;
 		/// Quarter value at the last settleDailyAccounting. When the live
 		/// time.quarter advances past this, we call Money::finalizeQuarter
 		/// so the finance window's quarterly accumulators reset.

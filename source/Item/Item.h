@@ -18,6 +18,10 @@ namespace OT {
 		class Item : public GameObject, public sf::Drawable
 		{
 		public:
+			/// Optional per-instance display name overriding
+			/// prototype->name (e.g. authentic tenant name variants,
+			/// OpenSkyWeb ISSUE-035). Empty = use the prototype name.
+			std::string displayName;
 			int layer;
 			AbstractPrototype * const prototype;
 			Item(Game * game, AbstractPrototype * prototype) : GameObject(game), sf::Drawable(), prototype(prototype), size(prototype->size) { layer = 0; population = 0; evaluation = 50; underConstruction = false; constructionEndTime = 0; }
@@ -39,6 +43,11 @@ namespace OT {
 
 			void draw(sf::RenderTarget & target, sf::RenderStates states) const;
 			virtual void render(sf::RenderTarget & target) const;
+
+			/// Render the occupant AnimPeple sprites with the web-port
+			/// pacing and suppression rules (multi-second activity cycles,
+			/// per-persona condo frames, waitstaff caps, sleeping filters).
+			void renderPeople(sf::RenderTarget & target, const sf::Color & statusTint, bool tinted) const;
 			sf::Vector2u getSize() const { return sf::Vector2u(size.x, size.y); }
 			sf::Vector2u getSizePixels() const { return sf::Vector2u(size.x*8, size.y*36); }
 

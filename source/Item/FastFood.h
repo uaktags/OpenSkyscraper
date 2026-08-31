@@ -28,6 +28,9 @@ namespace OT
 			virtual void decodeXML(tinyxml2::XMLElement &xml);
 
 			int variant;
+			/// Cosmetic tenant identity (OpenSkyWeb ISSUE-035, authentic
+			/// SIMTOWER.EXE name pools), indexed by the sprite `variant`.
+			static const char * const kNameVariants[5];
 			bool open;
 			int pricePerMeal;
 

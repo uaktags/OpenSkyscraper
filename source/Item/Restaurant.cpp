@@ -8,6 +8,13 @@
 using namespace OT;
 using namespace OT::Item;
 
+// Authentic tenant name pool (OpenSkyWeb ISSUE-035, SIMTOWER.EXE strings
+// 0xbaa02-0xbaa3d). The original has five variants; the loaded sprite sheet
+// carries four frames, so "Steak House" awaits a fifth frame.
+const char * const Restaurant::kNameVariants[4] = {
+	"English Pub", "French Restaurant", "Chinese Restaurant", "Sushi Bar"
+};
+
 Restaurant::~Restaurant()
 {
 	clearCustomers();
@@ -18,10 +25,11 @@ void Restaurant::init()
 	Item::init();
 
 	variant = rand() % 4;
+	displayName = kNameVariants[variant];
 	open = false;
 	pricePerMeal = 400;
 
-	sprite.setTexture(App->bitmaps["simtower/restaurant"]);
+	sprite.setTexture(App->bitmaps.editionTexture("restaurant", "simtower/restaurant"));
 	sprite.setOrigin({0.f, 24.f});
 	sprite.setPosition({static_cast<float>(getPosition().x * 8), static_cast<float>(-getPosition().y * 36)});
 	addSprite(&sprite);
@@ -74,6 +82,8 @@ void Restaurant::decodeXML(tinyxml2::XMLElement &xml)
 {
 	Item::decodeXML(xml);
 	variant = xml.IntAttribute("variant");
+	if (variant >= 0 && (size_t)variant < sizeof(kNameVariants)/sizeof(kNameVariants[0]))
+		displayName = kNameVariants[variant];
 	open = xml.BoolAttribute("open");
 	pricePerMeal = xml.IntAttribute("pricePerMeal", 400);
 	population = xml.IntAttribute("population", 0);

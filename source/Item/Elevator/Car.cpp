@@ -14,7 +14,11 @@ const static double kUnmountPeriod = 0.05; //ditto, but off the elevator
 
 void Car::init()
 {
-	sprite.setTexture(app->bitmaps[elevator->carBitmap]);
+	const std::string carKey = elevator->carBitmap;
+	const char *edition = carKey.find("express") != std::string::npos ? "elevator_express" :
+	                      carKey.find("service") != std::string::npos ? "elevator_service" :
+	                                                                    "elevator_standard";
+	sprite.setTexture(app->bitmaps.editionTexture(edition, elevator->carBitmap.c_str()));
 	sprite.setOrigin({0.f, 30.f});
 	updateSprite();
 
@@ -48,12 +52,18 @@ void Car::reposition()
 
 void Car::updateSprite()
 {
+	// Load-frame thresholds spread across the car's capacity so riders see
+	// genuine intermediate states (empty / light / half / busy / full)
+	// instead of jumping straight from empty to the 4+-passenger frame
+	// (the web used 0/1/3/rest which read as "always full or empty").
 	int index = 3;
-	int pc = passengers.size();
+	const int pc = (int)passengers.size();
+	const int cap = (int)elevator->maxCarCapacity;
 	if (pc == 0) index = 0;
-	else if (pc <= 1) index = 1;
-	else if (pc <= 3) index = 2;
-	else if (pc == elevator->maxCarCapacity) index = 4;
+	else if (pc <= cap / 4) index = 1;
+	else if (pc <= cap / 2) index = 2;
+	else if (pc <= cap * 3 / 4) index = 3;
+	else index = 4;
 
 	int w = sprite.getTexture().getSize().x / 5;
 	int h = sprite.getTexture().getSize().y;

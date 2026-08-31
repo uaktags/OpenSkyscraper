@@ -25,6 +25,7 @@ namespace OT {
 			int variant;
 			int entrance_offset;
 			int exit_offset;
+			int carCost;    ///< Optional per-car cost for elevator shafts (0 = none).
 			
 			virtual Item * make(Game * game) = 0;
 			virtual ~AbstractPrototype() {}

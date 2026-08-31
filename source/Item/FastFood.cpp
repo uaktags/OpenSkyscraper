@@ -8,6 +8,12 @@
 using namespace OT;
 using namespace OT::Item;
 
+// Authentic tenant name pool (OpenSkyWeb ISSUE-035, SIMTOWER.EXE strings
+// 0xbac01-0xbac37).
+const char * const FastFood::kNameVariants[5] = {
+	"Japanese Stall", "Chinese Cafe", "Hamburger Stand", "Ice Cream", "Coffee Shop"
+};
+
 FastFood::~FastFood()
 {
 	clearCustomers();
@@ -18,10 +24,11 @@ void FastFood::init()
 	Item::init();
 
 	variant = rand() % 5;
+	displayName = kNameVariants[variant];
 	open = false;
 	pricePerMeal = 200;
 
-	sprite.setTexture(App->bitmaps["simtower/fastfood"]);
+	sprite.setTexture(App->bitmaps.editionTexture("fastfood", "simtower/fastfood"));
 	sprite.setOrigin({0.f, 24.f});
 	sprite.setPosition({static_cast<float>(getPosition().x * 8), static_cast<float>(-getPosition().y * 36)});
 	addSprite(&sprite);
@@ -77,6 +84,8 @@ void FastFood::decodeXML(tinyxml2::XMLElement &xml)
 {
 	Item::decodeXML(xml);
 	variant = xml.IntAttribute("variant");
+	if (variant >= 0 && (size_t)variant < sizeof(kNameVariants)/sizeof(kNameVariants[0]))
+		displayName = kNameVariants[variant];
 	open = xml.BoolAttribute("open");
 	pricePerMeal = xml.IntAttribute("pricePerMeal", 200);
 	population = xml.IntAttribute("population", 0);

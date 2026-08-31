@@ -18,24 +18,12 @@ using namespace OT;
 
 namespace
 {
-	// Tunables. Keep these in one place so they're easy to find when
-	// balancing the system against the SimTower original.
-	const double kMinPopForVip     = 150;       // tower needs real momentum
-	const int    kMinRatingForVip  = 1;         // 2-star tower minimum
-	// VIPs are rare special occasions in the original, not weekly. A game
-	// "year" is 12 days, so ~3-7 week gaps make visits feel earned.
-	const double kVisitGapMinDays  = 21.0;      // ~3 weeks in-game
-	const double kVisitGapMaxDays  = 50.0;      // ~7 weeks in-game
+	// Tunables (OpenSkyWeb ISSUE-036 authentic trigger model).
 	const double kVisitDurationAbs = 2.0 / 24;  // ~2 game-hours on premises
 	const int    kSatisfiedReward  = 50000;     // cash bonus on positive review
-	const double kGoodEvalThreshold  = 55.0;    // avg eval above this = positive
+	const double kGoodEvalThreshold  = 55.0;
 	const double kExcellentEvalThreshold = 75.0;
-
-	double randDays(double lo, double hi)
-	{
-		const double r = static_cast<double>(rand()) / static_cast<double>(RAND_MAX);
-		return lo + r * (hi - lo);
-	}
+	const double kRetryDays = 14.0;             // cooldown after a bad review
 }
 
 VipSystem::VipSystem(Game * game)
@@ -59,15 +47,18 @@ void VipSystem::scheduleNow()
 	nextVisitTime = game->time.absolute;
 }
 
-void VipSystem::scheduleNextVisit()
+bool VipSystem::promotionNeedsVisit() const
 {
-	// Only schedule once the tower is established. This avoids VIP
-	// arrivals on a fresh 1-star lobby-only tower.
-	if (game->rating < kMinRatingForVip)    { nextVisitTime = 0; return; }
-	if (game->population < kMinPopForVip)   { nextVisitTime = 0; return; }
-
-	const double gapAbs = Time::hourToAbsolute(24.0 * randDays(kVisitGapMinDays, kVisitGapMaxDays));
-	nextVisitTime = game->time.absolute + gapAbs;
+	// The next promotion requires a VIP rating and everything else is
+	// already satisfied — the VIP comes to inspect (OpenSkyWeb ISSUE-036).
+	const LevelUp::Requirements * req = LevelUp::advancementRequirements(game->rating);
+	if (!req || !req->needsVip) return false;
+	const JudgeSystem::Counts & c = game->judgeSystem.counts();
+	if (game->population < req->population) return false;
+	if (req->needsSecurity && c.securityOffices <= 0) return false;
+	if (req->needsMedical  && c.medicalCenters  <= 0) return false;
+	if (req->needsMetro    && c.metros         <= 0) return false;
+	return true;
 }
 
 void VipSystem::beginVisit()
@@ -126,40 +117,43 @@ void VipSystem::endVisit()
 		LOG(IMPORTANT, "VIP review: POOR (score=%.1f)", score);
 	}
 
-	// Schedule the next visit. A bad review pushes the next VIP further out
-	// so the player has time to fix issues before being re-judged.
-	const double baseGapDays = randDays(kVisitGapMinDays, kVisitGapMaxDays);
-	const double extraGapDays = (score < kGoodEvalThreshold) ? 14.0 : 0.0;
-	nextVisitTime = game->time.absolute + Time::hourToAbsolute(24.0 * (baseGapDays + extraGapDays));
+	// A disappointed VIP needs time before re-inspecting (14-day retry
+	// cooldown); a satisfied one completed the promotion gate, which
+	// ratingMayIncrease() consumes below.
+	nextVisitTime = (score < kGoodEvalThreshold)
+		? game->time.absolute + kRetryDays
+		: 0;
 
 	game->ratingMayIncrease();
 }
 
 void VipSystem::advance(double dt)
 {
-	// If we have no visit scheduled, try to schedule one (no-op until the
-	// tower meets the population/rating thresholds).
-	if (nextVisitTime == 0 && !visiting)
-	{
-		scheduleNextVisit();
-	}
-
 	if (visiting)
 	{
 		if (game->time.absolute >= visitEndTime)
 		{
 			endVisit();
 		}
+		return;
 	}
-	else if (nextVisitTime > 0 && game->time.absolute >= nextVisitTime)
+
+	// Pending forced visit (scheduleNow) or post-bad-review cooldown.
+	if (nextVisitTime > 0)
 	{
-		// Threshold check again at fire time - the player may have dropped
-		// below the population threshold (e.g. tenants fled) since we
-		// scheduled.
-		if (game->rating >= kMinRatingForVip && game->population >= kMinPopForVip)
+		if (game->time.absolute >= nextVisitTime)
+		{
+			nextVisitTime = 0;
 			beginVisit();
-		else
-			scheduleNextVisit(); // try again later
+		}
+		return;
+	}
+
+	// Promotion gate: the next star needs a VIP rating and the tower
+	// already satisfies every other requirement.
+	if (promotionNeedsVisit())
+	{
+		beginVisit();
 	}
 }
 

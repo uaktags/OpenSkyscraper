@@ -1,8 +1,12 @@
 /* Copyright (c) 2012-2015 Fabian Schuiki */
 /* Copyright (c) 2026 OpenSkyscraper contributors */
 #include <cassert>
+#include <chrono>
+#include <TGUI/Widgets/Label.hpp>
+#include <TGUI/Widgets/Button.hpp>
 #include "Application.h"
 #include "Game.h"
+#include "SaveHash.h"
 #include "Item/FastFood.h"
 #include "Item/Lobby.h"
 #include "Item/Office.h"
@@ -14,6 +18,69 @@
 #endif
 
 using namespace OT;
+
+static double autosaveWallClock()
+{
+	return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
+void Game::askEventChoice(const std::string & title, const std::string & text,
+                          const std::string & yesLabel, const std::string & noLabel,
+                          const std::function<void(bool)> & onChoice)
+{
+	closeEventChoice();
+	eventChoiceSavedSpeed = speedMode;
+	setSpeedMode(0); // hold the sim while the player decides
+
+	tgui::ChildWindow::Ptr window = tgui::ChildWindow::create(title);
+	window->setClientSize({360 * app.uiScale, 130 * app.uiScale});
+	window->setPosition({(app.window.getSize().x - 360 * app.uiScale) / 2.f,
+	                     (app.window.getSize().y - 130 * app.uiScale) / 2.f});
+	window->setResizable(false);
+	window->setTitleButtons(tgui::ChildWindow::TitleButton::None);
+
+	tgui::Label::Ptr label = tgui::Label::create(text);
+	label->setPosition({14 * app.uiScale, 12 * app.uiScale});
+	label->setTextSize(13 * app.uiScale);
+	window->add(label);
+
+	tgui::Button::Ptr yes = tgui::Button::create(yesLabel);
+	yes->setSize({160 * app.uiScale, 30 * app.uiScale});
+	yes->setPosition({20 * app.uiScale, 85 * app.uiScale});
+	yes->onPress([this]() { answerEventChoice(true); });
+	window->add(yes);
+
+	tgui::Button::Ptr no = tgui::Button::create(noLabel);
+	no->setSize({160 * app.uiScale, 30 * app.uiScale});
+	no->setPosition({180 * app.uiScale, 85 * app.uiScale});
+	no->onPress([this]() { answerEventChoice(false); });
+	window->add(no);
+
+	app.gui.add(window);
+	eventChoiceWindow = window;
+	eventChoiceCallback = onChoice;
+}
+
+void Game::answerEventChoice(bool yes)
+{
+	if (!eventChoiceCallback) return;
+	std::function<void(bool)> cb = eventChoiceCallback;
+	closeEventChoice();
+	cb(yes);
+}
+
+void Game::closeEventChoice()
+{
+	if (eventChoiceWindow) {
+		app.gui.remove(eventChoiceWindow);
+		eventChoiceWindow.reset();
+	}
+	eventChoiceCallback = nullptr;
+	if (eventChoiceSavedSpeed >= 0) {
+		setSpeedMode(eventChoiceSavedSpeed);
+		eventChoiceSavedSpeed = -1;
+	}
+}
 
 Game::Game(Application & app)
 :	State("game"),
@@ -39,6 +106,8 @@ Game::Game(Application & app)
 	rating = 0;
 	population = 0;
 	populationNeedsUpdate = false;
+	lastAutosaveDay = (int)floor(time.absolute);
+	lastAutosaveWallClock = autosaveWallClock();
 
 	time.set(7/78.0);
 	lastAccountingDay = (int)floor(time.absolute);
@@ -90,6 +159,7 @@ void Game::clearWorld()
 {
 	inspectorDialog.close();
 	elevatorDialog.close();
+	closeEventChoice();
 	mapWindow.close();
 	financeWindow.close();
 	for (ItemSet::iterator i = items.begin(); i != items.end(); i++) {
@@ -206,12 +276,9 @@ bool Game::handleEvent(sf::Event & event)
 				case sf::Keyboard::Key::Down:  poi.y -= 20; return true;
 				case sf::Keyboard::Key::F1:    reloadGUI(); return true;
 				case sf::Keyboard::Key::F3:    setRating(1); return true;
-				case sf::Keyboard::Key::F2: {
-					FILE * f = fopen("default.tower", "w");
-					tinyxml2::XMLPrinter xml(f);
-					encodeXML(xml);
-					fclose(f);
-				} return true;
+				case sf::Keyboard::Key::F2:
+					writeTowerFile("default.tower");
+					return true;
 		case sf::Keyboard::Key::PageUp:   zoom /= 2; return true;
 		case sf::Keyboard::Key::PageDown: zoom *= 2; return true;
 		case sf::Keyboard::Key::O:        cycleStatusMode(); return true;
@@ -294,352 +361,17 @@ bool Game::handleEvent(sf::Event & event)
 				}
 				toolPosition = int2(round(mp.x/8-toolPrototype->size.x/2.0), round(mp.y/36-yHeightOffset/2.0));
 
-				struct SizeGuard {
-					int &val;
-					int oldVal;
-					~SizeGuard() { val = oldVal; }
-				} guard{toolPrototype->size.y, toolPrototype->size.y};
-
-				if (toolPrototype->icon == ICON_LOBBY) {
-					toolPrototype->size.y = height;
+				// ISSUE-039 (OpenSkyWeb): batchable room tools start a preview-only
+				// drag (ghosts mark each cell valid/red) and commit the whole
+				// batch on mouse release. Non-batchable tools (elevators, lobbies,
+				// floors, stairs, escalators, metro, parking ramp) keep instant
+				// placement.
+				if (isBatchDraggable(toolPrototype)) {
+					startBatchDrag();
+					return true;
 				}
-
-				bool handled = false;
-				recti toolBoundary = recti(toolPosition, toolPrototype->size);
-				if (toolPrototype->id.find("elevator") == 0) {
-					const ItemSet &elevators = itemsByType[toolPrototype->id];
-					for (ItemSet::const_iterator i = elevators.begin(); i != elevators.end(); i++) {
-						Item::Elevator::Elevator * e = (Item::Elevator::Elevator *) *i;
-						recti itemRect = e->getRect();
-						if (toolBoundary.minX() == itemRect.minX() &&
-							toolBoundary.maxX() == itemRect.maxX() &&
-							toolBoundary.minY() >= itemRect.minY() &&
-							toolBoundary.maxY() <= itemRect.maxY()) {
-							LOG(DEBUG, "add car on floor %i to elevator %s", toolPosition.y, e->desc().c_str());
-							e->addCar(toolPosition.y);
-							transferFunds(-80000, "construction", "Elevator car");
-							handled = true;
-							break;
-						}
-					}
-				}
-			if (!handled) {
-				bool constructionBlocked = false;
-				std::string blockReason;
-				int minFloorX = INT_MAX;
-				int maxFloorX = INT_MIN;
-
-				// Star-rating gate: some prototypes require a minimum tower
-				// rating to build. Reject early so the player gets feedback.
-				int minRating = LevelUp::minRatingToBuild(toolPrototype->id);
-				if (minRating > rating)
-				{
-					constructionBlocked = true;
-					blockReason = toolPrototype->name + " unlocks at " +
-					              std::to_string(minRating + 1) + " stars";
-				}
-
-				if (toolPosition.y < -9 && toolPrototype->icon != ICON_METRO) {
-						constructionBlocked = true;
-						blockReason = "Cannot build below floor B9";
-					}
-
-					if (metroStation != NULL && toolPosition.y < metroStation->position.y) {
-						constructionBlocked = true;
-						blockReason = "Cannot build below Metro Station";
-					}
-
-					if (toolPosition.y > 0 && toolPrototype->icon == ICON_METRO) {
-						constructionBlocked = true;
-						blockReason = toolPrototype->name + " unavailable above ground";
-					}
-
-					if (toolPosition.y > 0 && toolPrototype->id == "cinema") {
-						constructionBlocked = true;
-						blockReason = toolPrototype->name + " unavailable above ground";
-					}
-
-					if (toolPrototype->icon == ICON_LOBBY) {
-						if (toolPosition.y % 15 != 0) {
-							constructionBlocked = true;
-							blockReason = "Lobbies can only be built on every 15th floor";
-						}
-						else if (toolPosition.y != 0) {
-							// Check floor width below
-							if (floorItems.count(toolPosition.y - 1) != 0) {
-								Item::Item * i = floorItems[toolPosition.y - 1];
-								minFloorX = i->position.x;
-								maxFloorX = i->getRect().maxX();
-							}
-
-							// Check for non-lobby items blocking construction on lobby floor
-							ItemSet itemsOnFloor = itemsByFloor[toolPosition.y];
-							for (ItemSet::const_iterator ii = itemsOnFloor.begin(); !constructionBlocked && ii != itemsOnFloor.end(); ii++) {
-								Item::Item * i = *ii;
-								if (i->canHaulPeople() || i->prototype->icon == ICON_LOBBY) continue;
-								minFloorX = std::max(minFloorX, i->getRect().maxX());
-								maxFloorX = std::min(maxFloorX, i->position.x);
-							}
-						} else {
-							minFloorX = INT_MIN;
-							maxFloorX = INT_MAX;
-						}
-					} else if (toolPrototype->icon == ICON_STAIRS || toolPrototype->icon == ICON_ELEVATOR) {
-						// Check obstruction from other transport items
-						const ItemSet &stairlike = itemsByType["stairlike"];
-						for (ItemSet::const_iterator ii = stairlike.begin(); !constructionBlocked && ii != stairlike.end(); ii++) {
-							Item::Item * i = *ii;
-							int xOffset = (toolPosition.x - i->position.x);
-							if ((i->position.y == toolPosition.y && xOffset > -4 && xOffset < 4) ||
-								(i->position.y == toolPosition.y - 1 && xOffset > 0 && xOffset < 8) ||
-								(i->position.y == toolPosition.y + 1 && xOffset > -8 && xOffset < 0)) {
-								constructionBlocked = true;
-								blockReason = "Other " + i->prototype->name + " is in the way";
-							}
-						}
-
-						const ItemSet &elevators = itemsByType["elevator"];
-						for (ItemSet::const_iterator ii = elevators.begin(); !constructionBlocked && ii != elevators.end(); ii++) {
-							Item::Item * i = *ii;
-							recti itemRect = i->getRect();
-							itemRect.origin.y -= 1;
-							itemRect.size.y += 2;
-							if (toolBoundary.intersectsRect(itemRect)) {
-								constructionBlocked = true;
-								blockReason = i->prototype->name + " is in the way";
-							}
-						}
-
-						// Check floor width above
-						if (floorItems.count(toolPosition.y + 1) != 0) {
-							Item::Item * i = floorItems[toolPosition.y + 1];
-							minFloorX = i->position.x;
-							maxFloorX = i->getRect().maxX();
-						}
-						if (toolPosition.x < minFloorX || toolPosition.x + toolPrototype->size.x > maxFloorX) {
-							if (!constructionBlocked)
-								blockReason = "Upper floor is not wide enough";
-							constructionBlocked = true;
-						}
-
-						// Check floor width
-						minFloorX = INT_MAX;
-						maxFloorX = INT_MIN;
-						if (floorItems.count(toolPosition.y) != 0) {
-							Item::Item * i = floorItems[toolPosition.y];
-							minFloorX = i->position.x;
-							maxFloorX = i->getRect().maxX();
-						}
-					} else if (toolPrototype->id.find("elevator") == 0) {
-						// Check obstruction from other transport items
-						toolBoundary.origin.y -= 1;
-						toolBoundary.size.y += 2;
-
-						const ItemSet &stairlike = itemsByType["stairlike"];
-						for (ItemSet::const_iterator ii = stairlike.begin(); !constructionBlocked && ii != stairlike.end(); ii++) {
-							Item::Item * i = *ii;
-							if (toolBoundary.intersectsRect(i->getRect())) {
-								constructionBlocked = true;
-								blockReason = i->prototype->name + " is in the way";
-							}
-						}
-
-						const ItemSet &elevators = itemsByType["elevator"];
-						for (ItemSet::const_iterator ii = elevators.begin(); !constructionBlocked && ii != elevators.end(); ii++) {
-							Item::Item * i = *ii;
-							recti itemRect = i->getRect();
-							itemRect.origin.y -= 1;
-							itemRect.size.y += 2;
-							if (toolBoundary.intersectsRect(itemRect)) {
-								constructionBlocked = true;
-								blockReason = "Other " + i->prototype->name + " is in the way";
-							}
-						}
-
-						// Check floor width below/above if constructing above/below ground level
-						Item::Item * i = NULL;
-						if (toolPosition.y > 0 && floorItems.count(toolPosition.y - 1) != 0)
-							i = floorItems[toolPosition.y - 1];
-						else if (toolPosition.y < 0 && floorItems.count(toolPosition.y + 1) != 0)
-							i = floorItems[toolPosition.y + 1];
-						else if (floorItems.count(0) != 0)
-							i = floorItems[0];
-						if (i) {
-							minFloorX = i->position.x;
-							maxFloorX = i->getRect().maxX();
-						}
-					} else {
-						if (toolPrototype->icon == ICON_METRO && metroStation != NULL) {
-							constructionBlocked = true;
-							blockReason = "Only one Metro Station allowed";
-						}
-
-						if (toolPosition.y == 0) {
-							constructionBlocked = true;
-							blockReason = "Only lobbies may be built on the ground floor";
-						}
-
-						// Check obstruction from other buildings.
-						ItemSet itemsNearby;
-						for (int y = 0; !constructionBlocked && y < toolPrototype->size.y; y++) {
-							itemsNearby = itemsByFloor[toolPosition.y + y];
-							for (ItemSet::const_iterator ii = itemsNearby.begin(); !constructionBlocked && ii != itemsNearby.end(); ii++) {
-								Item::Item * i = *ii;
-								if (i->canHaulPeople()) continue;
-								if (toolBoundary.intersectsRect(i->getRect())) {
-									constructionBlocked = true;
-									blockReason = i->prototype->name + " is in the way";
-								}
-							}
-						}
-
-						// Check floor width below/above if constructing above/below ground level
-						Item::Item * i = NULL;
-						if (toolPosition.y > 0 && floorItems.count(toolPosition.y - 1) != 0)
-							i = floorItems[toolPosition.y - 1];
-						else if (floorItems.count(toolPosition.y + toolPrototype->size.y) != 0)
-							i = floorItems[toolPosition.y + toolPrototype->size.y];
-						if (i) {
-							minFloorX = i->position.x;
-							maxFloorX = i->getRect().maxX();
-
-							// If the floor below is the top of a multi-story lobby
-							// and the new item is wider than the lobby, auto-extend
-							// the lobby to match. This mirrors SimTower's behaviour of
-							// letting you place condos/offices directly above a sky
-							// lobby without manually widening it first. See Phase 2.5.
-							if (toolPosition.y > 0 && toolPrototype->icon != ICON_LOBBY) {
-								const ItemSet &belowItems = itemsByFloor[toolPosition.y - 1];
-								for (ItemSet::const_iterator bi = belowItems.begin(); bi != belowItems.end(); bi++) {
-									Item::Item * below = *bi;
-									if (below->prototype->icon == ICON_LOBBY && below->size.y > 1) {
-										Item::Lobby * l = (Item::Lobby *) below;
-										const int lobbyRight = l->position.x + l->size.x;
-										const int toolRight  = toolPosition.x + toolPrototype->size.x;
-										int diffLeft = 0, diffRight = 0;
-										int oldMinX = l->position.x;
-										int oldMaxX = l->getRect().maxX();
-										if (toolPosition.x < l->position.x) {
-											diffLeft = l->position.x - toolPosition.x;
-											l->size.x += diffLeft;
-											l->setPosition(toolPosition);
-										}
-										if (toolRight > lobbyRight) {
-											diffRight = toolRight - lobbyRight;
-											l->size.x += diffRight;
-										}
-										if (diffLeft + diffRight > 0) {
-											int newMinX = l->position.x;
-											int newMaxX = l->getRect().maxX();
-											// Extend floor intervals on every lobby floor.
-											for (int f = l->position.y; f < l->position.y + l->size.y; f++) {
-												extendFloor(f, newMinX, newMaxX);
-												FloorItems::iterator fi = floorItems.find(f);
-												if (fi != floorItems.end()) {
-													std::multiset<int> &interval = fi->second->interval;
-													std::multiset<int>::iterator it = interval.find(oldMinX);
-													if (it != interval.end()) interval.erase(it);
-													it = interval.find(oldMaxX);
-													if (it != interval.end()) interval.erase(it);
-													interval.insert(newMinX);
-													interval.insert(newMaxX);
-												}
-											}
-											maxFloorX = l->position.x + l->size.x;
-											minFloorX = l->position.x;
-											transferFunds(-l->prototype->price * 4 / (diffLeft + diffRight), "construction", "Lobby extension");
-											playOnce("simtower/construction/flexible");
-										}
-										break;
-									}
-								}
-							}
-						}
-					}
-					if (toolPosition.x < minFloorX || toolPosition.x + toolPrototype->size.x > maxFloorX) {
-						if (!constructionBlocked)
-							blockReason = "Floor " + std::string(toolPosition.y > 0 ? "below" : "above") + " is not wide enough";
-						constructionBlocked = true;
-					}
-
-					if (!constructionBlocked) {
-						LOG(DEBUG, "construct %s at %ix%i, size %ix%i", toolPrototype->id.c_str(), toolPosition.x, toolPosition.y, toolPrototype->size.x, toolPrototype->size.y);
-
-						// Construct floors
-						for (int i = 0; i < toolPrototype->size.y; i++)
-							extendFloor(toolPosition.y + i, toolPosition.x, toolPosition.x + toolPrototype->size.x);
-
-						if (toolPrototype->icon == ICON_LOBBY) {
-							// Look for existing lobby to extend
-							bool existingLobby = false;
-							const ItemSet &itemsOnFloor = itemsByFloor[toolPosition.y];
-							for (ItemSet::const_iterator ii = itemsOnFloor.begin(); !existingLobby && ii != itemsOnFloor.end(); ii++) {
-								Item::Item * i = *ii;
-								if (i->prototype->icon == ICON_LOBBY) {
-									gameMap.removeNode(MapNode::Point(i->position.x + i->size.x/2, i->position.y + i->prototype->entrance_offset), i);
-									Item::Lobby * l = (Item::Lobby *) i;
-									int diff = 0;
-									int oldMinX = l->position.x;
-									int oldMaxX = l->getRect().maxX();
-									if (toolPosition.x < l->position.x) {
-										diff = l->position.x - toolPosition.x;
-										l->size.x += diff;
-										l->setPosition(toolPosition);
-									} else {
-										diff = toolPosition.x + toolPrototype->size.x - l->getRect().maxX();
-										if (diff < 0) diff = 0;
-										l->size.x += diff;
-									}
-									LOG(INFO, "lobby diff = %d", diff);
-									l->updateSprite();
-									gameMap.addNode(MapNode::Point(i->position.x + i->size.x/2, i->position.y + i->prototype->entrance_offset), i);
-									if (diff > 0) {
-										int newMinX = l->position.x;
-										int newMaxX = l->getRect().maxX();
-										for (int f = l->position.y; f < l->position.y + l->size.y; f++) {
-											extendFloor(f, newMinX, newMaxX);
-											FloorItems::iterator fi = floorItems.find(f);
-											if (fi != floorItems.end()) {
-												std::multiset<int> &interval = fi->second->interval;
-												std::multiset<int>::iterator it = interval.find(oldMinX);
-												if (it != interval.end()) interval.erase(it);
-												it = interval.find(oldMaxX);
-												if (it != interval.end()) interval.erase(it);
-												interval.insert(newMinX);
-												interval.insert(newMaxX);
-											}
-										}
-										transferFunds(-toolPrototype->price * 4 / diff, "construction", "Lobby extension");
-										playOnce("simtower/construction/flexible");
-									}
-									existingLobby = true;
-								}
-							}
-							// Otherwise construct a new lobby
-							if (!existingLobby) {
-								Item::Item * item = itemFactory.make(toolPrototype, toolPosition);
-								LOG(INFO, "created new lobby item %p", item);
-								addItem(item);
-								transferFunds(-toolPrototype->price, "construction", toolPrototype->name);
-								playOnce("simtower/construction/normal");
-							}
-						} else if (toolPrototype->icon != ICON_FLOOR) {
-							Item::Item * item = itemFactory.make(toolPrototype, toolPosition);
-							addItem(item);
-							transferFunds(-toolPrototype->price, "construction", toolPrototype->name);
-							if (item->canHaulPeople()) {
-								if (item->isElevator()) selectTool("finger");
-								updateRoutes();
-							} else
-								item->updateRoutes();
-							playOnce("simtower/construction/normal");
-						}
-					} else {
-						LOG(DEBUG, "cannot construct %s at %ix%i, size %ix%i, reason: %s", toolPrototype->id.c_str(), toolPosition.x, toolPosition.y, toolPrototype->size.x, toolPrototype->size.y, blockReason.c_str());
-						playOnce("simtower/construction/impossible");
-						timeWindow.showMessage("Cannot place item there. " + blockReason + ".");
-					}
-				}
+				constructToolAt(toolPosition);
+				return true;
 			}
 			else if (itemBelowCursor) {
 				if (selectedTool == "bulldozer") {
@@ -695,11 +427,13 @@ bool Game::handleEvent(sf::Event & event)
 			}
 		} break;
 
-		case EventType::MouseMoved: {
-			if (toolboxWindow.window && toolboxWindow.window->isMouseOnWidget(tgui::Vector2f(mousePosition.x, mousePosition.y)))
-				return false;
+case EventType::MouseMoved: {
+if (toolboxWindow.window && toolboxWindow.window->isMouseOnWidget(tgui::Vector2f(mousePosition.x, mousePosition.y)))
+return false;
 
-			if (draggingElevator && draggingElevator->repositionMotor(draggingMotor, toolPosition.y)) {
+if (batchDragActive()) updateBatchDrag();
+
+if (draggingElevator && draggingElevator->repositionMotor(draggingMotor, toolPosition.y)) {
 				// Construct floors
 				if (draggingElevatorLower) {
 					if (draggingElevatorStart > draggingElevator->position.y) {
@@ -723,12 +457,15 @@ bool Game::handleEvent(sf::Event & event)
 			}
 		} break;
 
-		case EventType::MouseButtonReleased: {
-			if (toolboxWindow.window && toolboxWindow.window->isMouseOnWidget(tgui::Vector2f(mousePosition.x, mousePosition.y)))
-				return false;
+case EventType::MouseButtonReleased: {
+if (toolboxWindow.window && toolboxWindow.window->isMouseOnWidget(tgui::Vector2f(mousePosition.x, mousePosition.y)))
+return false;
 
-			draggingElevator = NULL;
-		} break;
+// ISSUE-039: commit the whole batch now (nothing was built/charged while dragging).
+if (batchDragActive()) { finishBatchDrag(); return true; }
+
+draggingElevator = NULL;
+} break;
 		case EventType::None:
 			break;
 	}
@@ -846,6 +583,7 @@ void Game::advance(double dt)
 	if (currentAccountingDay != lastAccountingDay) {
 		settleDailyAccounting();
 		lastAccountingDay = currentAccountingDay;
+		autosaveIfDue();
 	}
 	// Quarter rollover: snapshot the balance so the finance window can
 	// show "Last Quarter Balance" and reset the quarterly accumulators.
@@ -1100,12 +838,26 @@ void Game::advance(double dt)
 			static_cast<float>(toolPosition.x * 8),
 			static_cast<float>(-(toolPosition.y + height) * 36)
 		});
-		placement.setFillColor(sf::Color(255, 255, 255, 48));
-		placement.setOutlineColor(sf::Color::White);
-		placement.setOutlineThickness(1.f);
-		win.draw(placement);
-		drawnSprites++;
-	}
+placement.setFillColor(sf::Color(255, 255, 255, 48));
+placement.setOutlineColor(sf::Color::White);
+placement.setOutlineThickness(1.f);
+win.draw(placement);
+drawnSprites++;
+}
+
+// ISSUE-039: batch drag ghosts — white = buildable & affordable, red = blocked.
+if (batchDragActive() && toolPrototype) {
+for (const BatchCell & c : getBatchCells()) {
+const bool ok = c.valid && batchAllAffordable();
+sf::RectangleShape ghost({(float)(toolPrototype->size.x * 8), (float)(toolPrototype->size.y * 36)});
+ghost.setPosition({(float)(c.x * 8), (float)(-(c.y + toolPrototype->size.y) * 36)});
+ghost.setFillColor(ok ? sf::Color(255, 255, 255, 48) : sf::Color(255, 0, 0, 72));
+ghost.setOutlineColor(ok ? sf::Color::White : sf::Color::Red);
+ghost.setOutlineThickness(1.f);
+win.draw(ghost);
+drawnSprites++;
+}
+}
 
 	//Visualize route.
 	glColor3f(0, 1, 0);
@@ -1279,7 +1031,7 @@ void Game::removeItem(Item::Item * item)
 	delete item;
 }
 
-void Game::extendFloor(int floor, int minX, int maxX) {
+void Game::extendFloor(int floor, int minX, int maxX, bool free) {
 	if (floorItems.count(floor) != 0) {
 		// Look for existing floor to extend
 		Item::Floor * f = floorItems[floor];
@@ -1305,8 +1057,10 @@ void Game::extendFloor(int floor, int minX, int maxX) {
 		gameMap.addNode(MapNode::Point(f->position.x + f->size.x/2, f->position.y + f->prototype->entrance_offset), f);
 		if (diff_left + diff_right > 0) {
 			decorations.updateFloor(f->position.y);
-			transferFunds(-f->prototype->price * (diff_left + diff_right), "construction", "Floor extension");
-			playOnce("simtower/construction/flexible");
+			if (!free) {
+				transferFunds(-f->prototype->price * (diff_left + diff_right), "construction", "Floor extension");
+				playOnce("simtower/construction/flexible");
+			}
 		}
 	} else {
 		// Otherwise construct a new floor
@@ -1316,9 +1070,89 @@ void Game::extendFloor(int floor, int minX, int maxX) {
 		f->interval.insert(f->getRect().maxX());
 		f->updateSprite();
 		addItem(f);
-		transferFunds(-f->prototype->price, "construction", "Floor");
-		playOnce("simtower/construction/normal");
+		if (!free) {
+			transferFunds(-f->prototype->price, "construction", "Floor");
+			playOnce("simtower/construction/normal");
+		}
 	}
+}
+
+bool Game::writeTowerFile(const std::string & path)
+{
+	FILE * f = fopen(path.c_str(), "w");
+	if (!f) {
+		LOG(ERROR, "Could not open %s for writing", path.c_str());
+		return false;
+	}
+	tinyxml2::XMLPrinter xml;
+	encodeXML(xml);
+	// Integrity hash, ported from OpenSkyWeb (src/core/savehash.js): the
+	// digest covers the exact serialized text minus the hash attribute, so
+	// saves interop with OpenSkyWeb's loader (same salt + algorithm).
+	const std::string out = SaveHash::injectSaveHash(xml.CStr());
+	fwrite(out.data(), 1, out.size(), f);
+	fclose(f);
+	return true;
+}
+
+void Game::autosaveIfDue()
+{
+	// Policy ported from OpenSkyWeb (src/core/autosave.js): snapshot on an
+	// in-game day change, throttled to at most one write per 60 real seconds.
+	const int day = (int)floor(time.absolute);
+	if (day == lastAutosaveDay) return;
+	const double now = autosaveWallClock();
+	if (now - lastAutosaveWallClock < 60.0) return;
+	lastAutosaveDay = day;
+	lastAutosaveWallClock = now;
+
+	std::string name = saveFilename.empty() ? "default.tower" : saveFilename;
+	const std::string suffix = ".tower";
+	if (name.size() > suffix.size() && name.compare(name.size() - suffix.size(), suffix.size(), suffix) == 0)
+		name = name.substr(0, name.size() - suffix.size());
+	const std::string path = name + ".autosave.tower";
+	if (writeTowerFile(path)) {
+		LOG(INFO, "autosaved to %s", path.c_str());
+		timeWindow.showMessage("Autosaved.");
+	}
+}
+
+bool Game::repairFloorCoverage()
+{
+	// Ported from OpenSkyWeb Game::repairFloorCoverage (ISSUE-041): mints
+	// free stub floor slabs under hauler columns (stairs/elevators) where a
+	// level lost its floor entirely, and restores slab coverage under room
+	// footprints. Heals towers saved by older builds on first load.
+	std::map<int, std::pair<int,int> > needs; // level -> [minX, maxX)
+	for (ItemSet::iterator i = items.begin(); i != items.end(); i++) {
+		Item::Item * item = *i;
+		if (item->prototype->icon == ICON_FLOOR) continue;
+		const int h = std::max(1, item->size.y);
+		for (int yy = item->position.y; yy < item->position.y + h; yy++) {
+			// Haulers only need a slab where the level has none at all;
+			// rooms always need coverage spanning their footprint.
+			if (item->canHaulPeople() && floorItems.count(yy) != 0) continue;
+			const int minX = item->position.x;
+			const int maxX = item->getRect().maxX();
+			std::map<int, std::pair<int,int> >::iterator n = needs.find(yy);
+			if (n == needs.end()) needs[yy] = std::make_pair(minX, maxX);
+			else {
+				n->second.first = std::min(n->second.first, minX);
+				n->second.second = std::max(n->second.second, maxX);
+			}
+		}
+	}
+	bool repaired = false;
+	for (std::map<int, std::pair<int,int> >::iterator i = needs.begin(); i != needs.end(); i++) {
+		const int y = i->first;
+		Item::Floor * f = floorItems.count(y) ? floorItems[y] : NULL;
+		if (!f || f->position.x > i->second.first || f->getRect().maxX() < i->second.second) {
+			extendFloor(y, i->second.first, i->second.second, true);
+			repaired = true;
+		}
+	}
+	if (repaired) updateRoutes();
+	return repaired;
 }
 
 void Game::seedOfficeLunchQa()
@@ -1497,6 +1331,10 @@ void Game::decodeXML(tinyxml2::XMLDocument & xml)
 		e = e->NextSiblingElement("item");
 	}
 	populationNeedsUpdate = true;
+	// Self-heal missing floor slabs on load (OpenSkyWeb ISSUE-041): repairs
+	// towers saved by builds that minted floors with the off-by-one drag bug.
+	if (repairFloorCoverage())
+		LOG(IMPORTANT, "repairFloorCoverage: minted missing floor slabs on load");
 	updateRoutes();
 }
 
@@ -1604,6 +1442,10 @@ void Game::ratingMayIncrease()
 		// what they can now build (Phase 3.2).
 		levelUpDialog.showForRating(rating);
 		timeWindow.showMessage(std::string("Promoted to ") + std::to_string(rating + 1) + " stars!");
+		// Star award gift message (OpenSkyWeb ISSUE-034, EXE strings
+		// 0x79636-0x79c36).
+		const std::string award = LevelUp::starRewardMessage(rating + 1);
+		if (!award.empty()) timeWindow.showMessage(award);
 		toolboxWindow.reload(); // refresh build locks
 	}
 }
@@ -1655,11 +1497,544 @@ void Game::toggleElevatorService(Item::Elevator::Elevator * e, int floor)
 	updateRoutes();
 }
 
+bool Game::constructToolAt(int2 pos)
+{
+	toolPosition = pos;
+	const size_t itemsBefore = items.size();
+	int height = toolPrototype->size.y;
+	int yHeightOffset = height;
+	if (toolPrototype->icon == ICON_LOBBY) {
+		bool ctrl = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl);
+		bool shift = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LShift);
+		if (ctrl) {
+			height = shift ? 3 : 2;
+		} else {
+			height = 1;
+		}
+		yHeightOffset = 1;
+	}
+	struct SizeGuard {
+		int &val;
+		int oldVal;
+		~SizeGuard() { val = oldVal; }
+	} guard{toolPrototype->size.y, toolPrototype->size.y};
+
+	if (toolPrototype->icon == ICON_LOBBY) {
+		toolPrototype->size.y = height;
+	}
+
+	bool handled = false;
+	recti toolBoundary = recti(toolPosition, toolPrototype->size);
+	if (toolPrototype->id.find("elevator") == 0) {
+		const ItemSet &elevators = itemsByType[toolPrototype->id];
+		for (ItemSet::const_iterator i = elevators.begin(); i != elevators.end(); i++) {
+			Item::Elevator::Elevator * e = (Item::Elevator::Elevator *) *i;
+			recti itemRect = e->getRect();
+			if (toolBoundary.minX() == itemRect.minX() &&
+				toolBoundary.maxX() == itemRect.maxX() &&
+				toolBoundary.minY() >= itemRect.minY() &&
+				toolBoundary.maxY() <= itemRect.maxY()) {
+				LOG(DEBUG, "add car on floor %i to elevator %s", toolPosition.y, e->desc().c_str());
+				e->addCar(toolPosition.y);
+				transferFunds(-toolPrototype->carCost, "construction", "Elevator car");
+				handled = true;
+				break;
+			}
+		}
+	}
+if (!handled) {
+	bool constructionBlocked = false;
+	std::string blockReason;
+	int minFloorX = INT_MAX;
+	int maxFloorX = INT_MIN;
+
+	// Star-rating gate: some prototypes require a minimum tower
+	// rating to build. Reject early so the player gets feedback.
+	int minRating = LevelUp::minRatingToBuild(toolPrototype->id);
+	if (minRating > rating)
+	{
+		constructionBlocked = true;
+		blockReason = toolPrototype->name + " unlocks at " +
+		              std::to_string(minRating + 1) + " stars";
+	}
+
+	if (toolPosition.y < -9 && toolPrototype->icon != ICON_METRO) {
+			constructionBlocked = true;
+			blockReason = "Cannot build below floor B9";
+		}
+
+		if (metroStation != NULL && toolPosition.y < metroStation->position.y) {
+			constructionBlocked = true;
+			blockReason = "Cannot build below Metro Station";
+		}
+
+		if (toolPosition.y > 0 && toolPrototype->icon == ICON_METRO) {
+			constructionBlocked = true;
+			blockReason = toolPrototype->name + " unavailable above ground";
+		}
+
+		if (toolPosition.y > 0 && toolPrototype->id == "cinema") {
+			constructionBlocked = true;
+			blockReason = toolPrototype->name + " unavailable above ground";
+		}
+
+		if (toolPrototype->icon == ICON_LOBBY) {
+			if (toolPosition.y % 15 != 0) {
+				constructionBlocked = true;
+				blockReason = "Lobbies can only be built on every 15th floor";
+			}
+			else if (toolPosition.y != 0) {
+				// Check floor width below
+				if (floorItems.count(toolPosition.y - 1) != 0) {
+					Item::Item * i = floorItems[toolPosition.y - 1];
+					minFloorX = i->position.x;
+					maxFloorX = i->getRect().maxX();
+				}
+
+				// Check for non-lobby items blocking construction on lobby floor
+				ItemSet itemsOnFloor = itemsByFloor[toolPosition.y];
+				for (ItemSet::const_iterator ii = itemsOnFloor.begin(); !constructionBlocked && ii != itemsOnFloor.end(); ii++) {
+					Item::Item * i = *ii;
+					if (i->canHaulPeople() || i->prototype->icon == ICON_LOBBY) continue;
+					minFloorX = std::max(minFloorX, i->getRect().maxX());
+					maxFloorX = std::min(maxFloorX, i->position.x);
+				}
+			} else {
+				minFloorX = INT_MIN;
+				maxFloorX = INT_MAX;
+			}
+		} else if (toolPrototype->icon == ICON_STAIRS || toolPrototype->icon == ICON_ELEVATOR) {
+			// Check obstruction from other transport items
+			const ItemSet &stairlike = itemsByType["stairlike"];
+			for (ItemSet::const_iterator ii = stairlike.begin(); !constructionBlocked && ii != stairlike.end(); ii++) {
+				Item::Item * i = *ii;
+				int xOffset = (toolPosition.x - i->position.x);
+				if ((i->position.y == toolPosition.y && xOffset > -4 && xOffset < 4) ||
+					(i->position.y == toolPosition.y - 1 && xOffset > 0 && xOffset < 8) ||
+					(i->position.y == toolPosition.y + 1 && xOffset > -8 && xOffset < 0)) {
+					constructionBlocked = true;
+					blockReason = "Other " + i->prototype->name + " is in the way";
+				}
+			}
+
+			const ItemSet &elevators = itemsByType["elevator"];
+			for (ItemSet::const_iterator ii = elevators.begin(); !constructionBlocked && ii != elevators.end(); ii++) {
+				Item::Item * i = *ii;
+				recti itemRect = i->getRect();
+				itemRect.origin.y -= 1;
+				itemRect.size.y += 2;
+				if (toolBoundary.intersectsRect(itemRect)) {
+					constructionBlocked = true;
+					blockReason = i->prototype->name + " is in the way";
+				}
+			}
+
+			// Check floor width above
+			if (floorItems.count(toolPosition.y + 1) != 0) {
+				Item::Item * i = floorItems[toolPosition.y + 1];
+				minFloorX = i->position.x;
+				maxFloorX = i->getRect().maxX();
+			}
+			if (toolPosition.x < minFloorX || toolPosition.x + toolPrototype->size.x > maxFloorX) {
+				if (!constructionBlocked)
+					blockReason = "Upper floor is not wide enough";
+				constructionBlocked = true;
+			}
+
+			// Check floor width
+			minFloorX = INT_MAX;
+			maxFloorX = INT_MIN;
+			if (floorItems.count(toolPosition.y) != 0) {
+				Item::Item * i = floorItems[toolPosition.y];
+				minFloorX = i->position.x;
+				maxFloorX = i->getRect().maxX();
+			}
+		} else if (toolPrototype->id.find("elevator") == 0) {
+			// Check obstruction from other transport items
+			toolBoundary.origin.y -= 1;
+			toolBoundary.size.y += 2;
+
+			const ItemSet &stairlike = itemsByType["stairlike"];
+			for (ItemSet::const_iterator ii = stairlike.begin(); !constructionBlocked && ii != stairlike.end(); ii++) {
+				Item::Item * i = *ii;
+				if (toolBoundary.intersectsRect(i->getRect())) {
+					constructionBlocked = true;
+					blockReason = i->prototype->name + " is in the way";
+				}
+			}
+
+			const ItemSet &elevators = itemsByType["elevator"];
+			for (ItemSet::const_iterator ii = elevators.begin(); !constructionBlocked && ii != elevators.end(); ii++) {
+				Item::Item * i = *ii;
+				recti itemRect = i->getRect();
+				itemRect.origin.y -= 1;
+				itemRect.size.y += 2;
+				if (toolBoundary.intersectsRect(itemRect)) {
+					constructionBlocked = true;
+					blockReason = "Other " + i->prototype->name + " is in the way";
+				}
+			}
+
+			// Check floor width below/above if constructing above/below ground level
+			Item::Item * i = NULL;
+			if (toolPosition.y > 0 && floorItems.count(toolPosition.y - 1) != 0)
+				i = floorItems[toolPosition.y - 1];
+			else if (toolPosition.y < 0 && floorItems.count(toolPosition.y + 1) != 0)
+				i = floorItems[toolPosition.y + 1];
+			else if (floorItems.count(0) != 0)
+				i = floorItems[0];
+			if (i) {
+				minFloorX = i->position.x;
+				maxFloorX = i->getRect().maxX();
+			}
+		} else {
+			if (toolPrototype->icon == ICON_METRO && metroStation != NULL) {
+				constructionBlocked = true;
+				blockReason = "Only one Metro Station allowed";
+			}
+
+			{
+				// SECOM Center singleton (OpenSkyWeb ISSUE-031,
+				// EXE string "Only one SECOM allowed").
+				Game::ItemSetByString::const_iterator sit = itemsByType.find("secom");
+				if (toolPrototype->id == "secom" && sit != itemsByType.end() && !sit->second.empty()) {
+					constructionBlocked = true;
+					blockReason = "Only one SECOM allowed";
+				}
+			}
+
+			if (toolPosition.y == 0) {
+				constructionBlocked = true;
+				blockReason = "Only lobbies may be built on the ground floor";
+			}
+
+			// Check obstruction from other buildings.
+			ItemSet itemsNearby;
+			for (int y = 0; !constructionBlocked && y < toolPrototype->size.y; y++) {
+				itemsNearby = itemsByFloor[toolPosition.y + y];
+				for (ItemSet::const_iterator ii = itemsNearby.begin(); !constructionBlocked && ii != itemsNearby.end(); ii++) {
+					Item::Item * i = *ii;
+					if (i->canHaulPeople()) continue;
+					if (toolBoundary.intersectsRect(i->getRect())) {
+						constructionBlocked = true;
+						blockReason = i->prototype->name + " is in the way";
+					}
+				}
+			}
+
+			// Check floor width below/above if constructing above/below ground level
+			Item::Item * i = NULL;
+			if (toolPosition.y > 0 && floorItems.count(toolPosition.y - 1) != 0)
+				i = floorItems[toolPosition.y - 1];
+			else if (floorItems.count(toolPosition.y + toolPrototype->size.y) != 0)
+				i = floorItems[toolPosition.y + toolPrototype->size.y];
+			if (i) {
+				minFloorX = i->position.x;
+				maxFloorX = i->getRect().maxX();
+
+				// If the floor below is the top of a multi-story lobby
+				// and the new item is wider than the lobby, auto-extend
+				// the lobby to match. This mirrors SimTower's behaviour of
+				// letting you place condos/offices directly above a sky
+				// lobby without manually widening it first. See Phase 2.5.
+				if (toolPosition.y > 0 && toolPrototype->icon != ICON_LOBBY) {
+					const ItemSet &belowItems = itemsByFloor[toolPosition.y - 1];
+					for (ItemSet::const_iterator bi = belowItems.begin(); bi != belowItems.end(); bi++) {
+						Item::Item * below = *bi;
+						if (below->prototype->icon == ICON_LOBBY && below->size.y > 1) {
+							Item::Lobby * l = (Item::Lobby *) below;
+							const int lobbyRight = l->position.x + l->size.x;
+							const int toolRight  = toolPosition.x + toolPrototype->size.x;
+							int diffLeft = 0, diffRight = 0;
+							int oldMinX = l->position.x;
+							int oldMaxX = l->getRect().maxX();
+							if (toolPosition.x < l->position.x) {
+								diffLeft = l->position.x - toolPosition.x;
+								l->size.x += diffLeft;
+								l->setPosition(toolPosition);
+							}
+							if (toolRight > lobbyRight) {
+								diffRight = toolRight - lobbyRight;
+								l->size.x += diffRight;
+							}
+							if (diffLeft + diffRight > 0) {
+								int newMinX = l->position.x;
+								int newMaxX = l->getRect().maxX();
+								// Extend floor intervals on every lobby floor.
+								for (int f = l->position.y; f < l->position.y + l->size.y; f++) {
+									extendFloor(f, newMinX, newMaxX);
+									FloorItems::iterator fi = floorItems.find(f);
+									if (fi != floorItems.end()) {
+										std::multiset<int> &interval = fi->second->interval;
+										std::multiset<int>::iterator it = interval.find(oldMinX);
+										if (it != interval.end()) interval.erase(it);
+										it = interval.find(oldMaxX);
+										if (it != interval.end()) interval.erase(it);
+										interval.insert(newMinX);
+										interval.insert(newMaxX);
+									}
+								}
+								maxFloorX = l->position.x + l->size.x;
+								minFloorX = l->position.x;
+								transferFunds(-l->prototype->price * 4 / (diffLeft + diffRight), "construction", "Lobby extension");
+								playOnce("simtower/construction/flexible");
+							}
+							break;
+						}
+					}
+				}
+			}
+		}
+		if (toolPosition.x < minFloorX || toolPosition.x + toolPrototype->size.x > maxFloorX) {
+			if (!constructionBlocked)
+				blockReason = "Floor " + std::string(toolPosition.y > 0 ? "below" : "above") + " is not wide enough";
+			constructionBlocked = true;
+		}
+
+		if (!constructionBlocked) {
+			LOG(DEBUG, "construct %s at %ix%i, size %ix%i", toolPrototype->id.c_str(), toolPosition.x, toolPosition.y, toolPrototype->size.x, toolPrototype->size.y);
+
+			// Construct floors
+			for (int i = 0; i < toolPrototype->size.y; i++)
+				extendFloor(toolPosition.y + i, toolPosition.x, toolPosition.x + toolPrototype->size.x);
+
+			if (toolPrototype->icon == ICON_LOBBY) {
+				// Look for existing lobby to extend
+				bool existingLobby = false;
+				const ItemSet &itemsOnFloor = itemsByFloor[toolPosition.y];
+				for (ItemSet::const_iterator ii = itemsOnFloor.begin(); !existingLobby && ii != itemsOnFloor.end(); ii++) {
+					Item::Item * i = *ii;
+					if (i->prototype->icon == ICON_LOBBY) {
+						gameMap.removeNode(MapNode::Point(i->position.x + i->size.x/2, i->position.y + i->prototype->entrance_offset), i);
+						Item::Lobby * l = (Item::Lobby *) i;
+						int diff = 0;
+						int oldMinX = l->position.x;
+						int oldMaxX = l->getRect().maxX();
+						if (toolPosition.x < l->position.x) {
+							diff = l->position.x - toolPosition.x;
+							l->size.x += diff;
+							l->setPosition(toolPosition);
+						} else {
+							diff = toolPosition.x + toolPrototype->size.x - l->getRect().maxX();
+							if (diff < 0) diff = 0;
+							l->size.x += diff;
+						}
+						LOG(INFO, "lobby diff = %d", diff);
+						l->updateSprite();
+						gameMap.addNode(MapNode::Point(i->position.x + i->size.x/2, i->position.y + i->prototype->entrance_offset), i);
+						if (diff > 0) {
+							int newMinX = l->position.x;
+							int newMaxX = l->getRect().maxX();
+							for (int f = l->position.y; f < l->position.y + l->size.y; f++) {
+								extendFloor(f, newMinX, newMaxX);
+								FloorItems::iterator fi = floorItems.find(f);
+								if (fi != floorItems.end()) {
+									std::multiset<int> &interval = fi->second->interval;
+									std::multiset<int>::iterator it = interval.find(oldMinX);
+									if (it != interval.end()) interval.erase(it);
+									it = interval.find(oldMaxX);
+									if (it != interval.end()) interval.erase(it);
+									interval.insert(newMinX);
+									interval.insert(newMaxX);
+								}
+							}
+							transferFunds(-toolPrototype->price * 4 / diff, "construction", "Lobby extension");
+							playOnce("simtower/construction/flexible");
+						}
+						existingLobby = true;
+					}
+				}
+				// Otherwise construct a new lobby
+				if (!existingLobby) {
+					Item::Item * item = itemFactory.make(toolPrototype, toolPosition);
+					LOG(INFO, "created new lobby item %p", item);
+					addItem(item);
+					transferFunds(-toolPrototype->price, "construction", toolPrototype->name);
+					playOnce("simtower/construction/normal");
+				}
+			} else if (toolPrototype->icon != ICON_FLOOR) {
+				Item::Item * item = itemFactory.make(toolPrototype, toolPosition);
+				addItem(item);
+				transferFunds(-toolPrototype->price, "construction", toolPrototype->name);
+				if (item->canHaulPeople()) {
+					if (item->isElevator()) selectTool("finger");
+					updateRoutes();
+				} else
+					item->updateRoutes();
+				playOnce("simtower/construction/normal");
+			}
+		} else {
+			LOG(DEBUG, "cannot construct %s at %ix%i, size %ix%i, reason: %s", toolPrototype->id.c_str(), toolPosition.x, toolPosition.y, toolPrototype->size.x, toolPrototype->size.y, blockReason.c_str());
+			playOnce("simtower/construction/impossible");
+			timeWindow.showMessage("Cannot place item there. " + blockReason + ".");
+		}
+	}
+	return items.size() != itemsBefore;
+}
+
+bool Game::isBatchDraggable(Item::AbstractPrototype * proto) const
+{
+	if (!proto) return false;
+	if (proto->id.find("elevator") == 0 || proto->id == "parkingramp") return false;
+	if (proto->icon == ICON_LOBBY || proto->icon == ICON_FLOOR
+	    || proto->icon == ICON_METRO || proto->icon == ICON_STAIRS
+	    || proto->icon == ICON_ELEVATOR) return false;
+	return true;
+}
+
+void Game::startBatchDrag()
+{
+	batchDragging = true;
+	batchAnchorX = toolPosition.x;
+	batchAnchorY = toolPosition.y;
+	batchCells.clear();
+	batchAffordable = true;
+	batchFirstReason.clear();
+	updateBatchDrag();
+}
+
+void Game::updateBatchDrag()
+{
+	if (!batchDragging) return;
+	if (!isBatchDraggable(toolPrototype)) { cancelBatchDrag(); return; }
+	const int dxRaw = toolPosition.x - batchAnchorX;
+	const int dyRaw = toolPosition.y - batchAnchorY;
+	// A plain drag snaps to the dominant axis (RTS-style line); Shift spans
+	// both axes at once (rows x columns grid), preserving drag direction.
+	const bool shift = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LShift)
+	                || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RShift);
+	const bool horizontal = std::abs(dxRaw) >= std::abs(dyRaw);
+	const bool useX = shift || horizontal;
+	const bool useY = shift || !horizontal;
+	const int cols = useX ? std::max(1, (int)std::lround(std::abs((double)dxRaw) / toolPrototype->size.x)) : 1;
+	const int rows = useY ? std::max(1, (int)std::lround(std::abs((double)dyRaw) / toolPrototype->size.y)) : 1;
+	const int stepX = toolPrototype->size.x * (dxRaw < 0 ? -1 : 1);
+	const int stepY = toolPrototype->size.y * (dyRaw < 0 ? -1 : 1);
+
+std::vector<BatchCell> cells;
+std::string firstReason;
+// Cells are generated anchor-outward, so a vertical drag is ordered
+// bottom-to-top (top-to-bottom underground). Simulate the slabs the
+// batch creates as we go: a cell with no floor yet is still valid when
+// an earlier cell of this same drag will have laid the supporting slab
+// by the time it is constructed.
+std::set<int> simulatedSlabs;
+for (int j = 0; j < rows; j++) {
+for (int k = 0; k < cols; k++) {
+BatchCell c;
+c.x = batchAnchorX + k * stepX;
+c.y = batchAnchorY + j * stepY;
+c.valid = validateBatchCell(toolPrototype, c.x, c.y, c.reason, simulatedSlabs);
+if (!c.valid && firstReason.empty()) firstReason = c.reason;
+if (c.valid) {
+for (int yy = 0; yy < toolPrototype->size.y; yy++) simulatedSlabs.insert(c.y + yy);
+}
+cells.push_back(c);
+}
+}
+	batchCells = cells;
+	batchAffordable = money.balance >= (long long)cells.size() * toolPrototype->price;
+	batchFirstReason = firstReason;
+}
+
+void Game::finishBatchDrag()
+{
+	batchDragging = false;
+	if (batchCells.empty()) return;
+	const int price = toolPrototype->price;
+	int built = 0;
+	std::string firstReason = batchFirstReason;
+	for (const BatchCell & c : batchCells) {
+		if (!c.valid) continue;
+		// Stop when the balance can no longer cover another copy.
+		if (money.balance < price) break;
+		if (constructToolAt(int2(c.x, c.y))) built++;
+		else if (firstReason.empty()) firstReason = "placement failed";
+	}
+	batchCells.clear();
+	if (built > 0) {
+		updateRoutes();
+	} else {
+		playOnce("simtower/construction/impossible");
+		timeWindow.showMessage("Cannot place item there. " + (firstReason.empty() ? std::string("no space available") : firstReason) + ".");
+	}
+}
+
+void Game::cancelBatchDrag()
+{
+	batchDragging = false;
+	batchCells.clear();
+}
+
+bool Game::validateBatchCell(Item::AbstractPrototype * proto, int x, int y, std::string & reason, const std::set<int> & simulatedSlabs) const
+{
+	const int minRating = LevelUp::minRatingToBuild(proto->id);
+	if (minRating > rating) {
+		reason = proto->name + " unlocks at " + std::to_string(minRating + 1) + " stars";
+		return false;
+	}
+	if (y < -9) { reason = "Cannot build below floor B9"; return false; }
+	if (metroStation != NULL && y < metroStation->position.y) {
+		reason = "Cannot build above the metro station";
+		return false;
+	}
+	if (proto->id == "secom") {
+		Game::ItemSetByString::const_iterator sit = itemsByType.find("secom");
+		if (sit != itemsByType.end() && !sit->second.empty()) { reason = "Only one SECOM allowed"; return false; }
+	}
+	if (y == 0) { reason = "Only lobbies may be built on the ground floor"; return false; }
+
+	const recti boundary(int2(x, y), proto->size);
+	for (int yy = 0; yy < proto->size.y; yy++) {
+		Game::ItemSetByInt::const_iterator flIt = itemsByFloor.find(y + yy);
+		if (flIt == itemsByFloor.end()) continue;
+		const ItemSet & itemsOnFloor = flIt->second;
+		for (ItemSet::const_iterator ii = itemsOnFloor.begin(); ii != itemsOnFloor.end(); ii++) {
+			Item::Item * i = *ii;
+			if (i->canHaulPeople()) continue;
+			if (boundary.intersectsRect(i->getRect())) {
+				reason = i->prototype->name + " is in the way";
+				return false;
+			}
+		}
+	}
+// Floor support: an existing slab, OR a slab the batch itself will have
+// created by the time this cell is constructed (vertical drags build
+// bottom-to-top, so each item lays the floor the next one stands on).
+const int supportLevel = (y > 0) ? y - 1 : y + proto->size.y;
+int minFloorX = INT_MAX;
+int maxFloorX = INT_MIN;
+bool hasFloor = false;
+FloorItems::const_iterator f = (y > 0) ? floorItems.find(y - 1) : floorItems.end();
+if (f == floorItems.end()) f = floorItems.find(y + proto->size.y);
+if (f != floorItems.end()) {
+hasFloor = true;
+minFloorX = f->second->position.x;
+maxFloorX = f->second->getRect().maxX();
+} else if (simulatedSlabs.count(supportLevel)) {
+// The batch builds the supporting slab in this same drag.
+hasFloor = true;
+minFloorX = x;
+maxFloorX = x + proto->size.x;
+}
+if (!hasFloor) {
+reason = "Floor " + std::string(y > 0 ? "below" : "above") + " is not wide enough";
+return false;
+}
+if (x < minFloorX || x + proto->size.x > maxFloorX) {
+reason = "Floor " + std::string(y > 0 ? "below" : "above") + " is not wide enough";
+return false;
+}
+return true;
+}
+
+
 void Game::selectTool(const char * tool)
 {
-	if (!tool) return;
-	if (selectedTool != tool) {
-		selectedTool = tool;
+if (!tool) return;
+if (selectedTool != tool) {
+cancelBatchDrag(); // a tool change mid-drag invalidates the batch
+selectedTool = tool;
 		toolboxWindow.updateTool();
 		timeWindow.updateTooltip();
 	}

@@ -47,5 +47,10 @@ namespace OT
 		                               int population,
 		                               const JudgeSystem::Counts & counts,
 		                               int vipReviews);
+
+		/// Message announcing the award gift for reaching `newStars`
+		/// (1-based), or an empty string when there is none.
+		/// (OpenSkyWeb ISSUE-034; EXE strings 0x79636-0x79c36.)
+		static std::string starRewardMessage(int newStars);
 	};
 }

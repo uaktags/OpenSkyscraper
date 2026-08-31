@@ -14,6 +14,11 @@ public:
 	OT::Item::Item *parent_item;
 	int numStairs;
 	int numEscalators;
+	// Stairlike usage since the last elevator/lobby contact (OpenSkyWeb
+	// PORT NOTE 1): the stair budget refills at transport contact instead
+	// of being cumulative over the whole journey.
+	int stairsSinceTransport;
+	int escalatorsSinceTransport;
 	int numElevators;
 	float g;
 	float h;

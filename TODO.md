@@ -427,3 +427,177 @@ Reference Index (codemap.md → implementation)
 | Time                              | codemap.md:2307-2334  | source/Time.*                   | PORTED   |
 | Toolbox                           | codemap.md:2336-2366  | source/ToolboxWindow.*          | PORTED   |
 | VIP                               | codemap.md:2653-2690  | source/VipSystem.*              | PARTIAL  |
+
+-------------------------------------------------------------------------------
+Ported from OpenSkyWeb (2026-08-28)
+-------------------------------------------------------------------------------
+
+Improvements brought back from the 1:1 JS conversion at ~/Projects/OpenSkyWeb
+(each verified against that codebase before porting):
+
+- [DONE] **Pathfinder: per-segment stairlike budget** — `MapSearchNode` now
+  tracks `stairsSinceTransport` / `escalatorsSinceTransport` which refill at
+  elevator/lobby contact instead of accumulating over the whole journey
+  (web `pathfinder.js` PORT NOTE 1). Fixes tower tops becoming unreachable
+  when stairs were also used below the elevator serving them.
+- [DONE] **Pathfinder: stamina-aware A* state equivalence** — `IsSameState`
+  includes the since-counters + `numElevators` so an exhausted-budget path no
+  longer prunes a valid elevator route (web commit `9918897`).
+- [DONE] **Authentic SIMTOWER.EXE catalog pricing** — lobby $5000, condo
+  $80000, hotel $20000/$50000/$100000, medical/recycling $500000, party hall
+  $100000, parking $3000 (web commit `eca25e7`). Elevators now price the
+  shaft authentically (standard $200000, express $400000, service $100000)
+  plus a per-car `carCost` ($80000/$150000/$50000) charged when adding cars
+  (replaces the hardcoded $80000).
+- [DONE] **Authentic star progression** — advancement table now 300 / 1000 +
+  Security / 5000 + Medical & VIP / 10000 + Metro; toolbox locks moved to the
+  authentic mapping (service elevator/hotel single/security at 2★,
+  escalator/express/restaurant/cinema/party hall/hotel double & suite/
+  medical/recycling/parking at 3★, metro at 4★) (web commit `46372a2`).
+- [DONE] **Star award gift message** on promotion ("Your tower has been given
+  a Two-Star Award!", EXE strings 0x79636-0x79c36; web ISSUE-034).
+- [DONE] **Autosave** — daily snapshot throttled to 1/60s real time, written
+  to `<save>.autosave.tower` with an "Autosaved." toast (web ISSUE-030).
+- [DONE] **Floor-slab self-heal on load** — `Game::repairFloorCoverage()`
+  mints free stub slabs under haulers/rooms missing coverage, repairing towers
+  saved with the web's old elevator-drag off-by-one (web ISSUE-041).
+- [DONE] **Save integrity hash** — FNV-1a over the serialized XML (dev salt,
+  web-compatible) stored as the first `hash` attribute on `<tower>`;
+  `Application::loadGameFromFile` refuses mismatched files, legacy saves load
+  unchanged (web commit `7699b46`).
+- [DONE] **Tenant name variants** — restaurants (English Pub, French
+  Restaurant, Chinese Restaurant, Sushi Bar) and fast food (Japanese Stall,
+  Chinese Cafe, Hamburger Stand, Ice Cream, Coffee Shop) get authentic
+  cosmetic names from the existing sprite variant, persisted via `variant`
+  (web ISSUE-035).
+
+Verified: `OpenSkyTests` all green (run from `build/`); full game builds.
+Not ported: web's multi-story-lobby auto-connections (dead code there —
+`Lobby.canHaulPeople()` is false, so `gamemap.addNode` returns early), touch
+UI/rendering/asset work, SECOM/thief + ransom-choice + buried-treasure +
+parking-ramp + retail/housekeeping/restroom/cathedral items (candidates for a
+follow-up pass).
+
+### Second batch — gameplay cadence & events (2026-08-28, later)
+
+- [DONE] **CRITICAL fix: event cadence was undefined behaviour** —
+  `scheduleNextEvent()` passed *days* through `Time::hourToAbsolute()`, which
+  has no branch above 24h (uninitialized result). Events now add gap days
+  directly to `time.absolute` (web ISSUE-036 clamp-bug fix). This is the
+  "fires happen way too often/weirdly" bug.
+- [DONE] **Deterministic terrorist threat** (web ISSUE-036) — replaces the
+  random 30% terror roll. Once per game: weekend day of Q4 in year 5 at
+  10:00; detonation fixed at 15:00 the same day. If another event is active
+  when the trigger hits, it fires when that ends (`pendingTerror`). Both
+  flags persist in the save (`eventTerrorFired`/`eventPendingTerror`).
+- [DONE] **Burglar events** (web ISSUE-011/036) — random pool is now
+  fire 50% / burglar 50%. Security office within ±15 floors (`Security::
+  isCoveringFloor`) catches the burglar (+$10,000); otherwise −$50,000,
+  −20 evaluation and +40 stress for everyone on that floor.
+- [DONE] **Buried treasure** (web ISSUE-034) — 8% daily roll while anything
+  is under construction: instant $20k–$100k windfall with a blinking
+  `alerts/treasure` icon at the site for 12 game-hours.
+- [DONE] **VIP visits are promotion-gated, not random** (web ISSUE-036) —
+  the VIP arrives when the next star requires a VIP rating and every other
+  requirement is already met. Good review completes the promotion gate;
+  bad review starts a 14-day retry cooldown. Scoring/rewards unchanged
+  ($50k excellent / $25k content). Old saves transition cleanly (one pending
+  visit then the new model takes over).
+- Not ported (still follow-ups): SECOM center & its bomb-scan/fire-sense
+  coupling, terrorist ransom pay-or-find dialog, fire-crew hire dialog,
+  security quench/burnout flow, thief sprite system, cathedral ending.
+
+### Third batch — remaining web features (2026-08-29)
+
+- [DONE] **SECOM Center** (web ISSUE-031) — second security item ($100,000,
+  16x1, one per tower, "Only one SECOM allowed" EXE guard). Registered as a
+  `Security`-class prototype (`makeSecomPrototype`) sharing the security
+  sprite; unlocks at 2 stars. Event coupling: fires are reported as
+  "SECOM has sensed a fire..."; bomb threats get the auto-scan (+0.5h
+  "Secom System Now Scanning....") and auto-defusal (+1h, EXE success text);
+  SECOM substitutes for Security coverage in the burglar-arrest roll.
+- [DONE] **Fire-crew choice dialog** (web ISSUE-036 flow, EXE fire dialog) —
+  fires now open a modal "FIRE!" choice: Call Fire Crew ($10,000) vs Let it
+  burn. Declining hands response to Security: coverage within ±15 floors
+  quenches the blaze after ~1 game-hour; otherwise it burns out after ~12.
+  Note: the web's `chooseFireResponse`/`chooseTerrorResponse` UI hooks are
+  actually never wired in its main.js — the C++ implementation is the first
+  real wiring of this flow. The dialog pauses the sim until answered.
+- [DONE] **Terrorist ransom choice** (web ISSUE-033, EXE dialog 0x78c00) —
+  bomb threats open "Blackmail from Terrorists!" — Pay Them ($10k-$90k) or
+  Find the Bomb. Paying ends the event peacefully; finding keeps click-to-
+  defuse with a wider radius when Security covers the bomb floor (6->9).
+  Detonation with SECOM present shows the authentic SECOM failure text.
+- [DONE] **Authentic fire outcome text** — end-of-fire message now depends
+  on emergency stairs on the burning floor (EXE dialog 0x78800).
+- [DONE] **Cathedral + TOWER rating** (web ISSUE-010) — new 48x4, $3M item
+  unlockable at 5 stars (uses the party-hall art, matching the web's sprite
+  reuse). Construction completion rings `simtower/bells`, grants the TOWER
+  rating (internal 5) and shows the "Tower of the Year" award message; the
+  ceremony flag persists so reloads don't replay it. Advancement table gains
+  the authentic 6th tier (15,000 population + facilities -> TOWER).
+- Game gains `askEventChoice()` (modal two-button dialog, pauses the sim,
+  dropped safely on clearWorld).
+
+Verified: full build green, `OpenSkyTests` all green, smoke launch OK.
+Still open (no web counterpart worth porting / deferred): thief sprite
+walking animation, wedding processions, fireworks particle effects.
+
+### Fourth batch — occupant animation pacing (2026-08-29)
+
+- [DONE] **Stairs/escalators no longer play full-tilt loops** — Stairlike
+  animation now tracks the walking person's actual transition progress and
+  direction (straight stairs: frames 1-6 ascending, 7-13 descending;
+  escalator/spiral: progress-mapped through the moving frames) instead of a
+  free-running loop that always strobed at full speed (web stairlike.js,
+  commit 77a9feb).
+- [DONE] **Occupant overlays suppressed where the art already has people** —
+  elevators/stairs/escalators (walkers are pre-rendered in their animation
+  frames), cinema/party hall (pre-rendered crowds), fast food/cafes
+  (pre-rendered interior), and condos at night (dedicated night frames)
+  (web commits 4145df7, 77a9feb, e144044).
+- [DONE] **Item::renderPeople port** (web item.js renderPeople) —
+  multi-activity AnimPeple sheets (office, hotel, restaurant, guard,
+  housekeeper) now hold each activity for ~4-8 seconds with a ~1-2 Hz
+  micro-animation toggle instead of rapid costume strobing; condo residents
+  map to persona frames by Person type (men/kids/parents/women activity
+  pairs); hotels only show awake guests in occupied rooms; restaurants show
+  1-2 waitstaff (2 at >=10 diners) instead of every patron; offices show a
+  few workers while lit but not yet populated; people clamp inside room
+  margins with slight per-cycle positional wander.
+- [DONE] Added the missing `animpeple/guard` bitmap mapping (0x8469) and
+  public accessors (`Condo/YootCondo::isNightLighting`, `Office::isLit` /
+  `getWorkerPeople`).
+
+### Fifth batch — toolbox icons, elevator load frames, drag-to-build (2026-08-29)
+
+- [DONE] **SECOM toolbox icon** — the authentic SIMTOWER items strip (resource
+  0x812c, dumped and inspected cell by cell) has a dedicated cell labeled
+  "SECOM" at index 25; SECOM now uses it instead of borrowing the Security
+  guard icon (cell 21), which made it read as a duplicate Security entry.
+- [DONE] **Parking toolbox icon fix** — Parking pointed at cell 20 (the
+  church dome); it now uses the "P" sign cell (17).
+- [DONE] **Elevator car load frames graded across capacity** — the car sprite
+  has 5 baked load frames but the old thresholds (0 / <=1 / <=3 / rest /
+  exactly-full) meant cars jumped from empty to the 4+-person frame. Frames
+  now map to quarters of maxCarCapacity (21): 1-5 light, 6-10 half, 11-15
+  busy, 16+ full — genuine empty/some/more/full states.
+- [DONE] **ISSUE-039 drag-to-place batching (RTS-style)** — ported from
+  OpenSkyWeb: hold an item tool and drag to lay out a whole row or column
+  (Shift = full rows x columns grid). Ghost rectangles preview each cell
+  (white = buildable & affordable, red = blocked); nothing builds or charges
+  until mouse release, then every valid cell is constructed (funds stop the
+  batch when exhausted), a single updateRoutes() runs, and Esc cancels.
+  Construction was extracted from Game::handleEvent into
+  `Game::constructToolAt(pos)` with a side-effect-free preview mirror
+  (`Game::validateBatchCell`). Elevators, lobbies, floors, stairs,
+  escalators, metro and the parking ramp keep instant placement.
+- [CORRECTION 2026-08-29] SECOM unlock moved to **3 stars** (was 2) — the web's
+  2★ default had no authentic evidence, and it plays as the premium tier above
+  the manual Security Office (Tim's call).
+- [DONE 2026-08-29] **Vertical drag-builds into unbuilt space** — batch drag
+  preview simulates the floor slabs the batch itself lays (cells build
+  bottom-to-top, each item's construction creates the slab the next cell
+  stands on), so dragging e.g. an office upward past the current roof now
+  previews/validates instead of going red. Obstructed cells still break the
+  chain; downward drags into unsupported space stay blocked.

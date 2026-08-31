@@ -13,6 +13,7 @@
 #include <cstring>
 #include <ctime>
 #include <iostream>
+#include <fstream>
 #include <algorithm>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -22,11 +23,13 @@
 #endif
 #include <vector>
 #include <sstream>
+#include <memory>
 
 #include "Application.h"
 #include "Game.h"
 #include "MainMenu.h"
 #include "NativeFileDialog.h"
+#include "SaveHash.h"
 #include "SimTowerLoader.h"
 #include "OpenGL.h"
 #include "tinyxml2.h"
@@ -118,6 +121,12 @@ Application::Application(int argc, char *argv[])
             assert(i + 1 < argc && "--dump-resources is missing path");
             dumpResources = true;
             dumpResourcesPath = argv[++i];
+        }
+        if (strcmp(argv[i], "--simtower-exe") == 0)
+        {
+            assert(i + 1 < argc && "--simtower-exe is missing path");
+            simTowerExecutable = argv[++i];
+            LOG(INFO, "SimTower executable override set to %s", simTowerExecutable.c_str());
         }
         if (strcmp(argv[i], "--new-game") == 0)
         {
@@ -287,15 +296,10 @@ void Application::saveGameToFile(const std::string &filename)
     if (!isAbsoluteOrQualifiedPath(filename))
         outPath = userDataPath(filename);
     LOG(DEBUG, "Saving to %s", outPath.c_str());
-    FILE *f = fopen(outPath.c_str(), "w");
-    if (!f)
+    if (!game->writeTowerFile(outPath))
     {
-        LOG(ERROR, "Could not open %s for writing", outPath.c_str());
         return;
     }
-    tinyxml2::XMLPrinter xml(f);
-    game->encodeXML(xml);
-    fclose(f);
     game->saveFilename = filename;
     game->isDirty = false;
     LOG(IMPORTANT, "Game saved to %s", outPath.c_str());
@@ -330,7 +334,21 @@ void Application::loadGameFromFile(const std::string &filename)
     for (const auto &path : tryPaths)
     {
         LOG(DEBUG, "Trying path: %s", path.c_str());
-        if (xml.LoadFile(path.c_str()) == 0)
+        // Read the raw text first so the integrity hash (OpenSkyWeb
+        // savehash.js port) can be verified over exactly what we parse.
+        std::ifstream in(path.c_str(), std::ios::binary);
+        if (!in) continue;
+        std::stringstream buffer;
+        buffer << in.rdbuf();
+        std::string text = buffer.str();
+        const SaveHash::VerifyResult integrity = SaveHash::verifySaveHash(text);
+        if (!integrity.valid)
+        {
+            LOG(ERROR, "Save integrity check failed for %s (stored %s, computed %s) - refusing to load; the file may be corrupted or modified",
+                path.c_str(), integrity.stored.c_str(), integrity.computed.c_str());
+            continue;
+        }
+        if (xml.Parse(text.c_str()) == tinyxml2::XML_SUCCESS)
         {
             game->decodeXML(xml);
             game->reloadGUI();
@@ -545,44 +563,6 @@ void Application::makeMenu()
     gui.add(menu);
 }
 
-// YootTower plugins that map onto the item prototypes registered in
-// Item/Factory.cpp. A genuine YootTower installation ships all of these as
-// .t2p files under Plugins/. The catalog is built by PluginManager during
-// Application::init(); this list is the policy that decides whether the
-// YootTower tier is usable as a standalone asset source.
-static const char *const kEssentialYootPlugins[] = {
-    "Condo.t2p",            // Condo + YootCondo
-    "Floor.t2p",            // Floor
-    "Stair.t2p",            // Stairs
-    "Escalator.t2p",        // Escalator
-    "StdElev.t2p",          // Elevator::Standard
-    "ServElev.t2p",         // Elevator::Service
-    "BigElev.t2p",          // Elevator::Express
-    "Office.t2p",           // Office
-    "Parking.t2p",          // Parking
-    "Securityroom.t2p",     // Security
-    "Doctor's.t2p",         // MedicalCenter
-    "TrashFacility.t2p",    // Recycling
-    "Subway.t2p",           // Metro
-    "ClassicTheater.t2p",   // Cinema
-    "GatheringArea.t2p",    // PartyHall
-    "Singleroom.t2p",       // Hotel single
-    "Twinroom.t2p",         // Hotel double
-    "Suiteroom.t2p",        // Hotel suite
-    "Burger.t2p",           // FastFood
-    "Chinese.t2p",          // Restaurant
-    "DefaultToolPalette.t2p",// toolbox UI
-    "Front.t2p",            // lobby/front desk
-    "Maintenance.t2p",      // infrastructure
-    "PowerRoom.t2p",        // infrastructure
-    "FireDepartment.t2p",   // infrastructure
-};
-// Minimum number of essential plugins that must be present for the YootTower
-// path to be considered usable. Deliberately lenient: a partial install still
-// lets the game start (missing items fall back to placeholders), but we want
-// to avoid a single stray .t2p file silently enabling the bonus path.
-static const int kMinEssentialPlugins = 8;
-
 // Builds the PluginManager catalog by scanning every configured data dir
 // for a Plugins/ subdirectory. Idempotent across re-scans (PluginManager
 // de-duplicates). After this returns, app.pluginManager reflects every
@@ -596,20 +576,15 @@ static void catalogPlugins(Application * app)
     }
 }
 
-// Returns the kEssentialYootPlugins list as a vector so PluginManager can
-// consume it without exposing the array length calculation at every call.
-static std::vector<std::string> essentialPluginNames()
-{
-    std::vector<std::string> out;
-    out.reserve(sizeof(kEssentialYootPlugins) / sizeof(kEssentialYootPlugins[0]));
-    for (const char * name : kEssentialYootPlugins)
-        out.emplace_back(name);
-    return out;
-}
-
 void Application::init()
 {
     data.init();
+
+    // A user-selected executable takes precedence over all automatically
+    // discovered resource locations. SimTowerLoader still handles whether
+    // the selected directory contains SIMTOWER.EXE or compressed EX_ media.
+    if (!simTowerExecutable.empty())
+        data.addSearchPath(Path(simTowerExecutable).up());
 
     /*WindowsNEExecutable exe;
     DataManager::Paths paths = data.paths("SIMTOWER.EXE");
@@ -635,11 +610,12 @@ void Application::init()
         return;
     }
 
-    // Acquire game resources one of three ways, in order of preference:
+    // Acquire optional legacy game resources in order of preference:
     //   1. Extract from SIMTOWER.EXE / SIMTOWER.EX_
     //   2. Pre-dumped bitmaps/sounds under data/bitmaps and data/sounds
-    //   3. YootTower plugins under data/Plugins (silent bonus fallback)
-    // If none are available we prompt the user to locate SIMTOWER.EXE.
+    //   3. Any independently discovered plugins under data/Plugins
+    // None of these are startup requirements: first-party resources and
+    // safe placeholders allow a clean standalone installation to launch.
     bool loadedSimTowerResources = false;
     {
         SimTowerLoader simtower(this);
@@ -659,43 +635,17 @@ void Application::init()
     }
 
     // Build the plugin catalog from every search dir's Plugins/ subfolder.
-    // The catalog is consulted below to decide whether the YootTower tier
-    // is usable, and is later reused by BitmapManager::loadFromPlugin and
-    // the upcoming item-descriptor layer.
+    // Plugins are optional and lazily loaded when a resource or item asks for
+    // one. This includes both YootTower .t2p files and OpenTower directories.
     catalogPlugins(this);
-    LOG(DEBUG, "PluginManager cataloged %zu plugin(s)", pluginManager.enumerate().size());
-
-    // Detect YootTower plugins (silent bonus) via the PluginManager catalog.
-    const std::vector<std::string> essential = essentialPluginNames();
-    const int pluginCount = pluginManager.countEssential(essential);
-    const bool usingPlugins = (pluginCount >= kMinEssentialPlugins);
-
-    // Last resort: nothing usable on disk. Offer to locate SIMTOWER.EXE.
-    if (!loadedSimTowerResources && !usingDumpedResources && !usingPlugins)
-    {
-        LOG(ERROR, "unable to locate SimTower resources, dumped bitmaps, or YootTower plugins");
-        for (;;)
-        {
-            std::string exePath;
-            NativeFileDialog::Result r = NativeFileDialog::openExecutableFile(
-                "OpenSkyscraper needs SIMTOWER.EXE - please locate it", exePath);
-            if (r != NativeFileDialog::Result::Selected)
-            {
-                LOG(ERROR, "no SIMTOWER.EXE selected. Place SIMTOWER.EXE in the data directory, "
-                           "provide dumped bitmaps/sounds under data/bitmaps and data/sounds, "
-                           "or YootTower plugins under data/Plugins");
-                exitCode = 1;
-                return;
-            }
-            Path dir = Path(exePath).up();
-            data.addSearchPath(dir);
-            SimTowerLoader simtower(this);
-            loadedSimTowerResources = simtower.load();
-            if (loadedSimTowerResources)
-                break;
-            LOG(WARNING, "selected file did not load as a SimTower executable: %s", exePath.c_str());
-        }
-    }
+    const std::vector<std::string> discoveredPlugins = pluginManager.enumerate();
+    std::size_t openTowerPluginCount = 0;
+    for (const std::string &name : discoveredPlugins)
+        if (name.compare(0, 10, "OpenTower/") == 0)
+            ++openTowerPluginCount;
+    const std::size_t externalPluginCount = discoveredPlugins.size() - openTowerPluginCount;
+    LOG(INFO, "cataloged %zu first-party and %zu optional external plugin(s)",
+        openTowerPluginCount, externalPluginCount);
 
     // Report which resource path we ended up on.
     if (loadedSimTowerResources)
@@ -708,12 +658,10 @@ void Application::init()
     }
     else
     {
-        LOG(WARNING, "using YootTower plugins (%d/%zu essential found) with synthetic fallbacks "
-                     "for missing SimTower resources", pluginCount, sizeof(kEssentialYootPlugins)/sizeof(kEssentialYootPlugins[0]));
+        LOG(INFO, "running with standalone resources; missing optional assets use safe fallbacks");
     }
-    if (usingPlugins && (loadedSimTowerResources || usingDumpedResources))
-        LOG(INFO, "YootTower plugins also available (%d/%zu essential) - bonus content enabled",
-            pluginCount, sizeof(kEssentialYootPlugins)/sizeof(kEssentialYootPlugins[0]));
+    if (externalPluginCount != 0)
+        LOG(INFO, "%zu external plugin(s) available as optional content", externalPluginCount);
 
     videoMode = sf::VideoMode({static_cast<unsigned>(1280 * uiScale), static_cast<unsigned>(768 * uiScale)});
 
@@ -1026,6 +974,8 @@ bool Application::loadSettings()
             if (root->QueryFloatAttribute("uiScale", &valScale) == tinyxml2::XML_SUCCESS) {
                 uiScale = std::max(1.0f, std::min(2.0f, valScale));
             }
+            const char *exe = root->Attribute("simTowerExecutable");
+            simTowerExecutable = exe ? exe : "";
             LOG(INFO, "Loaded settings: volume=%f, muted=%d, fullscreen=%d, uiScale=%f",
                 audioVolume, audioMuted, fullscreen, uiScale);
             return true;
@@ -1055,6 +1005,7 @@ void Application::saveSettings()
     xml.PushAttribute("muted", audioMuted);
     xml.PushAttribute("fullscreen", fullscreen);
     xml.PushAttribute("uiScale", uiScale);
+    xml.PushAttribute("simTowerExecutable", simTowerExecutable.c_str());
     xml.CloseElement();
     fclose(f);
     LOG(INFO, "Saved settings: volume=%f, muted=%d, fullscreen=%d, uiScale=%f",
@@ -1110,7 +1061,7 @@ void Application::showSettingsDialog()
 
     auto dialog = tgui::ChildWindow::create("Settings");
     dialog->setWidgetName("SettingsDialog");
-    dialog->setClientSize({400 * uiScale, 300 * uiScale});
+    dialog->setClientSize({500 * uiScale, 390 * uiScale});
     dialog->getRenderer()->setTitleBarHeight(24 * uiScale);
     dialog->setTitleTextSize(14 * uiScale);
     dialog->getRenderer()->setTitleColor(sf::Color(220, 220, 220));
@@ -1209,6 +1160,52 @@ void Application::showSettingsDialog()
     dialog->add(cmbScale);
     currentY += 45.f * uiScale;
 
+    // --- GAME RESOURCES SECTION ---
+    auto lblResources = tgui::Label::create("GAME RESOURCES");
+    lblResources->setTextSize(14 * uiScale);
+    lblResources->getRenderer()->setTextColor(sf::Color(0, 150, 255));
+    lblResources->setPosition(padding, currentY);
+    dialog->add(lblResources);
+    currentY += 25.f * uiScale;
+
+    auto pendingExecutable = std::make_shared<std::string>(simTowerExecutable);
+    auto exePath = tgui::EditBox::create();
+    exePath->setSize(310 * uiScale, 24 * uiScale);
+    exePath->setPosition(padding + 10.f * uiScale, currentY);
+    exePath->setText(simTowerExecutable.empty() ? "Automatic" : simTowerExecutable);
+    exePath->setReadOnly(true);
+    dialog->add(exePath);
+
+    auto btnBrowseExecutable = tgui::Button::create("Browse...");
+    btnBrowseExecutable->setSize(90 * uiScale, 24 * uiScale);
+    btnBrowseExecutable->setPosition(padding + 330.f * uiScale, currentY);
+    dialog->add(btnBrowseExecutable);
+    btnBrowseExecutable->onPress([pendingExecutable, exePath]() {
+        std::string selected;
+        if (NativeFileDialog::openExecutableFile(
+                "Choose SIMTOWER.EXE or SIMTOWER.EX_", selected) == NativeFileDialog::Result::Selected)
+        {
+            *pendingExecutable = selected;
+            exePath->setText(selected);
+        }
+    });
+
+    auto btnAutoExecutable = tgui::Button::create("Auto");
+    btnAutoExecutable->setSize(50 * uiScale, 24 * uiScale);
+    btnAutoExecutable->setPosition(padding + 425.f * uiScale, currentY);
+    dialog->add(btnAutoExecutable);
+    btnAutoExecutable->onPress([pendingExecutable, exePath]() {
+        pendingExecutable->clear();
+        exePath->setText("Automatic");
+    });
+    currentY += 28.f * uiScale;
+
+    auto lblRestart = tgui::Label::create("The selected resource source is used after restarting OpenSkyscraper.");
+    lblRestart->setTextSize(11 * uiScale);
+    lblRestart->getRenderer()->setTextColor(sf::Color(170, 170, 170));
+    lblRestart->setPosition(padding + 10.f * uiScale, currentY);
+    dialog->add(lblRestart);
+
     // --- BUTTONS ---
     auto btnApply = tgui::Button::create("Apply");
     btnApply->setSize(100 * uiScale, 30 * uiScale);
@@ -1234,7 +1231,7 @@ void Application::showSettingsDialog()
         gui.remove(dialog);
     });
 
-    btnApply->onPress([this, dialog, chkMute, sldVolume, chkFullscreen, cmbScale]() {
+    btnApply->onPress([this, dialog, chkMute, sldVolume, chkFullscreen, cmbScale, pendingExecutable]() {
         bool newMute = chkMute->isChecked();
         float newVolume = sldVolume->getValue();
         bool newFullscreen = chkFullscreen->isChecked();
@@ -1248,6 +1245,7 @@ void Application::showSettingsDialog()
 
         setAudioMuted(newMute);
         setAudioVolume(newVolume);
+        simTowerExecutable = *pendingExecutable;
 
         bool needWindowRecreation = (newFullscreen != fullscreen) || (std::abs(newScale - uiScale) > 0.01f);
 
