@@ -162,6 +162,7 @@ void Game::clearWorld()
 	closeEventChoice();
 	mapWindow.close();
 	financeWindow.close();
+	routeBuildQueue.clear();
 	for (ItemSet::iterator i = items.begin(); i != items.end(); i++) {
 		delete *i;
 	}
@@ -576,6 +577,9 @@ void Game::advance(double dt)
 {
 	sf::RenderWindow & win = app.window;
 	drawnSprites = 0;
+
+	// Rebuild a slice of the invalidated lobby routes (see updateRoutes).
+	pumpRouteBuilds();
 
 	//Advance time.
 	time.advance(dt);
@@ -997,6 +1001,9 @@ void Game::addItem(Item::Item * item)
 void Game::removeItem(Item::Item * item)
 {
 	assert(item);
+	// Drop any pending route rebuild for this item before it is deleted.
+	std::vector<Item::Item *>::iterator rq = std::find(routeBuildQueue.begin(), routeBuildQueue.end(), item);
+	if (rq != routeBuildQueue.end()) routeBuildQueue.erase(rq);
 	items.erase(item);
 	itemsByType[item->prototype->id].erase(item);
 
@@ -2109,9 +2116,32 @@ void Game::playRandomBackgroundSound()
 void Game::updateRoutes()
 {
 	LOG(DEBUG, "updating routes");
+	// Invalidate every cached lobby route and queue the recompute. The
+	// searches themselves are drained by pumpRouteBuilds() with a per-frame
+	// time budget: eagerly running one A* per room in this call froze large
+	// towers for minutes on load (one search per room, ~2800 rooms in a
+	// full-lot tower).
 	visualizeRoute.clear();
+	routeBuildQueue.clear();
 	for (ItemSet::iterator i = items.begin(); i != items.end(); i++) {
 		(*i)->updateRoutes();
+		routeBuildQueue.push_back(*i);
+	}
+}
+
+/** Recomputes queued lobby routes, bounded to a few milliseconds per frame
+ *  so a full rebuild of a maxed tower spreads over a couple of seconds
+ *  instead of blocking the load or the frame loop. */
+void Game::pumpRouteBuilds()
+{
+	if (routeBuildQueue.empty()) return;
+	const auto budget = std::chrono::milliseconds(4);
+	const auto start = std::chrono::steady_clock::now();
+	while (!routeBuildQueue.empty()) {
+		Item::Item * item = routeBuildQueue.back();
+		routeBuildQueue.pop_back();
+		item->computeLobbyRoute();
+		if (std::chrono::steady_clock::now() - start > budget) break;
 	}
 }
 

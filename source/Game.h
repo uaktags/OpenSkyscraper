@@ -36,6 +36,7 @@
 
 namespace OT {
 	namespace Item { class AbstractPrototype; }
+	namespace Item { class Item; }
 
 	class Game : public State
 	{
@@ -193,6 +194,9 @@ namespace OT {
 
 		GameMap gameMap;
 		PathFinder pathFinder;
+		/// Items waiting for their lobby route to be recomputed (see updateRoutes).
+		std::vector<Item::Item *> routeBuildQueue;
+		void pumpRouteBuilds();
 		Decorations decorations;
 
 		/// Daily tenant & hotel evaluation engine. Updated once per day from

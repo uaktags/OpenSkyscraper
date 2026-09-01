@@ -98,8 +98,10 @@ namespace OT {
 			int population;
 
 			Route lobbyRoute;
+			bool lobbyRouteComputed = false; ///< false while the lazy route build queue hasn't reached this item
 			Route metroRoute;
 			virtual void updateRoutes();
+			void computeLobbyRoute();
 
 			virtual bool isOccupied() const { return false; }
 			virtual bool canHaulPeople() const { return false; }

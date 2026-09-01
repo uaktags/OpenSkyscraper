@@ -226,7 +226,7 @@ void Item::render(sf::RenderTarget &target) const
 		renderPeople(target, statusTint, tinted);
 	}
 
-	if (!canHaulPeople() && position.y != 0 && prototype->icon != ICON_FLOOR && lobbyRoute.empty())
+	if (!canHaulPeople() && position.y != 0 && prototype->icon != ICON_FLOOR && lobbyRouteComputed && lobbyRoute.empty())
 	{
 		Sprite noroute;
 		noroute.setTexture(app->bitmaps["noroute.png"]);
@@ -303,6 +303,16 @@ bool Item::containsPoint(const double2 & pt)
 
 void Item::updateRoutes()
 {
+	// Layout changed: invalidate the cached lobby route. The actual A* search
+	// is deferred to computeLobbyRoute(), drained from Game's time-budgeted
+	// route build queue - eagerly recomputing every room's route in one go
+	// froze large towers for minutes on load (one search per room).
+	lobbyRouteComputed = false;
+	lobbyRoute.clear();
+}
+
+void Item::computeLobbyRoute()
+{
 	if (!canHaulPeople() && position.y != 0)
 	{
 		lobbyRoute = game->findRoute(game->mainLobby, this);
@@ -311,7 +321,8 @@ void Item::updateRoutes()
 	{
 		lobbyRoute.clear();
 	}
-		}
+	lobbyRouteComputed = true;
+}
 
 
 // --- AnimPeple occupant overlay (OpenSkyWeb item.js renderPeople port) ---
