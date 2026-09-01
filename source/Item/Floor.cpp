@@ -44,6 +44,14 @@ void Floor::decodeXML(tinyxml2::XMLElement &xml)
 {
 	Item::decodeXML(xml);
 	size.x = xml.IntAttribute("width");
+	// Re-seed the boundary interval: init() already ran while this floor was
+	// still at the prototype's 1-tile width, so the boundaries it inserted
+	// describe the wrong extents. extendFloor() erases these by find(); a
+	// stale entry aborted (erase of end()) the first time an elevator was
+	// dragged across a floor loaded from a save with a wide slab.
+	interval.clear();
+	interval.insert(position.x);
+	interval.insert(getRect().maxX());
 	updateSprite();
 }
 
