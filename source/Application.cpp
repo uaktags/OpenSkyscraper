@@ -31,6 +31,7 @@
 #include "NativeFileDialog.h"
 #include "SaveHash.h"
 #include "SimTowerLoader.h"
+#include "TdtLoader.h"
 #include "OpenGL.h"
 #include "tinyxml2.h"
 
@@ -317,6 +318,49 @@ void Application::loadGameFromFile(const std::string &filename)
         // alive until the save has been loaded successfully.
         game = new Game(*this);
         createdNewGame = true;
+    }
+    // Original 1994 SimTower .TDT saves: sniff the little-endian 0x2400
+    // version word and convert to our native XML tower format before the
+    // regular decode path. Import never writes back to the .tdt file.
+    if (OT::Tdt::looksLikeTdt(filename))
+    {
+        OT::Tdt::TdtData tdt;
+        std::string tdtError;
+        if (!OT::Tdt::loadFile(filename, tdt, tdtError))
+        {
+            LOG(ERROR, "Could not import SimTower save %s: %s", filename.c_str(), tdtError.c_str());
+            if (createdNewGame) delete game;
+            return;
+        }
+        std::vector<std::string> report;
+        const std::string xmlText = OT::Tdt::toTowerXml(tdt, report);
+        tinyxml2::XMLDocument xml;
+        if (xml.Parse(xmlText.c_str(), xmlText.size()) != tinyxml2::XML_SUCCESS)
+        {
+            LOG(ERROR, "TDT import produced invalid XML for %s", filename.c_str());
+            if (createdNewGame) delete game;
+            return;
+        }
+        game->decodeXML(xml);
+        game->reloadGUI();
+        // Point autosave/save at our own extension so the original save is
+        // never overwritten with our format.
+        std::string nativeName = filename;
+        if (nativeName.size() >= 4 && nativeName.compare(nativeName.size() - 4, 4, ".tdt") == 0)
+            nativeName = nativeName.substr(0, nativeName.size() - 4) + ".tower";
+        game->saveFilename = nativeName;
+        game->isDirty = false;
+        for (size_t i = 0; i < tdt.warnings.size(); i++)
+            LOG(WARNING, "TDT import: %s", tdt.warnings[i].c_str());
+        for (size_t i = 0; i < report.size(); i++)
+            LOG(INFO, "TDT import: %s", report[i].c_str());
+        LOG(IMPORTANT, "SimTower save imported from %s", filename.c_str());
+        if (createdNewGame)
+        {
+            popState();
+            pushState(game);
+        }
+        return;
     }
     tinyxml2::XMLDocument xml;
     std::vector<std::string> tryPaths;

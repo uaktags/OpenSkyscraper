@@ -25,6 +25,7 @@
 #include "../source/PluginObjmap.h"
 #include "../source/PluginBitmapLoader.h"
 #include "../source/OspPlugin.h"
+#include "../source/TdtLoader.h"
 
 static int g_failures = 0;
 
@@ -1391,8 +1392,245 @@ static void testOspRoundTripMover()
 }
 
 
+// ---- TDT import fixtures ------------------------------------------------
+// Builds a minimal but structurally complete 1994 .TDT save in memory:
+// header, 120 floor records (tenants on several), empty people/retail blocks,
+// one built standard elevator + 23 empty slots, finance/parking, and a
+// 2-flight stairs table. Offsets follow doc/simtower/TDT_format.txt; the
+// ground floor must land exactly at 0x9C4 (560 + 10 x 194), which the lobby
+// assertion below double-checks via the converted coordinates.
+static void put8(std::vector<uint8_t> & b, int v) { b.push_back((uint8_t)(v & 0xFF)); }
+static void put16(std::vector<uint8_t> & b, int v) { put8(b, v); put8(b, v >> 8); }
+static void put32(std::vector<uint8_t> & b, long v)
+{
+	put8(b, (int)(v & 0xFF)); put8(b, (int)((v >> 8) & 0xFF));
+	put8(b, (int)((v >> 16) & 0xFF)); put8(b, (int)((v >> 24) & 0xFF));
+}
+static void putZeros(std::vector<uint8_t> & b, size_t n)
+{
+	for (size_t i = 0; i < n; i++) put8(b, 0);
+}
+static void putTenant(std::vector<uint8_t> & b, int left, int right, int type, int variant)
+{
+	put16(b, left); put16(b, right); put8(b, type); put8(b, 0); put8(b, variant);
+	putZeros(b, 9); put8(b, 2); put8(b, 0); // rentClass 2, reserved byte
+}
+static std::vector<uint8_t> buildTdtFixture()
+{
+	std::vector<uint8_t> b;
+	// Header (560 bytes).
+	put16(b, 0x2400);      // version magic
+	put16(b, 2);           // level: 2 stars
+	put32(b, 2000000000L); // balance: stored x100 -> $20,000,000
+	putZeros(b, 12);       // otherIncome, constructionCosts, lastQuarterMoney
+	put16(b, 0);           // frameTime: 0 = 7:00 AM in TDT terms
+	put32(b, 5);           // currentDay
+	put16(b, 0);           // unknown
+	put16(b, 0);           // lobbyHeight?
+	putZeros(b, 8);        // unknown x8
+	put16(b, 0); put16(b, 0); // lrPixel, udPixel
+	putZeros(b, 518);      // unknown tail of the header
+	// Floor map: 120 records, mostly empty (194 bytes each).
+	for (int f = 0; f < 120; f++)
+	{
+		std::vector<uint8_t> tenants;
+		if (f == 10) // ground floor: lobby + fastfood variant 3 + office under construction
+		{
+			putTenant(tenants, 180, 200, 24, 0);
+			putTenant(tenants, 100, 104, 12, 3);
+			putTenant(tenants, 0, 9, -7, 0);
+		}
+		else if (f == 11) // offices + retail shop + housekeeping + Steak House restaurant
+		{
+			putTenant(tenants, 100, 109, 7, 0);
+			putTenant(tenants, 150, 160, 10, 0);
+			putTenant(tenants, 170, 175, 15, 0);
+			putTenant(tenants, 120, 129, 6, 4);
+		}
+		else if (f == 12) putTenant(tenants, 60, 91, 18, 0); // cinema top half
+		else if (f == 13) putTenant(tenants, 60, 91, 19, 0); // cinema bottom half
+		else if (f == 20) putTenant(tenants, 50, 79, 31, 0); // metro part 1
+		else if (f == 21) putTenant(tenants, 50, 79, 32, 0); // metro part 2
+		else if (f == 22) putTenant(tenants, 50, 79, 33, 0); // metro part 3
+		put16(b, (int)(tenants.size() / 18));
+		put16(b, 0); put16(b, 200);
+		b.insert(b.end(), tenants.begin(), tenants.end());
+		putZeros(b, 94 * 2); // index map
+	}
+	// People block (empty).
+	put32(b, 0);
+	// Retail table (empty slots).
+	putZeros(b, 512 * 18);
+	// Elevator table: slot 0 built standard, floors 10..30, 2 cars, floor 15 skipped.
+	put8(b, 1);      // used
+	put8(b, 1);      // type: standard
+	put8(b, 21);     // capacity byte (not a kind signal)
+	put8(b, 2);      // cars
+	putZeros(b, 56); // schedule
+	putZeros(b, 2);  // visibility + reserved
+	put16(b, 180);   // x tile
+	put8(b, 30);     // top floor (TDT index)
+	put8(b, 10);     // bottom floor
+	for (int f = 0; f < 120; f++) put8(b, f == 15 ? 0 : 1); // serviced bitmap
+	put8(b, 10); put8(b, 20); putZeros(b, 6); // 8 car homes (u8 each): 10,20,10,10,10,10,10,10
+	putZeros(b, 3140 + 324 * 21 + 348);          // built-shaft payload (spanned)
+	// Slot 1: built express, floors 10..100, stopping only at 10/15/30/100.
+	// The retail game sizes an express payload by STOPS, not span
+	// (harness-measured): 3140 + 324*4 + 348 here. A wrong rule desyncs slot 2.
+	put8(b, 1);      // used
+	put8(b, 0);      // type: express
+	put8(b, 42);     // capacity byte
+	put8(b, 1);      // cars
+	putZeros(b, 56 + 2);
+	put16(b, 200);   // x tile
+	put8(b, 100);    // top floor
+	put8(b, 10);     // bottom floor
+	for (int f = 0; f < 120; f++) put8(b, (f == 10 || f == 15 || f == 30 || f == 100) ? 1 : 0);
+	put8(b, 10); putZeros(b, 7); // 8 car homes
+	putZeros(b, 3140 + 324 * 4 + 348);
+	for (int s = 2; s < 24; s++) putZeros(b, 194); // empty slots: header only
+	// Finance + parking blocks (not imported, walked past).
+	putZeros(b, 132);
+	putZeros(b, 2 + 512 * 2);
+	// Stairs table: one stairs flight, one escalator, one two-story escalator.
+	put8(b, 1); put8(b, 1); put16(b, 100); put16(b, 10); putZeros(b, 4);
+	put8(b, 1); put8(b, 0); put16(b, 50); put16(b, 11); putZeros(b, 4);
+	put8(b, 1); put8(b, 2); put16(b, 60); put16(b, 30); putZeros(b, 4);
+	for (int s = 3; s < 64; s++) putZeros(b, 10);
+	return b;
+}
+
+static void testTdtLoader()
+{
+	std::vector<uint8_t> bytes = buildTdtFixture();
+	EXPECT((int)bytes[0] == 0x00 && (int)bytes[1] == 0x24);
+	// Ground floor must land at 560 + 10 * 194 = 0x9C4 (the doc's landmark).
+	size_t groundOffset = 560 + 10 * (6 + 94 * 2);
+	EXPECT(groundOffset == 0x9C4);
+
+	const std::string path = "OpenSkyTests_tdt_fixture.tdt";
+	{
+		std::ofstream out(path.c_str(), std::ios::binary);
+		out.write((const char *)&bytes[0], (std::streamsize)bytes.size());
+		EXPECT(out.good());
+	}
+	EXPECT(OT::Tdt::looksLikeTdt(path));
+
+	OT::Tdt::TdtData tdt;
+	std::string error;
+	EXPECT(OT::Tdt::loadFile(path, tdt, error));
+	EXPECT(error.empty());
+	EXPECT(tdt.level == 2);
+	EXPECT(tdt.balance == 2000000000L);
+	EXPECT(tdt.frameTime == 0 && tdt.currentDay == 5);
+	EXPECT(tdt.elevatorsValid && tdt.stairsValid);
+	EXPECT(tdt.elevators.size() == 2);
+	EXPECT(tdt.elevators[0].type == 1 && tdt.elevators[0].cars == 2);
+	EXPECT(tdt.elevators[0].bottomFloor == 10 && tdt.elevators[0].topFloor == 30);
+	EXPECT(tdt.elevators[1].type == 0 && tdt.elevators[1].bottomFloor == 10 && tdt.elevators[1].topFloor == 100);
+	EXPECT(tdt.stairs.size() == 3);
+
+	std::vector<std::string> report;
+	const std::string xml = OT::Tdt::toTowerXml(tdt, report);
+
+	// Root attributes: funds /100, rating = level-1, time = day + (frame+300)/2600.
+	EXPECT(xml.find("funds=\"20000000\"") != std::string::npos);
+	EXPECT(xml.find("rating=\"1\"") != std::string::npos);
+	EXPECT(xml.find("time=\"5.115385\"") != std::string::npos);
+	EXPECT(xml.find("tool=\"inspector\"") != std::string::npos);
+
+	// Ground lobby at checked coordinates: tile 180 -> x -7, TDT 10 -> y 0.
+	EXPECT(xml.find("type=\"lobby\" x=\"-7\" y=\"0\" evaluation=\"50.0\" width=\"20\" height=\"1\"") != std::string::npos);
+	// Fast food keeps its variant byte.
+	EXPECT(xml.find("type=\"fastfood\" x=\"-87\" y=\"0\" evaluation=\"50.0\" variant=\"3\"") != std::string::npos);
+	// Offices, incl. the under-construction one (imported finished).
+	EXPECT(xml.find("type=\"office\" x=\"-87\" y=\"1\"") != std::string::npos);
+	EXPECT(xml.find("type=\"office\" x=\"-187\" y=\"0\"") != std::string::npos);
+	// Cinema halves on floors 12/13 merge to one item at the lower floor.
+	EXPECT(xml.find("type=\"cinema\" x=\"-127\" y=\"2\"") != std::string::npos);
+	EXPECT(xml.find("type=\"cinema\" x=\"-127\" y=\"3\"") == std::string::npos);
+	// Metro's three parts merge to one at floor 20 -> y 10.
+	EXPECT(xml.find("type=\"metro\" x=\"-137\" y=\"10\"") != std::string::npos);
+	// Elevator: kind, span, skip-floor inversion (TDT 15 -> ours 5), car homes.
+	EXPECT(xml.find("type=\"elevator-standard\" x=\"-7\" y=\"0\" evaluation=\"50.0\" height=\"21\" showShaft=\"1\"") != std::string::npos);
+	EXPECT(xml.find("<unserviced floor=\"5\"/>") != std::string::npos);
+	EXPECT(xml.find("<car altitude=\"0.0\" homeFloor=\"0\"/>") != std::string::npos);
+	EXPECT(xml.find("<car altitude=\"10.0\" homeFloor=\"10\"/>") != std::string::npos);
+	// Express sized by stops parsed without desyncing the table.
+	EXPECT(xml.find("type=\"elevator-express\" x=\"13\" y=\"0\" evaluation=\"50.0\" height=\"91\" showShaft=\"1\"") != std::string::npos);
+	// Stairs + escalator flights; the two-story escalator stacks two flights.
+	EXPECT(xml.find("type=\"stairs\" x=\"-87\" y=\"0\"") != std::string::npos);
+	EXPECT(xml.find("type=\"escalator\" x=\"-137\" y=\"1\"") != std::string::npos);
+	EXPECT(xml.find("type=\"escalator\" x=\"-127\" y=\"20\"") != std::string::npos);
+	EXPECT(xml.find("type=\"escalator\" x=\"-127\" y=\"21\"") != std::string::npos);
+	// Steak House clamps to the first available restaurant variant, with a report line.
+	EXPECT(xml.find("type=\"restaurant\" x=\"-67\" y=\"1\" evaluation=\"50.0\" variant=\"0\"") != std::string::npos);
+	bool sawSteak = false;
+	for (size_t i = 0; i < report.size(); i++)
+		if (report[i].find("Steak House") != std::string::npos) sawSteak = true;
+	EXPECT(sawSteak);
+
+	// Fidelity report: construction site imported finished, shop + housekeeping skipped.
+	bool sawConstruction = false, sawShop = false, sawHousekeeping = false;
+	for (size_t i = 0; i < report.size(); i++)
+	{
+		if (report[i].find("under construction") != std::string::npos) sawConstruction = true;
+		if (report[i].find("kind 10") != std::string::npos) sawShop = true;
+		if (report[i].find("kind 15") != std::string::npos) sawHousekeeping = true;
+	}
+	EXPECT(sawConstruction && sawShop && sawHousekeeping);
+	if (!(sawConstruction && sawShop && sawHousekeeping))
+	{
+		for (size_t i = 0; i < report.size(); i++)
+			std::cerr << "report: " << report[i] << "\n";
+		std::cerr << "xml head: " << xml.substr(0, 300) << "\n";
+	}
+
+	std::remove(path.c_str());
+}
+
+static void testTdtLoaderTruncated()
+{
+	std::vector<uint8_t> bytes = buildTdtFixture();
+	// Cut inside the elevator table's built-shaft payload: the tail walk must
+	// degrade to a warning (no elevators), not crash or fail the load.
+	// Layout: 560 header + 120*194 floor records + 198 tenant bytes + 4 people
+	// count + 9216 retail = 33258 = elevator table start.
+	size_t elevatorTableStart = 560 + 120 * 194 + 198 + 4 + 512 * 18;
+	EXPECT(elevatorTableStart == 33258);
+	bytes.resize(elevatorTableStart + 200);
+
+	const std::string path = "OpenSkyTests_tdt_truncated.tdt";
+	{
+		std::ofstream out(path.c_str(), std::ios::binary);
+		out.write((const char *)&bytes[0], (std::streamsize)bytes.size());
+	}
+	OT::Tdt::TdtData tdt;
+	std::string error;
+	EXPECT(OT::Tdt::loadFile(path, tdt, error));
+	EXPECT(!tdt.elevatorsValid);
+	EXPECT(!tdt.warnings.empty());
+	std::vector<std::string> report;
+	const std::string xml = OT::Tdt::toTowerXml(tdt, report);
+	EXPECT(xml.find("elevator-standard") == std::string::npos);
+	EXPECT(xml.find("type=\"lobby\"") != std::string::npos); // floor map still imported
+	std::remove(path.c_str());
+
+	// Garbage file: wrong magic must fail cleanly.
+	{
+		std::ofstream out(path.c_str(), std::ios::binary);
+		out << "<tower></tower>";
+	}
+	OT::Tdt::TdtData tdt2;
+	EXPECT(!OT::Tdt::looksLikeTdt(path));
+	EXPECT(!OT::Tdt::loadFile(path, tdt2, error));
+	std::remove(path.c_str());
+}
+
 int main()
 {
+	testTdtLoader();
+	testTdtLoaderTruncated();
 	testSmoke();
 	testTimeConversion();
 	testNightSpeedMultiplier();

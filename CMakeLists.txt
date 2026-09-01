@@ -195,6 +195,7 @@ add_executable(OpenSkyTests
   source/Path.cpp
   source/Logger.cpp
   source/NameManager.cpp
+  source/TdtLoader.cpp
   source/LevelUp.cpp
   source/PluginManager.cpp
   source/PluginResources.cpp

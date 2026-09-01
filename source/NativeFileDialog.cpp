@@ -24,7 +24,7 @@ namespace OT
 
 		// Filter description used by the platform dialogs. kind selects the
 		// extensions and default extension offered to the user.
-		enum class FileKind { Tower, Executable, Plugin, Png };
+		enum class FileKind { Tower, TowerLegacy, Executable, Plugin, Png };
 		struct FilterInfo
 		{
 			std::string winFilter; // double-NUL terminated pair list for Win32
@@ -74,6 +74,18 @@ namespace OT
 				f.defExt = "png";
 				f.zenityFilter = "PNG images (*.png) | *.png";
 				f.kdialogFilter = "*.png|PNG images";
+				f.appleType = "";
+				return f;
+			}
+			if (kind == FileKind::TowerLegacy)
+			{
+				// Opening also accepts original 1994 SimTower .TDT saves
+				// (imported via TdtLoader); saving stays .tower-only.
+				FilterInfo f;
+				f.winFilter = buildWinFilter("Tower saves (*.tower;*.tdt)", "*.tower;*.tdt");
+				f.defExt = "tower";
+				f.zenityFilter = "Tower saves (*.tower *.tdt) | *.tower *.tdt";
+				f.kdialogFilter = "*.tower *.tdt|Tower saves";
 				f.appleType = "";
 				return f;
 			}
@@ -269,9 +281,9 @@ namespace OT
 		Result openTowerFile(const std::string &title, const std::string &defaultName, std::string &path)
 		{
 #ifdef _WIN32
-			return showWindowsDialog(title, defaultName, false, FileKind::Tower, path);
+			return showWindowsDialog(title, defaultName, false, FileKind::TowerLegacy, path);
 #else
-			return showUnixDialog(title, defaultName, false, FileKind::Tower, path);
+			return showUnixDialog(title, defaultName, false, FileKind::TowerLegacy, path);
 #endif
 		}
 
