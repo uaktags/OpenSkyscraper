@@ -28,19 +28,23 @@ namespace OT
 		                    const sf::Color & maskColor = sf::Color::Transparent);
 
 		/// Edition-aware texture resolution for the legacy item classes.
-		/// `logicalName` is the short item id ("office", "condo",
-		/// "hotel_single", ...). If an OpenTower folder plugin for that
-		/// item is cataloged (e.g. "OpenTower/Office"), its RT_BITMAP 1000
-		/// is loaded when SimTowerLoader has not already populated the requested
-		/// texture. An explicitly selected or auto-discovered SIMTOWER executable
-		/// therefore takes precedence; OpenTower remains the fallback edition.
-		/// The result is cached under the simtower key, letting item classes keep
-		/// their existing
-		/// `App->bitmaps["simtower/office"]` calls unchanged while the art
-		/// source switches transparently when the OpenTower edition is
-		/// installed.
+		/// `logicalName` is the short item id ("office", "condo", ...).
+		/// Resolution order: the OpenTower folder plugin's RT_BITMAP 1000
+		/// (e.g. "OpenTower/Office") when cataloged, then a texture
+		/// SimTowerLoader installed from a located SIMTOWER executable,
+		/// then BitmapManager::load (loose data/bitmaps file, then
+		/// generated placeholder). The result is cached under the simtower
+		/// key, letting item classes keep their existing
+		/// `App->bitmaps["simtower/office"]` calls while the art source
+		/// switches transparently.
 		sf::Texture & editionTexture(const char * logicalName,
 		                             const char * simtowerKey);
+
+		/// True when first-party replacement art for `name` (a texture key
+		/// such as "simtower/condo") ships as data/bitmaps/<key>.png.
+		/// SimTowerLoader skips installing the extracted EXE sheet for such
+		/// keys so the file edition is what loads.
+		bool hasFirstPartyArt(const Path & name) const;
 
 		bool usedFallback;
 	private:

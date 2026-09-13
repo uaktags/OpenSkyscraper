@@ -790,9 +790,13 @@ void SimTowerLoader::loadBitmaps()
 		}
 	}
 
-	// Convert the images we just loaded to textures.
+	// Convert the images we just loaded to textures. Keys with first-party
+	// data/bitmaps art are left empty so BitmapManager loads the file
+	// edition on demand instead of the extracted EXE sheet.
 	LOG(DEBUG, "Converting loaded images to textures");
 	for (Images::const_iterator it = images.begin(); it != images.end(); ++it) {
+		if (app->bitmaps.hasFirstPartyArt(it->first))
+			continue;
 		app->bitmaps.getResources()[it->first].loadFromImage(it->second);
 	}
 }

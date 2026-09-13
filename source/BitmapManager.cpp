@@ -220,25 +220,38 @@ namespace
 sf::Texture & BitmapManager::editionTexture(const char * logicalName,
                                             const char * simtowerKey)
 {
-	// SimTowerLoader eagerly installs extracted textures under these keys.
-	// Preserve those when an executable was loaded: an installed OpenTower
-	// edition is a fallback/alternative, not an override of an explicitly
-	// selected (or automatically discovered) SIMTOWER executable.
+	// First-party OpenTower art is the product's look: whenever the item's
+	// folder plugin is cataloged, its RT_BITMAP 1000 wins, regardless of a
+	// located SIMTOWER executable. The executable edition fills whatever the
+	// plugins don't cover; load() then falls back to loose data/bitmaps
+	// files and finally generated placeholders. The result is cached under
+	// the simtower key so item classes keep their existing texture calls.
 	Resources & resources = getResources();
 	Resources::iterator existing = resources.find(Path(simtowerKey));
 	if (existing != resources.end() && existing->second.getSize().x != 0 &&
 	    existing->second.getSize().y != 0)
-		return existing->second;
-
-	// Cache plugin or file fallback under the key the item expects.
+	{
+		return existing->second;  // cached plugin/EXE/file result
+	}
 	sf::Texture & dst = resources[Path(simtowerKey)];
 	const char * pluginName = editionPluginFor(logicalName);
-	if (pluginName && app->pluginManager.has(pluginName))
+	if (pluginName && app->pluginManager.has(pluginName) &&
+	    loadFromPlugin(pluginName, 1000, dst))
 	{
-		if (loadFromPlugin(pluginName, 1000, dst))
-			return dst;
-		// Fall through to the simtower path on load failure.
+		return dst;
 	}
 	load(simtowerKey, dst);
 	return dst;
+}
+
+bool BitmapManager::hasFirstPartyArt(const Path & name) const
+{
+	// True when first-party replacement art for this texture key ships under
+	// data/bitmaps (same stripped-path convention load() uses). SimTowerLoader
+	// consults this before installing an extracted EXE sheet so the file
+	// edition always wins.
+	std::string key = name.str();
+	if (key.find(internal_path) == 0)
+		key = key.substr(internal_path.size());
+	return app->data.exists(Path("bitmaps") + (key + ".png"));
 }
