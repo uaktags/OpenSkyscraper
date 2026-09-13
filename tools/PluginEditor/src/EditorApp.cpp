@@ -46,23 +46,48 @@ namespace editors
 			t.windowBg    = sf::Color(236, 238, 242);
 			t.panelBg     = sf::Color(250, 250, 252);
 			t.titleBar    = sf::Color(210, 214, 222);
-			t.border      = sf::Color(150, 156, 168);
+			t.border      = sf::Color(118, 124, 136);
 			t.labelText   = sf::Color(30, 34, 42);
 			t.sectionText = sf::Color(20, 90, 160);
 			t.noteText    = sf::Color(110, 110, 120);
 			t.editBg      = sf::Color(255, 255, 255);
 			t.statusText  = sf::Color(40, 44, 52);
-			t.btnBg       = sf::Color(70, 120, 190);
+			t.btnBg       = sf::Color(62, 110, 178);
 			t.canvasBg    = sf::Color(220, 222, 228);
 			t.placeholder = sf::Color(200, 202, 210);
 			t.rectOutline = sf::Color(200, 40, 40, 220);
+
+			// Full-widget palette: every renderer property the theme helpers
+			// touch is set, so no TGUI light-theme default can show through.
+			t.editText          = sf::Color(25, 28, 34);
+			t.editTextFocused   = sf::Color(15, 18, 24);
+			t.editCaret         = sf::Color(20, 24, 30);
+			t.editSelectionBg   = sf::Color(60, 110, 180);
+			t.editSelectionText = sf::Color(255, 255, 255);
+			t.editBgHover       = sf::Color(245, 247, 250);
+			t.editBgFocused     = sf::Color(255, 255, 255);
+			t.editBorder        = sf::Color(118, 124, 136);
+			t.editBorderHover   = sf::Color(110, 118, 132);
+			t.editBorderFocused = sf::Color(20, 90, 160);
+			t.buttonText        = sf::Color(250, 251, 253);
+			t.buttonTextHover   = sf::Color(255, 255, 255);
+			t.buttonTextDown    = sf::Color(255, 255, 255);
+			t.buttonBgHover     = sf::Color(60, 108, 172);
+			t.buttonBgDown      = sf::Color(52, 94, 152);
+			t.buttonBorder      = sf::Color(52, 94, 152);
+			t.scrollTrack       = sf::Color(228, 230, 236);
+			t.scrollThumb       = sf::Color(122, 130, 144);
+			t.scrollThumbHover  = sf::Color(104, 112, 128);
+			t.scrollArrow       = sf::Color(60, 64, 72);
+			t.scrollArrowBg     = sf::Color(206, 210, 218);
+			t.checkMark         = sf::Color(255, 255, 255);
 		}
 		else  // dark (default)
 		{
 			t.windowBg    = sf::Color(24, 26, 32);
 			t.panelBg     = sf::Color(28, 31, 38);
 			t.titleBar    = sf::Color(42, 46, 54);
-			t.border      = sf::Color(70, 76, 86);
+			t.border      = sf::Color(100, 108, 122);
 			t.labelText   = sf::Color(210, 216, 224);
 			t.sectionText = sf::Color(120, 170, 230);
 			t.noteText    = sf::Color(140, 140, 150);
@@ -72,6 +97,31 @@ namespace editors
 			t.canvasBg    = sf::Color(32, 35, 42);
 			t.placeholder = sf::Color(50, 54, 62);
 			t.rectOutline = sf::Color(80, 200, 120, 200);
+
+			// Full-widget palette: every renderer property the theme helpers
+			// touch is set, so no TGUI light-theme default can show through.
+			t.editText          = sf::Color(232, 236, 242);
+			t.editTextFocused   = sf::Color(240, 244, 250);
+			t.editCaret         = sf::Color(230, 235, 242);
+			t.editSelectionBg   = sf::Color(70, 110, 170);
+			t.editSelectionText = sf::Color(245, 248, 252);
+			t.editBgHover       = sf::Color(44, 48, 57);
+			t.editBgFocused     = sf::Color(48, 53, 62);
+			t.editBorder        = sf::Color(110, 120, 134);
+			t.editBorderHover   = sf::Color(124, 134, 148);
+			t.editBorderFocused = sf::Color(120, 170, 230);
+			t.buttonText        = sf::Color(238, 242, 248);
+			t.buttonTextHover   = sf::Color(250, 252, 255);
+			t.buttonTextDown    = sf::Color(255, 255, 255);
+			t.buttonBgHover     = sf::Color(60, 108, 164);
+			t.buttonBgDown      = sf::Color(38, 72, 116);
+			t.buttonBorder      = sf::Color(70, 110, 160);
+			t.scrollTrack       = sf::Color(32, 36, 44);
+			t.scrollThumb       = sf::Color(112, 120, 134);
+			t.scrollThumbHover  = sf::Color(136, 144, 158);
+			t.scrollArrow       = sf::Color(200, 206, 214);
+			t.scrollArrowBg     = sf::Color(48, 52, 62);
+			t.checkMark         = sf::Color(245, 248, 252);
 		}
 		return t;
 	}
@@ -89,6 +139,180 @@ namespace editors
 				case OT::PluginDesc::OuterObjPlugin: return "OuterObj";
 				default:                             return "Unknown";
 			}
+		}
+
+		// ---------------------------------------------------------------------
+		// Theme helpers — apply the full palette to each widget renderer.
+		// Nested renderers (list box, scrollbars, dialog buttons) are handed
+		// RendererData built from the same palette, so no property falls back
+		// to a TGUI light-theme default.
+		// ---------------------------------------------------------------------
+		/// Shared button mapping. Applied in place to a widget's renderer (the
+		/// property signals keep the widget's cached values in sync) and to a
+		/// fresh renderer for the nested ButtonRendererData of a MessageBox.
+		void applyButtonMapping(tgui::ButtonRenderer * r, const Theme & th)
+		{
+			r->setBackgroundColor(th.btnBg);
+			r->setBackgroundColorHover(th.buttonBgHover);
+			r->setBackgroundColorDown(th.buttonBgDown);
+			r->setBackgroundColorDownHover(th.buttonBgDown);
+			r->setBackgroundColorDownFocused(th.buttonBgDown);
+			r->setBackgroundColorFocused(th.btnBg);
+			r->setTextColor(th.buttonText);
+			r->setTextColorHover(th.buttonTextHover);
+			r->setTextColorDown(th.buttonTextDown);
+			r->setTextColorDownHover(th.buttonTextDown);
+			r->setTextColorDownFocused(th.buttonTextDown);
+			r->setTextColorFocused(th.buttonText);
+			r->setBorderColor(th.buttonBorder);
+			r->setBorderColorHover(th.buttonBorder);
+			r->setBorderColorFocused(th.buttonBorder);
+			r->setBorderColorDown(th.buttonBorder);
+			r->setBorderColorDownHover(th.buttonBorder);
+			r->setBorderColorDownFocused(th.buttonBorder);
+			r->setBorders({1, 1, 1, 1});
+			r->setRoundedBorderRadius(3);
+		}
+
+		std::shared_ptr<tgui::RendererData> makeButtonRendererData(const Theme & th)
+		{
+			auto r = std::make_shared<tgui::ButtonRenderer>();
+			applyButtonMapping(r.get(), th);
+			return r->getData();
+		}
+
+		std::shared_ptr<tgui::RendererData> makeScrollbarRendererData(const Theme & th)
+		{
+			tgui::ScrollbarRenderer r;
+			r.setTrackColor(th.scrollTrack);
+			r.setTrackColorHover(th.scrollTrack);
+			r.setThumbColor(th.scrollThumb);
+			r.setThumbColorHover(th.scrollThumbHover);
+			r.setArrowBackgroundColor(th.scrollArrowBg);
+			r.setArrowBackgroundColorHover(th.scrollArrowBg);
+			r.setArrowColor(th.scrollArrow);
+			r.setArrowColorHover(th.scrollArrow);
+			return r.getData();
+		}
+
+		std::shared_ptr<tgui::RendererData> makeListBoxRendererData(const Theme & th)
+		{
+			tgui::ListBoxRenderer r;
+			r.setBackgroundColor(th.editBg);
+			r.setBackgroundColorHover(th.editBgHover);
+			r.setTextColor(th.editText);
+			r.setTextColorHover(th.editText);
+			r.setSelectedBackgroundColor(th.editSelectionBg);
+			r.setSelectedBackgroundColorHover(th.editSelectionBg);
+			r.setSelectedTextColor(th.editSelectionText);
+			r.setSelectedTextColorHover(th.editSelectionText);
+			r.setBorderColor(th.editBorder);
+			r.setBorders({1, 1, 1, 1});
+			r.setScrollbar(makeScrollbarRendererData(th));
+			return r.getData();
+		}
+
+		/// MenuBar — also covers its popup menus, which share this renderer.
+		void applyMenuTheme(tgui::MenuBar::Ptr menu, const Theme & th)
+		{
+			auto * r = menu->getRenderer();
+			r->setBackgroundColor(th.titleBar);
+			r->setTextColor(th.labelText);
+			r->setSelectedBackgroundColor(th.btnBg);
+			r->setSelectedTextColor(th.buttonText);
+			r->setSeparatorColor(th.border);
+		}
+
+		/// ChildWindow chrome only: geometry (borders, title-bar height, client
+		/// size) stays at the call site.
+		void applyChildWindowTheme(tgui::ChildWindow::Ptr w, const Theme & th, const sf::Color & clientBg)
+		{
+			auto * r = w->getRenderer();
+			r->setBackgroundColor(clientBg);
+			r->setTitleBarColor(th.titleBar);
+			r->setBorderColor(th.border);
+			r->setBorderColorFocused(th.editBorderFocused);
+			r->setTitleColor(th.labelText);
+		}
+
+		void applyEditBoxTheme(tgui::EditBox::Ptr e, const Theme & th)
+		{
+			auto * r = e->getRenderer();
+			r->setBackgroundColor(th.editBg);
+			r->setBackgroundColorHover(th.editBgHover);
+			r->setBackgroundColorFocused(th.editBgFocused);
+			r->setTextColor(th.editText);
+			r->setTextColorFocused(th.editTextFocused);
+			r->setCaretColor(th.editCaret);
+			r->setCaretColorHover(th.editCaret);
+			r->setSelectedTextColor(th.editSelectionText);
+			r->setSelectedTextBackgroundColor(th.editSelectionBg);
+			r->setBorderColor(th.editBorder);
+			r->setBorderColorHover(th.editBorderHover);
+			r->setBorderColorFocused(th.editBorderFocused);
+			r->setBorders({1, 1, 1, 1});
+			r->setRoundedBorderRadius(3);
+		}
+
+		void applyComboBoxTheme(tgui::ComboBox::Ptr c, const Theme & th)
+		{
+			auto * r = c->getRenderer();
+			r->setBackgroundColor(th.editBg);
+			r->setBorderColor(th.editBorder);
+			r->setTextColor(th.editText);
+			r->setDefaultTextColor(th.noteText);
+			r->setArrowColor(th.labelText);
+			r->setArrowColorHover(th.labelText);
+			r->setArrowBackgroundColor(th.editBg);
+			r->setArrowBackgroundColorHover(th.editBgHover);
+			r->setListBox(makeListBoxRendererData(th));
+		}
+
+		/// CheckBox and RadioButton share the RadioButtonRenderer properties.
+		void applyCheckBoxTheme(tgui::CheckBox::Ptr c, const Theme & th)
+		{
+			auto * r = c->getRenderer();
+			r->setTextColor(th.labelText);
+			r->setTextColorHover(th.labelText);
+			r->setTextColorChecked(th.labelText);
+			r->setTextColorCheckedHover(th.labelText);
+			r->setBackgroundColor(th.editBg);
+			r->setBackgroundColorHover(th.editBgHover);
+			r->setBackgroundColorChecked(th.btnBg);
+			r->setBackgroundColorCheckedHover(th.buttonBgHover);
+			r->setBorderColor(th.editBorder);
+			r->setBorderColorHover(th.editBorder);
+			r->setBorderColorChecked(th.editBorder);
+			r->setBorderColorCheckedHover(th.editBorder);
+			r->setBorderColorFocused(th.editBorderFocused);
+			r->setBorderColorCheckedFocused(th.editBorderFocused);
+			r->setCheckColor(th.checkMark);
+			r->setCheckColorHover(th.checkMark);
+		}
+
+		/// Button — in-place mapping so TGUI's cached renderer values stay in sync.
+		void applyButtonTheme(tgui::Button::Ptr b, const Theme & th)
+		{
+			applyButtonMapping(b->getRenderer(), th);
+		}
+
+		/// ScrollablePanel — only the scrollbars; the call site keeps deciding
+		/// the panel background (the inspector uses Transparent).
+		void applyScrollablePanelTheme(tgui::ScrollablePanel::Ptr p, const Theme & th)
+		{
+			p->getRenderer()->setScrollbar(makeScrollbarRendererData(th));
+		}
+
+		void applyMessageBoxTheme(tgui::MessageBox::Ptr m, const Theme & th)
+		{
+			auto * r = m->getRenderer();
+			r->setBackgroundColor(th.panelBg);
+			r->setTitleBarColor(th.titleBar);
+			r->setBorderColor(th.border);
+			r->setBorderColorFocused(th.editBorderFocused);
+			r->setTitleColor(th.labelText);
+			r->setTextColor(th.labelText);
+			r->setButton(makeButtonRendererData(th));
 		}
 
 		/// Helper to build a labeled EditBox row inside a vertical container.
@@ -118,7 +342,7 @@ namespace editors
 			edit->setSize(w * s, 24 * s);
 			edit->setTextSize(int(14 * s));
 			edit->setText(def);
-			edit->getRenderer()->setBackgroundColor(Theme::active().editBg);
+			applyEditBoxTheme(edit, Theme::active());
 			panel->add(edit);
 			return edit;
 		}
@@ -246,12 +470,7 @@ namespace editors
 			else if (item == "Quit") confirmThen([this] { window.close(); });
 		});
 		// Theme the menu bar (its default renderer is dark regardless of theme).
-		{
-			auto r = menu->getRenderer();
-			r->setBackgroundColor(Theme::active().titleBar);
-			r->setTextColor(Theme::active().labelText);
-			r->setSelectedBackgroundColor(Theme::active().btnBg);
-		}
+		applyMenuTheme(menu, Theme::active());
 		gui.add(menu);
 
 		// --- Inspector panel (left) ---
@@ -264,16 +483,15 @@ namespace editors
 		inspector->setTitleButtons(tgui::ChildWindow::TitleButton::None);
 		inspector->setPosition({0, panelY});
 		inspector->setClientSize({340 * s, 700 * s});
+		applyChildWindowTheme(inspector, th, th.panelBg);
 		{
 			auto r = inspector->getRenderer();
-			r->setBackgroundColor(th.panelBg);
-			r->setTitleBarColor(th.titleBar);
-			r->setBorderColor(th.border);
 			r->setBorders(1);
 			r->setTitleBarHeight(int(22 * s));
 		}
 		auto panel = tgui::ScrollablePanel::create();
 		panel->getRenderer()->setBackgroundColor(sf::Color::Transparent);
+		applyScrollablePanelTheme(panel, Theme::active());
 		panel->setPosition({4 * s, 4 * s});
 		panel->setSize({324 * s, 660 * s});
 		// Content is taller than the viewport (16+ fields × 48px); the panel scrolls.
@@ -377,11 +595,9 @@ namespace editors
 		previewWindow->setTitleButtons(tgui::ChildWindow::TitleButton::None);
 		previewWindow->setPosition({344 * s, panelY});
 		previewWindow->setClientSize({768 * s, 700 * s});
+		applyChildWindowTheme(previewWindow, th, th.windowBg);
 		{
 			auto r = previewWindow->getRenderer();
-			r->setBackgroundColor(th.windowBg);
-			r->setTitleBarColor(th.titleBar);
-			r->setBorderColor(th.border);
 			r->setBorders(1);
 			r->setTitleBarHeight(int(22 * s));
 		}
@@ -400,6 +616,7 @@ namespace editors
 			if (shownSheet < 0) shownSheet = 1;
 			renderPreview();
 		});
+		applyComboBoxTheme(sheetSelector, Theme::active());
 		previewWindow->add(sheetSelector);
 
 		showRectsCheck = tgui::CheckBox::create("Overlay OBJMAP rects");
@@ -407,6 +624,7 @@ namespace editors
 		showRectsCheck->setTextSize(int(14 * s));
 		showRectsCheck->setChecked(true);
 		showRectsCheck->onChange([this](bool) { renderPreview(); });
+		applyCheckBoxTheme(showRectsCheck, Theme::active());
 		previewWindow->add(showRectsCheck);
 
 		// Asset operation buttons (act on the currently-shown sheet).
@@ -415,7 +633,7 @@ namespace editors
 			b->setPosition({bx * s, 3 * s});
 			b->setSize({110 * s, 28 * s});
 			b->setTextSize(int(14 * s));
-			b->getRenderer()->setBackgroundColor(th.btnBg);
+			applyButtonTheme(b, Theme::active());
 			previewWindow->add(b);
 			return b;
 		};
@@ -780,6 +998,7 @@ namespace editors
 		confirmBox = tgui::MessageBox::create("Unsaved changes",
 		                                      "Save changes before continuing?",
 		                                      {"Save", "Discard", "Cancel"});
+		applyMessageBoxTheme(confirmBox, Theme::active());
 		confirmBox->setPosition({"(parent.width - width) / 2",
 		                         "(parent.height - height) / 2"});
 		gui.add(confirmBox);
