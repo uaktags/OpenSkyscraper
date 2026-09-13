@@ -35,44 +35,19 @@ MapNode* GameMap::addNode(const MapNode::Point &p, Item::Item *item) {
 		f->position.y = p.y;
 	} else f = floorNodes[p.y];
 
-	if(!item->canHaulPeople()) return f; // Building item, do not add into transport map
-
-	MapNode *n;
-	if(gameMap.count(p) == 0) {
-		n = new MapNode(f);
-		gameMap[p] = n;
-		n->position = p;
-
-		// Just insert node if list is empty
-		if(mapNodesByFloor[p.y].empty()) mapNodesByFloor[p.y].push_back(n);
-		else {
-			// Look for nearby nodes on same floor to insert
-			MapNode *left = NULL;
-			MapNode *right = NULL;
-			for(std::list<MapNode *>::iterator i = mapNodesByFloor[p.y].begin(); i != mapNodesByFloor[p.y].end(); i++) {
-				MapNode *node = *i;
-				if(node->position.x <= p.x) left = node;
-				else {
-					right = node;
-					mapNodesByFloor[p.y].insert(i, n);
-					break;
-				}
-			}
-
-			if(left) {
-				if(!right) mapNodesByFloor[p.y].push_back(n); // Insert node as last node in list
-				n->neighbours[MapNode::LEFT] = left;
-				left->neighbours[MapNode::RIGHT] = n;
-			} 
-		
-			if(right) {
-				n->neighbours[MapNode::RIGHT] = right;
-				right->neighbours[MapNode::LEFT] = n;
-			}
-		}
-	} else {
-		n = gameMap[p];
+	if(!item->canHaulPeople()) {
+		// Multi-story lobby: the atrium is open inside, so every floor the
+		// lobby covers is a first-class pedestrian floor (OpenSkyWeb
+		// ISSUE-006). The lobby never hauls people itself, but its vertical
+		// links let pedestrians walk from the ground entrance up to
+		// mezzanine elevator doors; MapSearchNode prices the hop in its
+		// lobby branch.
+		if(item->isLobby() && item->size.y > 1 && p.y == item->position.y)
+			linkLobbyAtrium(p, item);
+		return f; // Building item, do not add into transport map
 	}
+
+	MapNode *n = ensureNode(p);
 
 	if(item->isStairlike() && p.y == item->position.y) {
 		// If stairlike, automatically create pair node above and link accordingly.
@@ -141,9 +116,135 @@ MapNode* GameMap::addNode(const MapNode::Point &p, Item::Item *item) {
 	return n;
 }
 
+/// Creates the node at p if missing, wiring it into its floor's node list
+/// with LEFT/RIGHT links to its new neighbours.
+MapNode *GameMap::ensureNode(const MapNode::Point &p) {
+	if(floorNodes.count(p.y) == 0) {
+		FloorNode *f = new FloorNode(&mapNodesByFloor[p.y]);
+		floorNodes[p.y] = f;
+		f->position.x = INT_MIN;
+		f->position.y = p.y;
+	}
+
+
+	MapNode *n;
+	if(gameMap.count(p) == 0) {
+		n = new MapNode(floorNodes[p.y]);
+		gameMap[p] = n;
+		n->position = p;
+
+		// Just insert node if list is empty
+		if(mapNodesByFloor[p.y].empty()) mapNodesByFloor[p.y].push_back(n);
+		else {
+			// Look for nearby nodes on same floor to insert
+			MapNode *left = NULL;
+			MapNode *right = NULL;
+			for(std::list<MapNode *>::iterator i = mapNodesByFloor[p.y].begin(); i != mapNodesByFloor[p.y].end(); i++) {
+				MapNode *node = *i;
+				if(node->position.x <= p.x) left = node;
+				else {
+					right = node;
+					mapNodesByFloor[p.y].insert(i, n);
+					break;
+				}
+			}
+
+
+
+			if(left) {
+				if(!right) mapNodesByFloor[p.y].push_back(n); // Insert node as last node in list
+				n->neighbours[MapNode::LEFT] = left;
+				left->neighbours[MapNode::RIGHT] = n;
+			}
+
+
+			if(right) {
+				n->neighbours[MapNode::RIGHT] = right;
+				right->neighbours[MapNode::LEFT] = n;
+			}
+		}
+
+
+	} else {
+		n = gameMap[p];
+	}
+
+	return n;
+}
+
+/// Links a multi-story lobby's entrance node to every extension floor the
+/// lobby covers, turning those floors into first-class pedestrian (and thus
+/// elevator pickup) floors (OpenSkyWeb ISSUE-006).
+void GameMap::linkLobbyAtrium(const MapNode::Point &p, Item::Item *lobby) {
+	MapNode *lower = ensureNode(p);
+	for(int y = p.y + 1; y < lobby->position.y + lobby->size.y; y++) {
+		MapNode *upper = ensureNode(MapNode::Point(p.x, y));
+		lower->neighbours[MapNode::UP] = upper;
+		lower->transportItems[MapNode::UP] = lobby;
+		upper->neighbours[MapNode::DOWN] = lower;
+		upper->transportItems[MapNode::DOWN] = lobby;
+		lower = upper;
+	}
+
+}
+
+/// Removes the atrium links of a multi-story lobby and drops extension
+/// nodes that no other transport item still uses.
+void GameMap::unlinkLobbyAtrium(const MapNode::Point &p, Item::Item *lobby) {
+	if(gameMap.count(p) == 0) return;
+	MapNode *entrance = gameMap[p];
+	MapNode *chain = entrance->neighbours[MapNode::UP];
+	entrance->neighbours[MapNode::UP] = NULL;
+	entrance->transportItems[MapNode::UP] = NULL;
+	while(chain) {
+		MapNode *next = chain->neighbours[MapNode::UP];
+		if(chain->transportItems[MapNode::DOWN] == lobby) {
+			chain->neighbours[MapNode::DOWN] = NULL;
+			chain->transportItems[MapNode::DOWN] = NULL;
+		}
+
+		if(chain->transportItems[MapNode::UP] == lobby) {
+			chain->neighbours[MapNode::UP] = NULL;
+			chain->transportItems[MapNode::UP] = NULL;
+		}
+
+
+		// Drop the extension node unless another transport still uses it.
+		if(!chain->hasElevator && !chain->hasServiceElevator
+		   && !chain->transportItems[MapNode::UP] && !chain->transportItems[MapNode::DOWN]) {
+			if(chain->neighbours[MapNode::LEFT])
+				chain->neighbours[MapNode::LEFT]->neighbours[MapNode::RIGHT] = chain->neighbours[MapNode::RIGHT];
+			if(chain->neighbours[MapNode::RIGHT])
+				chain->neighbours[MapNode::RIGHT]->neighbours[MapNode::LEFT] = chain->neighbours[MapNode::LEFT];
+			gameMap.erase(chain->position);
+			for(std::list<MapNode *>::iterator i = mapNodesByFloor[chain->position.y].begin(); i != mapNodesByFloor[chain->position.y].end(); i++) {
+				if(*i == chain) {
+					mapNodesByFloor[chain->position.y].erase(i);
+					break;
+				}
+			}
+
+
+			delete chain;
+		}
+
+		chain = next;
+	}
+
+}
+
 void GameMap::removeNode(const MapNode::Point &p, Item::Item *item) {
 	if(!item) return;
-	if(!item->canHaulPeople() || gameMap.count(p) == 0) return;
+	if(!item->canHaulPeople()) {
+		// Multi-story lobby: tear down the atrium chain above the entrance
+		// floor. (The lobby hauls no one itself; only its vertical links
+		// live in the transport map.)
+		if(item->isLobby() && item->size.y > 1 && p.y == item->position.y)
+			unlinkLobbyAtrium(p, item);
+		return;
+	}
+
+	if(gameMap.count(p) == 0) return;
 	MapNode *n = gameMap[p];
 	//LOG(DEBUG, "Removing node %s at %dx%d", item->desc().c_str(), p.x, p.y);
 

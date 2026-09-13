@@ -61,6 +61,7 @@ void PathFinder::buildRoute(Route &r, Item::Item *start_item, Item::Item *end_it
 		r.add(start_item, start_node->mapNode->position.y);
 		r.add(end_item, end_node->mapNode->position.y);
 	}
+
 	else {
 		MapSearchNode *n = start_node;
 		MapSearchNode *n_child;
@@ -71,8 +72,12 @@ void PathFinder::buildRoute(Route &r, Item::Item *start_item, Item::Item *end_it
 			Item::Item *i = n_child->parent_item;
 			if(i) {
 				int toFloor;
-				if(i->canHaulPeople()) toFloor = n_child->mapNode->position.y;
-				else				   toFloor = n->mapNode->position.y;
+				// A multi-story lobby is a walkable atrium: its route node must
+				// keep the hop's destination floor so journeys can cross the
+				// lobby's extension floors (the lobby itself advances the
+				// pedestrian). Other non-hauling items keep the legacy floor.
+				if(i->canHaulPeople() || i->isLobby()) toFloor = n_child->mapNode->position.y;
+				else				                   toFloor = n->mapNode->position.y;
 
 				Route::Node &rn_prev = r.nodes.back();
 				if(i->isElevator() && rn_prev.item->isElevator() && i == rn_prev.item) {
@@ -80,9 +85,11 @@ void PathFinder::buildRoute(Route &r, Item::Item *start_item, Item::Item *end_it
 					rn_prev.toFloor = toFloor;
 				} else r.add(i, toFloor);
 			}
+
 			n = n_child;
 		};
 		r.add(end_item, n->mapNode->position.y);
 	}
+
 	r.updateScore((int)std::abs(end_node->g + end_node->h));
 }

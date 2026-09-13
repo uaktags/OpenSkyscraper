@@ -33,6 +33,38 @@ void Lobby::init()
 	updateSprite();
 }
 
+const static double kAtriumWalkTime = 1.5;
+
+void Lobby::addPerson(Person *p)
+{
+	transitionTimes[p] = 0;
+	Item::addPerson(p);
+}
+
+void Lobby::removePerson(Person *p)
+{
+	transitionTimes.erase(p);
+	Item::removePerson(p);
+}
+
+void Lobby::advance(double dt)
+{
+	Item::advance(dt);
+	// The atrium is open: a pedestrian whose journey crosses the lobby takes
+	// a short walk per floor it covers (mirrors Stairlike's transition) and
+	// then continues at the next route node - typically boarding an elevator
+	// on a lobby extension floor.
+	double dta = game->time.dta / Time::kBaseSpeed;
+	for (People::iterator ip = people.begin(); ip != people.end();)
+	{
+		Person *p = *(ip++);
+		if (p->journey.item != this) continue;
+		if ((transitionTimes[p] += dta) < kAtriumWalkTime) continue;
+		transitionTimes.erase(p);
+		p->journey.next();
+	}
+}
+
 void Lobby::encodeXML(tinyxml2::XMLPrinter &xml)
 {
 	Item::encodeXML(xml);

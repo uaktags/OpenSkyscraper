@@ -1,7 +1,7 @@
 #pragma once
+#include <map>
 #include "../Sprite.h"
 #include "Item.h"
-
 namespace OT {
 	namespace Item {
 		class Lobby : public Item
@@ -18,6 +18,7 @@ namespace OT {
 			virtual ~Lobby();
 
 			virtual void init();
+			virtual void advance(double dt);
 
 			virtual void encodeXML(tinyxml2::XMLPrinter & xml);
 			virtual void decodeXML(tinyxml2::XMLElement & xml);
@@ -26,9 +27,14 @@ namespace OT {
 			Sprite overlay;
 			Sprite entrances[2];
 			void updateSprite();
-
 			virtual void render(sf::RenderTarget & target) const;
+			virtual void addPerson(Person * p);
+			virtual void removePerson(Person * p);
+			virtual bool isLobby() const override { return true; }
 			virtual int dailyMaintenanceCost() const override { return size.x * 20; }
+
+			/// Per-person atrium walk timer (see advance); mirrors Stairlike.
+			std::map<Person *, double> transitionTimes;
 		};
 	}
 }

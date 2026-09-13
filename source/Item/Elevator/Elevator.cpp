@@ -368,6 +368,7 @@ void Elevator::addPerson(Person *p)
 {
 	Item::addPerson(p);
 	Direction dir = (p->journey.toFloor > p->journey.fromFloor ? kUp : kDown);
+	LOG(DEBUG, "person %p queues at elevator floor %i (%s)", (void *)p, p->journey.fromFloor, dir == kUp ? "up" : "down");
 	getQueue(p->journey.fromFloor, dir)->addPerson(p);
 }
 
