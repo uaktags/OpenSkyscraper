@@ -57,8 +57,12 @@ MapNode* GameMap::addNode(const MapNode::Point &p, Item::Item *item) {
 		// position.y + size.y - 1 (intermediate floors are skipped, matching
 		// the original game where a spiral stair is one continuous spiral).
 		const int upper_y = p.y + item->size.y - 1;
-		assert(n->neighbours[MapNode::UP] == NULL);
-		assert(n->transportItems[MapNode::UP] == NULL);
+		// A multi-story lobby's atrium links every column it covers, so a
+		// stair placed inside the lobby starts on an already-linked node.
+		// The stair supersedes the atrium hop at its own tile (OpenSkyWeb
+		// gamemap.js resolves the overlap the same way: last writer wins).
+		assert(n->transportItems[MapNode::UP] == NULL ||
+		       (n->transportItems[MapNode::UP]->isLobby() && n->transportItems[MapNode::UP]->size.y > 1));
 		MapNode *n_upper = addNode(MapNode::Point(p.x, upper_y), item);
 
 		n->neighbours[MapNode::UP] = n_upper;

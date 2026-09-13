@@ -601,3 +601,21 @@ walking animation, wedding processions, fireworks particle effects.
   stands on), so dragging e.g. an office upward past the current roof now
   previews/validates instead of going red. Obstructed cells still break the
   chain; downward drags into unsupported space stay blocked.
+- [FIX 2026-09-13] **Spiral stairs now span the full lobby height** — the
+  first-party `data/bitmaps/stairs/spiral_2.png` / `spiral_3.png` sheets were
+  64x60 / 64x96 frames (YootTower t2p extraction proportions, then reproduced
+  by the OpenSkyAssets Blender dioramas), while the engine anchors stair
+  sprites bottom-edge to the entry floor line and needs one 36 px floor pitch
+  per story (64x72 / 64x108, matching the EXE-built sheets from the 8fe9/8fea
+  64x36 slots). Spirals visually stopped ~2/3 up their lobby. Rebuilt both
+  Blender dioramas at 4.5 BU/story (landing surfaces flush with the sprite
+  edges, full-height column), re-rendered, and reinstalled 704x72 / 704x108
+  sheets. Files: data/bitmaps/stairs/spiral_2.png, spiral_3.png (regenerated
+  from OpenSkyAssets assets/stairs; see its LATEST.md).
+- [FIX 2026-09-13] **Debug assert when placing stairs inside a multi-story
+  lobby** — the lobby atrium links (b15db18) claim every covered column's UP
+  link, so GameMap::addNode's `neighbours[UP] == NULL` assert fired for a
+  legitimate stair placement. A stair now supersedes the atrium hop at its own
+  tile, mirroring OpenSkyWeb gamemap.js last-writer-wins. Known follow-up:
+  on save load, a lobby encoded AFTER its stair still overwrites the stair's
+  link silently (both repos), leaving that stair unhaukable until re-placed.
