@@ -3,11 +3,11 @@
 """Generate strategy-guide .tower saves (1..5 stars) for OpenSkyscraper.
 
 Encodes the classic SimTower strategy into our native XML save format:
-  - offices NEVER get standard-elevator service (stairs up from the lobby only)
+  - offices share the standard elevators (every built floor gets a stop)
   - stair/escalator stacks spread across the built width (<= ~1/2 screen apart)
   - fast food one floor below each sky lobby, escalators up to the lobby
   - 7 condo floors per 15-floor section carry the finances (premium pricing)
-  - standard elevators stop only at lobbies + condo/hotel floors
+  - standard elevators serve every floor of their span (no dead-floor skips)
   - service elevators stop only at ground + hotel floors (housekeeping staff)
   - express elevators stop only at sky lobbies (+ parking on B7 from 4 stars)
   - parking ONLY on B7; metro station at B8..B10 (5 stars)
@@ -184,8 +184,11 @@ class Tower:
             for x in self.express_x:
                 self.elevator("elevator-express", x, bottom, top, stops, cars=6)
 
-        # ---- Standard elevators: lobbies + condo/hotel floors only ----
-        # Section 0 uses 2 shafts (a service elevator takes the third slot),
+        # ---- Standard elevators: every floor of the span ----
+        # Office floors are occupied, not dead, so they get stops too
+        # (Tim's rule: elevators serve every floor the shaft passes that
+        # is not dead). Section 0 uses 2 shafts (a service elevator takes
+        # the third slot),
         # matching the guide's "all 24 shafts used" arithmetic at 5 stars.
         for k in range(seven):
             sky = 15 * k
@@ -194,7 +197,7 @@ class Tower:
                 stops = {sky} | set(condos_top(self.rating, sky, seven))
             else:
                 top = sky + 10 + (3 if self.rating >= 4 else 2)
-                stops = {sky} | set(range(sky + 4, top + 1))
+                stops = set(range(sky, top + 1))
             n = 2 if k == 0 else 3
             for i in range(n):
                 self.elevator("elevator-standard", self.std_x[i], sky, top, stops, cars=2)

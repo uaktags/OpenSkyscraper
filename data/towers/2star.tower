@@ -170,7 +170,7 @@
 <item type="fastfood" x="24" y="-1" evaluation="90.0" variant="1" open="1"/>
 <item type="escalator" x="-80" y="-1" evaluation="90.0"/>
 <item type="escalator" x="52" y="-1" evaluation="90.0"/>
-<item type="elevator-standard" x="60" y="0" evaluation="90.0" height="13" showShaft="1"><unserviced floor="1"/><unserviced floor="2"/><unserviced floor="3"/><car altitude="0.0" homeFloor="0"/><car altitude="4.0" homeFloor="4"/></item>
-<item type="elevator-standard" x="64" y="0" evaluation="90.0" height="13" showShaft="1"><unserviced floor="1"/><unserviced floor="2"/><unserviced floor="3"/><car altitude="0.0" homeFloor="0"/><car altitude="4.0" homeFloor="4"/></item>
+<item type="elevator-standard" x="60" y="0" evaluation="90.0" height="13" showShaft="1"><car altitude="0.0" homeFloor="0"/><car altitude="1.0" homeFloor="1"/></item>
+<item type="elevator-standard" x="64" y="0" evaluation="90.0" height="13" showShaft="1"><car altitude="0.0" homeFloor="0"/><car altitude="1.0" homeFloor="1"/></item>
 <item type="elevator-service" x="76" y="0" evaluation="90.0" height="13" showShaft="1"><unserviced floor="1"/><unserviced floor="2"/><unserviced floor="3"/><unserviced floor="4"/><unserviced floor="5"/><unserviced floor="6"/><unserviced floor="7"/><unserviced floor="8"/><unserviced floor="9"/><unserviced floor="10"/><car altitude="0.0" homeFloor="0"/></item>
 </tower>

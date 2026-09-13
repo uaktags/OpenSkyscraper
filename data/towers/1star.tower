@@ -90,6 +90,6 @@
 <item type="fastfood" x="0" y="-1" evaluation="90.0" variant="2" open="1"/>
 <item type="escalator" x="-40" y="-1" evaluation="90.0"/>
 <item type="escalator" x="21" y="-1" evaluation="90.0"/>
-<item type="elevator-standard" x="21" y="0" evaluation="90.0" height="13" showShaft="1"><unserviced floor="1"/><unserviced floor="2"/><unserviced floor="3"/><car altitude="0.0" homeFloor="0"/><car altitude="4.0" homeFloor="4"/></item>
-<item type="elevator-standard" x="25" y="0" evaluation="90.0" height="13" showShaft="1"><unserviced floor="1"/><unserviced floor="2"/><unserviced floor="3"/><car altitude="0.0" homeFloor="0"/><car altitude="4.0" homeFloor="4"/></item>
+<item type="elevator-standard" x="21" y="0" evaluation="90.0" height="13" showShaft="1"><car altitude="0.0" homeFloor="0"/><car altitude="1.0" homeFloor="1"/></item>
+<item type="elevator-standard" x="25" y="0" evaluation="90.0" height="13" showShaft="1"><car altitude="0.0" homeFloor="0"/><car altitude="1.0" homeFloor="1"/></item>
 </tower>
