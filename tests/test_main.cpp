@@ -1281,9 +1281,9 @@ static void testOspRoundTrip()
     if (isOspPluginDir(tmpDir)) {
         // best-effort wipe of generated files
         std::remove((tmpDir + "/plugin.json").c_str());
-        std::remove((tmpDir + "/sprites/toolbox.png").c_str());
-        std::remove((tmpDir + "/sprites/ingame.png").c_str());
-        std::remove((tmpDir + "/sprites/occupants.png").c_str());
+        std::remove((tmpDir + "/sprites/100.png").c_str());
+        std::remove((tmpDir + "/sprites/1000.png").c_str());
+        std::remove((tmpDir + "/sprites/1100.png").c_str());
         std::remove((tmpDir + "/meta/objmap_100.txt").c_str());
         std::remove((tmpDir + "/meta/objmap_1000.txt").c_str());
     }
@@ -1327,9 +1327,9 @@ static void testOspRoundTrip()
             EXPECT(!r.ok);  // higher version must be rejected
         }
         std::remove((badDir + "/plugin.json").c_str());
-        std::remove((badDir + "/sprites/toolbox.png").c_str());
-        std::remove((badDir + "/sprites/ingame.png").c_str());
-        std::remove((badDir + "/sprites/occupants.png").c_str());
+        std::remove((badDir + "/sprites/100.png").c_str());
+        std::remove((badDir + "/sprites/1000.png").c_str());
+        std::remove((badDir + "/sprites/1100.png").c_str());
         std::remove((badDir + "/meta/objmap_100.txt").c_str());
         std::remove((badDir + "/meta/objmap_1000.txt").c_str());
     }
@@ -1383,12 +1383,158 @@ static void testOspRoundTripMover()
 
     // cleanup
     std::remove((tmpDir + "/plugin.json").c_str());
-    std::remove((tmpDir + "/sprites/toolbox.png").c_str());
-    std::remove((tmpDir + "/sprites/ingame.png").c_str());
-    std::remove((tmpDir + "/sprites/walking.png").c_str());
+    std::remove((tmpDir + "/sprites/100.png").c_str());
+    std::remove((tmpDir + "/sprites/1000.png").c_str());
+    std::remove((tmpDir + "/sprites/200.png").c_str());
     std::remove((tmpDir + "/meta/objmap_100.txt").c_str());
     std::remove((tmpDir + "/meta/objmap_1000.txt").c_str());
     std::remove((tmpDir + "/meta/objmap_200.txt").c_str());
+}
+
+
+// Shipped OpenTower folder plugins use numeric sprite naming
+// (sprites/1000.png) with no manifest relPath. The OSP loader must resolve
+// them via the manifest -> canonical -> numeric fallback chain, so every
+// shipped data/Plugins/OpenTower plugin stays loadable (and editable by the
+// PluginEditor). Dimensions pin the build_opentower_sheets.py calibration.
+static void testOspShippedOpenTower()
+{
+    using namespace OT;
+    OspPlugin condo;
+    const OspResult cr = loadOspPlugin("../data/Plugins/OpenTower/Condo", condo);
+    EXPECT(cr.ok);
+    if (cr.ok) {
+        EXPECT(condo.ingame.present);
+        EXPECT(condo.ingame.relPath == "sprites/1000.png");
+        EXPECT(condo.ingame.image.getSize().x == 640u);
+        EXPECT(condo.ingame.image.getSize().y == 72u);
+        EXPECT(!condo.toolbox.present);  // shipped Condo has no toolbox sheet
+    }
+
+    OspPlugin office;
+    const OspResult orr = loadOspPlugin("../data/Plugins/OpenTower/Office", office);
+    EXPECT(orr.ok);
+    if (orr.ok) {
+        EXPECT(office.ingame.present);
+        EXPECT(office.ingame.relPath == "sprites/1000.png");
+        EXPECT(office.ingame.image.getSize().x == 144u);
+        EXPECT(office.ingame.image.getSize().y == 168u);
+    }
+}
+
+// Saving a shipped numeric-named plugin must not orphan its sheet: the
+// writer records the resolved relPath in the manifest and writes the pixels
+// back to sprites/1000.png, so the save stays loadable by both the editor
+// and the game (DecompiledPlugin reads sprites/1000.png).
+static void testOspNumericRoundTrip()
+{
+    using namespace OT;
+    OspPlugin condo;
+    const OspResult cr = loadOspPlugin("../data/Plugins/OpenTower/Condo", condo);
+    EXPECT(cr.ok);
+    if (!cr.ok) return;
+
+    const std::string tmpDir = "test_osp_numeric.osp-plugin";
+    // best-effort wipe of a previous run
+    std::remove((tmpDir + "/plugin.json").c_str());
+    std::remove((tmpDir + "/sprites/1000.png").c_str());
+    std::remove((tmpDir + "/sprites/ingame.png").c_str());
+    std::remove((tmpDir + "/meta/objmap_1000.txt").c_str());
+
+    const OspResult sr = saveOspPlugin(tmpDir, condo, true);
+    EXPECT(sr.ok);
+    if (!sr.ok) return;
+
+    // The manifest declares the numeric path inside the ingame entry.
+    {
+        std::ifstream f(tmpDir + "/plugin.json");
+        std::ostringstream ss; ss << f.rdbuf();
+        const std::string json = ss.str();
+        EXPECT(json.find("\"relPath\": \"sprites/1000.png\"") != std::string::npos);
+    }
+
+    OspPlugin reloaded;
+    const OspResult lr = loadOspPlugin(tmpDir, reloaded);
+    EXPECT(lr.ok);
+    if (!lr.ok) return;
+    EXPECT(reloaded.ingame.present);
+    EXPECT(reloaded.ingame.relPath == "sprites/1000.png");
+    EXPECT(reloaded.ingame.image.getSize().x == 640u);
+    EXPECT(reloaded.ingame.image.getSize().y == 72u);
+
+    // cleanup
+    std::remove((tmpDir + "/plugin.json").c_str());
+    std::remove((tmpDir + "/sprites/1000.png").c_str());
+    std::remove((tmpDir + "/meta/objmap_1000.txt").c_str());
+}
+
+// Backwards compatibility: a plugin that still uses the canonical sheet
+// names (sprites/ingame.png) must keep loading — both with the relPath
+// declared in the manifest and via the file-existence fallback when the
+// manifest omits it.
+static void testOspCanonicalSheetNames()
+{
+    using namespace OT;
+    // Hand-crafted doc using the canonical pre-numeric naming.
+    OspPlugin p;
+    p.sourceFormat = "scratch";
+    p.pluginClass = PluginDesc::TenantPlugin;
+    p.attr.valid = true;
+    p.attr.itemType.c[0]='T'; p.attr.itemType.c[1]='E'; p.attr.itemType.c[2]='S'; p.attr.itemType.c[3]='T';
+    p.attr.name = "Canonical";
+    p.ingame.present = true;
+    p.ingame.relPath = "sprites/ingame.png";
+    p.ingame.image = sf::Image({4u, 4u}, sf::Color::Red);
+
+    const std::string tmpDir = "test_osp_canonical.osp-plugin";
+    // best-effort wipe of a previous run
+    std::remove((tmpDir + "/plugin.json").c_str());
+    std::remove((tmpDir + "/sprites/ingame.png").c_str());
+    std::remove((tmpDir + "/sprites/1000.png").c_str());
+    std::remove((tmpDir + "/meta/objmap_1000.txt").c_str());
+
+    const OspResult sr = saveOspPlugin(tmpDir, p, true);
+    EXPECT(sr.ok);
+    if (!sr.ok) return;
+
+    // Declared relPath: the canonical name loads.
+    {
+        OspPlugin reloaded;
+        const OspResult lr = loadOspPlugin(tmpDir, reloaded);
+        EXPECT(lr.ok);
+        if (lr.ok) {
+            EXPECT(reloaded.ingame.present);
+            EXPECT(reloaded.ingame.relPath == "sprites/ingame.png");
+            EXPECT(reloaded.ingame.image.getSize().x == 4u);
+            EXPECT(reloaded.ingame.image.getSize().y == 4u);
+        }
+    }
+
+    // Undeclared relPath: strip it from the manifest so the loader must
+    // fall back to the canonical name on file existence alone.
+    {
+        std::ifstream rf(tmpDir + "/plugin.json");
+        std::ostringstream rs; rs << rf.rdbuf();
+        std::string json = rs.str();
+        const std::string needle = "\"relPath\": \"sprites/ingame.png\", ";
+        const size_t at = json.find(needle);
+        EXPECT(at != std::string::npos);
+        if (at != std::string::npos) json.erase(at, needle.size());
+        std::ofstream(tmpDir + "/plugin.json", std::ios::trunc) << json;
+
+        OspPlugin reloaded;
+        const OspResult lr = loadOspPlugin(tmpDir, reloaded);
+        EXPECT(lr.ok);
+        if (lr.ok) {
+            EXPECT(reloaded.ingame.present);
+            EXPECT(reloaded.ingame.relPath == "sprites/ingame.png");
+        }
+    }
+
+    // cleanup
+    std::remove((tmpDir + "/plugin.json").c_str());
+    std::remove((tmpDir + "/sprites/ingame.png").c_str());
+    std::remove((tmpDir + "/meta/objmap_1000.txt").c_str());
 }
 
 
@@ -1660,6 +1806,9 @@ int main()
 	testObjmapRoundTrip();
 	testOspRoundTrip();
 	testOspRoundTripMover();
+	testOspShippedOpenTower();
+	testOspNumericRoundTrip();
+	testOspCanonicalSheetNames();
     if (g_failures > 0)
     {
         std::cerr << g_failures << " test(s) failed\n";

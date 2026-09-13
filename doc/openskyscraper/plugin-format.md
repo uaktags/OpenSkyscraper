@@ -25,18 +25,24 @@ can be re-saved.
 Name.osp-plugin/
   plugin.json            manifest (schema below)
   sprites/
-    toolbox.png          RT_BITMAP 100  — toolbox icon sheet (~26x130)
-    ingame.png           RT_BITMAP 1000 — primary sprite sheet
-    occupants.png        RT_BITMAP 1100 — people animation (Tenant, optional)
-    walking.png          RT_BITMAP 200  — mover walking-frame SHIL (Mover, optional)
+    100.png              RT_BITMAP 100  — toolbox icon sheet (~26x130)
+    1000.png             RT_BITMAP 1000 — primary sprite sheet
+    1100.png             RT_BITMAP 1100 — people animation (Tenant, optional)
+    200.png              RT_BITMAP 200  — mover walking-frame SHIL (Mover, optional)
   meta/
     objmap_100.txt       toolbox-icon rects (OBJMAP grammar; see objmap-format.md)
     objmap_1000.txt      primary sprite rects
     objmap_200.txt       mover walking-frame rects (Mover plugins only)
 ```
 
+Sheet files are named after their RT_BITMAP id (`100`/`1000`/`1100`/`200`).
+The loader also accepts the long names (`sprites/toolbox.png`,
+`sprites/ingame.png`, `sprites/occupants.png`, `sprites/walking.png`) and
+honors a per-sheet `relPath` in the manifest when present, but the numeric
+names are what the editor writes and what the shipped OpenTower plugins use.
+
 Missing sprite sheets are tolerated: a plugin without occupants simply omits
-`sprites/occupants.png` and its `bitmaps.occupants.present` is `false`.
+`sprites/1100.png` and its `bitmaps.occupants.present` is `false`.
 
 ## `plugin.json` schema
 
@@ -61,9 +67,9 @@ Missing sprite sheets are tolerated: a plugin without occupants simply omits
   "price":     { "basePrice": 50000, "f1": 40, "f2": 10, "f3": 300, "f4": 50, "f5": 100 },
   "transport": { "priceString": "$150000:$50000/car", "quarterlyString": "$12000/Q", "name": "Simple Elevator" },
   "bitmaps": {
-    "toolbox":   { "present": true, "width": 26,  "height": 130, "transparentColor": null,         "maskDiscovery": "none" },
-    "ingame":    { "present": true, "width": 128, "height": 360, "transparentColor": [105,33,104], "maskDiscovery": "manual" },
-    "occupants": { "present": true, "width": 16,  "height": 984, "transparentColor": [255,255,255], "maskDiscovery": "manual" },
+    "toolbox":   { "present": true, "width": 26,  "height": 130, "transparentColor": null,         "maskDiscovery": "none", "relPath": "sprites/100.png" },
+    "ingame":    { "present": true, "width": 128, "height": 360, "transparentColor": [105,33,104], "maskDiscovery": "manual", "relPath": "sprites/1000.png" },
+    "occupants": { "present": true, "width": 16,  "height": 984, "transparentColor": [255,255,255], "maskDiscovery": "manual", "relPath": "sprites/1100.png" },
     "walking":   { "present": false, "width": 0,   "height": 0,   "transparentColor": null,         "maskDiscovery": "none" }
   },
   "spriteLayout": { "toolbox": "meta/objmap_100.txt", "ingame": "meta/objmap_1000.txt", "walking": "meta/objmap_200.txt" }
@@ -83,7 +89,7 @@ Missing sprite sheets are tolerated: a plugin without occupants simply omits
 | `placement` | no | DPDF values; present on placement-driven items, absent on transport. |
 | `price` | no | PLDF values (Tenant shops); `basePrice` is the construction cost. Present on shops, absent on residences/transport. |
 | `transport` | no | MVDF values (Mover plugins): human-readable `priceString` (e.g. `"$150000:$50000/car"`), `quarterlyString` (e.g. `"$12000/Q"`), and `name`. Only the price strings round-trip today; the binary header dwords (capacity/speed) are inferred pending the T2DLL Ghidra pass. |
-| `bitmaps` | yes | Per-sheet dimensions + transparency. `transparentColor` is `null` or `[r,g,b]`. `walking` is present only on Mover plugins. |
+| `bitmaps` | yes | Per-sheet dimensions + transparency. `transparentColor` is `null` or `[r,g,b]`. `relPath` (optional) points at the sheet PNG relative to the plugin dir; the loader falls back to the numeric then canonical names when absent. `walking` is present only on Mover plugins. |
 | `spriteLayout` | yes | Relative paths to the OBJMAP text files under `meta/`. `walking` (`objmap_200.txt`) is present only on Mover plugins. |
 
 ### `maskDiscovery`

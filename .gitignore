@@ -32,6 +32,9 @@ cmake_install.cmake
 /stdout.log
 *.png
 
+# First-party art source sheets under data/bitmaps are tracked assets.
+!data/bitmaps/**/*.png
+
 # OpenTower edition ships its art as committed folder-plugin sprites.
 !data/Plugins/OpenTower/**/*.png
 

@@ -47,7 +47,13 @@ void PartyHall::decodeXML(tinyxml2::XMLElement &xml)
 void PartyHall::updateSprite()
 {
 	spriteNeedsUpdate = false;
-	int index = (open ? 1 : 0);
+	int index = 0;
+	if (open)
+	{
+		// Lit hall; the third frame adds the buffet and stanchions once
+		// visitors have actually arrived.
+		index = people.empty() ? 1 : 2;
+	}
 	sprite.setTextureRect(sf::IntRect({index * 192, 0}, {192, 60}));
 	sprite.setPosition({static_cast<float>(getPositionPixels().x), static_cast<float>(-getPositionPixels().y)});
 }

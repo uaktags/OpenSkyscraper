@@ -225,13 +225,18 @@ namespace
 			return false;
 
 		// ---- RT_BITMAP sheets (sprites/*.png) ----
-		// id 1000 = ingame, 100 = toolbox, 1100 = occupants.
-		// The manifest's spriteLayout maps a logical name to a meta path;
-		// the sprite files themselves follow the RT_BITMAP id convention.
-		loadFileResource(stored_->table, dirStr, "sprites/1000.png", "2", 1000);
-		loadFileResource(stored_->table, dirStr, "sprites/100.png",  "2", 100);
-		loadFileResource(stored_->table, dirStr, "sprites/1100.png", "2", 1100);
-		loadFileResource(stored_->table, dirStr, "sprites/200.png",  "2", 200);
+		// id 1000 = ingame, 100 = toolbox, 1100 = occupants, 200 = walking.
+		// Numeric id names are the shipped convention; hand-made plugins may
+		// use the canonical names (sprites/ingame.png etc.), so fall back to
+		// those only when the numeric file was absent.
+		if (!loadFileResource(stored_->table, dirStr, "sprites/1000.png", "2", 1000))
+			loadFileResource(stored_->table, dirStr, "sprites/ingame.png",    "2", 1000);
+		if (!loadFileResource(stored_->table, dirStr, "sprites/100.png",  "2", 100))
+			loadFileResource(stored_->table, dirStr, "sprites/toolbox.png",   "2", 100);
+		if (!loadFileResource(stored_->table, dirStr, "sprites/1100.png", "2", 1100))
+			loadFileResource(stored_->table, dirStr, "sprites/occupants.png", "2", 1100);
+		if (!loadFileResource(stored_->table, dirStr, "sprites/200.png",  "2", 200))
+			loadFileResource(stored_->table, dirStr, "sprites/walking.png",   "2", 200);
 
 		// ---- OBJMAP frame layouts (meta/objmap_*.txt) ----
 		loadFileResource(stored_->table, dirStr, "meta/objmap_1000.txt", "OBJMAP", 1000);

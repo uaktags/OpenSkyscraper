@@ -13,6 +13,7 @@ MedicalCenter::~MedicalCenter()
 void MedicalCenter::init()
 {
     Item::init();
+    variant = 0;
 
     sprite.SetImage(App->bitmaps.editionTexture("medicalcenter", "simtower/medicalcenter"));
     sprite.setOrigin({0.f, 24.f});
@@ -23,9 +24,21 @@ void MedicalCenter::init()
     updateSprite();
 }
 
+void MedicalCenter::advance(double dt)
+{
+    // Sheet frame 0 is the day interior, frame 1 the night interior; follow
+    // the tower lighting hours (same rule as Condo::updateLighting).
+    int frame = ((game->time.getHour() < 7.0) || (game->time.getHour() > 22.0)) ? 1 : 0;
+    if (frame != variant)
+    {
+        variant = frame;
+        updateSprite();
+    }
+}
+
 void MedicalCenter::updateSprite()
 {
     spriteNeedsUpdate = false;
-    int index = 0;
-    sprite.setTextureRect(sf::IntRect({index*256, variant*24}, {256, 24}));
+    // First-party sheet: two 312x24 frames (day, night).
+    sprite.setTextureRect(sf::IntRect({variant * 312, 0}, {312, 24}));
 }

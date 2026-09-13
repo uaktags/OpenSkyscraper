@@ -18,8 +18,7 @@
 #include <TGUI/Widgets/ChildWindow.hpp>
 #include <TGUI/Widgets/ComboBox.hpp>
 #include <TGUI/Widgets/EditBox.hpp>
-#include <TGUI/Widgets/Label.hpp>
-#include <TGUI/Widgets/MenuBar.hpp>
+#include <TGUI/Widgets/MessageBox.hpp>
 #include <TGUI/Widgets/Panel.hpp>
 #include <TGUI/Widgets/ScrollablePanel.hpp>
 
@@ -154,6 +153,22 @@ namespace editors
 		setStatus("Ready. Use File \u25B8 Open .t2p or Open .osp-plugin to begin.");
 		updateTitle();
 
+		// A document requested on the command line (main() validated the
+		// path kind). Runs after buildUi so the widgets/status exist.
+		if (!cliOpenPath.empty())
+		{
+			const bool isT2p = cliOpenPath.size() >= 4
+				&& cliOpenPath.compare(cliOpenPath.size() - 4, 4, ".t2p") == 0;
+			const bool ok = isT2p ? openT2pPath(cliOpenPath) : openOspPath(cliOpenPath);
+			if (!ok)
+			{
+				setStatus("Failed to open " + cliOpenPath, true);
+				std::cerr << "PluginEditor: failed to open " << cliOpenPath << "\n";
+				// Headless mode must not fake success with a shot of an
+				// empty editor.
+				if (!cliScreenshotPath.empty()) return 1;
+			}
+		}
 		while (window.isOpen())
 		{
 			while (const std::optional event = window.pollEvent())
@@ -176,6 +191,22 @@ namespace editors
 			window.clear(Theme::active().windowBg);
 			gui.draw();
 			window.display();
+
+			// Headless capture (--screenshot): the first fully rendered frame
+			// is the proof that the document loaded and drew; save it and
+			// exit (mirrors the game's startup frame capture).
+			if (!cliScreenshotPath.empty())
+			{
+				sf::Texture frame(window.getSize());
+				frame.update(window);
+				if (!frame.copyToImage().saveToFile(cliScreenshotPath))
+				{
+					std::cerr << "PluginEditor: unable to save frame capture to "
+					          << cliScreenshotPath << "\n";
+					return 1;
+				}
+				return 0;
+			}
 		}
 		return 0;
 	}
@@ -196,18 +227,23 @@ namespace editors
 		menu->addMenuItem("Save");
 		menu->addMenuItem("Save As...");
 		menu->addMenuItem("-");
+		menu->addMenuItem("Close");
 		menu->addMenuItem("Quit");
 		menu->addMenu("Plugin");
 		menu->addMenuItem("Convert (t2p \u2192 osp)");
 		menu->onMenuItemClick([this](const std::vector<tgui::String> & items) {
 			const auto & item = items.back();
-			if (item == "New Tenant...") newTenant();
-			else if (item == "Open .t2p...") actionOpenT2p();
-			else if (item == "Open .osp-plugin...") actionOpenOsp();
+			// Destructive/navigation actions go through the unsaved-changes
+			// guard first; the pending action only runs after a clean
+			// Save, an explicit Discard, or when nothing is dirty.
+			if (item == "New Tenant...") confirmThen([this] { newTenant(); });
+			else if (item == "Open .t2p...") confirmThen([this] { actionOpenT2p(); });
+			else if (item == "Open .osp-plugin...") confirmThen([this] { actionOpenOsp(); });
 			else if (item == "Save") actionSave();
 			else if (item == "Save As...") actionSaveAs();
 			else if (item == "Convert (t2p \u2192 osp)") actionConvert();
-			else if (item == "Quit") window.close();
+			else if (item == "Close") confirmThen([this] { closeDoc(); });
+			else if (item == "Quit") confirmThen([this] { window.close(); });
 		});
 		// Theme the menu bar (its default renderer is dark regardless of theme).
 		{
@@ -316,6 +352,22 @@ namespace editors
 			"MVDF recurring maintenance, e.g. \"$12000/Q\"."); y += 48;
 		transportPriceEdit->setVisible(false);
 		transportQuarterlyEdit->setVisible(false);
+
+		// Any inspector edit marks the doc dirty — this is what engages the
+		// unsaved-changes guard after field edits. refreshFromDoc() pushes
+		// doc values through the same signal, so it suppresses the flag.
+		auto wireDirty = [this](tgui::EditBox::Ptr e) {
+			e->onTextChange([this] {
+				if (!refreshingFields) { dirty = true; updateTitle(); }
+			});
+		};
+		wireDirty(itemTypeEdit); wireDirty(nameEdit); wireDirty(gameLevelEdit);
+		wireDirty(idEdit); wireDirty(markerEdit);
+		wireDirty(placeWEdit); wireDirty(placeHEdit);
+		wireDirty(placeBaseXEdit); wireDirty(placeBaseYEdit);
+		wireDirty(priceBaseEdit); wireDirty(priceF1Edit); wireDirty(priceF2Edit);
+		wireDirty(priceF3Edit); wireDirty(priceF4Edit); wireDirty(priceF5Edit);
+		wireDirty(transportPriceEdit); wireDirty(transportQuarterlyEdit);
 
 		gui.add(inspector);
 
@@ -432,6 +484,9 @@ namespace editors
 	void EditorApp::refreshFromDoc()
 	{
 		if (!doc) return;
+		// Mirroring doc values into the fields fires onTextChange; keep the
+		// dirty flag out of it so opening a document doesn't count as editing.
+		refreshingFields = true;
 		const OT::OspPlugin & p = *doc;
 		itemTypeEdit->setText(p.attr.itemType.str());
 		// Annotate the Type code with the catalog lookup so an author sees the
@@ -470,6 +525,7 @@ namespace editors
 		if (transportHeader)    transportHeader->setVisible(isMover);
 		if (transportPriceEdit)    { transportPriceEdit->setVisible(isMover);    transportPriceEdit->setText(p.transport.priceString); }
 		if (transportQuarterlyEdit){ transportQuarterlyEdit->setVisible(isMover); transportQuarterlyEdit->setText(p.transport.quarterlyString); }
+		refreshingFields = false;
 	}
 
 	void EditorApp::pullFromInspector()
@@ -577,16 +633,20 @@ namespace editors
 		std::string path;
 		Result r = OT::NativeFileDialog::openPluginFile("Open YootTower plugin (.t2p)", path);
 		if (r != Result::Selected) { if (r == Result::Unavailable) setStatus("No file dialog available.", true); return; }
+		openT2pPath(path);
+	}
 
+	bool EditorApp::openT2pPath(const std::string & path)
+	{
 		OT::Plugin plugin(OT::Path(path).name(), OT::Path(path));
 		if (!plugin.ensureLoaded())
 		{
 			setStatus("Failed to load PE: " + path, true);
-			return;
+			return false;
 		}
 		OT::OspPlugin p;
 		OT::OspResult cr = OT::convertT2pToOsp(plugin, p);
-		if (!cr.ok) { setStatus("Convert failed: " + cr.message, true); return; }
+		if (!cr.ok) { setStatus("Convert failed: " + cr.message, true); return false; }
 
 		doc = std::move(p);
 		loadedFromPath.clear();   // converted from t2p — Save needs Save As first
@@ -596,6 +656,7 @@ namespace editors
 		renderPreview();
 		setStatus("Loaded " + path + " (read-only source). Use Save As to write an .osp-plugin.");
 		updateTitle();
+		return true;
 	}
 
 	void EditorApp::actionOpenOsp()
@@ -603,10 +664,14 @@ namespace editors
 		std::string path;
 		Result r = OT::NativeFileDialog::openDirectory("Open OpenSkyscraper plugin directory", path);
 		if (r != Result::Selected) { if (r == Result::Unavailable) setStatus("No directory dialog available.", true); return; }
+		openOspPath(path);
+	}
 
+	bool EditorApp::openOspPath(const std::string & path)
+	{
 		OT::OspPlugin p;
 		OT::OspResult lr = OT::loadOspPlugin(path, p);
-		if (!lr.ok) { setStatus("Open failed: " + lr.message, true); return; }
+		if (!lr.ok) { setStatus("Open failed: " + lr.message, true); return false; }
 
 		doc = std::move(p);
 		loadedFromPath = path;
@@ -616,6 +681,7 @@ namespace editors
 		renderPreview();
 		setStatus("Opened " + path);
 		updateTitle();
+		return true;
 	}
 
 	bool EditorApp::ensureLoadedForSave()
@@ -693,15 +759,58 @@ namespace editors
 		updateTitle();
 	}
 
+	// -----------------------------------------------------------------------
+	// Unsaved-changes guard. Wraps a pending action: with a dirty document
+	// the user is asked "Save changes?" first — Save routes through
+	// actionSave() and only continues on success, Discard continues without
+	// saving, Cancel aborts the pending action.
+	// -----------------------------------------------------------------------
+	void EditorApp::confirmThen(const std::function<void()> & action)
+	{
+		if (!doc || !dirty) { action(); return; }
+
+		// A second trigger while the dialog is open replaces the pending
+		// action instead of stacking dialogs.
+		pendingAction = action;
+		if (confirmBox)
+		{
+			gui.remove(confirmBox);
+			confirmBox = nullptr;
+		}
+		confirmBox = tgui::MessageBox::create("Unsaved changes",
+		                                      "Save changes before continuing?",
+		                                      {"Save", "Discard", "Cancel"});
+		confirmBox->setPosition({"(parent.width - width) / 2",
+		                         "(parent.height - height) / 2"});
+		gui.add(confirmBox);
+		confirmBox->onButtonPress([this](const tgui::String & button) {
+			tgui::MessageBox::Ptr box = confirmBox;
+			confirmBox = nullptr;
+			if (box) gui.remove(box);
+			if (button == "Cancel") { pendingAction = nullptr; return; }
+			if (button == "Save")
+			{
+				actionSave();
+				if (dirty) { pendingAction = nullptr; return; }  // save failed/cancelled
+			}
+			// Discard — or a successful Save — proceeds with the action.
+			std::function<void()> run = pendingAction;
+			pendingAction = nullptr;
+			if (run) run();
+		});
+	}
+
 	void EditorApp::loadSheetIntoDoc(int which, const std::string & pngPath)
 	{
 		if (!doc) return;
 		OT::OspSpriteSheet * sh = nullptr;
 		const char * rel = nullptr;
-		if (which == 0) { sh = &doc->toolbox;  rel = "sprites/toolbox.png"; }
-		else if (which == 1) { sh = &doc->ingame;   rel = "sprites/ingame.png"; }
-		else if (which == 2) { sh = &doc->occupants; rel = "sprites/occupants.png"; }
-		else { sh = &doc->walking; rel = "sprites/walking.png"; }
+		// New plugins follow the shipped OpenTower convention: sheets live
+		// under their numeric RT_BITMAP ids (the game-side names).
+		if (which == 0) { sh = &doc->toolbox;  rel = "sprites/100.png"; }
+		else if (which == 1) { sh = &doc->ingame;   rel = "sprites/1000.png"; }
+		else if (which == 2) { sh = &doc->occupants; rel = "sprites/1100.png"; }
+		else { sh = &doc->walking; rel = "sprites/200.png"; }
 		if (!sh->image.loadFromFile(pngPath)) { setStatus("Failed to load PNG: " + pngPath, true); return; }
 		sh->present = true;
 		sh->relPath = rel;
@@ -733,9 +842,9 @@ namespace editors
 		if (r != Result::Selected) { if (r == Result::Unavailable) setStatus("No file dialog available.", true); return; }
 		OT::OspSpriteSheet * sh = currentSheet();
 		if (!sh) return;
-		const char * rel = (shownSheet == 0 ? "sprites/toolbox.png"
-		                    : shownSheet == 1 ? "sprites/ingame.png"
-		                    : shownSheet == 2 ? "sprites/occupants.png" : "sprites/walking.png");
+		const char * rel = (shownSheet == 0 ? "sprites/100.png"
+		                    : shownSheet == 1 ? "sprites/1000.png"
+		                    : shownSheet == 2 ? "sprites/1100.png" : "sprites/200.png");
 		// Reload from the unmasked source so a re-import isn't doubly-keyed.
 		sf::Image raw;
 		if (!raw.loadFromFile(path)) { setStatus("Failed to load PNG: " + path, true); return; }

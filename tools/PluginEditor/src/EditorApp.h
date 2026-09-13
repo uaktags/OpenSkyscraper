@@ -24,6 +24,9 @@
 #include <TGUI/Backend/SFML-Graphics.hpp>
 #include <TGUI/TGUI.hpp>
 
+#include <TGUI/Widgets/MessageBox.hpp>
+
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -61,6 +64,15 @@ namespace editors
 	public:
 		int run();
 
+		/// Startup plumbing set by main() before run():
+		/// cliOpenPath — a .t2p file or .osp-plugin directory to open at
+		/// startup (empty = start with an empty workspace); the open happens
+		/// after the window/GUI exist. cliScreenshotPath — when non-empty,
+		/// the first rendered frame is saved to this PNG and the process
+		/// exits (headless smoke test, mirrors the game's --screenshot).
+		std::string cliOpenPath;
+		std::string cliScreenshotPath;
+
 		/// Global UI scale. All widget sizes/positions are multiplied by this
 		/// (mirrors the game's uiScale convention). 1.5 gives comfortable
 		/// legibility on standard-density displays with TGUI's default font.
@@ -77,7 +89,9 @@ namespace editors
 		std::optional<OT::OspPlugin> doc;
 		bool dirty = false;
 		std::string loadedFromPath;  // OSP dir last loaded/saved (for Save w/o As)
-
+		tgui::MessageBox::Ptr confirmBox;      // active "Save changes?" dialog (created on demand)
+		std::function<void()> pendingAction;   // action waiting behind confirmBox
+		bool refreshingFields = false;         // refreshFromDoc mirrors doc values; don't mark dirty
 		// Sprite-sheet textures derived from the doc (rebuilt on load/edit).
 		sf::Texture toolboxTex, ingameTex, occupantsTex, walkingTex;
 		bool toolboxValid = false, ingameValid = false, occupantsValid = false, walkingValid = false;
@@ -112,6 +126,9 @@ namespace editors
 		// --- actions ---
 		void actionOpenT2p();
 		void actionOpenOsp();
+		bool openT2pPath(const std::string & path);   // dialog-less opens (menu actions + CLI)
+		bool openOspPath(const std::string & path);
+		void confirmThen(const std::function<void()> & action);  // unsaved-changes guard
 		void actionSave();
 		void actionSaveAs();
 		void actionConvert();         // only meaningful after loading a t2p

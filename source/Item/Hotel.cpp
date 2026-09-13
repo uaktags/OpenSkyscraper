@@ -105,7 +105,7 @@ void Hotel::applyVariant()
 	{
 		case kSingle: sz = int2(4, 1); tex = "simtower/single"; edition = "hotel_single"; frameWidth = 32; break;
 		case kDouble: sz = int2(6, 1); tex = "simtower/double"; edition = "hotel_double"; frameWidth = 48; break;
-		case kSuite:  sz = int2(7, 1); tex = "simtower/suite";  edition = "hotel_suite";  frameWidth = 56; break;
+		case kSuite:  sz = int2(7, 1); tex = "simtower/suite";  edition = "hotel_suite";  frameWidth = 72; break;
 	}
 	size = sz;
 	sprite.setTexture(App->bitmaps.editionTexture(edition, tex));
@@ -139,7 +139,7 @@ void Hotel::updateSprite()
 	{
 		case kSingle: frameWidth = 32; break;
 		case kDouble: frameWidth = 48; break;
-		case kSuite:  frameWidth = 56; break;
+		case kSuite:  frameWidth = 72; break; // first-party sheet: 10 frames of 72x24
 	}
 	int row = (roomState == kDirty) ? 1 : 0;
 	if (variant == kDouble)

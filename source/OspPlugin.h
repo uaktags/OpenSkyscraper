@@ -51,7 +51,7 @@ namespace OT
 
 	/// One sprite sheet and its OBJMAP layout. `image` holds the decoded
 	/// pixels (mask already applied); `blocks` slice it into named rects.
-	/// `relPath` is the path relative to the plugin dir (e.g. "sprites/ingame.png").
+	/// `relPath` is the path relative to the plugin dir (e.g. "sprites/1000.png").
 	struct OspSpriteSheet
 	{
 		bool present = false;             // false => no resource on the source

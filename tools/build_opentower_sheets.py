@@ -11,10 +11,16 @@ Engine cell grids (from SimTowerLoader + per-item updateSprite math):
     Condo  : 128 x 24 cells, sheet 640 x 72  (5 cols x 3 rows)
     Hotel-Single : 32 x 24, sheet 288 x 48  (9 cols x 2 rows)
     Hotel-Double : 48 x 24, sheet 432 x 96  (9 cols x 4 rows)
-    Hotel-Suite  : 56 x 24, sheet 504 x 48  (9 cols x 2 rows)
+    Hotel-Suite  : superseded — the committed first-party sheet is 72 x 24
+                   cells, 720 x 48 (10 cols x 2 rows, data/bitmaps/suite.png)
 
 Run from the repo root:  python3 tools/build_opentower_sheets.py
 Idempotent: re-running overwrites the output plugins in place.
+
+Superseded by the first-party art in data/bitmaps/ (synced byte-exact into
+the plugins, different grids): Hotel-Suite, MedicalCenter, Recycling,
+PartyHall. Re-running this tool would clobber those sheets/objmaps/manifests
+with the legacy grids shown below.
 """
 import json
 import os
@@ -225,10 +231,16 @@ def build_first_party_candidates():
                    8, 36, 1, 1, "Tenant", "OLFK", "Floor")
     build_repeated("Security", "Facility", ["security_u.png"],
                    128, 24, 3, 1, "Tenant", "IBEK", "Security")
+    # Superseded: MedicalCenter now ships the first-party 624x24 day/night
+    # sheet (data/bitmaps/medicalcenter.png); do not regenerate it from here.
     build_repeated("MedicalCenter", "Facility", ["MedicalClinic_u.png"],
                    256, 24, 1, 1, "Tenant", "PSOH", "Medical Center")
+    # Superseded: Recycling now ships the first-party 1400x60 sheet with 7
+    # animation frames (data/bitmaps/recycling.png).
     build_repeated("Recycling", "Facility", ["MM_Recycle-empty.png"],
                    200, 60, 1, 1, "Tenant", "SUDK", "Recycling Center")
+    # Superseded: PartyHall now ships the first-party 576x60 sheet with 3
+    # frames (closed / open / event in progress), data/bitmaps/partyhall.png.
     party = sheet_blank(192, 60, 2, 1)
     paste_cell(party, load_png("Facility", "partyhall-0-day-0.png"),
                192, 60, 0, 0)
@@ -310,7 +322,9 @@ def main():
     os.makedirs(DST, exist_ok=True)
     build_office()
     build_condo()
-    # Hotel variants: single 32px/9col/2row, double 48px/9col/4row, suite 56px/9col/2row.
+    # Hotel variants: single 32px/9col/2row, double 48px/9col/4row. Suite's
+    # legacy 56px/9col build is superseded by the first-party 72px/10col
+    # sheet (data/bitmaps/suite.png); do not regenerate it from here.
     build_hotel("single", "LGSH", "Hotel-Single", 32, 9, 2, "single")
     build_hotel("double", "NWTH", "Hotel-Double", 48, 9, 4, "double")
     build_hotel("suite", "IUSH", "Hotel-Suite", 56, 9, 2, "Suite")

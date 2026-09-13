@@ -20,6 +20,8 @@ namespace OT {
 
             virtual void init();
 
+            virtual void advance(double dt);
+
             int variant;
 
             Sprite sprite;

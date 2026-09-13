@@ -329,45 +329,53 @@ namespace OT
 		}
 
 		// Sprite sheets. Each entry under "bitmaps" may carry a
-		// transparentColor (null or [r,g,b]); the pixels load from sprites/.
-		auto loadSheet = [&](const char * key, OspSpriteSheet & sheet, const char * defaultRelPath) -> bool {
+		// transparentColor (null or [r,g,b]) and a "relPath" pointing at its
+		// pixels. The pixel path resolves as: the manifest-declared relPath,
+		// else the canonical name (sprites/<sheet>.png), else the numeric
+		// RT_BITMAP id name (sprites/<id>.png) used by the shipped OpenTower
+		// plugins and the game side (DecompiledPlugin). `sheet.relPath`
+		// records whichever path actually loaded so saveOspPlugin writes
+		// the pixels back where they came from.
+		auto loadSheet = [&](const char * key, OspSpriteSheet & sheet,
+		                     const char * canonicalRel, const char * numericRel,
+		                     bool tolerateMissing) -> bool {
 			size_t scope = findObject(json, key, 0);
 			if (scope == std::string::npos) return true;  // absent => not present
+			// The writer records explicit "present": false entries for absent
+			// sheets; honor them (an object being there is not enough).
+			{
+				size_t pi = findKeyValue(json, "present", scope);
+				if (pi != std::string::npos && json.compare(pi, 5, "false") == 0)
+					return true;
+			}
 			sheet.present = true;
-			sheet.relPath = defaultRelPath;
 			sf::Color c;
 			if (readColor(json, "transparentColor", scope, c)) { sheet.mask = c; sheet.maskHow = MaskDiscovery::Manual; }
 			else sheet.maskHow = MaskDiscovery::None;
-			// Load pixels.
-			const std::string pngPath = join(dir, sheet.relPath);
-			if (!sheet.image.loadFromFile(pngPath))
-				return false;
+			std::string rel;
+			if (!readString(json, "relPath", scope, rel) || rel.empty())
+				rel = fileExists(join(dir, canonicalRel)) ? canonicalRel : numericRel;
+			sheet.relPath = rel;
+			// Load pixels. A declared-but-missing sheet is fatal for the two
+			// sheets every tenant needs and tolerable for the optional ones.
+			if (!sheet.image.loadFromFile(join(dir, rel)))
+			{
+				if (!tolerateMissing) return false;
+				sheet.present = false;
+				sheet.relPath.clear();
+				sheet.mask.reset();
+				return true;
+			}
 			if (sheet.mask) sheet.image.createMaskFromColor(*sheet.mask);
 			return true;
 		};
-		if (!loadSheet("toolbox", p.toolbox, "sprites/toolbox.png"))
+		if (!loadSheet("toolbox", p.toolbox, "sprites/toolbox.png", "sprites/100.png", false))
 			return {false, "Failed to load sprites/toolbox.png"};
-		if (!loadSheet("ingame", p.ingame, "sprites/ingame.png"))
+		if (!loadSheet("ingame", p.ingame, "sprites/ingame.png", "sprites/1000.png", false))
 			return {false, "Failed to load sprites/ingame.png"};
-		if (!loadSheet("occupants", p.occupants, "sprites/occupants.png"))
-			p.occupants.present = false;  // absent sheet is tolerable (residents/shops only)
+		loadSheet("occupants", p.occupants, "sprites/occupants.png", "sprites/1100.png", true);
 		// Walking frames (Mover plugins). Absent for tenants — tolerate.
-		{
-			size_t scope = findObject(json, "walking", 0);
-			if (scope != std::string::npos)
-			{
-				p.walking.present = true;
-				p.walking.relPath = "sprites/walking.png";
-				sf::Color c;
-				if (readColor(json, "transparentColor", scope, c)) { p.walking.mask = c; p.walking.maskHow = MaskDiscovery::Manual; }
-				const std::string pngPath = join(dir, p.walking.relPath);
-				if (p.walking.image.loadFromFile(pngPath))
-				{
-					if (p.walking.mask) p.walking.image.createMaskFromColor(*p.walking.mask);
-				}
-				else p.walking.present = false;
-			}
-		}
+		loadSheet("walking", p.walking, "sprites/walking.png", "sprites/200.png", true);
 
 		// MVDF transport definition (optional; Mover plugins).
 		size_t mvdfScope = findObject(json, "transport", 0);
@@ -468,6 +476,13 @@ namespace OT
 		auto emitSheet = [&](const char * key, const OspSpriteSheet & sh, bool last) {
 			s += "    \""; s += key; s += "\": { ";
 			s += "\"present\": "; s += (sh.present ? "true" : "false"); s += ", ";
+			// Record where the pixels live so a reload (editor or game-side
+			// manifest reader) finds the sheet even under numeric naming.
+			if (sh.present && !sh.relPath.empty())
+			{
+				emitStr(s, "relPath", sh.relPath, "");
+				s += ", ";
+			}
 			s += "\"width\": "; s += std::to_string(sh.image.getSize().x); s += ", ";
 			s += "\"height\": "; s += std::to_string(sh.image.getSize().y); s += ", ";
 			if (sh.mask) { emitColor(s, "transparentColor", *sh.mask, ""); }
@@ -604,10 +619,12 @@ namespace OT
 		plugin.getPldf(p.price);
 		plugin.getMvdf(p.transport);   // Mover plugins only; no-op for tenants
 
-		convertSheet(plugin, 100,  100,  plugin.name(), "sprites/toolbox.png",   p.toolbox);
-		convertSheet(plugin, 1000, 1000, plugin.name(), "sprites/ingame.png",    p.ingame);
-		convertSheet(plugin, 1100, -1,   plugin.name(), "sprites/occupants.png", p.occupants);
-		convertSheet(plugin, 200,  200,  plugin.name(), "sprites/walking.png",   p.walking);
+		// Fresh plugins follow the shipped numeric RT_BITMAP convention
+		// (same default the editor's Import uses; the game reads these).
+		convertSheet(plugin, 100,  100,  plugin.name(), "sprites/100.png",   p.toolbox);
+		convertSheet(plugin, 1000, 1000, plugin.name(), "sprites/1000.png",  p.ingame);
+		convertSheet(plugin, 1100, -1,   plugin.name(), "sprites/1100.png",  p.occupants);
+		convertSheet(plugin, 200,  200,  plugin.name(), "sprites/200.png",   p.walking);
 
 		out = std::move(p);
 		return {true, ""};
