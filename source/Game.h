@@ -161,6 +161,13 @@ namespace OT {
 		/// Used by the minimap click-to-jump.
 		void centerViewportOnTile(double tileX, double tileY);
 
+		/// Multiply the viewport zoom by `factor`, keeping the world point
+		/// under `anchorPx` (window pixels, e.g. the mouse) fixed when
+		/// given; otherwise the view centre stays put. Clamped to
+		/// [1/3, 2]: SimTower's 3x-out .. 2x-in range (`zoom` is the
+		/// fraction of the world visible, so smaller = closer).
+		void zoomBy(double factor, const sf::Vector2i * anchorPx = nullptr);
+
 		/// Modal two-button choice for emergency events (fire crew /
 		/// terrorist ransom). Pauses the simulation until answered;
 		/// `onChoice(true)` = the `yesLabel` button. The pending callback

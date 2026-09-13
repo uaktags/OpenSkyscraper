@@ -228,7 +228,14 @@ bool Game::handleEvent(sf::Event & event)
 			return false;
 
 		bool isShiftPressed = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LShift) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RShift);
+		bool isCtrlPressed = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RControl);
 		float delta = wheelEvent->delta;
+		if (isCtrlPressed && wheelEvent->wheel == sf::Mouse::Wheel::Vertical) {
+			// Ctrl + wheel: zoom toward the cursor (~1.25x per notch).
+			// Plain wheel keeps scrolling the viewport.
+			zoomBy(std::pow(1.25, -delta), &mousePosition);
+			return true;
+		}
 		if (wheelEvent->wheel == sf::Mouse::Wheel::Horizontal || isShiftPressed) {
 			poi.x -= delta * 40.f * zoom;
 		} else {
@@ -280,8 +287,8 @@ bool Game::handleEvent(sf::Event & event)
 				case sf::Keyboard::Key::F2:
 					writeTowerFile("default.tower");
 					return true;
-		case sf::Keyboard::Key::PageUp:   zoom /= 2; return true;
-		case sf::Keyboard::Key::PageDown: zoom *= 2; return true;
+		case sf::Keyboard::Key::PageUp:   zoomBy(0.5); return true;
+		case sf::Keyboard::Key::PageDown: zoomBy(2.0); return true;
 		case sf::Keyboard::Key::O:        cycleStatusMode(); return true;
 		case sf::Keyboard::Key::M:
 			mapWindow.setVisible(!mapWindow.isVisible());
@@ -1486,6 +1493,29 @@ void Game::centerViewportOnTile(double tileX, double tileY)
 {
 	poi.x = tileX * 8.0;
 	poi.y = tileY * 36.0;
+}
+
+void Game::zoomBy(double factor, const sf::Vector2i * anchorPx)
+{
+	const sf::Vector2u ws = app.window.getSize();
+	const double newZoom = std::clamp(zoom * factor, 1.0 / 3.0, 2.0);
+	if (newZoom == zoom)
+		return;
+	const double f = newZoom / zoom;
+	const double halfx = ws.x * 0.5 * zoom,  halfy = ws.y * 0.5 * zoom;
+	const double nhalfx = halfx * f,          nhalfy = halfy * f;
+	const double ax = anchorPx ? anchorPx->x : ws.x * 0.5;
+	const double ay = anchorPx ? anchorPx->y : ws.y * 0.5;
+	// Camera view rect in SFML view space (y grows down):
+	//   position = (poi.x - halfx, -(poi.y + halfy)), size = 2 * halfsize.
+	// Keep the world point under the anchor fixed while swapping the rect
+	// for the zoomed one, then read the new poi back off the new rect.
+	const double vx = poi.x - halfx, vy = -(poi.y + halfy);
+	const double wx = vx + ax * (2 * halfx) / ws.x;
+	const double wy = vy + ay * (2 * halfy) / ws.y;
+	poi.x = (wx - ax * (2 * nhalfx) / ws.x) + nhalfx;
+	poi.y = -(wy - ay * (2 * nhalfy) / ws.y) - nhalfy;
+	zoom = newZoom;
 }
 
 void Game::toggleElevatorService(Item::Elevator::Elevator * e, int floor)
