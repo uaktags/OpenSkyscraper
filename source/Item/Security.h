@@ -19,6 +19,7 @@ namespace OT {
             virtual ~Security();
 
             virtual void init();
+            virtual void advance(double dt);
 
             /// Second prototype for the SECOM Center (OpenSkyWeb ISSUE-031):
             /// the original ships two security items — the manual Security

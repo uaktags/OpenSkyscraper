@@ -147,37 +147,9 @@ void YootCondo::render(sf::RenderTarget &target) const
 	baseSprite.setColor(origBaseColor);
 	game->drawnSprites++;
 
-	if (occupied) {
-		sf::Color origResColor = residentSprite.getColor();
-		for (auto *occupant : occupants) {
-			if (occupant->at == this) {
-				int frameIdx = (static_cast<int>(game->time.absolute * 400.0) + occupant->animOffset) % 41;
-				residentSprite.setTextureRect(sf::IntRect({0, frameIdx * 24}, {16, 24}));
-				
-				float x = position.x * 8 + occupant->posX;
-				float y = -position.y * 36;
-				residentSprite.setPosition({x, y});
-				
-				if (game->statusMode == Game::kHotel)
-				{
-					sf::Color composed = game->lighting.compose(origResColor);
-					composed.r = (composed.r * 110) / 255;
-					composed.g = (composed.g * 110) / 255;
-					composed.b = (composed.b * 110) / 255;
-					composed.a = (composed.a * 160) / 255;
-					residentSprite.setColor(composed);
-				}
-				else
-				{
-					residentSprite.setColor(game->lighting.compose(origResColor));
-				}
-				target.draw(residentSprite);
-				residentSprite.setColor(origResColor);
-				game->drawnSprites++;
-			}
-		}
-	}
-
+	// Occupants are drawn solely by Item::renderPeople's AnimPeple condo
+	// band (former double-draw: this loop and renderPeople both rendered
+	// every resident while they were home; adoption review row 11).
 	Item::render(target);
 }
 

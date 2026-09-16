@@ -105,7 +105,7 @@ void Hotel::applyVariant()
 	{
 		case kSingle: sz = int2(4, 1); tex = "simtower/single"; edition = "hotel_single"; frameWidth = 32; break;
 		case kDouble: sz = int2(6, 1); tex = "simtower/double"; edition = "hotel_double"; frameWidth = 48; break;
-		case kSuite:  sz = int2(7, 1); tex = "simtower/suite";  edition = "hotel_suite";  frameWidth = 72; break;
+		case kSuite:  sz = int2(7, 1); tex = "simtower/suite";  edition = "hotel_suite";  frameWidth = 80; break;
 	}
 	size = sz;
 	sprite.setTexture(App->bitmaps.editionTexture(edition, tex));
@@ -127,8 +127,27 @@ void Hotel::init()
 	applyVariant();
 	addSprite(&sprite);
 	spriteNeedsUpdate = false;
+	roomFrameIndex = -1;
 
 	updateSprite();
+}
+
+// EXE hotel sheet: door (col 0) + 8 room frames as state x day/night
+// pairs — 1/2 occupied, 3/4 clean, 5/6 dirty, 7/8 infested (status byte
+// bands 0x10..0x40; day frame first, night second). Night art runs from
+// 17:00 to 5:00. Clean vacant rooms clamp to the lights-out band
+// (occupied-night art) between 4AM and 7AM (<0x18 -> 0x10).
+static int hotelRoomFrame(int roomState, double hour)
+{
+	bool night = (hour >= 17 || hour < 5);
+	switch (roomState)
+	{
+		case Hotel::kInfested: return night ? 8 : 7; // cockroaches
+		case Hotel::kDirty:    return night ? 6 : 5; // needs housekeeping
+		case Hotel::kOccupied: return night ? 2 : 1;
+	}
+	if (hour >= 4 && hour < 7) return 2; // 4AM lights-out clamp
+	return night ? 4 : 3;
 }
 
 void Hotel::updateSprite()
@@ -139,33 +158,17 @@ void Hotel::updateSprite()
 	{
 		case kSingle: frameWidth = 32; break;
 		case kDouble: frameWidth = 48; break;
-		case kSuite:  frameWidth = 72; break; // first-party sheet: 10 frames of 72x24
+		case kSuite:  frameWidth = 80; break; // 9 cols: door + 8 state frames
 	}
-	int row = (roomState == kDirty) ? 1 : 0;
+
+	// Sheet rows are style variants (single 2, double 4 = two style
+	// families, suite base + style); the room state selects the column.
+	int row = subVariant;
 	if (variant == kDouble)
-	{
-		row += subVariant * 2;
-	}
+		row *= 2;
 
-	int col = 0;
-	if (roomState == kOccupied)
-	{
-		bool resting = false;
-		for (std::set<Guest *>::iterator it = guests.begin(); it != guests.end(); ++it)
-		{
-			if ((*it)->state == Person::kResting)
-			{
-				resting = true;
-				break;
-			}
-		}
-		col = resting ? 2 : 3;
-	}
-	else if (housekeeper && housekeeper->at == this && housekeeper->cleaning)
-	{
-		col = 1;
-	}
-
+	int col = hotelRoomFrame(roomState, game->time.hour);
+	roomFrameIndex = col;
 	sprite.setTextureRect(sf::IntRect({col * frameWidth, row * 24}, {frameWidth, 24}));
 }
 
@@ -193,20 +196,24 @@ void Hotel::scheduleGuest(Guest *g)
 
 	g->atHotel = false;
 }
-
 void Hotel::clearAll()
 {
 	for (std::set<Guest *>::iterator it = guests.begin(); it != guests.end(); ++it)
 	{
-		releaseParking((*it)->parkingUsed);
-		(*it)->parkingUsed = NULL;
-		delete *it;
+		Guest *guest = *it;
+		releaseParking(guest->parkingUsed);
+		guest->parkingUsed = NULL;
+		if (guest->at == this)
+			Item::removePerson(guest);
+		delete guest;
 	}
 	guests.clear();
 	while (!arrivingGuests.empty())
 		arrivingGuests.pop();
 	if (housekeeper)
 	{
+		if (housekeeper->at == this)
+			Item::removePerson(housekeeper);
 		delete housekeeper;
 		housekeeper = NULL;
 	}
@@ -369,7 +376,7 @@ void Hotel::advance(double dt)
 		}
 	}
 
-	if (spriteNeedsUpdate)
+	if (spriteNeedsUpdate || roomFrameIndex != hotelRoomFrame(roomState, game->time.hour))
 		updateSprite();
 }
 

@@ -508,6 +508,11 @@ void SimTowerLoader::loadBitmaps()
 	loadMergedByID(suiteRooms[0], 'x', 0x8528, 0x8529, NULL);
 	loadMergedByID(suiteRooms[1], 'x', 0x852A, 0x852B, NULL);
 	loadMerged(images["simtower/suite"], 'y', &suiteRooms[0], &suiteRooms[1], NULL);
+	//loadHotel masks the two sky colors out of the single/double
+	//window panes; this merge path bypasses it, and all four suite
+	//sheets (0x8528..0x852B) do carry those pixels.
+	images["simtower/suite"].createMaskFromColor(sf::Color(0x8C, 0xD6, 0xFF));
+	images["simtower/suite"].createMaskFromColor(sf::Color(0x4A, 0xB4, 0xFF));
 
 	//Stairs
 	sf::Image stairs[2];
@@ -750,15 +755,24 @@ void SimTowerLoader::loadBitmaps()
 		{0x8E29, "construction/solid"},
 		{0x85EA, "construction/worker", sf::Color::White},
 
-		// AnimPeple occupant strips from the original. These are 16x24 frame
-		// horizontal sheets used by the Draw*AP family; names are based on
-		// visual/resource audit and can be refined as more strips are mapped.
+		// AnimPeple occupant strips (16x24 frames, white-keyed). Each strip
+		// is one venue's slice of the shared frame-code space, checked by DIB
+		// width and identical to the band split in concilia's game.h:
+		//   office 0x00-0x1D (480px), condo 0x1E-0x38 (432px),
+		//   construction 0x39-0x3E (96px), fast food 0x3F-0x48 (160px),
+		//   restaurant 0x49-0x4F (112px), hotel 0x50-0x5F (256px),
+		//   in-room maid 0x60-0x62 (48px).
+		// 0x85EB was misfiled as the hotel strip; it is 160px = 10 fast-food
+		// staff frames. The hotel-guest band is 0x85ED (16 frames), keyed
+		// animpeple/event for existing consumers, with animpeple/hotel kept
+		// as a corrected alias of it.
 		{0x85E8, "animpeple/office",       sf::Color::White},
 		{0x85E9, "animpeple/condo",        sf::Color::White},
 		{0x85EA, "animpeple/construction", sf::Color::White},
-		{0x85EB, "animpeple/hotel",        sf::Color::White},
+		{0x85EB, "animpeple/fastfood",     sf::Color::White},
 		{0x85EC, "animpeple/restaurant",   sf::Color::White},
 		{0x85ED, "animpeple/event",        sf::Color::White},
+		{0x85ED, "animpeple/hotel",        sf::Color::White},
 		{0x85EE, "animpeple/housekeeper",  sf::Color::White},
 		{0x8469, "animpeple/guard",        sf::Color::White},
 
@@ -806,6 +820,22 @@ void SimTowerLoader::loadBitmaps()
 		if (namedBitmaps[i].alpha != sf::Color()) {
 			bmp.createMaskFromColor(namedBitmaps[i].alpha);
 		}
+	}
+
+	//The EXE's AnimPeple band: the seven 16x24 strips 0x85E8..0x85EE
+	//joined in id order into one sheet of 99 frames (30+27+6+10+7+16+3,
+	//widths 480/432/96/160/112/256/48 px = 1584 px = 0x63 * 16).
+	//Occupant band tables index it directly with the EXE's global frame
+	//codes 0x00-0x62 instead of chasing the seven per-venue keys.
+	{
+		sf::Image bandStrips[7];
+		for (int i = 0; i < 7; i++) {
+			loadBitmap(0x85E8 + i, bandStrips[i]);
+			bandStrips[i].createMaskFromColor(sf::Color::White);
+		}
+		loadMerged(images["simtower/animpeple/band"], 'x',
+			&bandStrips[0], &bandStrips[1], &bandStrips[2], &bandStrips[3],
+			&bandStrips[4], &bandStrips[5], &bandStrips[6], NULL);
 	}
 
 	// Convert the images we just loaded to textures. Keys with first-party
@@ -984,7 +1014,11 @@ void SimTowerLoader::loadElevators()
 	shaft_wide.copy(extension, toVector2u(0, 0), toIntRect(0, 0, 8, 36));
 	shaft_wide.copy(extension, toVector2u(40, 0), toIntRect(8, 0, 8, 36));
 
-	//Render the shaft digits.
+	//Render the shaft digits. Row 0 is the plain 0x87e9/0x87ea atlas,
+	//row 1 the red plate bank 0x87ec/0x87ed (lit color 153,87,76 over
+	//the 25,25,25 shaft plate), which Elevator::render picks while a car
+	//of the group stands on the floor (IsCarOnFloor 10a8:367). Both
+	//atlases share geometry: glyphs at x = 1+16*i, y = 16, 11x17 px.
 	sf::Image rawDigits[2];
 	loadBitmap(0x87e9, rawDigits[0]);
 	loadBitmap(0x87ec, rawDigits[1]);

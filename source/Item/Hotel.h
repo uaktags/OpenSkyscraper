@@ -20,7 +20,9 @@ namespace OT
 			virtual ~Hotel();
 
 			enum RoomType { kSingle = 0, kDouble = 1, kSuite = 2 };
-			enum RoomState { kClean = 0, kOccupied = 1, kDirty = 2 };
+			enum RoomState { kClean = 0, kOccupied = 1, kDirty = 2, kInfested = 3 };
+			// kInfested: cockroach frames (sheet cols 7/8); the hotel
+			// lifecycle arms it (wave S) — render support only here.
 
 			int variant;
 			int subVariant;
@@ -82,6 +84,9 @@ namespace OT
 
 			Sprite sprite;
 			bool spriteNeedsUpdate;
+			// Last frame column updateSprite() selected (detects the
+			// day/night and 4AM lights-out re-poses).
+			int roomFrameIndex;
 			void updateSprite();
 
 			Path getRandomBackgroundSoundPath() override;
