@@ -3,6 +3,7 @@
 #include "ElevatorDialog.h"
 #include "Item/Elevator/Elevator.h"
 
+
 #include <cstdio>
 #include <sstream>
 
@@ -27,6 +28,7 @@ void ElevatorDialog::close()
 		header.reset();
 		showToggleBtn.reset();
 		floorButtons.clear();
+		scheduleButtons.clear();
 	}
 	currentElevator = NULL;
 }
@@ -40,6 +42,36 @@ std::string ElevatorDialog::buttonLabel(int floor) const
 	snprintf(buf, sizeof(buf), "F%d  %s", floor, served ? "[ON]" : "[OFF]");
 	return buf;
 }
+std::string ElevatorDialog::scheduleLabel(int day, int period) const
+{
+	if (!currentElevator) return "";
+	const Item::Elevator::SchedulePeriod &s = currentElevator->schedules[day][period];
+	const char *dayName = day == 0 ? "WD" : "WE";
+	const char *mode = s.mode == Item::Elevator::kScheduleExpressUp ? "Up" :
+	                   s.mode == Item::Elevator::kScheduleExpressDown ? "Down" : "Full";
+	char buf[96];
+	snprintf(buf, sizeof(buf), "%s %d: %s  T%d P%d", dayName, period + 1,
+	         mode, s.threshold, s.patience);
+	return buf;
+}
+
+void ElevatorDialog::editSchedule(int day, int period)
+{
+	if (!currentElevator || day < 0 || day >= Item::Elevator::Elevator::kScheduleDays ||
+	    period < 0 || period >= Item::Elevator::Elevator::kSchedulePeriods) return;
+	Item::Elevator::SchedulePeriod &s = currentElevator->schedules[day][period];
+	if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LShift) ||
+	    sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RShift))
+		s.patience = (s.patience + 1) % 4;
+	else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl) ||
+	         sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RControl))
+		s.threshold = (s.threshold + 1) % 6;
+	else
+		s.mode = (s.mode + 1) % 3;
+	std::map<int, tgui::Button::Ptr>::iterator it = scheduleButtons.find(day * Item::Elevator::Elevator::kSchedulePeriods + period);
+	if (it != scheduleButtons.end()) it->second->setText(scheduleLabel(day, period));
+}
+
 
 std::string ElevatorDialog::showToggleLabel() const
 {
@@ -65,8 +97,7 @@ void ElevatorDialog::buildWindow()
 	renderer->setBorders(1);
 
 	const float w = 180 * app->uiScale;
-	const float h = 280 * app->uiScale;
-	window->setClientSize({w, h});
+	const float h = 390 * app->uiScale;
 	window->setPosition({static_cast<float>(130 * app->uiScale),
 	                     static_cast<float>(40 * app->uiScale)});
 
@@ -80,16 +111,14 @@ void ElevatorDialog::buildWindow()
 
 	panel = tgui::ScrollablePanel::create();
 	panel->setPosition({6 * app->uiScale, 44 * app->uiScale});
-	panel->setSize({168 * app->uiScale, 210 * app->uiScale});
-	window->add(panel);
+	panel->setSize({168 * app->uiScale, 310 * app->uiScale});
 
 	// "Show: Yes/No" toggle — flips the elevator's shaft visibility.
 	// When No, the shaft interior is transparent (only rails + cars +
 	// motors are drawn) so tenants behind show through.
 	showToggleBtn = tgui::Button::create("Show: Yes");
 	showToggleBtn->setSize(85 * app->uiScale, 18 * app->uiScale);
-	showToggleBtn->setPosition({6 * app->uiScale, 260 * app->uiScale});
-	showToggleBtn->setTextSize(10 * app->uiScale);
+	showToggleBtn->setPosition({6 * app->uiScale, 360 * app->uiScale});
 	showToggleBtn->onPress([this] {
 		if (!currentElevator) return;
 		currentElevator->showShaft = !currentElevator->showShaft;
@@ -99,7 +128,7 @@ void ElevatorDialog::buildWindow()
 
 	auto closeBtn = tgui::Button::create("Close");
 	closeBtn->setSize(60 * app->uiScale, 18 * app->uiScale);
-	closeBtn->setPosition({96 * app->uiScale, 260 * app->uiScale});
+	closeBtn->setPosition({96 * app->uiScale, 360 * app->uiScale});
 	closeBtn->setTextSize(11 * app->uiScale);
 	closeBtn->onPress([this] { close(); });
 	window->add(closeBtn);
@@ -141,8 +170,31 @@ void ElevatorDialog::rebuildFloorButtons()
 
 	// Make the scrollable panel's inner content size match the buttons.
 	panel->setContentSize({btnW, y});
+	rebuildScheduleButtons();
 }
 
+void ElevatorDialog::rebuildScheduleButtons()
+{
+	if (!panel || !currentElevator) return;
+	const float btnH = 18 * app->uiScale;
+	const float btnW = 160 * app->uiScale;
+	float y = (float)floorButtons.size() * (btnH + 2) + 4;
+	scheduleButtons.clear();
+	for (int day = 0; day < Item::Elevator::Elevator::kScheduleDays; ++day)
+		for (int period = 0; period < Item::Elevator::Elevator::kSchedulePeriods; ++period)
+		{
+			const int key = day * Item::Elevator::Elevator::kSchedulePeriods + period;
+			auto btn = tgui::Button::create(scheduleLabel(day, period));
+			btn->setSize(btnW, btnH);
+			btn->setPosition(0, y);
+			btn->setTextSize(9 * app->uiScale);
+			btn->onPress([this, day, period] { editSchedule(day, period); });
+			panel->add(btn);
+			scheduleButtons[key] = btn;
+			y += btnH + 2;
+		}
+	panel->setContentSize({btnW, y});
+}
 void ElevatorDialog::showForElevator(Item::Elevator::Elevator * elevator)
 {
 	if (!elevator) { close(); return; }
@@ -168,5 +220,12 @@ void ElevatorDialog::refresh()
 	     it != floorButtons.end(); ++it)
 	{
 		it->second->setText(buttonLabel(it->first));
+	}
+	for (std::map<int, tgui::Button::Ptr>::iterator it = scheduleButtons.begin();
+	     it != scheduleButtons.end(); ++it)
+	{
+		const int day = it->first / Item::Elevator::Elevator::kSchedulePeriods;
+		const int period = it->first % Item::Elevator::Elevator::kSchedulePeriods;
+		it->second->setText(scheduleLabel(day, period));
 	}
 }

@@ -54,6 +54,11 @@ namespace OT {
 				double startAltitude;
 				double journeyTime;
 
+				/// Returns the raw tail delay and the number of floors to
+				/// advance for one simulation tick (CalcMoveSpeed).
+				static int CalcMoveSpeed(bool express, int distanceToTarget,
+				                         int distanceFromStart, int *stride);
+
 				Sound arrivingSound;
 				Sound departingSound;
 				bool arrivingPlayed;
@@ -63,6 +68,13 @@ namespace OT {
 				Person * nextPassengerToUnmount() const;
 
 				void moveTo(int floor);
+
+				/// Door timer is the authentic five-tick countdown. The
+				/// legacy State values remain serialized-compatible.
+				int doorTicks;
+				int holdTicks;
+				int moveTicks;
+
 			};
 		}
 	}

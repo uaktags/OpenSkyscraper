@@ -1,4 +1,5 @@
-#include <cassert>
+#include <algorithm>
+#include <cmath>
 #include "../../Application.h"
 #include "../../Game.h"
 #include "../../Person.h"
@@ -9,17 +10,22 @@
 using namespace OT;
 using namespace OT::Item::Elevator;
 
-/// The seconds at regular speed requried to stress a person from zero to max.
-const static double kSecondsUntilStressed = 30;
+/// Wait stress is kept in the person's journey bank and delivered when the
+/// journey reaches its destination. Service queues do not bank wait stress.
 
 Queue::Queue(Elevator *e)
 	: GameObject(e->game),
-	  elevator(e)
+	  elevator(e),
+	  floor(0),
+	  direction(Elevator::kNone),
+	  width(400),
+	  called(false),
+	  callTime(0),
+	  answered(false),
+	  steppingInside(false),
+	  fullRetryFrame(0),
+	  waitStartFrame(0)
 {
-	called = false;
-	callTime = 0;
-	answered = false;
-	steppingInside = false;
 }
 
 Queue::~Queue()
@@ -39,9 +45,21 @@ double Queue::getWaitDuration()
 
 void Queue::addPerson(Person *p)
 {
+	if (!p) return;
+	if ((int)people.size() >= kQueueCapacity)
+	{
+		// TripT rejects the 41st rider and applies a single +5 penalty per
+		// 16-frame full-queue retry. Service staff are exempt from wait stress.
+		const double frame = game->time.absolute / Time::kBaseSpeed;
+		if (!elevator->isService() && frame >= fullRetryFrame)
+		{
+			p->addJourneyStress((double)kQueueFullPenalty);
+			fullRetryFrame = frame + kQueueFullRetryFrames;
+		}
+		return;
+	}
 	people.push_back(p);
-	if (!called)
-		callElevator();
+	if (!called) callElevator();
 }
 
 void Queue::removePerson(Person *p)
@@ -60,26 +78,48 @@ Person *Queue::popPerson()
 
 void Queue::callElevator()
 {
-	if (!called)
+	if (!called && !people.empty())
 	{
 		called = true;
+		answered = false;
 		callTime = game->time.absolute;
+		waitStartFrame = game->time.absolute / Time::kBaseSpeed;
 		elevator->called(this);
 	}
 }
 
+void Queue::applyWatchdog()
+{
+	if (elevator->isService() || people.empty()) return;
+	const double frame = game->time.absolute / Time::kBaseSpeed;
+	if (frame - waitStartFrame < kQueueWatchdogFrames) return;
+	for (People::iterator it = people.begin(); it != people.end(); ++it)
+		(*it)->addJourneyStress(300.0); // failed trip banks the wait cap
+	called = false;
+	answered = false;
+	waitStartFrame = frame + kQueueFullRetryFrames;
+	fullRetryFrame = frame + kQueueFullRetryFrames;
+}
+
 void Queue::advance(double dt)
 {
-	double dta = game->time.dta;
 	if (!people.empty() && !called)
-		callElevator();
-
-	for (People::iterator ip = people.begin(); ip != people.end();)
 	{
-		Person *p = *(ip++);
-		p->addStress(1.0 / kSecondsUntilStressed / Time::kBaseSpeed * dta);
-		if (p->stress >= 1.0)
-			p->journey.next();
+		const double frame = game->time.absolute / Time::kBaseSpeed;
+		// Failed calls are retried at the original one-in-sixteen cadence,
+		// rather than continuously hammering dispatch.
+		if (frame >= waitStartFrame && ((int)frame % kQueueFullRetryFrames) == 0)
+			callElevator();
+	}
+	applyWatchdog();
+	if (elevator->isService()) return;
+	const double frameDelta = game->time.dta / Time::kBaseSpeed;
+	for (People::iterator it = people.begin(); it != people.end(); ++it)
+	{
+		const double forgiveness = (game->mainLobby && floor == game->mainLobby->position.y)
+			? (game->mainLobby->size.y >= 3 ? 50.0 : 25.0) : 0.0;
+		const double scale = std::max(0.0, frameDelta - forgiveness / 300.0 * frameDelta);
+		(*it)->addJourneyStress(scale);
 	}
 }
 
@@ -135,11 +175,11 @@ void Queue::render(sf::RenderTarget &target) const
 		pos.x = (direction == Elevator::kUp ? -x : elevator->size.x * 8 + x);
 		pos.x += elevator->getPositionPixels().x;
 
-		// Decide what color to use based on stress level.
+		// The bank is 0..300: pink at 80, red at the 150 judge bar.
 		sf::Color color = sf::Color::Black;
-		if (p->stress > 0.8)
+		if (p->stress >= 150.0)
 			color = sf::Color(255, 0, 0);
-		else if (p->stress > 0.4)
+		else if (p->stress >= 80.0)
 			color = sf::Color(255, 128, 128);
 		if (tinted)
 		{

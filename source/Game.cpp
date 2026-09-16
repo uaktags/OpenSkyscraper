@@ -1639,9 +1639,17 @@ bool Game::constructToolAt(int2 pos)
 				toolBoundary.maxX() == itemRect.maxX() &&
 				toolBoundary.minY() >= itemRect.minY() &&
 				toolBoundary.maxY() <= itemRect.maxY()) {
-				LOG(DEBUG, "add car on floor %i to elevator %s", toolPosition.y, e->desc().c_str());
-				e->addCar(toolPosition.y);
-				transferFunds(-toolPrototype->carCost, "construction", "Elevator car");
+				if (!e->canAddCar(toolPosition.y)) {
+					timeWindow.showMessage("No more cars in this shaft.");
+					playOnce("simtower/construction/impossible");
+				} else if (money.balance < toolPrototype->carCost) {
+					timeWindow.showMessage("Not enough money for an elevator car.");
+					playOnce("simtower/construction/impossible");
+				} else {
+					LOG(DEBUG, "add car on floor %i to elevator %s", toolPosition.y, e->desc().c_str());
+					e->addCar(toolPosition.y);
+					transferFunds(-toolPrototype->carCost, "construction", "Elevator car");
+				}
 				handled = true;
 				break;
 			}
@@ -1665,6 +1673,23 @@ if (!handled) {
 
 	// Star-rating gate: some prototypes require a minimum tower
 	// rating to build. Reject early so the player gets feedback.
+	// Elevator placement gates belong to the construction path as well as
+	// the UI: 24 groups, express sky-lobby anchoring, metro depth, and
+	// grand-lobby upper-story exclusion are all checked before charging.
+	if (toolPrototype->id.find("elevator") == 0) {
+		const bool express = toolPrototype->icon == 6;
+		if (itemsByType["elevator"].size() >= Item::Elevator::Elevator::kMaxShafts) {
+			constructionBlocked = true;
+			blockReason = "No more elevator shafts available";
+		} else if (express && toolPosition.y > 0 && toolPosition.y % 15 != 0) {
+			constructionBlocked = true;
+			blockReason = "New express shafts anchor at lobby floors";
+		} else if (mainLobby && toolPosition.y >= mainLobby->position.y + 1 &&
+		           toolPosition.y < mainLobby->position.y + mainLobby->size.y) {
+			constructionBlocked = true;
+			blockReason = "Cannot start a shaft inside the lobby's upper stories";
+		}
+	}
 	int minRating = LevelUp::minRatingToBuild(toolPrototype->id);
 	if (minRating > rating)
 	{
@@ -1678,9 +1703,14 @@ if (!handled) {
 			blockReason = "Cannot build below floor B9";
 		}
 
-		if (metroStation != NULL && toolPosition.y < metroStation->position.y) {
-			constructionBlocked = true;
-			blockReason = "Cannot build below Metro Station";
+		if (metroStation != NULL) {
+			const bool elevatorTool = toolPrototype->id.find("elevator") == 0;
+			const int lowestAllowed = metroStation->position.y -
+				(elevatorTool ? Item::Elevator::Elevator::kMetroClearanceFloors : 0);
+			if (toolPosition.y < lowestAllowed) {
+				constructionBlocked = true;
+				blockReason = "Cannot build below Metro Station";
+			}
 		}
 
 		if (toolPosition.y > 0 && toolPrototype->icon == ICON_METRO) {
@@ -1718,7 +1748,7 @@ if (!handled) {
 				minFloorX = INT_MIN;
 				maxFloorX = INT_MAX;
 			}
-		} else if (toolPrototype->icon == ICON_STAIRS || toolPrototype->icon == ICON_ELEVATOR) {
+		} else if (toolPrototype->icon == ICON_STAIRS) {
 			// Check obstruction from other transport items
 			const ItemSet &stairlike = itemsByType["stairlike"];
 			for (ItemSet::const_iterator ii = stairlike.begin(); !constructionBlocked && ii != stairlike.end(); ii++) {
@@ -1765,9 +1795,12 @@ if (!handled) {
 				maxFloorX = i->getRect().maxX();
 			}
 		} else if (toolPrototype->id.find("elevator") == 0) {
-			// Check obstruction from other transport items
-			toolBoundary.origin.y -= 1;
-			toolBoundary.size.y += 2;
+			// Elevator clearances use a two-floor vertical guard band;
+			// stairs/escalators themselves are checked against the shaft's
+			// uninflated footprint.
+			recti elevatorBoundary = toolBoundary;
+			elevatorBoundary.origin.y -= 1;
+			elevatorBoundary.size.y += 2;
 
 			const ItemSet &stairlike = itemsByType["stairlike"];
 			for (ItemSet::const_iterator ii = stairlike.begin(); !constructionBlocked && ii != stairlike.end(); ii++) {
@@ -1779,14 +1812,18 @@ if (!handled) {
 			}
 
 			const ItemSet &elevators = itemsByType["elevator"];
-			for (ItemSet::const_iterator ii = elevators.begin(); !constructionBlocked && ii != elevators.end(); ii++) {
-				Item::Item * i = *ii;
-				recti itemRect = i->getRect();
-				itemRect.origin.y -= 1;
-				itemRect.size.y += 2;
-				if (toolBoundary.intersectsRect(itemRect)) {
+			for (ItemSet::const_iterator ii = elevators.begin(); !constructionBlocked && ii != elevators.end(); ++ii) {
+				Item::Elevator::Elevator *other = (Item::Elevator::Elevator *) *ii;
+				if (other->isExpress() == (toolPrototype->icon == 6)) continue;
+				recti itemRect = other->getRect();
+				itemRect.origin.x -= Item::Elevator::Elevator::kShaftClearanceCells;
+				itemRect.size.x += 2 * Item::Elevator::Elevator::kShaftClearanceCells;
+				itemRect.origin.y -= 2;
+				itemRect.size.y += 3;
+				if (elevatorBoundary.intersectsRect(itemRect)) {
 					constructionBlocked = true;
-					blockReason = "Other " + i->prototype->name + " is in the way";
+					blockReason = "Item requires more space on both sides";
+
 				}
 			}
 

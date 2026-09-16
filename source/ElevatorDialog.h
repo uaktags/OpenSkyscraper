@@ -12,15 +12,11 @@ namespace OT
 	/** Elevator control panel dialog.
 	 *
 	 * TGUI child window with per-floor service toggles for an elevator.
-	 * Each floor in the elevator's span gets a button showing its number
-	 * and current service state; clicking flips the elevator's
-	 * unservicedFloors set via Game::toggleElevatorService().
-	 *
-	 * Mirrors ElvDlogT.h/c from the Yoot source. Currently opened from the
-	 * InspectorDialog when inspecting an elevator.
-	 *
-	 * TODO(Phase 5.3): WD/WE service modes, express-to-top/bottom buttons,
-	 * time-before-departing slider. */
+	 * The lower schedule panel exposes both weekday and weekend's six
+	 * editable periods. Shift-click edits patience, Ctrl-click edits the
+	 * threshold, and an ordinary click cycles Full/Express Up/Express
+	 * Down. The hidden seventh night period is persisted but not shown.
+	 */
 	class ElevatorDialog : public GameObject
 	{
 	public:
@@ -42,10 +38,15 @@ namespace OT
 
 		/// Button per floor, keyed by floor number.
 		std::map<int, tgui::Button::Ptr> floorButtons;
+		/// Six editable periods per day, keyed by day * 6 + period.
+		std::map<int, tgui::Button::Ptr> scheduleButtons;
 
 		void buildWindow();
 		void rebuildFloorButtons();
+		void rebuildScheduleButtons();
+		void editSchedule(int day, int period);
 		std::string buttonLabel(int floor) const;
+		std::string scheduleLabel(int day, int period) const;
 		std::string showToggleLabel() const;
 		void updateShowToggle();
 	};

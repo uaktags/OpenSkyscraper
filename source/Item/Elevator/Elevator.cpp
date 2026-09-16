@@ -1,4 +1,4 @@
-#include <cassert>
+#include <algorithm>
 #include <vector>
 #include "../../Game.h"
 #include "../../Sprite.h"
@@ -15,12 +15,101 @@ Elevator::~Elevator()
 	clearCars();
 }
 
+void Elevator::resetSchedules()
+{
+	for (int day = 0; day < kScheduleDays; ++day)
+		for (int period = 0; period < kSchedulePeriodCount; ++period)
+		{
+			schedules[day][period].mode = kScheduleFull;
+			schedules[day][period].threshold = 5;
+			schedules[day][period].patience = 0;
+		}
+}
+
+int Elevator::schedulePeriod(double hour)
+{
+	int frame = (int)std::floor((hour / 24.0) * 2600.0);
+	int period = frame / 400;
+	if (period < 0) period = 0;
+	if (period >= kSchedulePeriodCount) period = kSchedulePeriodCount - 1;
+	return period;
+}
+
+bool Elevator::scheduleAllows(Direction dir) const
+{
+	const int day = (game->time.day == 2) ? 1 : 0;
+	const SchedulePeriod &period = schedules[day][schedulePeriod(game->time.hour)];
+	if (period.mode == kScheduleExpressUp)
+		return dir == kUp;
+	if (period.mode == kScheduleExpressDown)
+		return dir == kDown;
+	return true;
+}
+
+int Elevator::scheduleThreshold() const
+{
+	const int day = (game->time.day == 2) ? 1 : 0;
+	const int threshold = schedules[day][schedulePeriod(game->time.hour)].threshold;
+	return std::max(0, std::min(5, threshold));
+}
+
+int Elevator::schedulePatienceTicks() const
+{
+	const int day = (game->time.day == 2) ? 1 : 0;
+	const int patience = schedules[day][schedulePeriod(game->time.hour)].patience;
+	return std::max(0, std::min(3, patience)) * 30;
+}
+
+bool Elevator::canResizeTo(int bottom, int height) const
+{
+	if (height < 1) return false;
+	if (!isExpress() && height > kNonExpressMaxSpan) return false;
+	if (bottom <= -10) return false;
+	if (game->metroStation && bottom < game->metroStation->position.y - kMetroClearanceFloors)
+		return false;
+
+	Game::ItemSetByString::const_iterator group = game->itemsByType.find("elevator");
+	if (group == game->itemsByType.end()) return true;
+	const int top = bottom + height;
+	for (Game::ItemSet::const_iterator it = group->second.begin(); it != group->second.end(); ++it)
+	{
+		const Elevator *other = static_cast<const Elevator *>(*it);
+		if (other == this || other->isExpress() == isExpress()) continue;
+		const bool horizontal = position.x - kShaftClearanceCells < other->position.x + other->size.x &&
+		                        position.x + size.x + kShaftClearanceCells > other->position.x;
+		const bool vertical = bottom - 2 < other->position.y + other->size.y + 1 &&
+		                      top + 1 > other->position.y - 2;
+		if (horizontal && vertical) return false;
+	}
+	return true;
+}
+
+bool Elevator::canAddCar(int floor) const
+{
+	return (int)cars.size() < kMaxCarsPerShaft &&
+	       floor >= position.y && floor < position.y + size.y;
+}
+
+void Elevator::reassignCalls(Car *car)
+{
+	if (!car) return;
+	const int floor = (int)std::lround(car->altitude);
+	for (Queues::iterator it = queues.begin(); it != queues.end(); ++it)
+	{
+		Queue *q = *it;
+		if (q->floor != floor || !scheduleAllows(q->direction)) continue;
+		q->answered = false;
+		q->called = false;
+	}
+}
+
 void Elevator::init()
 {
 	layer = 1;
 	maxCarAcceleration = 7.5;
 	maxCarSpeed = 10.0;
-	maxCarCapacity = 21;
+	maxCarCapacity = isExpress() ? 42 : 21;
+	resetSchedules();
 
 	Item::init();
 
@@ -127,17 +216,20 @@ void Elevator::render(sf::RenderTarget &target) const
 		if (!connectsFloor(flr))
 			continue;
 
-		bool isHome = false;
+		// Red floor plate: row 1 of the digits sheet (the 0x87ec twin of
+		// 0x87e9) lights while a car of this group is on this floor
+		// (IsCarOnFloor 10a8:367). Replaces the old home-floor tint.
+		bool carOnFloor = false;
 		for (auto *c : cars) {
-			if (c->homeFloor == flr) {
-				isHome = true;
+			if (std::lround(c->altitude) == flr) {
+				carOnFloor = true;
 				break;
 			}
 		}
-		sf::Color digitColor = isHome ? sf::Color(255, 100, 100) : sf::Color::White; // Pinkish-red for home floor, white otherwise
+		const int digitRow = carOnFloor ? 1 : 0;
 		if (tinted)
 		{
-			sf::Color composed = game->lighting.compose(digitColor);
+			sf::Color composed = game->lighting.compose(sf::Color::White);
 			if (statusTint != sf::Color::White)
 			{
 				composed.r = (composed.r * statusTint.r) / 255;
@@ -146,10 +238,6 @@ void Elevator::render(sf::RenderTarget &target) const
 				composed.a = (composed.a * statusTint.a) / 255;
 			}
 			d.setColor(composed);
-		}
-		else
-		{
-			d.setColor(digitColor);
 		}
 
 		char c[8];
@@ -160,7 +248,7 @@ void Elevator::render(sf::RenderTarget &target) const
 			int p = 10;
 			if (c[i] >= '0' && c[i] <= '9')
 				p = c[i] - '0';
-			d.setTextureRect(sf::IntRect({p * 11, 0}, {11, 17}));
+			d.setTextureRect(sf::IntRect({p * 11, digitRow * 17}, {11, 17}));
 			d.setPosition({static_cast<float>(position.x * 8 + x), static_cast<float>(-y * 36.f - 10.f)});
 			target.draw(d);
 			x += 12;
@@ -207,21 +295,36 @@ void Elevator::advance(double dt)
 			frame = 0;
 			updateSprite();
 		}
+		}
 	}
-}
 
 void Elevator::encodeXML(tinyxml2::XMLPrinter &xml)
 {
 	Item::encodeXML(xml);
 	xml.PushAttribute("height", size.y);
 	xml.PushAttribute("showShaft", showShaft);
-	for (std::set<int>::iterator i = unservicedFloors.begin(); i != unservicedFloors.end(); i++)
+	for (std::set<int>::iterator i = unservicedFloors.begin(); i != unservicedFloors.end(); ++i)
 	{
 		xml.OpenElement("unserviced");
 		xml.PushAttribute("floor", *i);
 		xml.CloseElement();
 	}
-	for (Cars::iterator c = cars.begin(); c != cars.end(); c++)
+	for (int day = 0; day < kScheduleDays; ++day)
+	{
+		xml.OpenElement("schedule");
+		xml.PushAttribute("day", day);
+		for (int period = 0; period < kSchedulePeriodCount; ++period)
+		{
+			xml.OpenElement("period");
+			xml.PushAttribute("index", period);
+			xml.PushAttribute("mode", schedules[day][period].mode);
+			xml.PushAttribute("threshold", schedules[day][period].threshold);
+			xml.PushAttribute("patience", schedules[day][period].patience);
+			xml.CloseElement();
+		}
+		xml.CloseElement();
+	}
+	for (Cars::iterator c = cars.begin(); c != cars.end(); ++c)
 	{
 		xml.OpenElement("car");
 		(*c)->encodeXML(xml);
@@ -233,21 +336,32 @@ void Elevator::decodeXML(tinyxml2::XMLElement &xml)
 {
 	clearCars();
 	Item::decodeXML(xml);
-	size.y = xml.IntAttribute("height");
+	size.y = xml.IntAttribute("height", size.y);
 	showShaft = xml.BoolAttribute("showShaft", true);
-	for (tinyxml2::XMLElement *e = xml.FirstChildElement("unserviced"); e; e = e->NextSiblingElement("unserviced"))
+	resetSchedules();
+	for (tinyxml2::XMLElement *s = xml.FirstChildElement("schedule"); s; s = s->NextSiblingElement("schedule"))
 	{
-		unservicedFloors.insert(e->IntAttribute("floor"));
+		const int day = std::max(0, std::min(kScheduleDays - 1, s->IntAttribute("day", 0)));
+		for (tinyxml2::XMLElement *p = s->FirstChildElement("period"); p; p = p->NextSiblingElement("period"))
+		{
+			const int index = p->IntAttribute("index", -1);
+			if (index < 0 || index >= kSchedulePeriodCount) continue;
+			schedules[day][index].mode = std::max(0, std::min(2, p->IntAttribute("mode", 0)));
+			schedules[day][index].threshold = std::max(0, std::min(5, p->IntAttribute("threshold", 5)));
+			schedules[day][index].patience = std::max(0, std::min(3, p->IntAttribute("patience", 0)));
+		}
 	}
+	for (tinyxml2::XMLElement *e = xml.FirstChildElement("unserviced"); e; e = e->NextSiblingElement("unserviced"))
+		unservicedFloors.insert(e->IntAttribute("floor"));
 	for (tinyxml2::XMLElement *e = xml.FirstChildElement("car"); e; e = e->NextSiblingElement("car"))
 	{
+		if ((int)cars.size() >= kMaxCarsPerShaft) break;
 		Car *car = new Car(this);
 		car->decodeXML(*e);
 		cars.insert(car);
 	}
 	updateSprite();
 }
-
 /*
  * This is reimplemented because the elevator contains
  * the two "operational" components around it in the
@@ -286,77 +400,59 @@ bool Elevator::repositionMotor(int motor, int y)
 	if (motor == -1)
 	{
 		newy = y + 1;
-		height = (size.y + position.y - newy);
+		height = size.y + position.y - newy;
 	}
 	else
 	{
 		newy = position.y;
-		height = (y - position.y);
+		height = y - position.y;
 	}
-	if (height < 1)
-		height = 1;
-	if (height > 30 + 1)
-		height = 30 + 1;
-	if (motor == -1)
+	if (height < 1) height = 1;
+	if (!isExpress() && height > kNonExpressMaxSpan) return false;
+	if (!canResizeTo(newy, height)) return false;
+	if (newy == position.y && height == size.y) return false;
+
+	setPosition(int2(position.x, newy));
+	size.y = height;
+	for (Cars::iterator c = cars.begin(); c != cars.end(); ++c)
 	{
-		newy = (size.y + position.y - height);
+		Car *car = *c;
+		if (car->altitude < newy) car->setAltitude(newy);
+		else if (car->altitude >= newy + height) car->setAltitude(newy + height - 1);
+		if (car->destinationFloor < newy) car->destinationFloor = newy;
+		else if (car->destinationFloor >= newy + height) car->destinationFloor = newy + height - 1;
+		if (car->state == Car::kIdle) car->startAltitude = car->altitude;
+		car->reposition();
 	}
-	if (newy != position.y || height != size.y)
+
+	const int maxY = newy + height;
+	for (std::set<int>::iterator i = unservicedFloors.begin(); i != unservicedFloors.end();)
 	{
-		setPosition(int2(position.x, newy));
-		size.y = height;
-		// TODO: constrain cars to stay within elevator bounds.
-		for (Cars::iterator c = cars.begin(); c != cars.end(); c++)
-		{
-			Car *car = *c;
-			if (car->altitude < newy)
-				car->altitude = newy;
-			else if (car->altitude >= newy + height)
-				car->altitude = newy + height - 1;
-
-			if (car->destinationFloor < newy)
-				car->destinationFloor = newy;
-			else if (car->destinationFloor >= newy + height)
-				car->destinationFloor = newy + height - 1;
-
-			if (car->state == Car::kIdle)
-				car->startAltitude = car->altitude;
-
-			(*c)->reposition();
-		}
-
-		int maxY = newy + height;
-		for (std::set<int>::iterator i = unservicedFloors.begin(); i != unservicedFloors.end();)
-		{
-			int floor = *i;
-			if (floor < newy || floor >= maxY)
-				unservicedFloors.erase(i++);
-			else
-				i++;
-		}
-		updateSprite();
-		cleanQueues();
-		return true;
+		if (*i < newy || *i >= maxY) unservicedFloors.erase(i++);
+		else ++i;
 	}
-	return false;
+	updateSprite();
+	cleanQueues();
+	return true;
 }
 
 void Elevator::clearCars()
 {
-	for (Cars::iterator c = cars.begin(); c != cars.end(); c++)
+	for (Cars::iterator c = cars.begin(); c != cars.end(); ++c)
 		delete *c;
 	cars.clear();
 }
 
 void Elevator::addCar(int floor)
 {
+	if (!canAddCar(floor)) return;
 	Car *car = new Car(this);
 	car->setAltitude(floor);
 	car->startAltitude = floor;
 	car->destinationFloor = floor;
+	car->homeFloor = floor;
 	cars.insert(car);
 }
-
 bool Elevator::connectsFloor(int floor) const
 {
 	if (floor < position.y || floor >= position.y + size.y)
@@ -421,28 +517,40 @@ void Elevator::cleanQueues()
 	}
 }
 
-/// Called whenever the first person queues up at an elevator queue. The elevator is now
-/// responsible for making a car answer the call or postpone it.
 void Elevator::called(Queue *queue)
 {
-	assert(queue);
+	// Queue::callElevator() records the call timestamp and calls this
+	// hook.  Keep the pending call latched while a schedule period blocks
+	// its direction; getMostUrgentQueue() will dispatch it at the next
+	// permitted period.
+	if (!queue || queue->people.empty()) return;
+	if (!scheduleAllows(queue->direction)) return;
 	respondToCalls();
 }
 
-/// Responds to the most urgent calls.
 void Elevator::respondToCalls()
 {
-	// Iterate through the queues, always getting the most urgent one.
 	Queue *q;
 	while ((q = getMostUrgentQueue()))
 	{
-		// Find the car best suited for responding. If none could be found, abort since all cars
-		// are occupied.
 		Car *car = getIdleCar(q->floor);
 		if (!car)
-			break;
-
-		// Answer the call.
+		{
+			const int threshold = scheduleThreshold();
+			for (Cars::iterator it = cars.begin(); it != cars.end(); ++it)
+			{
+				Car *candidate = *it;
+				if (candidate->state != Car::kMoving || candidate->direction != q->direction)
+					continue;
+				const double distance = (q->floor - candidate->altitude) * (double)candidate->direction;
+				if (distance >= 0 && distance <= threshold)
+				{
+					car = candidate;
+					break;
+				}
+			}
+		}
+		if (!car) break;
 		q->answered = true;
 		car->direction = q->direction;
 		car->moveTo(q->floor);
@@ -453,10 +561,12 @@ void Elevator::respondToCalls()
 Queue *Elevator::getMostUrgentQueue()
 {
 	Queue *queue = NULL;
-	for (Queues::iterator iq = queues.begin(); iq != queues.end(); iq++)
+	for (Queues::iterator iq = queues.begin(); iq != queues.end(); ++iq)
 	{
-		if ((*iq)->called && !(*iq)->answered && (!queue || queue->getWaitDuration() < (*iq)->getWaitDuration()))
-			queue = *iq;
+		Queue *q = *iq;
+		if (q->people.empty() || !q->called || q->answered || !scheduleAllows(q->direction))
+			continue;
+		if (!queue || queue->getWaitDuration() > q->getWaitDuration()) queue = q;
 	}
 	return queue;
 }
@@ -476,38 +586,25 @@ Car *Elevator::getIdleCar(int floor)
 
 void Elevator::decideCarDestination(Car *car)
 {
-	// Find the next floor a passenger needs to go.
+	if (!car) return;
 	int nextFloor = INT_MAX;
-	for (People::iterator ip = car->passengers.begin(); ip != car->passengers.end(); ip++)
+	for (People::iterator ip = car->passengers.begin(); ip != car->passengers.end(); ++ip)
 	{
-		int f = (*ip)->journey.toFloor;
-		if (nextFloor == INT_MAX || abs(car->destinationFloor - nextFloor) > abs(car->destinationFloor - f))
-			nextFloor = f;
+		const int floor = (*ip)->journey.toFloor;
+		if (nextFloor == INT_MAX ||
+		    std::abs(car->destinationFloor - nextFloor) > std::abs(car->destinationFloor - floor))
+			nextFloor = floor;
 	}
 
-	// Find the next queue that would lie in the car's path.
 	Queue *nextQueue = NULL;
 	double queueDistance = 0;
-	for (Queues::iterator iq = queues.begin(); iq != queues.end(); iq++)
+	for (Queues::iterator iq = queues.begin(); iq != queues.end(); ++iq)
 	{
 		Queue *q = *iq;
-
-		// Skip queues that aren't called, are answered, or are for the opposite direction.
-		if (q->direction != car->direction)
+		if (q->people.empty() || !q->called || q->answered || !scheduleAllows(q->direction))
 			continue;
-		if (!q->called || q->answered)
-			continue;
-
-		// Calculate the offset of the queue and the car, based on the car's current direction.
-		// This will make queues that lie ahead of the car have a positive distance, and cars that
-		// lie behin the car a negative distance. We only serve queues that are somewhat ahead of
-		// the car.
-		double distance = q->floor - car->altitude;
-		distance *= static_cast<double>(car->direction);
-		if (distance < 0.5)
-			continue;
-
-		// Keep the best queue.
+		const double distance = (q->floor - car->altitude) * (double)car->direction;
+		if (distance < 0.5) continue;
 		if (!nextQueue || queueDistance > distance)
 		{
 			queueDistance = distance;
@@ -515,10 +612,9 @@ void Elevator::decideCarDestination(Car *car)
 		}
 	}
 
-	// Move the car to the closer of the two destinations.
 	if (nextQueue && !car->isFull())
 	{
-		double floorDistance = fabs(nextFloor - car->altitude);
+		const double floorDistance = nextFloor == INT_MAX ? 1e30 : std::abs(nextFloor - car->altitude);
 		if (queueDistance <= floorDistance)
 		{
 			nextQueue->answered = true;
@@ -526,6 +622,13 @@ void Elevator::decideCarDestination(Car *car)
 			return;
 		}
 	}
-	getQueue(nextFloor, car->direction)->answered = true;
-	car->moveTo(nextFloor);
+	if (nextFloor != INT_MAX)
+	{
+		getQueue(nextFloor, car->direction)->answered = true;
+		car->moveTo(nextFloor);
+	}
+	else
+	{
+		car->setState(Car::kIdle);
+	}
 }

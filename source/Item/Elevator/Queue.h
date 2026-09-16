@@ -23,6 +23,11 @@ namespace OT {
 				Elevator::Direction direction;
 				int width;
 
+				static const int kQueueCapacity = 40;
+				static const int kQueueFullPenalty = 5;
+				static const int kQueueFullRetryFrames = 16;
+				static const int kQueueWatchdogFrames = 300;
+
 				bool called;
 				double callTime;
 				bool answered;
@@ -40,6 +45,11 @@ namespace OT {
 				virtual void advance(double dt);
 				void draw(sf::RenderTarget & target, sf::RenderStates states) const;
 				virtual void render(sf::RenderTarget & target) const;
+
+			private:
+				double fullRetryFrame;
+				double waitStartFrame;
+				void applyWatchdog();
 			};
 		}
 	}
