@@ -36,14 +36,17 @@ MapNode* GameMap::addNode(const MapNode::Point &p, Item::Item *item) {
 	} else f = floorNodes[p.y];
 
 	if(!item->canHaulPeople()) {
-		// Multi-story lobby: the atrium is open inside, so every floor the
-		// lobby covers is a first-class pedestrian floor (OpenSkyWeb
-		// ISSUE-006). The lobby never hauls people itself, but its vertical
-		// links let pedestrians walk from the ground entrance up to
-		// mezzanine elevator doors; MapSearchNode prices the hop in its
-		// lobby branch.
-		if(item->isLobby() && item->size.y > 1 && p.y == item->position.y)
-			linkLobbyAtrium(p, item);
+		// Every lobby is a routing slot. Marker nodes let the pathfinder apply
+		// the EXE's 16-slot overlapping-shaft transfer table.
+		if(item->isLobby() && p.y == item->position.y) {
+			MapNode::Point slotPoint(p.x, p.y);
+			while (gameMap.count(slotPoint) && gameMap[slotPoint]->hasElevator)
+				slotPoint.x++;
+			MapNode *slot = ensureNode(slotPoint);
+			if (!slot->transportItems[MapNode::UP] || slot->transportItems[MapNode::UP]->isLobby())
+				slot->transportItems[MapNode::UP] = item;
+			if (item->size.y > 1) linkLobbyAtrium(p, item);
+		}
 		return f; // Building item, do not add into transport map
 	}
 
@@ -240,11 +243,24 @@ void GameMap::unlinkLobbyAtrium(const MapNode::Point &p, Item::Item *lobby) {
 void GameMap::removeNode(const MapNode::Point &p, Item::Item *item) {
 	if(!item) return;
 	if(!item->canHaulPeople()) {
-		// Multi-story lobby: tear down the atrium chain above the entrance
-		// floor. (The lobby hauls no one itself; only its vertical links
-		// live in the transport map.)
-		if(item->isLobby() && item->size.y > 1 && p.y == item->position.y)
-			unlinkLobbyAtrium(p, item);
+		if(item->isLobby() && p.y == item->position.y) {
+			if (item->size.y > 1) unlinkLobbyAtrium(p, item);
+			else {
+				for (std::list<MapNode *>::iterator it = mapNodesByFloor[p.y].begin(); it != mapNodesByFloor[p.y].end(); ++it) {
+					MapNode *slot = *it;
+					if (slot->transportItems[MapNode::UP] != item) continue;
+					slot->transportItems[MapNode::UP] = NULL;
+					if (!slot->hasElevator && !slot->hasServiceElevator && !slot->transportItems[MapNode::DOWN] && !slot->neighbours[MapNode::UP] && !slot->neighbours[MapNode::DOWN]) {
+						if (slot->neighbours[MapNode::LEFT]) slot->neighbours[MapNode::LEFT]->neighbours[MapNode::RIGHT] = slot->neighbours[MapNode::RIGHT];
+						if (slot->neighbours[MapNode::RIGHT]) slot->neighbours[MapNode::RIGHT]->neighbours[MapNode::LEFT] = slot->neighbours[MapNode::LEFT];
+						gameMap.erase(slot->position);
+						mapNodesByFloor[p.y].erase(it);
+						delete slot;
+					}
+					break;
+				}
+			}
+		}
 		return;
 	}
 
