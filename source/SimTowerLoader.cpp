@@ -474,9 +474,11 @@ void SimTowerLoader::loadBitmaps()
 		fastfoods.copy(fastfood, toVector2u(0, i * 24));
 	}
 
-	//Restaurants
+	//Restaurants - all five variants. Each row is four 192px state
+	//frames merged from the 0x8568+2*i / 0x8568+2*i+1 pair; the old
+	//4*24 buffer clipped row 4 (the fifth restaurant) off the bottom.
 	sf::Image & restaurants = images["simtower/restaurant"];
-	restaurants.resize(toVector2u(4 * 192, 4 * 24));
+	restaurants.resize(toVector2u(4 * 192, 5 * 24));
 	for (int i = 0; i < 5; i++) {
 		sf::Image restaurant;
 		loadFood(0x8568 + i*2, restaurant);

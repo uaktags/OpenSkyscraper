@@ -29,9 +29,20 @@ namespace OT
 			int variant;
 			/// Cosmetic tenant identity (OpenSkyWeb ISSUE-035, authentic
 			/// SIMTOWER.EXE name pools), indexed by the sprite `variant`.
-			static const char * const kNameVariants[4];
+			static const char * const kNameVariants[5];
 			bool open;
 			int pricePerMeal;
+			// Daily retail pool (VenueT / Restaurant.c): quota is selected
+			// from the previous service score and counts down as street
+			// walk-ins are dispatched.  The door itself remains capped at 40.
+			int serviceScore[3];
+			int dailyQuota;
+			int quotaRemaining;
+			int walkinsToday;
+			int customersToday;
+			int walkinsYesterday;
+			int lastDemandDay;
+			bool revenueSettled;
 
 			class Customer : public Person
 			{

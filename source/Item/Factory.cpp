@@ -12,6 +12,7 @@
 #include "Hotel.h"
 #include "Lobby.h"
 #include "Restaurant.h"
+#include "Shop.h"
 #include "Stairs.h"
 #include "PartyHall.h"
 #include "Cinema.h"
@@ -51,7 +52,7 @@ void Factory::loadPrototypes()
 	register_item(Elevator::Service);
 	register_item(Elevator::Standard);
 	register_item(FastFood);
-	register_item(Restaurant);
+	register_item(Shop);
 	prototypes.push_back(Hotel::makeSinglePrototype());
 	prototypes.push_back(Hotel::makeDoublePrototype());
 	prototypes.push_back(Hotel::makeSuitePrototype());

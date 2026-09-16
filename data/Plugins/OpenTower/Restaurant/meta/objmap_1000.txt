@@ -1,6 +1,6 @@
 DefParts	Name	Csr
 		ID	100
-		List	Rect 0,0,768,96 Halftone
+		List	Rect 0,0,768,120 Halftone
 
 DefParts	Name	View
 		ID	1000
@@ -81,5 +81,25 @@ DefParts	Name	View
 		ID	1000
 		Pattern	115
 		List	Rect 576,72,768,96 Transparent
+
+DefParts	Name	View
+		ID	1000
+		Pattern	116
+		List	Rect 0,96,192,120 Transparent
+
+DefParts	Name	View
+		ID	1000
+		Pattern	117
+		List	Rect 192,96,384,120 Transparent
+
+DefParts	Name	View
+		ID	1000
+		Pattern	118
+		List	Rect 384,96,576,120 Transparent
+
+DefParts	Name	View
+		ID	1000
+		Pattern	119
+		List	Rect 576,96,768,120 Transparent
 
 End

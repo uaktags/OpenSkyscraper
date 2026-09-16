@@ -24,6 +24,9 @@ namespace OT {
 			virtual void decodeXML(tinyxml2::XMLElement & xml);
 
 			bool open;
+			int quota;
+			int patronsToday;
+			bool eventSettled;
 
 			/** A Person who arrives for a party. Spawned when the hall opens,
 			 *  removed when the hall closes (with attendance-based income). */

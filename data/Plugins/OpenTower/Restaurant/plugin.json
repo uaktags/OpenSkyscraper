@@ -18,12 +18,12 @@
     "ingame": {
       "present": true,
       "width": 768,
-      "height": 96,
+      "height": 120,
       "transparentColor": null,
       "maskDiscovery": "none",
       "downscale": {
         "toW": 768,
-        "toH": 96
+        "toH": 120
       }
     }
   },

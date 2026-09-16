@@ -28,10 +28,17 @@ namespace OT {
 			bool playing;
 			bool intermission;
 			int movieType;
+			int movieAgeDays;
+			int quotaMatinee;
+			int quotaEvening;
+			int patronsToday;
+			bool eveningShow;
+			bool revenueSettled;
 
 			class Customer : public Person {
 			public:
 				Customer(Cinema *cinema);
+				bool evening;
 			};
 			typedef std::set<Customer *> Customers;
 			Customers customers;

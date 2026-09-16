@@ -2,31 +2,40 @@
 #include "../Math/Rand.h"
 #include "Cinema.h"
 #include <string>
+#include <algorithm>
+#include <cmath>
 
 using namespace OT;
 using namespace OT::Item;
 
 Cinema::~Cinema()
 {
+	clearCustomers();
 }
 
 void Cinema::init()
 {
 	Item::init();
-
 	open = false;
 	playing = false;
 	intermission = false;
-	movieType = rand() % 15;
+	movieType = rand() % 14; // B12: film 14 is unreachable in the EXE.
+	movieAgeDays = 0;
+	quotaMatinee = quotaEvening = patronsToday = 0;
+	eveningShow = false;
+	revenueSettled = false;
 	animation = 0;
 	animationFrame = 0;
-
 	hallSprite.setTexture(App->bitmaps["simtower/cinema/hall"]);
 	hallSprite.setOrigin({0.f, 60.f});
 	hallSprite.setPosition({static_cast<float>(position.x * 8), static_cast<float>(-position.y * 36)});
 	screenSprite.setTexture(App->bitmaps["simtower/cinema/screens"]);
 	screenSprite.setOrigin({0.f, 60.f});
 	screenSprite.setPosition({static_cast<float>(position.x * 8), static_cast<float>(-position.y * 36)});
+	addSprite(&hallSprite);
+	addSprite(&screenSprite);
+	spriteNeedsUpdate = true;
+	updateSprite();
 }
 
 void Cinema::encodeXML(tinyxml2::XMLPrinter &xml)
@@ -36,14 +45,17 @@ void Cinema::encodeXML(tinyxml2::XMLPrinter &xml)
 	xml.PushAttribute("playing", playing);
 	xml.PushAttribute("intermission", intermission);
 	xml.PushAttribute("movie", movieType);
-
-	for (Customers::iterator c = customers.begin(); c != customers.end(); c++)
-	{
+	xml.PushAttribute("movieAgeDays", movieAgeDays);
+	xml.PushAttribute("quotaMatinee", quotaMatinee);
+	xml.PushAttribute("quotaEvening", quotaEvening);
+	xml.PushAttribute("patronsToday", patronsToday);
+	xml.PushAttribute("eveningShow", eveningShow);
+	xml.PushAttribute("revenueSettled", revenueSettled);
+	for (Customers::iterator c = customers.begin(); c != customers.end(); ++c) {
 		Customer *customer = *c;
-		if (customer->at != this)
-			continue;
-
+		if (customer->at != this) continue;
 		xml.OpenElement("customer");
+		xml.PushAttribute("evening", customer->evening);
 		xml.PushAttribute("type", customer->type);
 		xml.PushAttribute("state", customer->state);
 		xml.PushAttribute("stress", customer->stress);
@@ -58,15 +70,22 @@ void Cinema::encodeXML(tinyxml2::XMLPrinter &xml)
 void Cinema::decodeXML(tinyxml2::XMLElement &xml)
 {
 	Item::decodeXML(xml);
-	open = xml.BoolAttribute("open");
-	playing = xml.BoolAttribute("playing");
+	open = xml.BoolAttribute("open", false);
+	playing = xml.BoolAttribute("playing", false);
 	intermission = xml.BoolAttribute("intermission", false);
-	movieType = xml.IntAttribute("movie");
+	movieType = xml.IntAttribute("movie", 0);
+	if (movieType < 0 || movieType >= 14) movieType = 0;
+	movieAgeDays = std::max(0, xml.IntAttribute("movieAgeDays", 0));
+	quotaMatinee = std::max(0, xml.IntAttribute("quotaMatinee", 0));
+	quotaEvening = std::max(0, xml.IntAttribute("quotaEvening", 0));
+	patronsToday = std::max(0, xml.IntAttribute("patronsToday", 0));
+	eveningShow = xml.BoolAttribute("eveningShow", false);
+	revenueSettled = xml.BoolAttribute("revenueSettled", false);
+	const int savedPatronsToday = patronsToday;
 	clearCustomers();
-
-	for (tinyxml2::XMLElement *e = xml.FirstChildElement("customer"); e; e = e->NextSiblingElement("customer"))
-	{
+	for (tinyxml2::XMLElement *e = xml.FirstChildElement("customer"); e; e = e->NextSiblingElement("customer")) {
 		Customer *c = new Customer(this);
+		c->evening = e->BoolAttribute("evening", false);
 		c->type = (Person::Type)e->IntAttribute("type", Person::kMan);
 		c->state = (Person::State)e->IntAttribute("state", Person::kShopping);
 		c->stress = e->DoubleAttribute("stress", 0.0);
@@ -74,12 +93,10 @@ void Cinema::decodeXML(tinyxml2::XMLElement &xml)
 		c->name = e->Attribute("name", "");
 		c->from = e->Attribute("from", "");
 		c->goingTo = e->Attribute("goingTo", "");
-
 		customers.insert(c);
-		if (open)
-			addPerson(c);
+		if (open) addPerson(c);
 	}
-
+	patronsToday = savedPatronsToday;
 	updateSprite();
 }
 
@@ -105,7 +122,8 @@ void Cinema::updateSprite()
 		}
 		else
 		{
-			hallIndex = (people.size() > 0 ? 2 : 1); // TODO: make this based on the number of guests
+			// Doors-open seating state: empty, then occupied.
+			hallIndex = (people.size() > 0 ? 2 : 1);
 			screenIndex = hallIndex;
 		}
 	}
@@ -117,111 +135,98 @@ void Cinema::updateSprite()
 
 void Cinema::advance(double dt)
 {
-	// Open
-	if (game->time.checkHour(13) || game->time.checkHour(19))
-	{
-		open = true;
-		playing = false;
-		intermission = false;
-		spriteNeedsUpdate = true;
-
-		// Fill in the customers for this screening.
-		clearCustomers();
-		const int numCustomers = 50;
-		for (int i = 0; i < numCustomers; i++)
-		{
-			Customer *p = new Customer(this);
-			customers.insert(p);
-
-			// Make the customer journey to the cinema immediately.
-			p->journey.set(lobbyRoute);
-		}
-	}
-
-	// Start Screening
-	if ((game->time.checkHour(15) || game->time.checkHour(21)) && open)
-	{
-		playing = true;
-		intermission = false;
-		spriteNeedsUpdate = true;
-		// game->timeWindow.showMessage("Movie starts at the Movie Theatre");
-	}
-
-	// Intermission
-	if ((game->time.checkHour(16) || game->time.checkHour(22)) && open && playing)
-	{
-		if (!intermission)
-		{
-			intermission = true;
-			spriteNeedsUpdate = true;
-			game->playOnce("simtower/doorbell");
-
-			for (Customers::iterator c = customers.begin(); c != customers.end(); c++)
-			{
-				Customer *p = *c;
-				if (p->at == this)
-				{
-					p->eval = std::min(p->eval + 15.0, 100.0);
-					p->addStress(-15.0);
-				}
-			}
-		}
-	}
-
-	// Close
-	if ((game->time.checkHour(17) || game->time.checkHour(23)) && open)
-	{
+	if (game->time.checkHour(10)) {
+		if (movieAgeDays < 127) ++movieAgeDays;
+		patronsToday = 0;
+		quotaMatinee = (movieType >= 7 ? (movieAgeDays / 3 >= 3 ? 20 : movieAgeDays / 3 == 2 ? 40 : 60)
+			: (movieAgeDays / 3 >= 3 ? 20 : 40));
+		quotaEvening = quotaMatinee;
 		open = false;
 		playing = false;
 		intermission = false;
+		eveningShow = false;
+		revenueSettled = false;
+		clearCustomers();
 		spriteNeedsUpdate = true;
-
-		// Attendance-based income: count customers who actually reached the
-		// theatre (those still in `people`), times the ticket price, less the
-		// fixed royalty per screening. Replaces the previous flat calculation
-		// that credited every spawned customer regardless of whether they
-		// found a route in.
-		const int kTicketPrice = 80;
-		const int kScreeningFee = 2000;
-		int attendees = static_cast<int>(people.size());
-		int net = attendees * kTicketPrice - kScreeningFee;
-		game->transferFunds(net, "entertainment_income", "Income from Movie Theatre");
-
-		// Make the customers leave.
-		const Route &r = game->findRoute(this, game->mainLobby);
-		for (Customers::iterator c = customers.begin(); c != customers.end(); c++)
-		{
+	}
+	if (game->time.checkHour(12)) {
+		open = true;
+		playing = false;
+		eveningShow = false;
+		spriteNeedsUpdate = true;
+	}
+	if (game->time.checkHour(13) && open) {
+		playing = true;
+		intermission = false;
+		eveningShow = false;
+		for (int i = 0; i < quotaMatinee && customers.size() < static_cast<size_t>(quotaMatinee + quotaEvening); ++i) {
+			Customer *c = new Customer(this);
+			c->evening = false;
+			customers.insert(c);
+			if (!lobbyRoute.empty()) c->journey.set(lobbyRoute);
+		}
+		spriteNeedsUpdate = true;
+	}
+	if (game->time.checkHour(15) && open) {
+		for (int i = 0; i < quotaEvening; ++i) {
+			Customer *c = new Customer(this);
+			c->evening = true;
+			customers.insert(c);
+			if (!lobbyRoute.empty()) c->journey.set(lobbyRoute);
+		}
+		playing = false;
+		eveningShow = true;
+		spriteNeedsUpdate = true;
+	}
+	if (game->time.checkHour(16) && open) {
+		playing = false;
+		for (Customers::iterator c = customers.begin(); c != customers.end(); ++c) {
 			Customer *p = *c;
-			if (r.empty())
-			{
-				LOG(DEBUG, "%p has no route to leave", p);
-			}
-			else
-			{
-				LOG(DEBUG, "%p leaving", p);
-				p->state = Person::kReturning;
-				p->from = prototype->name;
-				p->goingTo = "Exit";
-				if (p->at == this)
-				{
-					removePerson(p);
-				}
-				p->journey.set(r);
-			}
+			if (p->evening || p->at != this) continue;
+			removePerson(p);
+			p->state = Person::kReturning;
+			p->goingTo = "Exit";
+			const Route &r = game->findRoute(this, game->mainLobby);
+			if (!r.empty()) p->journey.set(r);
+		}
+		spriteNeedsUpdate = true;
+	}
+	if (game->time.checkHour(17) && open) {
+		playing = true;
+		eveningShow = true;
+		intermission = false;
+		spriteNeedsUpdate = true;
+	}
+	if (game->time.checkHour(20) && open) {
+		playing = false;
+		open = false;
+		intermission = false;
+		spriteNeedsUpdate = true;
+		if (!revenueSettled) {
+			int amount = patronsToday < 40 ? 0 : patronsToday < 80 ? 2000 : patronsToday < 100 ? 10000 : 15000;
+			if (amount > 0) game->transferFunds(amount, "entertainment_income", "Income from Movie Theatre");
+			revenueSettled = true;
+		}
+		const Route &r = game->findRoute(this, game->mainLobby);
+		for (Customers::iterator c = customers.begin(); c != customers.end(); ++c) {
+			Customer *p = *c;
+			if (p->at != this) continue;
+			removePerson(p);
+			p->state = Person::kReturning;
+			p->goingTo = "Exit";
+			if (!r.empty()) p->journey.set(r);
 		}
 	}
-
-	// Animate the sprite.
+	if (game->time.checkHour(16) || game->time.checkHour(22)) {
+		if (open && playing && !intermission) {
+			intermission = true;
+			game->playOnce("simtower/doorbell");
+		}
+	}
 	animation = fmod(animation + dt, 1);
 	int af = floor(animation * 2);
-	if (af != animationFrame)
-	{
-		animationFrame = af;
-		spriteNeedsUpdate = true;
-	}
-
-	if (spriteNeedsUpdate)
-		updateSprite();
+	if (af != animationFrame) { animationFrame = af; spriteNeedsUpdate = true; }
+	if (spriteNeedsUpdate) updateSprite();
 }
 
 Path Cinema::getRandomBackgroundSoundPath()
@@ -235,10 +240,21 @@ Path Cinema::getRandomBackgroundSoundPath()
 
 void Cinema::addPerson(Person *p)
 {
+	if (patronsToday >= quotaMatinee + quotaEvening) {
+		Item::addPerson(p);
+		Item::removePerson(p);
+		p->state = Person::kReturning;
+		p->goingTo = "Exit";
+		if (game->mainLobby) {
+			const Route &r = game->findRoute(this, game->mainLobby);
+			if (!r.empty()) p->journey.set(r);
+		}
+		return;
+	}
 	Item::addPerson(p);
 	p->state = Person::kShopping;
 	p->eval = 60;
-	p->addStress(-20);
+	++patronsToday;
 	spriteNeedsUpdate = true;
 }
 
@@ -251,6 +267,7 @@ void Cinema::removePerson(Person *p)
 Cinema::Customer::Customer(Cinema *item)
 	: Person(item->game)
 {
+	evening = false;
 	Type types[] = {kMan, kWoman1, kWoman2, kWomanWithChild1};
 	type = types[rand() % 4];
 	from = "City";
