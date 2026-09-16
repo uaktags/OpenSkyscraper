@@ -60,6 +60,12 @@ namespace OT {
 
 		bool handleEvent(sf::Event & event);
 		void advance(double dt);
+
+		/// Jump the game clock to `h` (0..24) of the current day. The clock's
+		/// absolute-to-hour mapping is non-linear, so this goes through
+		/// Time's table. Used by the event system (e.g. a caught fire) to
+		/// snap the clock forward.
+		void jumpToHour(double h);
 		bool handleViewportScrollbarEvent(sf::Event & event);
 		void drawViewportScrollbars(sf::RenderTarget & target) const;
 		void qaSetViewportScrollFractions(double horizontal, double vertical);

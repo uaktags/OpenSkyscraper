@@ -765,6 +765,10 @@ void SimTowerLoader::loadBitmaps()
 		{0x8F6C, "fire/small"},
 		{0x8F6D, "fire/chopper"},
 		{0x8FA8, "fire/destroyed"},
+		//0x8FA8 is also the burned-out rubble sheet the fire and bomb
+		//waves lay down: same DIB, second key.
+		{0x8FA8, "fire/rubble"},
+
 		//ChurchT wedding art. 0x8828 is the 128x36 procession sheet: eight
 		//16px cells, 0 bride walk / 1 groom walk / 2..6 ceremony / 7 held
 		//pose. The six 224x36 ceremony strips stack above the cathedral

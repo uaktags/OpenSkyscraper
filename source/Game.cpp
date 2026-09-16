@@ -1459,6 +1459,11 @@ void Game::setFunds(int f)
 		timeWindow.updateMoneyStats();
 	}
 }
+void Game::jumpToHour(double h)
+{
+	time.set(Time::hourToAbsolute(h));
+}
+
 
 void Game::setRating(int r)
 {
