@@ -842,6 +842,12 @@ void Game::advance(double dt)
 	if (time.checkHour(18)) eveningSound.Play(this);
 	morningSound.setLooping(time.hour < 8);
 
+	// Promotion landing window (LevelUp): 3->4 and 4->5 only land 5PM-7AM on
+	// weekdays. Population/item events already re-evaluate; this catches a
+	// tower that became eligible while the window was shut (e.g. a good VIP
+	// review at 4PM) so it is crowned the moment 5PM opens.
+	if (time.checkHour(LevelUp::kPromotionWindowStartHour)) ratingMayIncrease();
+
 	//Constrain the POI.
 	double2 halfsize((win.getView().getSize().x)*0.5*zoom, (win.getView().getSize().y)*0.5*zoom);
 	poi.y = std::max<double>(std::min<double>(poi.y, 360*12 - halfsize.y), -360 + halfsize.y);
@@ -1637,12 +1643,38 @@ void Game::ratingMayIncrease()
 	judgeSystem.evaluateAll(this);
 	const JudgeSystem::Counts & counts = judgeSystem.counts();
 
+	// Facility scan the counts struct cannot answer: hotel suites, recycling
+	// centers and the 15-floor medical coverage (concilia LevelUp 1148:0000 /
+	// scan_promotion_flags). The gate itself is pure and lives in LevelUp.
+	LevelUp::PromotionContext ctx;
+	ctx.population = population;
+	ctx.securityOffices = counts.securityOffices;
+	ctx.metros = counts.metros;
+	Game::ItemSetByString::const_iterator suites = itemsByType.find("hotel_suite");
+	ctx.hotelSuites = (suites == itemsByType.end()) ? 0 : (int)suites->second.size();
+	Game::ItemSetByString::const_iterator recyclers = itemsByType.find("recycling");
+	const int recyclingCenters = (recyclers == itemsByType.end()) ? 0 : (int)recyclers->second.size();
+	ctx.recyclingAdequate = LevelUp::recyclingAdequate(population, recyclingCenters);
+	std::vector<int> servedFloors, medicalFloors;
+	for (ItemSet::const_iterator i = items.begin(); i != items.end(); ++i)
+	{
+		const std::string & id = (*i)->prototype->id;
+		if (id == "office" || id == "condo" || id == "yoot_condo")
+			servedFloors.push_back((*i)->position.y);
+		else if (id == "medicalcenter")
+			medicalFloors.push_back((*i)->position.y);
+	}
+	ctx.medicalAdequate = LevelUp::medicalAdequate(servedFloors, medicalFloors);
+	ctx.vipReviews = vipSystem.positiveReviews();
+	ctx.hour = time.hour;
+	ctx.day = time.day;
+
 	while (true)
 	{
 		const LevelUp::Requirements * req = LevelUp::advancementRequirements(rating);
 		if (!req) break; // already at max rating
 
-		if (!LevelUp::meetsRequirements(*req, population, counts, vipSystem.positiveReviews()))
+		if (!LevelUp::meetsRequirements(*req, ctx))
 		{
 			// Surface what's missing as a one-shot hint, but only when the
 			// player is close enough that the next push might trigger it.
@@ -1653,15 +1685,19 @@ void Game::ratingMayIncrease()
 			break;
 		}
 		setRating(rating + 1);
+		// Promotion ceremony (concilia LevelUp 1148:004f and @0047-004a):
+		// every promotion consumes the favorable-VIP verdict and re-seeds
+		// the buried-treasure latch with the new tier's dig condition.
+		vipSystem.clearApproval();
+		eventSystem.armTreasureLatch(rating + 1);
 		// Show a level-up modal in addition to the transient message.
 		// The modal lists the freshly unlocked items so the player knows
 		// what they can now build (Phase 3.2).
 		levelUpDialog.showForRating(rating);
 		timeWindow.showMessage(std::string("Promoted to ") + std::to_string(rating + 1) + " stars!");
-		// Star award gift message (OpenSkyWeb ISSUE-034, EXE strings
-		// 0x79636-0x79c36).
-		const std::string award = LevelUp::starRewardMessage(rating + 1);
-		if (!award.empty()) timeWindow.showMessage(award);
+		// No star award gift: the errata's promotion bonus was the buried-
+		// treasure payout misfiled (Phase 1a adjudication). LevelUp keeps the
+		// starRewardMessage API for callers, but it always returns empty.
 		toolboxWindow.reload(); // refresh build locks
 	}
 }

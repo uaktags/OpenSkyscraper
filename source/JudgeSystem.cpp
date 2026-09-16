@@ -30,83 +30,43 @@ namespace
 		if (item->people.empty()) return 0;
 		double sum = 0;
 		for (Item::Item::People::iterator p = item->people.begin(); p != item->people.end(); ++p)
-			sum += (*p)->stress;
+			sum += std::max(0.0, std::min(Person::kMaxStress, (*p)->stress));
 		return sum / item->people.size();
 	}
 
-	// Noise model approximating the original Kinsoku.h/c placement rules.
-	struct NoiseProfile { int level; int sensitivity; };
-	NoiseProfile noiseProfileFor(const std::string & id)
+	// The EXE's hotel verdict uses a same-floor noisy-neighbour check. A
+	// qualifying venue within 20 cells contributes one +60 verdict penalty;
+	// vertical/radius falloff is deliberately not part of this rule.
+	double computeNoisePenalty(Item::Item * item)
 	{
-		// Loud tenants - offices and commercial activity.
-		if (id == "office"   || id == "fastfood"   || id == "restaurant" ||
-		    id == "cinema"   || id == "partyhall"  || id == "metro")     return {90,  0};
-		// Quiet but noise-sensitive residents.
-		if (id == "condo" || id == "yoot_condo")                          return {10, 90};
-		if (id == "hotel_single" || id == "hotel_double" ||
-		    id == "hotel_suite"  || id == "hotel")                        return {10, 70};
-		return {0, 0};
-	}
-
-	// Isolation radius in tiles, per the SimTower Notes
-	// (120px / 8px = 15 tiles for hotels, 240px / 8px = 30 tiles for condos).
-	int noiseRadiusTilesFor(const std::string & id)
-	{
-		if (id == "condo" || id == "yoot_condo")              return 30;
-		if (id.find("hotel") != std::string::npos)            return 15;
-		return 0;
-	}
-
-	// Sum the noise load on a sensitive item from loud neighbours on the same
-	// floor and the two adjacent floors. Returns a 0..25 evaluation penalty.
-	double computeNoisePenalty(Game * game, Item::Item * item)
-	{
-		NoiseProfile np = noiseProfileFor(item->prototype->id);
-		if (np.sensitivity == 0) return 0;
-		int radius = noiseRadiusTilesFor(item->prototype->id);
-		if (radius <= 0) return 0;
-
-		double noiseLoad = 0;
-		for (int floorDelta = -1; floorDelta <= 1; ++floorDelta)
+		if (!item || item->prototype->id.find("hotel") == std::string::npos)
+			return 0.0;
+		const int minX = item->position.x;
+		const int maxX = item->position.x + item->size.x;
+		const int floor = item->position.y;
+		double penalty = 0.0;
+		for (Game::ItemSetByInt::const_iterator fit = item->game->itemsByFloor.begin();
+		     fit != item->game->itemsByFloor.end(); ++fit)
 		{
-			int floor = item->position.y + floorDelta;
-			Game::ItemSetByInt::const_iterator it = game->itemsByFloor.find(floor);
-			if (it == game->itemsByFloor.end()) continue;
-
-			for (Game::ItemSet::const_iterator nit = it->second.begin();
-			     nit != it->second.end(); ++nit)
+			if (fit->first != floor) continue;
+			for (Game::ItemSet::const_iterator nit = fit->second.begin();
+			     nit != fit->second.end(); ++nit)
 			{
 				Item::Item *neighbor = *nit;
 				if (neighbor == item) continue;
-				NoiseProfile np2 = noiseProfileFor(neighbor->prototype->id);
-				if (np2.level == 0) continue;
-
-				// Horizontal gap between the two item rectangles (tiles).
-				int myMin = item->position.x;
-				int myMax = item->position.x + item->size.x;
-				int nMin  = neighbor->position.x;
-				int nMax  = neighbor->position.x + neighbor->size.x;
-				int dist;
-				if (nMin >= myMax)      dist = nMin - myMax;
-				else if (myMin >= nMax) dist = myMin - nMax;
-				else                    dist = 0; // overlapping
-				// Cross-floor noise has to pass through a ceiling, treat that
-				// as a few extra tiles of distance.
-				if (floorDelta != 0) dist += 5;
-
-				if (dist < radius)
-				{
-					double weight = 1.0 - static_cast<double>(dist) / radius;
-					noiseLoad += np2.level * weight;
-				}
+				const std::string &id = neighbor->prototype->id;
+				const bool loud = id == "restaurant" || id == "shop" ||
+					id == "fastfood" || id == "office" || id == "cinema" ||
+					id == "partyhall";
+				if (!loud) continue;
+				const int nMin = neighbor->position.x;
+				const int nMax = neighbor->position.x + neighbor->size.x;
+				const int gap = nMin >= maxX ? nMin - maxX :
+					(minX >= nMax ? minX - nMax : 0);
+				if (gap <= 20) penalty += 60.0;
 			}
 		}
-
-		if (noiseLoad <= 0) return 0;
-		// Scale so a single neighbouring office at distance 0 (~90 load)
-		// subtracts ~18 points from a condo's evaluation.
-		if (noiseLoad > 125.0) noiseLoad = 125.0;
-		return noiseLoad * 0.2;
+		return std::min(100.0, penalty);
 	}
 }
 
@@ -124,18 +84,17 @@ double JudgeSystem::clampScore(double v)
 }
 
 namespace {
-	// Rule-of-thumb capacities used by the granular counters. They don't
-	// drive any gameplay directly; they just give the statistics UI and
-	// future VIP system a sensible "this tower can hold N people" number.
+	// Capacities mirror the live occupant constructors and venue admission
+	// pools; these values are counters, not satisfaction heuristics.
 	int populationCapacityFor(const std::string & id)
 	{
-		if (id == "office")                       return 3;
-		if (id == "condo" || id == "yoot_condo")  return 2;
-		return 0; // hotels counted via capacity() below
+		if (id == "office")                       return 6;
+		if (id == "condo" || id == "yoot_condo") return 10;
+		return 0; // hotels counted via Hotel::capacity()
 	}
 	int visitorCapacityFor(const std::string & id)
 	{
-		// Coarse visitor estimates for commercial venues.
+		// Commercial admission pools are bounded per venue type.
 		if (id == "fastfood")    return 6;
 		if (id == "restaurant")  return 8;
 		if (id == "cinema")      return 20;
@@ -163,7 +122,7 @@ static double baseTenantScore(Item::Item * item)
 		// Unreachable tenants are deeply unhappy.
 		score -= 30;
 	}
-	score -= averageStress(item) * 0.3;
+	score -= averageStress(item) * 0.1;
 	return score;
 }
 
@@ -216,8 +175,7 @@ double JudgeSystem::scoreCondo(Game * game, Item::Item * item)
 			[&](Item::Item * r) { return !game->findRoute(item, r).empty(); });
 	score += foodReachable ? 3 : 0;
 
-	// Noise penalty - condos are the most noise-sensitive tenant.
-	score -= computeNoisePenalty(game, item);
+	// Noise is an EXE hotel verdict rule, not a condo radius/falloff model.
 
 	return clampScore(score);
 }
@@ -252,7 +210,8 @@ double JudgeSystem::scoreHotel(Game * game, Item::Item * item)
 			score -= 6;
 
 		// Noise penalty - hotels are noise-sensitive but less so than condos.
-		score -= computeNoisePenalty(game, item) * 0.7;
+		// Same-floor loud neighbours within 20 cells subtract one +60 verdict.
+		score -= computeNoisePenalty(item);
 	}
 
 	return clampScore(score);
@@ -273,24 +232,39 @@ double JudgeSystem::scoreCommercial(Game * game, Item::Item * item)
 
 void JudgeSystem::evaluateAll(Game * game)
 {
-	// Reset tallies.
+	const int day = static_cast<int>(std::floor(game->time.absolute));
+	const int oldDay = lastCounts.visitorDay;
+	const int oldDailyArrivals = lastCounts.dailyArrivals;
+	const int oldDailyHotel = lastCounts.dailyHotelArrivals;
+	const int oldDailyFood = lastCounts.dailyFoodArrivals;
+	const int oldDailyShop = lastCounts.dailyShopArrivals;
+	const int oldDailyLeisure = lastCounts.dailyLeisureArrivals;
 	lastCounts = Counts();
+	lastCounts.visitorDay = day;
+	if (oldDay == day)
+	{
+		lastCounts.dailyArrivals = oldDailyArrivals;
+		lastCounts.dailyHotelArrivals = oldDailyHotel;
+		lastCounts.dailyFoodArrivals = oldDailyFood;
+		lastCounts.dailyShopArrivals = oldDailyShop;
+		lastCounts.dailyLeisureArrivals = oldDailyLeisure;
+	}
 
-	// Pass 1: cheap counting pass so derived metrics (parking coverage) are
-	// available before the per-item scorers run.
+	// Pass 1: count facilities, live capacities, and current visitor pools.
 	for (Game::ItemSet::iterator it = game->items.begin(); it != game->items.end(); ++it)
 	{
-		const std::string & id = (*it)->prototype->id;
+		Item::Item *item = *it;
+		const std::string &id = item->prototype->id;
 		if (id == "office")                              ++lastCounts.offices;
 		else if (id == "condo" || id == "yoot_condo")    ++lastCounts.condos;
 		else if (id == "hotel_single" || id == "hotel_double" ||
 		         id == "hotel_suite" || id == "hotel")
 		{
 			++lastCounts.hotels;
-			Item::Hotel * hotel = dynamic_cast<Item::Hotel *>(*it);
+			Item::Hotel *hotel = dynamic_cast<Item::Hotel *>(item);
 			if (hotel)
 			{
-				if (hotel->roomState == Item::Hotel::kDirty)    ++lastCounts.hotelsDirty;
+				if (hotel->roomState == Item::Hotel::kDirty) ++lastCounts.hotelsDirty;
 				else if (hotel->roomState == Item::Hotel::kOccupied) ++lastCounts.hotelsOccupied;
 				lastCounts.visitorCapacity += hotel->capacity();
 			}
@@ -300,14 +274,59 @@ void JudgeSystem::evaluateAll(Game * game)
 		else if (id == "medicalcenter")                  ++lastCounts.medicalCenters;
 		else if (id == "metro")                          ++lastCounts.metros;
 
-		// Granular capacity / occupancy tallies. These are reported
-		// alongside the basic Counts above so future UI/VIP systems can
-		// read a single struct instead of rescanning the world.
 		lastCounts.populationCapacity += populationCapacityFor(id);
 		lastCounts.visitorCapacity    += visitorCapacityFor(id);
-		lastCounts.currentOccupants   += static_cast<int>((*it)->people.size());
+		const int occupants = static_cast<int>(item->people.size());
+		lastCounts.currentOccupants += occupants;
+		const bool hotel = id == "hotel_single" || id == "hotel_double" ||
+			id == "hotel_suite" || id == "hotel";
+		const bool food = id == "fastfood" || id == "restaurant";
+		const bool shop = id == "shop";
+		const bool leisure = id == "cinema" || id == "partyhall";
+		if (hotel || food || shop || leisure)
+		{
+			lastCounts.visitorPool += occupants;
+			if (hotel)   lastCounts.hotelVisitorPool += occupants;
+			if (food)    lastCounts.foodVisitorPool += occupants;
+			if (shop)    lastCounts.shopVisitorPool += occupants;
+			if (leisure) lastCounts.leisureVisitorPool += occupants;
+		}
 	}
 	lastCounts.population = game->population;
+
+	// Daily visitor passes are idempotent across multiple judge invocations.
+	for (Game::PersonSet::const_iterator p = game->people.begin(); p != game->people.end(); ++p)
+	{
+		Person *person = *p;
+		Item::Item *at = person->at;
+		if (!at) continue;
+		const std::string &id = at->prototype->id;
+		const bool visitor = id == "hotel_single" || id == "hotel_double" ||
+			id == "hotel_suite" || id == "hotel" || id == "fastfood" ||
+			id == "restaurant" || id == "shop" || id == "cinema" ||
+			id == "partyhall";
+		std::map<Person *, int>::iterator seen = visitorDaySeen.find(person);
+		if (seen != visitorDaySeen.end() && seen->second == day) continue;
+		visitorDaySeen[person] = day;
+		++lastCounts.dailyArrivals;
+		if (id == "hotel_single" || id == "hotel_double" ||
+		    id == "hotel_suite" || id == "hotel")
+			++lastCounts.dailyHotelArrivals;
+		else if (id == "fastfood" || id == "restaurant")
+			++lastCounts.dailyFoodArrivals;
+		else if (id == "shop")
+			++lastCounts.dailyShopArrivals;
+		else if (id == "cinema" || id == "partyhall")
+			++lastCounts.dailyLeisureArrivals;
+	}
+	for (std::map<Person *, int>::iterator p = visitorDaySeen.begin();
+	     p != visitorDaySeen.end(); )
+	{
+		if (game->people.find(p->first) == game->people.end())
+			p = visitorDaySeen.erase(p);
+		else
+			++p;
+	}
 
 	// Tower-wide parking coverage, cached for the per-item scorers below.
 	computeParkingCoverage(game);

@@ -341,9 +341,10 @@ static void testLevelUpRules()
 	using OT::LevelUp;
 	using OT::JudgeSystem;
 
-	// Authentic SimTower progression (SimTower wiki, OpenSkyWeb 46372a2):
-	// 1->2: 300 pop; 2->3: 1000 + security; 3->4: 5000 + medical + VIP;
-	// 4->5: 10000 + metro.
+	// Authentic SimTower progression: 1->2 requires 300 population;
+	// 2->3 requires 1000 + security; 3->4 requires 5000 + suite,
+	// recycling, medical coverage, VIP approval, and the evening window;
+	// 4->5 requires 10000 + metro, recycling, medical, and that window.
 	const LevelUp::Requirements * r1to2 = LevelUp::advancementRequirements(0);
 	EXPECT(r1to2 != nullptr);
 	EXPECT(r1to2->population == 300);
@@ -357,18 +358,30 @@ static void testLevelUpRules()
 	const LevelUp::Requirements * r3to4 = LevelUp::advancementRequirements(2);
 	EXPECT(r3to4 != nullptr);
 	EXPECT(r3to4->population == 5000);
-	EXPECT(r3to4->needsSecurity);
+	EXPECT(!r3to4->needsSecurity);
 	EXPECT(r3to4->needsMedical);
 	EXPECT(r3to4->needsVip);
+	EXPECT(r3to4->needsSuite);
+	EXPECT(r3to4->needsRecycling);
+	EXPECT(r3to4->needsWindow);
+	EXPECT(!r3to4->needsMetro);
 
 	const LevelUp::Requirements * r4to5 = LevelUp::advancementRequirements(3);
 	EXPECT(r4to5 != nullptr);
 	EXPECT(r4to5->population == 10000);
 	EXPECT(r4to5->needsMetro);
+	EXPECT(r4to5->needsMedical);
+	EXPECT(r4to5->needsRecycling);
+	EXPECT(r4to5->needsWindow);
+	EXPECT(!r4to5->needsVip);
+	EXPECT(!r4to5->needsSuite);
+	EXPECT(!r4to5->needsSecurity);
 
-	// 5 stars -> TOWER needs 15,000 population + facilities (the Cathedral
-	// itself grants TOWER instantly on completion; see Cathedral::advance).
 	const LevelUp::Requirements * rTower = LevelUp::advancementRequirements(4);
+
+	// 5 stars -> TOWER is a cathedral wedding special event; the retained
+	// row supplies the UI population/facility locks but is not the landing
+	// implementation.
 	EXPECT(rTower != nullptr);
 	EXPECT(rTower->population == 15000);
 	EXPECT(rTower->needsSecurity);
@@ -379,23 +392,36 @@ static void testLevelUpRules()
 	const LevelUp::Requirements * rMax = LevelUp::advancementRequirements(5);
 	EXPECT(rMax == nullptr);
 
-	// meetsRequirements: pure helper, takes a Counts struct.
-	JudgeSystem::Counts c = {};
-	c.securityOffices = 0; c.medicalCenters = 0; c.metros = 0;
+	// meetsRequirements is a pure PromotionContext gate.
+	LevelUp::PromotionContext ctx;
+	ctx.population = 300;
+	EXPECT(LevelUp::meetsRequirements(*r1to2, ctx));
+	ctx.population = 299;
+	EXPECT(!LevelUp::meetsRequirements(*r1to2, ctx));
 
-	EXPECT(LevelUp::meetsRequirements(*r1to2, 300, c, 0));  // pop only
-	EXPECT(!LevelUp::meetsRequirements(*r1to2, 299, c, 0)); // pop short
+	ctx = LevelUp::PromotionContext();
+	ctx.population = 1000;
+	EXPECT(!LevelUp::meetsRequirements(*r2to3, ctx)); // missing security
+	ctx.securityOffices = 1;
+	EXPECT(LevelUp::meetsRequirements(*r2to3, ctx));
 
-	// 2 -> 3 stars needs security only (no VIP since the authentic table).
-	EXPECT(!LevelUp::meetsRequirements(*r2to3, 1000, c, 0)); // missing security
-	c.securityOffices = 1;
-	EXPECT(LevelUp::meetsRequirements(*r2to3, 1000, c, 0));  // security suffices
-
-	// 3 -> 4 stars additionally needs medical + VIP approval.
-	EXPECT(!LevelUp::meetsRequirements(*r3to4, 5000, c, 0)); // missing medical & VIP
-	c.medicalCenters = 1;
-	EXPECT(!LevelUp::meetsRequirements(*r3to4, 5000, c, 0)); // missing VIP
-	EXPECT(LevelUp::meetsRequirements(*r3to4, 5000, c, 1));  // all present
+	ctx = LevelUp::PromotionContext();
+	ctx.population = 5000;
+	ctx.hotelSuites = 1;
+	ctx.recyclingAdequate = true;
+	ctx.medicalAdequate = true;
+	ctx.vipReviews = 1;
+	ctx.hour = 18.0;
+	ctx.day = 0;
+	EXPECT(LevelUp::meetsRequirements(*r3to4, ctx));
+	ctx.hour = 12.0;
+	EXPECT(!LevelUp::meetsRequirements(*r3to4, ctx)); // outside window
+	ctx.hour = 18.0;
+	ctx.day = 2;
+	EXPECT(!LevelUp::meetsRequirements(*r3to4, ctx)); // weekend
+	ctx.day = 0;
+	ctx.vipReviews = 0;
+	EXPECT(!LevelUp::meetsRequirements(*r3to4, ctx)); // missing VIP
 
 	// minRatingToBuild: authentic toolbox mapping, the rest 0.
 	EXPECT(LevelUp::minRatingToBuild("elevator-service") == 1);
@@ -420,14 +446,39 @@ static void testLevelUpRules()
 	EXPECT(LevelUp::minRatingToBuild("nonexistent_prototype") == 0);
 }
 
+static void testLevelUpPromotionHelpers()
+{
+	using OT::LevelUp;
+
+	EXPECT(LevelUp::promotionWindowOpen(17.0, 0));
+	EXPECT(LevelUp::promotionWindowOpen(23.5, 1));
+	EXPECT(LevelUp::promotionWindowOpen(3.0, 0));
+	EXPECT(!LevelUp::promotionWindowOpen(16.99, 0));
+	EXPECT(!LevelUp::promotionWindowOpen(7.0, 0));
+	EXPECT(!LevelUp::promotionWindowOpen(17.0, 2));
+
+	EXPECT(LevelUp::recyclingAdequate(2499, 1));
+	EXPECT(!LevelUp::recyclingAdequate(2500, 1));
+	EXPECT(!LevelUp::recyclingAdequate(1, 0));
+
+	EXPECT(LevelUp::medicalBand(-5) == 0);
+	EXPECT(LevelUp::medicalBand(14) == 0);
+	EXPECT(LevelUp::medicalBand(15) == 1);
+	EXPECT(LevelUp::medicalBand(44) == 2);
+	EXPECT(LevelUp::medicalAdequate({25}, {20}));
+	EXPECT(!LevelUp::medicalAdequate({25, 35}, {20}));
+	EXPECT(LevelUp::medicalAdequate({25, 35}, {20, -3}));
+}
+
 static void testLevelUpStarReward()
 {
-	// Authentic award gift wording (OpenSkyWeb ISSUE-034).
+	// The Phase 1a adjudication found no promotion cash or award gift:
+	// the old wording was a misread of the buried-treasure payout.
 	EXPECT(OT::LevelUp::starRewardMessage(1).empty());
-	EXPECT(OT::LevelUp::starRewardMessage(2) == "Your tower has been given a Two-Star Award!");
-	EXPECT(OT::LevelUp::starRewardMessage(3) == "Your tower has been given a Three-Star Award!");
-	EXPECT(OT::LevelUp::starRewardMessage(4) == "Your tower has been given a Four-Star Award!");
-	EXPECT(OT::LevelUp::starRewardMessage(5) == "Your tower has been given a Five-Star Award!");
+	EXPECT(OT::LevelUp::starRewardMessage(2).empty());
+	EXPECT(OT::LevelUp::starRewardMessage(3).empty());
+	EXPECT(OT::LevelUp::starRewardMessage(4).empty());
+	EXPECT(OT::LevelUp::starRewardMessage(5).empty());
 	EXPECT(OT::LevelUp::starRewardMessage(6).empty());
 	EXPECT(OT::LevelUp::starRewardMessage(99).empty());
 }
@@ -1842,7 +1893,7 @@ int main()
 	testNameManager();
 	testLightingColorMath();
 	testLevelUpRules();
-	testLevelUpStarReward();
+	testLevelUpPromotionHelpers();
 	testSaveHash();
 	testWindowsPEExecutable();
 	testWindowsSPExecutable();

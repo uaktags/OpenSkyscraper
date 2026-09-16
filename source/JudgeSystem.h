@@ -5,6 +5,7 @@
 namespace OT
 {
 	class Game;
+	class Person;
 
 	namespace Item { class Item; }
 
@@ -48,15 +49,23 @@ namespace OT
 			int population;
 			int criticalTenants; ///< tenants with evaluation < 25 (complaint risk)
 
-			/// Granular capacity/occupancy metrics. Capacity uses each
-			/// item type's rule-of-thumb (offices: 3 workers, condos: 2
-			/// residents, hotels: capacity() per room). Visitors and
-			/// day-pass counts are stubbed until the matching scheduling
-			/// work lands; they are reported here so future UI/stat
-			/// windows can read a single struct.
+			/// Granular capacity/occupancy metrics. Capacity is derived from
+			/// the live item model; visitor pools are current occupants by
+			/// category and dailyArrivals is deduplicated per simulation day.
 			int populationCapacity; ///< sum of worker/resident capacity
 			int visitorCapacity;    ///< hotel + commercial capacity
 			int currentOccupants;   ///< people currently at an item
+			int visitorPool;        ///< all hotel/commercial visitors present
+			int hotelVisitorPool;   ///< hotel guests present
+			int foodVisitorPool;    ///< fast-food/restaurant visitors present
+			int shopVisitorPool;    ///< retail visitors present
+			int leisureVisitorPool; ///< cinema/party visitors present
+			int dailyArrivals;      ///< visitor arrivals during the current day
+			int dailyHotelArrivals;
+			int dailyFoodArrivals;
+			int dailyShopArrivals;
+			int dailyLeisureArrivals;
+			int visitorDay;         ///< floor(time.absolute), for pass consumers
 			double hotelAvgEval;    ///< mean evaluation across hotels, 0 if none
 		};
 		const Counts & counts() const { return lastCounts; }
@@ -89,6 +98,9 @@ namespace OT
 
 		Counts lastCounts;
 
+		/// Visitor pass de-duplication: a person contributes once per day even
+		/// when evaluateAll is also triggered by a rating/facility change.
+		std::map<Person *, int> visitorDaySeen;
 		/// Item pointer -> consecutive bad days. Used by
 		/// reviewUnderperformers to only complain about persistently
 		/// unhappy tenants rather than transient dips.

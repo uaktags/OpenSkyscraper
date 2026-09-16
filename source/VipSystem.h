@@ -7,26 +7,22 @@ namespace tinyxml2 { class XMLPrinter; class XMLElement; }
 
 namespace OT
 {
-	/** VIP visit system (Phase 3.2).
+	namespace Item { class Hotel; }
+	class Person;
+
+	/** Authentic VIP visit state machine.
 	 *
-	 * Scheduling retuned to the authentic trigger model (OpenSkyWeb
-	 * ISSUE-036, docs/research/event-triggers.md): VIP visits are NOT
-	 * random. The VIP arrives when the next star promotion requires a VIP
-	 * rating and every other requirement is already met. A good review
-	 * completes the promotion gate (consumed by Game::ratingMayIncrease);
-	 * a bad review schedules a 14-day retry cooldown.
-	 *
-	 * The visit itself is abstract - we don't spawn a walking Person for
-	 * the VIP, just bookkeep a scheduled window. This keeps the system
-	 * decoupled from the pathfinder and lets it run even mid-construction.
+	 * At exactly three stars, every ninth-day schedule arms a real suite
+	 * guest.  The guest must arrive in a parked car; the guest's own banked
+	 * stress is judged at checkout and a favorable result supplies one
+	 * consumable 3->4 approval.
 	 */
 	class VipSystem : public GameObject
 	{
 	public:
 		VipSystem(Game * game);
 
-		/// Per-frame hook. Handles countdown to the next scheduled visit
-		/// and ends any in-progress visit. Called from Game::advance().
+		/// Per-frame hook. Handles deterministic arming, arrival and checkout.
 		void advance(double dt);
 
 		/// Force a visit as soon as possible (used by dev keys / tests).
@@ -38,37 +34,43 @@ namespace OT
 		/// Is a VIP currently on the premises?
 		bool isVisiting() const { return visiting; }
 
-		/// Absolute-time at which the next visit will trigger. 0 if no
-		/// visit is scheduled yet (e.g. fresh tower below the threshold).
+		/// Absolute-time at which the next visit will trigger. 0 if none.
 		double nextVisitAt() const { return nextVisitTime; }
 
-		/// Persist / restore across save-reload. Called from Game's
-		/// encodeXML/decodeXML.
+		/// Persist / restore across save-reload.
 		void encodeXML(tinyxml2::XMLPrinter & xml) const;
 		void decodeXML(tinyxml2::XMLElement & xml);
 
-		/// Running count of positive reviews. Intended to gate the
-		/// Cathedral "Tower of the Year" ending once that lands.
+		/// Favorable verdicts on hand, consumed by promotion ceremonies.
 		int positiveReviews() const { return goodReviews; }
 
+		/// Consume exactly one favorable verdict without clearing history.
+		void clearApproval();
+
 	private:
-		/// True when the next promotion requires a VIP rating and every
-		/// other requirement (population, facilities) is already met — the
-		/// condition under which the VIP comes to inspect.
 		bool promotionNeedsVisit() const;
-
-		/// Begin a visit: mark visiting, capture the end time, emit an
-		/// arrival message.
+		void armVisit();
 		void beginVisit();
+		void advanceGuest();
+		void endVisit(bool favorable);
+		Item::Hotel * firstBookableSuite() const;
+		bool liveSuite(Item::Hotel * suite) const;
+		bool liveGuest(Person * guest) const;
 
-		/// End a visit: evaluate tower state, emit a result message,
-		/// grant any reward, bump goodReviews / badReviews.
-		void endVisit();
-
-		double nextVisitTime;   ///< absolute time of next scheduled visit; 0 = none
-		double visitEndTime;    ///< absolute time when current visit ends
-		bool   visiting;        ///< is a VIP currently on premises?
-		int    goodReviews;     ///< lifetime positive reviews
-		int    badReviews;      ///< lifetime negative reviews
+		double nextVisitTime;   ///< absolute time of the next 17:00 arm
+		double visitEndTime;    ///< fallback timeout for a malformed stay
+		bool   visiting;        ///< a scheduled VIP stay is active
+		bool   forcedVisit;     ///< scheduleNow() bypasses the calendar gate
+		bool   guestArrived;    ///< a suite guest claimed a car space
+		bool   guestCheckedIn;  ///< the selected guest reached the suite
+		bool   visitVoided;     ///< failed parking/route voided this stay
+		int    armedDay;        ///< day already armed; prevents per-frame re-arm
+		int    suiteFloor;      ///< reservation dialog floor, 0 when unavailable
+		double stressTotal;     ///< selected guest's banked felt-wait stress
+		int    stressTrips;     ///< number of banked stress samples
+		Item::Hotel * bookedSuite;
+		Person * vipGuest;
+		int    goodReviews;
+		int    badReviews;
 	};
 }
