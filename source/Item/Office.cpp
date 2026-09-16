@@ -41,7 +41,8 @@ static void releaseParking(Parking * park)
 
 Office::~Office()
 {
-	// Get rid of the workers.
+	// Remove worker memberships before deleting records; Item::removePerson
+	// asserts ownership and keeps Game::people free of dangling pointers.
 	for (Workers::iterator c = workers.begin(); c != workers.end(); c++)
 	{
 		if ((*c)->parkingUsed)
@@ -50,6 +51,8 @@ Office::~Office()
 			(*c)->parkingUsed->spriteNeedsUpdate = true;
 			(*c)->parkingUsed = NULL;
 		}
+		if ((*c)->at == this)
+			Item::removePerson(*c);
 		delete *c;
 	}
 }
@@ -135,31 +138,35 @@ void Office::advance(double dt)
 			lit = true;
 			spriteNeedsUpdate = true;
 			rentDeposit = rent;
+			// A worker record survives a vacancy, but must not remain in
+			// Item::people (or count toward tower population) while the
+			// office is unlet.
+			for (Workers::iterator iw = workers.begin(); iw != workers.end(); ++iw)
+				if (!(*iw)->at)
+					addPerson(*iw);
 			population = workers.size();
 			game->populationNeedsUpdate = true;
 			game->transferFunds(rentDeposit, "deposit_income", "Occupied Office's rent deposit");
 		}
 	}
 
-	// Monday 5:00 needs special treatment as this is where rent will be paid and tenants vacate
-	// unattractive items.
-	if (occupied && game->time.checkHour(5) && game->time.day == 0)
+	// The EXE's 4:59AM row runs on the first weekday of each three-day
+	// financial cycle. Game performs the quarter rent before item advance;
+	if (occupied && game->time.hour >= 5.0 && game->time.hour < 5.1 &&
+	    game->time.day == 0 && !isAttractive())
 	{
-		// Vacate unattractive offices.
-		if (!isAttractive())
+		for (Workers::iterator iw = workers.begin(); iw != workers.end(); ++iw)
 		{
-			occupied = false;
-			spriteNeedsUpdate = true;
-			population = 0;
-			game->populationNeedsUpdate = true;
-			game->transferFunds(-rentDeposit, "deposit_refund", "Vacated Office's rent deposit paid back");
+			Worker *w = *iw;
+			releaseParking(w->parkingUsed);
+			w->parkingUsed = NULL;
+			if (w->at == this)
+				Item::removePerson(w);
 		}
-
-		// Pay rent for the others.
-		else
-		{
-			game->transferFunds(rent, "rent_income", "Income from Office rent");
-		}
+		occupied = false;
+		spriteNeedsUpdate = true;
+		population = 0;
+		game->populationNeedsUpdate = true;
 	}
 
 	// Reset worker schedules at 5:00 if the office is occupied.
@@ -329,7 +336,6 @@ void Office::advance(double dt)
 				w->state = Person::kReturning;
 				w->goingTo = "Home (stressed)";
 				w->journey.set(homeRoute);
-				w->addStress(-10.0); // recovering on the way home
 				releaseParking(w->parkingUsed);
 				w->parkingUsed = NULL;
 				game->timeWindow.showMessage("Worker leaves a stressful office");
@@ -364,8 +370,6 @@ void Office::addPerson(Person *p)
 
 	p->state = Person::kWorking;
 
-	// Reduce the person's stress a bit, just for the time being.
-	p->stress *= 0.5;
 
 	// If this was a salesman, set a sales leave and return time for him.
 	if (p->type == Person::kSalesman)

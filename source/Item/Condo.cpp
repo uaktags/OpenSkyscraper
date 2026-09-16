@@ -4,6 +4,8 @@
 
 using namespace OT;
 using namespace OT::Item;
+// Shared rent-table writer implemented by Game.cpp (resource 0x7f0b/0x3e9).
+extern int openSkyQuarterlyRent(const std::string &prototypeId, int rentClass);
 
 Condo::~Condo()
 {
@@ -15,9 +17,7 @@ void Condo::init()
 
 	variant = rand() % 3;
 	occupied = false;
-	spriteNeedsUpdate = false;
-	updateLighting(game->time.getHour());
-	rent = 5000;
+	rent = 150000;
 	rentDeposit = rent;
 
 	sprite.setTexture(App->bitmaps.editionTexture("condo", "simtower/condo"));
@@ -40,10 +40,9 @@ void Condo::encodeXML(tinyxml2::XMLPrinter &xml)
 
 void Condo::decodeXML(tinyxml2::XMLElement &xml)
 {
-	Item::decodeXML(xml);
+	rent = xml.IntAttribute("rent", 150000);
 	const bool hasPopulation = (xml.FindAttribute("population") != NULL);
-	rent = xml.IntAttribute("rent");
-	rentDeposit = xml.IntAttribute("rentDeposit");
+	rentDeposit = xml.IntAttribute("rentDeposit", rent);
 	variant = xml.IntAttribute("variant");
 	lighting = (LightingConditions)xml.IntAttribute("lighting");
 	occupied = xml.BoolAttribute("occupied");
@@ -112,20 +111,19 @@ void Condo::advance(double dt)
 		}
 	}
 
-	// Monday 5:00 needs special treatment as this is where rent will be paid and tenants vacate
-	// unattractive items.
-	if (occupied && game->time.checkHour(5) && game->time.day == 0)
+	// The 4:59AM quarter row has already skipped this unit's rent when its
+	// cached evaluation marked it for departure. Remove the family safely
+	// before the next day's arrivals and buy the unit back at its rent class.
+	if (occupied && game->time.hour >= 5.0 && game->time.hour < 5.1 &&
+	    game->time.day == 0 && !isAttractive())
 	{
-		// Vacate unattractive offices.
-		if (!isAttractive())
-		{
-			occupied = false;
-			removeOccupants();
-			spriteNeedsUpdate = true;
-			population = 0;
-			game->populationNeedsUpdate = true;
-			game->transferFunds(-prototype->price, "condo_buyback", "Repurchased vacated Condo");
-		}
+		occupied = false;
+		removeOccupants();
+		spriteNeedsUpdate = true;
+		population = 0;
+		game->populationNeedsUpdate = true;
+		const int buyback = openSkyQuarterlyRent("condo", 1);
+		game->transferFunds(-buyback, "condo_buyback", "Repurchased vacated Condo");
 	}
 
 	if (occupied && game->time.checkHour(3))
@@ -284,16 +282,33 @@ void Condo::createOccupants()
 
 void Condo::removeOccupants()
 {
-	for (Person *occupant : occupants)
+	// Erase before deleting so a subsequent re-let cannot retain dangling
+	// occupant pointers (and Item::removePerson remains assertion-safe).
+	while (!occupants.empty())
 	{
-		removePerson(occupant);
+		std::set<CondoOccupant *>::iterator it = occupants.begin();
+		CondoOccupant *occupant = *it;
+		occupants.erase(it);
+		if (occupant->at == this)
+			Item::removePerson(occupant);
 		delete occupant;
 	}
 }
 
 void Condo::removePerson(Person *p)
 {
+	assert(p);
 	Item::removePerson(p);
+	for (std::set<CondoOccupant *>::iterator it = occupants.begin(); it != occupants.end(); ++it)
+	{
+		if (*it == p)
+		{
+			occupants.erase(it);
+			break;
+		}
+	}
+	population = static_cast<int>(occupants.size());
+	game->populationNeedsUpdate = true;
 }
 
 /** Returns whether the item will be vacated at the next month. */

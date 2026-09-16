@@ -27,6 +27,9 @@ namespace OT {
 
 			bool open;
 			bool trainPresent;
+			// The EXE's station pool is per-day and bounded at 240 riders.
+			int visitorsToday;
+			int lastVisitorDay;
 
 			/** A Person who arrived at the tower via the metro. The Metro item
 			 *  drives the lifecycle: spawn on train arrival, send to a random

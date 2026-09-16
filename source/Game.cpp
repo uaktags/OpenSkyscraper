@@ -11,13 +11,148 @@
 #include "Item/Lobby.h"
 #include "Item/Office.h"
 #include "Item/Hotel.h"
+#include "Item/Condo.h"
+#include "Item/Elevator/Elevator.h"
+#include "Item/Parking.h"
+#include "Item/Shop.h"
+#include "Item/Security.h"
+#include "Item/Recycling.h"
+#include "Item/Metro.h"
+#include "Item/Escalator.h"
 #include "OpenGL.h"
 
+using namespace OT;
 #ifdef _WIN32
 #include "Math/Round.h"
 #endif
+// Rent resource 0x7f0b/0x3e9, expressed in dollars (the EXE stores
+// hundreds). Classes are High, Average, Low and Very Low, respectively.
+int openSkyQuarterlyRent(const std::string &prototypeId, int rentClass)
+{
+	static const int office[] = {15000, 10000, 5000, 2000};
+	static const int single[] = {3000, 2000, 1500, 500};
+	static const int twin[] = {4500, 3000, 2000, 800};
+	static const int suite[] = {9000, 6000, 4000, 1500};
+	static const int shop[] = {20000, 15000, 10000, 4000};
+	static const int condo[] = {200000, 150000, 100000, 40000};
+	if (rentClass < 0 || rentClass > 3) rentClass = 1;
+	const int *rates = NULL;
+	if (prototypeId == "office") rates = office;
+	else if (prototypeId == "hotel_single" || prototypeId == "hotel") rates = single;
+	else if (prototypeId == "hotel_double") rates = twin;
+	else if (prototypeId == "hotel_suite") rates = suite;
+	else if (prototypeId == "shop") rates = shop;
+	else if (prototypeId == "condo" || prototypeId == "yoot_condo") rates = condo;
+	return rates ? rates[rentClass] : 0;
+}
 
-using namespace OT;
+int openSkyDefaultRentClass(const std::string &prototypeId)
+{
+	// Existing office/condo saves used the neutral (average) class. Hotel
+	// checkout is the class-0 room rate used by the original room records.
+	if (prototypeId == "hotel_single" || prototypeId == "hotel_double" ||
+	    prototypeId == "hotel_suite" || prototypeId == "hotel")
+		return 0;
+	return 1;
+}
+
+static int quarterlyMaintenanceCost(const Game *game)
+{
+	int total = 0;
+	for (Game::ItemSet::const_iterator it = game->items.begin();
+	     it != game->items.end(); ++it)
+	{
+		Item::Item *item = *it;
+		if (item->underConstruction) continue;
+		const std::string &id = item->prototype->id;
+		if (id == "lobby")
+		{
+			if (game->rating >= 4) total += item->size.x * 1000;
+			else if (game->rating >= 3) total += item->size.x * 300;
+		}
+		else if (id == "elevator-standard" || id == "standard_elevator")
+		{
+			Item::Elevator::Elevator *e = dynamic_cast<Item::Elevator::Elevator *>(item);
+			total += e ? (int)e->cars.size() * 10000 : 0;
+		}
+		else if (id == "elevator-express" || id == "express_elevator")
+		{
+			Item::Elevator::Elevator *e = dynamic_cast<Item::Elevator::Elevator *>(item);
+			total += e ? (int)e->cars.size() * 20000 : 0;
+		}
+		else if (id == "elevator-service" || id == "service_elevator")
+		{
+			Item::Elevator::Elevator *e = dynamic_cast<Item::Elevator::Elevator *>(item);
+			total += e ? (int)e->cars.size() * 10000 : 0;
+		}
+		else if (id == "escalator")
+			total += std::max(1, item->size.y - 1) * 5000;
+		else if (id == "parking")
+			total += Item::Parking::rampUpkeepPerQuarter();
+		else if (id == "metro")
+			total += 100000;
+		else if (id == "security" || id == "secom")
+			total += 20000;
+		else if (id == "recycling")
+			total += 50000;
+		else if (id == "hotel_single" || id == "hotel_double" || id == "hotel_suite" || id == "hotel")
+			total += 10000;
+	}
+	return total;
+}
+
+static void settleQuarterlyAccounting(Game *game)
+{
+	// The EXE opens a new quarter at 4:59AM, then processes departures,
+	// rent and infrastructure. Never perform this more than once for the
+	// same three-day financial cycle.
+	game->money.finalizeQuarter();
+	for (Game::ItemSet::const_iterator it = game->items.begin();
+	     it != game->items.end(); ++it)
+	{
+		Item::Item *item = *it;
+		if (item->underConstruction) continue;
+		const std::string &id = item->prototype->id;
+		if (id == "shop")
+		{
+			Item::Shop *shop = dynamic_cast<Item::Shop *>(item);
+			if (!shop || !shop->let) continue;
+		}
+		else
+		{
+			if (!item->isOccupied()) continue;
+		}
+		// Office/Condo move-out eligibility is checked before rent. Their
+		// advance() pass below performs the safe occupant removal.
+		bool attractive = true;
+		if (id == "office")
+		{
+			Item::Office *office = dynamic_cast<Item::Office *>(item);
+			attractive = office && office->isAttractive();
+		}
+		else if (id == "condo" || id == "yoot_condo")
+		{
+			Item::Condo *condo = dynamic_cast<Item::Condo *>(item);
+			attractive = condo && !condo->lobbyRoute.empty() &&
+				condo->evaluation >= 30.0;
+		}
+		if (!attractive)
+			continue;
+		int cls = openSkyDefaultRentClass(id);
+		if (id == "shop")
+		{
+			Item::Shop *shop = dynamic_cast<Item::Shop *>(item);
+			if (!shop || !shop->let) continue;
+			cls = shop->rentClass;
+		}
+		const int rent = openSkyQuarterlyRent(id, cls);
+		if (rent > 0)
+			game->transferFunds(rent, "rent_income", "Quarterly rent income");
+	}
+	const int maintenance = quarterlyMaintenanceCost(game);
+	if (maintenance > 0)
+		game->transferFunds(-maintenance, "maintenance", "Quarterly maintenance");
+}
 
 static double autosaveWallClock()
 {
@@ -103,8 +238,8 @@ void Game::closeEventChoice()
 
 Game::Game(Application & app)
 :	State("game"),
-	activeRules(app.selectedRuleset()),
 	app(app),
+	activeRules(app.selectedRuleset()),
 	itemFactory(this),
 	toolboxWindow(this),
 	timeWindow(this),
@@ -121,7 +256,7 @@ Game::Game(Application & app)
 {
 	//mapWindow     = NULL;
 
-	funds  = 4000000;
+	funds  = 2000000;
 	money.setBalance(funds);
 	rating = 0;
 	population = 0;
@@ -131,7 +266,9 @@ Game::Game(Application & app)
 
 	time.set(7/78.0);
 	lastAccountingDay = (int)floor(time.absolute);
-	lastAccountingQuarter = time.quarter;
+	// Store the absolute three-day financial cycle, not Time::quarter's
+	// presentation value. This survives year wrap without duplicate billing.
+	lastAccountingQuarter = (int)floor(time.absolute / 3.0);
 	itemBelowCursor = NULL;
 	toolPrototype = NULL;
 	statusMode = kNormal;
@@ -615,21 +752,25 @@ void Game::advance(double dt)
 	// Rebuild a slice of the invalidated lobby routes (see updateRoutes).
 	pumpRouteBuilds();
 
-	//Advance time.
+	// Advance the clock first. Financial quarters are three-day cycles, and
+	// settle at the 4:59AM/5:00AM boundary rather than at the midnight
+	// quarter-number transition. The cycle marker makes repeated frames and
+	// large time jumps idempotent.
 	time.advance(dt);
 	int currentAccountingDay = (int)floor(time.absolute);
-	if (currentAccountingDay != lastAccountingDay) {
+	if (currentAccountingDay > lastAccountingDay) {
 		settleDailyAccounting();
 		lastAccountingDay = currentAccountingDay;
 		autosaveIfDue();
 	}
-	// Quarter rollover: snapshot the balance so the finance window can
-	// show "Last Quarter Balance" and reset the quarterly accumulators.
-	if (time.quarter != lastAccountingQuarter) {
-		money.finalizeQuarter();
-		lastAccountingQuarter = time.quarter;
-	}
+	const int financialCycle = (int)floor(time.absolute / 3.0);
+	const bool quarterlySettlementDue =
+		financialCycle > lastAccountingQuarter && time.hour >= 5.0;
 	timeWindow.updateTime();
+
+	// Quarterly accounting is committed after the item/person pass. Office and
+	// Condo use this boundary frame to remove unattractive tenants first, so
+	// leavers do not pay the rent that follows.
 
 	timeWindow.advance(dt);
 	sky.advance(dt);
@@ -656,6 +797,11 @@ void Game::advance(double dt)
 
 	for (PersonSet::iterator p = people.begin(); p != people.end(); p++) {
 		(*p)->advance(dt);
+	}
+	if (quarterlySettlementDue)
+	{
+		settleQuarterlyAccounting(this);
+		lastAccountingQuarter = financialCycle;
 	}
 
 	if (populationNeedsUpdate) {
@@ -1078,7 +1224,6 @@ bool Game::extendFloor(int floor, int minX, int maxX, bool free) {
 		    floor, activeRules.displayName());
 		return false;
 	}
-
 	if (floorItems.count(floor) != 0) {
 		// Look for existing floor to extend
 		Item::Floor * f = floorItems[floor];
@@ -1234,20 +1379,20 @@ void Game::seedOfficeLunchQa()
 void Game::seedNewTower()
 {
 	clearWorld();
-	funds = 4000000;
+	funds = 2000000; // the EXE's starting cash (tower_init 10d0:0ac2: 20000 x $100; concilia adoption row 24)
 	money.clear(funds);
 	rating = 0;
 	population = 0;
 	populationNeedsUpdate = false;
 	time.set(7/78.0);
 	lastAccountingDay = (int)floor(time.absolute);
-	lastAccountingQuarter = time.quarter;
+	lastAccountingQuarter = (int)floor(time.absolute / 3.0);
 	setSpeedMode(1);
 	selectTool("inspector");
 	poi.x = 0;
 	poi.y = 200;
 
-	funds = 4000000;
+	funds = 2000000; // keep in lockstep with the balance above (corner-click doubler arms on this exact value)
 	updateRoutes();
 	LOG(IMPORTANT, "seeded new tower");
 }
@@ -1255,14 +1400,15 @@ void Game::seedNewTower()
 void Game::encodeXML(tinyxml2::XMLPrinter & xml)
 {
 	xml.OpenElement("tower");
+	xml.PushAttribute("accountingCycle", lastAccountingQuarter);
 	xml.PushAttribute("funds", funds);
 	xml.PushAttribute("rating", rating);
 	xml.PushAttribute("time", time.absolute);
 	xml.PushAttribute("speed", speedMode);
 	xml.PushAttribute("rainy", sky.rainyDay);
 	xml.PushAttribute("tool", selectedTool.c_str());
-
 	xml.PushAttribute("ruleset", activeRules.identifier());
+
 
 	xml.PushAttribute("x", (int)poi.x);
 	xml.PushAttribute("y", (int)poi.y);
@@ -1381,7 +1527,9 @@ void Game::decodeXML(tinyxml2::XMLDocument & xml)
 	setRating(root->IntAttribute("rating"));
 	time.set(root->DoubleAttribute("time"));
 	lastAccountingDay = (int)floor(time.absolute);
-	lastAccountingQuarter = time.quarter;
+	const int currentCycle = (int)floor(time.absolute / 3.0);
+	lastAccountingQuarter = root->IntAttribute("accountingCycle",
+		currentCycle - (time.hour < 5.0 ? 1 : 0));
 	setSpeedMode(root->IntAttribute("speed"));
 	sky.rainyDay = root->BoolAttribute("rainy");
 	selectTool(root->Attribute("tool"));
@@ -1411,29 +1559,20 @@ void Game::decodeXML(tinyxml2::XMLDocument & xml)
 }
 
 void Game::settleDailyAccounting()
-
 {
+	// Daily bookkeeping only closes the previous day and refreshes tenant
+	// evaluation. Maintenance and recurring rent are quarterly events at
+	// 4:59AM, handled by settleQuarterlyAccounting().
 	money.finalizeDay();
-	int maintenanceCost = calculateDailyMaintenanceCost();
-	if (maintenanceCost > 0) {
-		transferFunds(-maintenanceCost, "maintenance", "Daily maintenance");
-	}
-	// Re-evaluate every tenant so Office/Condo::isAttractive() and the
-	// inspector have fresh satisfaction scores for the new day. Runs after
-	// maintenance so stress/counts reflect yesterday's state.
 	judgeSystem.evaluateAll(this);
 	timeWindow.updateMoneyStats();
 }
 
 int Game::calculateDailyMaintenanceCost() const
 {
-	int total = 0;
-	for (ItemSet::const_iterator i = items.begin(); i != items.end(); i++) {
-		// Unfinished buildings cost nothing to maintain.
-		if ((*i)->underConstruction) continue;
-		total += (*i)->dailyMaintenanceCost();
-	}
-	return total;
+	// The old helper name is retained for source compatibility; the faithful
+	// amount is a quarterly resource sweep, not a daily charge.
+	return quarterlyMaintenanceCost(this);
 }
 
 void Game::transferFunds(int f, std::string category, std::string message)
@@ -1459,11 +1598,11 @@ void Game::setFunds(int f)
 		timeWindow.updateMoneyStats();
 	}
 }
+
 void Game::jumpToHour(double h)
 {
 	time.set(Time::hourToAbsolute(h));
 }
-
 
 void Game::setRating(int r)
 {
@@ -1610,6 +1749,20 @@ bool Game::constructToolAt(int2 pos)
 		return false;
 	}
 
+
+	// Corner-click money doubler (EXE build-dispatcher prologue,
+	// 11f8:0955; concilia adoption row 24): a build-tool click on the
+	// lot's bottom-left cell — B10 (floor -10), lot cell 0 (our x = -187,
+	// TDT X_ORIGIN) — of a virgin tower (zero items, so the lobby-height
+	// choice is still open) holding EXACTLY the starting $2,000,000
+	// awards the current balance, a silent one-shot doubling to $4M. The
+	// click is consumed and nothing is placed; any spend or placement
+	// breaks the exact-balance/virgin conditions and disarms it forever.
+	if (pos == int2(-187, -10) && items.empty() && funds == 2000000) {
+		transferFunds(funds, "easter_egg", "Corner-click windfall");
+		LOG(IMPORTANT, "corner-click doubler: funds doubled to %i", funds);
+		return true; // click consumed (no item built)
+	}
 	const size_t itemsBefore = items.size();
 	int height = toolPrototype->size.y;
 	int yHeightOffset = height;
@@ -1828,9 +1981,9 @@ if (!handled) {
 				if (elevatorBoundary.intersectsRect(itemRect)) {
 					constructionBlocked = true;
 					blockReason = "Item requires more space on both sides";
-
 				}
 			}
+
 
 			// Check floor width below/above if constructing above/below ground level
 			Item::Item * i = NULL;

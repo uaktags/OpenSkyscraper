@@ -1,19 +1,201 @@
 #include "../Game.h"
 #include "Parking.h"
+#include <algorithm>
+#include <map>
+#include <set>
 
 using namespace OT;
 using namespace OT::Item;
 
-// Each horizontal tile of parking provides this many car spaces. Tunable;
-// the original SimTower roughly follows "one car per cell" with the ramp
-// cells consumed by access, but for MVP we keep this simple.
-static const int kSpacesPerTile = 2;
+// =============================================================================
+// EXE-verified parking constants (ground-truth.md; concilia-tower reference)
+// =============================================================================
 
-// Visual size of each drawn car rectangle, in world pixels. The sprite
-// sheet only ships ramp + space frames, so we approximate a parked car
-// with a small dark rectangle until a dedicated car bitmap lands.
-static const float kCarW = 5.f;
-static const float kCarH = 11.f;
+// Merged parking sheet "simtower/parking/space" (0x86A8 + 0x86A9, merged by
+// SimTowerLoader as one 15-frame strip): frame 0 = empty bay, frame 1 =
+// red X (unusable space), frames 2-14 = the 13 parked-car variants.
+static const int kParkingFrameEmpty    = 0;
+static const int kParkingFrameCrossed  = 1;
+static const int kParkingFrameFirstCar = 2;
+static const int kParkingCarVariants   = 13;   // frames 2..14
+
+// One parking space per 4 cells (32 px) - the EXE "Parking Space" record
+// width; our 8-cell item renders and admits two spaces.
+static const int kBayWidthCells = 4;
+static const int kBayWidthPx    = 32;
+static const int kBayHeightPx   = 24;
+
+// A bare-deck run of this many cells between the ramp and a space cuts the
+// drive path (ParkingT CheckAllParking sweep; concilia game.c
+// game_parking_recompute).
+static const int kRampGapLimitCells = 4;
+
+// Quarterly upkeep PER RAMP: maintenance table 0x3EA item 44 = 10000 x $100
+// (byte-verified). Spaces and cars cost nothing - ParkingT InParkingCar
+// (1198:031a) makes zero MoneyT calls, which is why
+// dailyMaintenanceCost() returns 0 and no income is ever booked here.
+const int Parking::kRampUpkeepPerQuarter = 10000;
+
+// =============================================================================
+// Ramp chain + usability sweep (ParkingT CheckAllParking)
+// =============================================================================
+
+namespace {
+
+struct RampRec {
+	int x;      ///< left cell of the ramp strip
+	int width;  ///< strip width in cells
+};
+
+typedef std::map<int, RampRec> RampByFloor;      ///< basement floor -> ramp
+typedef std::map<int, std::map<int, int> > FloorCellKinds; ///< floor -> cell -> kind
+
+// Cell kinds for the drive sweep (SetParkingUsable 1198:09ce): 0 = bare deck
+// (counts toward the gap limit), 1 = parking (continues the path), 2 = any
+// other record (kills the path). Elevator shafts are no floor-map record in
+// the EXE, so they read as bare deck here.
+enum {
+	kCellBare    = 0,
+	kCellParking = 1,
+	kCellBlocker = 2
+};
+
+const Game::ItemSet * itemsOfType(Game * game, const char * type)
+{
+	Game::ItemSetByString::const_iterator it = game->itemsByType.find(type);
+	return (it == game->itemsByType.end()) ? NULL : &it->second;
+}
+
+// Comparator for the fill-ordinal pass: B1 first, then left to right, then
+// deeper basements (deterministic tower-wide bay order).
+bool parkOrdinalLess(const Parking * a, const Parking * b)
+{
+	if (a->position.y != b->position.y) return a->position.y > b->position.y; // B1 before B2...
+	return a->position.x < b->position.x;
+}
+
+// Layout signature for cheap change detection in Parking::advance. The EXE
+// recomputes the chain on build/demolish plus a daily 7AM sweep; we watch
+// the item counts (any build/demolish shifts them) and the sim hour (which
+// also catches construction completions, at finer granularity than 7AM).
+struct LayoutSignature {
+	size_t items, ramps, parks;
+	long hourStamp;
+	bool valid;
+	LayoutSignature() : items(0), ramps(0), parks(0), hourStamp(0), valid(false) {}
+};
+
+std::map<Game *, LayoutSignature> s_layoutSignatures;
+
+} // namespace
+
+// Rebuild the ramp chain and every Parking item's bay usability. A floor is
+// chained iff B1 has a ramp and each deeper basement floor has a ramp at the
+// SAME x as the floor above it (ramps stack vertically into one column;
+// concilia game.c game_parking_recompute, byte-verified 2026-07-11).
+void Parking::recomputeAllChains(Game * game)
+{
+	// 1. Collect completed ramps by floor. The EXE build gate allows only
+	//    one ramp per floor; if several exist here anyway, the leftmost
+	//    anchors the chain (deterministic).
+	RampByFloor ramps;
+	if (const Game::ItemSet * rampItems = itemsOfType(game, "parkingramp")) {
+		for (Game::ItemSet::const_iterator it = rampItems->begin(); it != rampItems->end(); ++it) {
+			const Item * item = *it;
+			if (item->underConstruction) continue; // construction sites never chain
+			RampRec rec = { item->position.x, item->size.x };
+			std::pair<RampByFloor::iterator, bool> ins =
+				ramps.insert(std::make_pair(item->position.y, rec));
+			if (!ins.second && rec.x < ins.first->second.x) ins.first->second = rec;
+		}
+	}
+
+	// 2. Chain the floors downward from the B1 anchor (-1): a floor without
+	//    a ramp, or one whose ramp sits at a different x than the chained
+	//    floor above, ends the chain.
+	std::set<int> chained;
+	for (int floor = -1; ramps.count(floor) != 0; --floor) {
+		if (floor < -1) {
+			if (chained.count(floor + 1) == 0) break;
+			if (ramps[floor].x != ramps[floor + 1].x) break; // not same-x consecutive
+		}
+		chained.insert(floor);
+	}
+
+	// 3. Cell-kind map for the drive sweep, basement floors only.
+	FloorCellKinds kinds;
+	for (Game::ItemSetByInt::const_iterator fi = game->itemsByFloor.begin();
+	     fi != game->itemsByFloor.end(); ++fi) {
+		const int floor = fi->first;
+		if (floor >= 0) continue; // parking lives underground only
+		std::map<int, int> & row = kinds[floor];
+		for (Game::ItemSet::const_iterator it = fi->second.begin(); it != fi->second.end(); ++it) {
+			const Item * item = *it;
+			int kind;
+			if (item->prototype->id == "parking") kind = kCellParking;
+			else if (item->isElevator())         kind = kCellBare; // shafts: no floor-map record
+			else                                 kind = kCellBlocker;
+			for (int cx = item->position.x; cx < item->position.x + item->size.x; ++cx) {
+				std::map<int, int>::iterator k = row.find(cx);
+				if (k == row.end()) row[cx] = kind;
+				else if (k->second < kind) k->second = kind; // blocker > parking > bare
+			}
+		}
+	}
+
+	// 4. Recompute every Parking item's bays, ordered B1-first then left to
+	//    right, assigning tower-wide ordinals so cars fill by ordinal.
+	std::vector<Parking *> parks;
+	if (const Game::ItemSet * parkingItems = itemsOfType(game, "parking")) {
+		for (Game::ItemSet::const_iterator it = parkingItems->begin(); it != parkingItems->end(); ++it) {
+			Parking * park = dynamic_cast<Parking *>(*it);
+			if (park) parks.push_back(park);
+		}
+	}
+	std::sort(parks.begin(), parks.end(), parkOrdinalLess);
+
+	int ordinal = 0;
+	for (std::vector<Parking *>::iterator pi = parks.begin(); pi != parks.end(); ++pi) {
+		Parking * park = *pi;
+		const int floor = park->position.y;
+		const bool floorChained = (floor < 0) && chained.find(floor) != chained.end();
+		RampByFloor::const_iterator rampIt = floorChained ? ramps.find(floor) : ramps.end();
+		FloorCellKinds::iterator rowIt = floorChained ? kinds.find(floor) : kinds.end();
+		const RampRec * ramp = (rampIt != ramps.end()) ? &rampIt->second : NULL;
+		std::map<int, int> * row = (rowIt != kinds.end()) ? &rowIt->second : NULL;
+
+		for (int b = 0; b < (int)park->bayList.size(); ++b) {
+			Bay & bay = park->bayList[b];
+			bool ok = floorChained && ramp && row && !park->underConstruction;
+			if (ok) {
+				// Drive sweep from the ramp's edge to the bay's first cell:
+				// parking continues the path, a >= kRampGapLimitCells bare
+				// run severs it, any other record blocks it outright.
+				const int bayX = park->position.x + b * kBayWidthCells;
+				const int step = (bayX > ramp->x) ? 1 : -1;
+				int cx = (step > 0) ? ramp->x + ramp->width : ramp->x - 1;
+				int gap = 0;
+				for (; ok && cx != bayX; cx += step) {
+					std::map<int, int>::const_iterator k = row->find(cx);
+					const int kind = (k == row->end()) ? kCellBare : k->second;
+					if (kind == kCellParking) gap = 0;
+					else if (kind == kCellBare) { if (++gap >= kRampGapLimitCells) ok = false; }
+					else ok = false;
+				}
+			}
+			bay.usable = ok;
+			bay.ordinal = ok ? ordinal++ : 0;
+			// An occupied bay stranded off-chain keeps its car (the driver
+			// frees it when they leave); it just draws the red X.
+		}
+		park->spriteNeedsUpdate = true;
+	}
+}
+
+
+// =============================================================================
+// Parking
+// =============================================================================
 
 Parking::~Parking() {}
 
@@ -21,52 +203,152 @@ void Parking::init()
 {
 	Item::init();
 
-	used = 0;
+	// Fresh placements are always marked underConstruction right after
+	// init() by Factory::make; remember that so the first advance() after
+	// completion forces a chain recompute (this item just came online).
+	wasUnderConstruction = true;
 
-	sprite.setTexture(App->bitmaps.editionTexture("parking", "simtower/parking/space"));
-	sprite.setOrigin({0.f, 24.f});
-	sprite.setPosition({static_cast<float>(position.x * 8), static_cast<float>(position.y * -36)});
-	addSprite(&sprite);
-	spriteNeedsUpdate = false;
-
-	setupGate();
+	ensureBays();
 	updateSprite();
-}
-
-void Parking::setupGate()
-{
-	// SetupAllGate() equivalent: in the original this links the parking
-	// facility to the road/gate tile so cars know where to spawn from.
-	// OpenSky has no road item yet, so we just leave a wiring point
-	// here. When a road tile lands, this is where the connection should
-	// be made (e.g. register this Parking with the road item's arrival
-	// queue).
-	LOG(DEBUG, "Parking %p setupGate: no road item yet, skipping", this);
 }
 
 int Parking::totalSpaces() const
 {
-	return size.x * kSpacesPerTile;
+	return std::max(1, (size.x + kBayWidthCells - 1) / kBayWidthCells);
 }
 
-bool Parking::assignSpace()
+int Parking::usedSpaces() const
+{
+	int used = 0;
+	for (std::vector<Bay>::const_iterator b = bayList.begin(); b != bayList.end(); ++b)
+		if (b->occupied) ++used;
+	return used;
+}
+
+int Parking::usableSpaces() const
+{
+	int usable = 0;
+	for (std::vector<Bay>::const_iterator b = bayList.begin(); b != bayList.end(); ++b)
+		if (b->usable) ++usable;
+	return usable;
+}
+
+bool Parking::hasSpace() const
+{
+	for (std::vector<Bay>::const_iterator b = bayList.begin(); b != bayList.end(); ++b)
+		if (b->usable && !b->occupied) return true;
+	return false;
+}
+
+bool Parking::assignSpace(Person * driver, CarCategory cat)
 {
 	if (!hasSpace()) return false;
-	++used;
-	spriteNeedsUpdate = true;
-	return true;
+	// EXE admission valve: the category quota of 2 x usable spaces
+	// tower-wide (ParkingT SetupGateCount). With the B2 fix the free-bay
+	// check above is usually the tighter constraint.
+	if (cat != kNoCar && carsParked(game, cat) >= carQuota(game)) return false;
+	for (int b = 0; b < (int)bayList.size(); ++b) {
+		Bay & bay = bayList[b];
+		// B2 divergence: an occupied bay (person != none) is never
+		// assignable - the EXE would double-park the physical space.
+		if (!bay.usable || bay.occupied) continue;
+		bay.occupied = true;
+		bay.person = driver;
+		bay.category = cat;
+		spriteNeedsUpdate = true;
+		return true;
+	}
+	return false;
 }
 
-void Parking::freeSpace()
+void Parking::freeSpace(Person * driver)
 {
-	if (used > 0) {
-		--used;
+	for (int b = 0; b < (int)bayList.size(); ++b) {
+		Bay & bay = bayList[b];
+		if (!bay.occupied) continue;
+		if (driver && bay.person != driver) continue;
+		bay.occupied = false;
+		bay.person = NULL;
+		bay.category = kNoCar;
 		spriteNeedsUpdate = true;
+		return;
 	}
+}
+
+int Parking::usableSpaceCount(Game * game)
+{
+	int usable = 0;
+	if (const Game::ItemSet * parkingItems = itemsOfType(game, "parking")) {
+		for (Game::ItemSet::const_iterator it = parkingItems->begin(); it != parkingItems->end(); ++it) {
+			const Parking * park = dynamic_cast<const Parking *>(*it);
+			if (park && !park->underConstruction) usable += park->usableSpaces();
+		}
+	}
+	return usable;
+}
+
+int Parking::carQuota(Game * game)
+{
+	// 2 x usable spaces PER CATEGORY (office and suite each; concilia
+	// people.c people_parking_assign, EXE SetupGateCount quota table).
+	return 2 * usableSpaceCount(game);
+}
+
+int Parking::carsParked(Game * game, CarCategory cat)
+{
+	int cars = 0;
+	if (const Game::ItemSet * parkingItems = itemsOfType(game, "parking")) {
+		for (Game::ItemSet::const_iterator it = parkingItems->begin(); it != parkingItems->end(); ++it) {
+			const Parking * park = dynamic_cast<const Parking *>(*it);
+			if (!park) continue;
+			const std::vector<Bay> & bays = park->bays();
+			for (std::vector<Bay>::const_iterator b = bays.begin(); b != bays.end(); ++b)
+				if (b->occupied && (cat == kNoCar || b->category == cat)) ++cars;
+		}
+	}
+	return cars;
+}
+
+bool Parking::canPark(Game * game, CarCategory cat)
+{
+	if (cat == kNoCar) return false;
+	// Quota room AND a physical free usable bay (the B2 fix makes the bay
+	// the binding scarcity once a category fills the usable spaces 1:1).
+	if (carsParked(game, cat) >= carQuota(game)) return false;
+	if (const Game::ItemSet * parkingItems = itemsOfType(game, "parking")) {
+		for (Game::ItemSet::const_iterator it = parkingItems->begin(); it != parkingItems->end(); ++it) {
+			const Parking * park = dynamic_cast<const Parking *>(*it);
+			if (park && !park->underConstruction && park->hasSpace()) return true;
+		}
+	}
+	return false;
 }
 
 void Parking::advance(double dt)
 {
+	// Recompute the ramp chain when the layout changed (any build/demolish
+	// shifts an item count) or on the sim-hour tick (catches construction
+	// completions and mirrors the EXE's daily CheckAllParking sweep).
+	LayoutSignature sig;
+	sig.valid = true;
+	sig.items = game->items.size();
+	if (const Game::ItemSet * rampItems = itemsOfType(game, "parkingramp"))
+		sig.ramps = rampItems->size();
+	if (const Game::ItemSet * parkingItems = itemsOfType(game, "parking"))
+		sig.parks = parkingItems->size();
+	sig.hourStamp = (long)game->time.day * 100 + (long)game->time.hour;
+
+	const bool justBuilt = wasUnderConstruction && !underConstruction;
+	wasUnderConstruction = underConstruction;
+
+	LayoutSignature & cached = s_layoutSignatures[game];
+	if (justBuilt || !cached.valid || cached.items != sig.items ||
+	    cached.ramps != sig.ramps || cached.parks != sig.parks ||
+	    cached.hourStamp != sig.hourStamp) {
+		recomputeAllChains(game);
+		cached = sig;
+	}
+
 	if (spriteNeedsUpdate)
 		updateSprite();
 }
@@ -74,72 +356,72 @@ void Parking::advance(double dt)
 void Parking::encodeXML(tinyxml2::XMLPrinter &xml)
 {
 	Item::encodeXML(xml);
-	xml.PushAttribute("used", used);
+	xml.PushAttribute("used", usedSpaces());
 }
 
 void Parking::decodeXML(tinyxml2::XMLElement &xml)
 {
 	Item::decodeXML(xml);
-	used = xml.IntAttribute("used");
+	ensureBays();
+	// Legacy "used": older saves stored an anonymous occupied-slot count
+	// against the retired 2-spaces-per-tile model. Clamp to the bay count
+	// and park that many cars; the driver handle is lost with the old
+	// model, so the bays are released by the ordinal fallback in
+	// freeSpace(NULL). Category is unknown - count them as office cars.
+	int used = xml.IntAttribute("used");
+	if (used > (int)bayList.size()) used = (int)bayList.size();
+	for (int b = 0; b < used; ++b) {
+		bayList[b].occupied = true;
+		bayList[b].person = NULL;
+		bayList[b].category = kOfficeCar;
+	}
 	updateSprite();
+}
+
+void Parking::ensureBays()
+{
+	const int count = totalSpaces();
+	if ((int)bayList.size() == count && (int)baySprites.size() == count) return;
+	bayList.assign(count, Bay());
+	for (int b = 0; b < count; ++b) {
+		// Deterministic per-space id: the bay's physical cell anchor (x,
+		// floor). Stable across save/load, unlike a creation counter.
+		const long spaceId = (long)(position.x + b * kBayWidthCells) * 128 - (long)position.y;
+		const int variant = (int)(((spaceId % kParkingCarVariants) + kParkingCarVariants) % kParkingCarVariants);
+		bayList[b].variant = kParkingFrameFirstCar + variant; // 2 + id % 13
+	}
+	rebuildBaySprites();
+}
+
+void Parking::rebuildBaySprites()
+{
+	for (std::vector<Sprite>::iterator s = baySprites.begin(); s != baySprites.end(); ++s)
+		removeSprite(&*s);
+	baySprites.clear();
+	baySprites.resize(bayList.size());
+	sf::Texture & texture = App->bitmaps.editionTexture("parking", "simtower/parking/space");
+	for (std::vector<Sprite>::iterator s = baySprites.begin(); s != baySprites.end(); ++s) {
+		s->setTexture(texture);
+		s->setOrigin({0.f, 24.f});
+		addSprite(&*s);
+	}
+	spriteNeedsUpdate = true;
 }
 
 void Parking::updateSprite()
 {
+	ensureBays();
 	spriteNeedsUpdate = false;
-	sprite.setTextureRect(sf::IntRect({0, 0}, {size.x * 8, 24}));
-	sprite.setPosition({static_cast<float>(position.x * 8), static_cast<float>(position.y * -36)});
-}
-
-void Parking::render(sf::RenderTarget & target) const
-{
-	// Draw the base parking-space sprite (Item::render applies the
-	// global Lighting tint per sprite and may also draw the no-route
-	// indicator on top of the footprint). For under-construction sites
-	// Item::render draws the placeholder overlay and returns early; we
-	// skip the car overlay in that case so it doesn't draw on top of
-	// the hatched rectangle.
-	Item::render(target);
-	if (underConstruction || used <= 0) return;
-	// TODO(Phase 2.2 art): replace this rectangle with a proper
-	// "simtower/parking/car" frame once the bitmap is shipped.
-	const sf::Color tint = game->lighting.tint();
-	const bool tinted = (tint != sf::Color(255, 255, 255, 255));
-	const float baseX = static_cast<float>(position.x * 8);
-	const float baseY = static_cast<float>(position.y * -36);
-
-	for (int i = 0; i < used; ++i)
-	{
-		int tile = i / kSpacesPerTile;
-		int slot = i % kSpacesPerTile;
-		// Each tile is 8 px wide; two cars per tile get ~5 px width
-		// with 1 px padding each side and 1 px gap between them.
-		float carX = baseX + tile * 8.f + 1.f + slot * (kCarW + 1.f);
-		// Parked cars sit in the lower-middle of the 24 px sprite so
-		// the space markings stay partially visible above them.
-		float carY = baseY - kCarH - 4.f;
-
-		sf::RectangleShape car({kCarW, kCarH});
-		car.setPosition({carX, carY});
-		sf::Color body(50, 70, 130, 235);
-		if (tinted) body = game->lighting.compose(body);
-		sf::Color outline(20, 25, 45, 235);
-		if (game->statusMode == Game::kHotel)
-		{
-			body.r = (body.r * 110) / 255;
-			body.g = (body.g * 110) / 255;
-			body.b = (body.b * 110) / 255;
-			body.a = (body.a * 160) / 255;
-
-			outline.r = (outline.r * 110) / 255;
-			outline.g = (outline.g * 110) / 255;
-			outline.b = (outline.b * 110) / 255;
-			outline.a = (outline.a * 160) / 255;
-		}
-		car.setFillColor(body);
-		car.setOutlineColor(outline);
-		car.setOutlineThickness(1.f);
-		target.draw(car);
-		game->drawnSprites++;
+	for (int b = 0; b < (int)bayList.size() && b < (int)baySprites.size(); ++b) {
+		const Bay & bay = bayList[b];
+		// Frame pick (concilia main.c, ITEM_PARKING render): red X when
+		// off the chain, else the car variant while occupied, else the
+		// empty bay.
+		const int frame = !bay.usable ? kParkingFrameCrossed
+		                : bay.occupied ? bay.variant
+		                : kParkingFrameEmpty;
+		baySprites[b].setTextureRect(sf::IntRect({frame * kBayWidthPx, 0}, {kBayWidthPx, kBayHeightPx}));
+		baySprites[b].setPosition({static_cast<float>((position.x + b * kBayWidthCells) * 8),
+		                           static_cast<float>(position.y * -36)});
 	}
 }

@@ -5,6 +5,8 @@
 #include "Metro.h"
 
 #include <vector>
+#include <algorithm>
+#include <cmath>
 
 using namespace OT;
 using namespace OT::Item;
@@ -22,8 +24,6 @@ static const double kTrainGapAbs   = Time::hourToAbsolute(0.5);
 static const double kVisitorMinDwell = Time::hourToAbsolute(0.25);
 static const double kVisitorMaxDwell = Time::hourToAbsolute(0.75);
 
-// Revenue per boarding passenger on departure.
-static const int kFarePerBoarding = 50;
 
 Metro::~Metro()
 {
@@ -33,11 +33,11 @@ Metro::~Metro()
 void Metro::init()
 {
 	Item::init();
-
 	open = true;
 	trainPresent = false;
 	nextTrainTime = game->time.absolute + kTrainGapAbs;
-
+	visitorsToday = 0;
+	lastVisitorDay = static_cast<int>(std::floor(game->time.absolute));
 	station.setTexture(App->bitmaps["simtower/metro/station"]);
 	station.setOrigin({0.f, 66.f});
 	station.setPosition({0.f, 0.f});
@@ -47,18 +47,9 @@ void Metro::init()
 	addSprite(&station);
 	addSprite(&platform);
 	spriteNeedsUpdate = true;
-
-	// The construction flow already rejects a second Metro (Game.cpp:424-427
-	// with "Only one Metro Station allowed"). This branch is defensive for
-	// save/reload and any future code paths that bypass the construction
-	// gate; in that case log and refuse to clobber the existing station.
 	if (game->metroStation != NULL) {
-		LOG(WARNING, "Metro::init() called while metroStation already set; "
-		             "keeping the existing station and ignoring this one");
-	} else {
-		game->metroStation = this;
-	}
-
+		LOG(WARNING, "Metro::init() called while metroStation already set; keeping the existing station");
+	} else game->metroStation = this;
 	updateSprite();
 }
 
@@ -73,9 +64,9 @@ void Metro::encodeXML(tinyxml2::XMLPrinter &xml)
 	xml.PushAttribute("open", open);
 	xml.PushAttribute("trainPresent", trainPresent);
 	xml.PushAttribute("nextTrainTime", nextTrainTime);
-
-	for (std::set<Visitor *>::iterator it = visitors.begin(); it != visitors.end(); ++it)
-	{
+	xml.PushAttribute("visitorsToday", visitorsToday);
+	xml.PushAttribute("lastVisitorDay", lastVisitorDay);
+	for (std::set<Visitor *>::iterator it = visitors.begin(); it != visitors.end(); ++it) {
 		Visitor *v = *it;
 		xml.OpenElement("visitor");
 		xml.PushAttribute("arrivalTime", v->arrivalTime);
@@ -95,13 +86,13 @@ void Metro::encodeXML(tinyxml2::XMLPrinter &xml)
 void Metro::decodeXML(tinyxml2::XMLElement &xml)
 {
 	Item::decodeXML(xml);
-	open = xml.BoolAttribute("open");
-	trainPresent = xml.BoolAttribute("trainPresent");
+	open = xml.BoolAttribute("open", true);
+	trainPresent = xml.BoolAttribute("trainPresent", false);
 	nextTrainTime = xml.DoubleAttribute("nextTrainTime", game->time.absolute + kTrainGapAbs);
+	visitorsToday = std::max(0, xml.IntAttribute("visitorsToday", 0));
+	lastVisitorDay = xml.IntAttribute("lastVisitorDay", static_cast<int>(std::floor(game->time.absolute)));
 	clearAllVisitors();
-
-	for (tinyxml2::XMLElement *e = xml.FirstChildElement("visitor"); e; e = e->NextSiblingElement("visitor"))
-	{
+	for (tinyxml2::XMLElement *e = xml.FirstChildElement("visitor"); e; e = e->NextSiblingElement("visitor")) {
 		Visitor *v = new Visitor(this);
 		v->arrivalTime = e->DoubleAttribute("arrivalTime");
 		v->departTime = e->DoubleAttribute("departTime");
@@ -115,7 +106,6 @@ void Metro::decodeXML(tinyxml2::XMLElement &xml)
 		v->goingTo = e->Attribute("goingTo", "");
 		visitors.insert(v);
 	}
-
 	updateSprite();
 }
 
@@ -126,7 +116,7 @@ void Metro::updateSprite()
 	if (open)
 	{
 		stationIndex = 1;
-		platformIndex = (trainPresent ? 0 : 1);
+		platformIndex = trainPresent ? 0 : 2;
 	}
 
 	station.setTextureRect(sf::IntRect({stationIndex * 240, 0}, {240, 66}));
@@ -138,7 +128,7 @@ void Metro::updateSprite()
 OT::Item::Item * Metro::pickDestinationFor(Visitor *v)
 {
 	// Target underground commercial venues specifically.
-	static const char *typeIds[] = {"fastfood", "restaurant", "cinema", "partyhall"};
+	static const char *typeIds[] = {"fastfood", "restaurant", "shop", "cinema", "partyhall"};
 	std::vector<OT::Item::Item *> reachable;
 
 	for (size_t i = 0; i < sizeof(typeIds) / sizeof(typeIds[0]); ++i)
@@ -159,55 +149,36 @@ OT::Item::Item * Metro::pickDestinationFor(Visitor *v)
 
 void Metro::spawnVisitors(int count)
 {
-	if (lobbyRoute.empty()) return;
-
-	for (int i = 0; i < count; ++i)
-	{
+	if (lobbyRoute.empty() || visitorsToday >= 240) return;
+	if (count < 0) count = 0;
+	count = std::min(count, 240 - visitorsToday);
+	for (int i = 0; i < count; ++i) {
 		Item *dest = pickDestinationFor(NULL);
 		if (!dest) continue;
-
+		const Route &r = game->findRoute(this, dest);
+		if (r.empty()) continue;
 		Visitor *v = new Visitor(this);
 		v->arrivalTime = game->time.absolute;
 		v->departTime = game->time.absolute + randd(kVisitorMinDwell, kVisitorMaxDwell);
 		v->state = Person::kCommuting;
 		v->goingTo = dest->prototype->name;
 		v->from = "Metro";
-
-		const Route &r = game->findRoute(this, dest);
-		if (r.empty())
-		{
-			delete v;
-			continue;
-		}
 		v->journey.set(r);
 		visitors.insert(v);
+		++visitorsToday;
 	}
 }
 
 void Metro::boardReturnedVisitors()
 {
-	// Train departs: any visitor currently at the platform boards and is
-	// removed from the simulation. Each boarding yields fare revenue.
-	int boardings = 0;
-	for (std::set<Visitor *>::iterator it = visitors.begin(); it != visitors.end();)
-	{
+	// Metro passenger travel is a visitor pool, not a fare source in the EXE.
+	// Boarding removes only visitors that actually reached the platform.
+	for (std::set<Visitor *>::iterator it = visitors.begin(); it != visitors.end();) {
 		Visitor *v = *it;
-		if (v->returnedToMetro || v->at == this)
-		{
-			++boardings;
+		if (v->returnedToMetro || v->at == this) {
 			delete v;
 			it = visitors.erase(it);
-		}
-		else
-		{
-			++it;
-		}
-	}
-
-	if (boardings > 0)
-	{
-		game->transferFunds(boardings * kFarePerBoarding, "metro_fare", "Metro passenger fares");
-		LOG(DEBUG, "Metro trainedeparted with %d boarding passenger(s)", boardings);
+		} else ++it;
 	}
 }
 
@@ -220,93 +191,57 @@ void Metro::clearAllVisitors()
 
 void Metro::advance(double dt)
 {
-	// Open
-	if (game->time.checkHour(7))
-	{
-		open = true;
-		spriteNeedsUpdate = true;
+	(void)dt;
+	const int day = static_cast<int>(std::floor(game->time.absolute));
+	if (day != lastVisitorDay) {
+		lastVisitorDay = day;
+		visitorsToday = 0;
 	}
-
-	// Close
-	if (game->time.checkHour(23) && open)
-	{
+	if (game->time.checkHour(7)) { open = true; spriteNeedsUpdate = true; }
+	if (game->time.checkHour(23) && open) {
 		open = false;
-		// Send any in-station train away and clear stranded visitors so the
-		// closed platform doesn't accumulate people overnight.
-		if (trainPresent)
-		{
+		if (trainPresent) {
 			trainPresent = false;
 			nextTrainTime = game->time.absolute + kTrainGapAbs;
 			spriteNeedsUpdate = true;
 		}
 	}
-
-	if (open)
-	{
-		// Train arrival / departure cycle.
-		if (game->time.absolute >= nextTrainTime)
-		{
-			if (!trainPresent)
-			{
-				trainPresent = true;
-				spriteNeedsUpdate = true;
-				spawnVisitors(static_cast<int>(randd(2, 6)));
-			}
-			else
-			{
-				trainPresent = false;
-				spriteNeedsUpdate = true;
-				boardReturnedVisitors();
-			}
+	if (open) {
+		if (game->time.absolute >= nextTrainTime) {
+			if (!trainPresent) { trainPresent = true; spriteNeedsUpdate = true; }
+			else { trainPresent = false; spriteNeedsUpdate = true; boardReturnedVisitors(); }
 			scheduleNextTrain();
 		}
-
-		// Drive visitor state transitions.
-		for (std::set<Visitor *>::iterator it = visitors.begin(); it != visitors.end(); ++it)
-		{
+		// The station admits a bounded visitor pool during the 10:00-17:00
+		// commercial window.  One 1/36 roll is made per 16 simulation ticks;
+		// no commuter population or fare income is fabricated here.
+		if (game->time.hour >= 10.0 && game->time.hour < 17.0 &&
+			visitorsToday < 240 && game->time.checkTick(16.0 / 2600.0) &&
+			rand() % 36 == 0) spawnVisitors(1);
+		for (std::set<Visitor *>::iterator it = visitors.begin(); it != visitors.end(); ++it) {
 			Visitor *v = *it;
-
-			// Visitor has reached their commercial destination - mark them
-			// as shopping and arm the depart timer when they arrive.
-			if (v->state == Person::kCommuting && v->at && v->at != this)
-			{
+			if (v->state == Person::kCommuting && v->at && v->at != this) {
 				v->state = Person::kShopping;
-				v->addStress(-5);
 			}
-
-			// Time to head back to the metro.
-			if (v->state == Person::kShopping && game->time.absolute >= v->departTime)
-			{
+			if (v->state == Person::kShopping && game->time.absolute >= v->departTime) {
 				Item *from = v->at ? v->at : game->mainLobby;
 				const Route &r = game->findRoute(from, this);
-				if (!r.empty())
-				{
-					v->state = Person::kReturning;
-					v->goingTo = "Metro";
-					v->journey.set(r);
-				}
-				else
-				{
-					// No way back; force-flag so the next departure cleans them up.
-					v->returnedToMetro = true;
-				}
+				if (!r.empty()) { v->state = Person::kReturning; v->goingTo = "Metro"; v->journey.set(r); }
+				else v->returnedToMetro = true;
 			}
 		}
 	}
-
-	if (spriteNeedsUpdate)
-		updateSprite();
+	if (spriteNeedsUpdate) updateSprite();
 }
 
 void Metro::addPerson(Person *p)
 {
 	Item::addPerson(p);
-
 	Visitor *v = dynamic_cast<Visitor *>(p);
-	if (v && v->state == Person::kReturning)
-	{
+	if (v && v->state == Person::kReturning) {
 		v->returnedToMetro = true;
 		v->state = Person::kIdle;
+		if (visitorsToday > 0) --visitorsToday;
 	}
 }
 

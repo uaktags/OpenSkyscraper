@@ -10,6 +10,8 @@
 
 using namespace OT;
 using namespace OT::Item;
+// Shared rent-table writer implemented by Game.cpp (resource 0x7f0b/0x3e9).
+extern int openSkyQuarterlyRent(const std::string &prototypeId, int rentClass);
 
 // Find a reachable Parking with a free slot and assign it. Mirrors the
 // FastFood/Restaurant iteration pattern. Returns the claimed Parking or NULL.
@@ -260,7 +262,7 @@ void Hotel::advance(double dt)
 
 	// Process guest schedules.
 	double t = game->time.absolute;
-	for (std::set<Guest *>::iterator it = guests.begin(); it != guests.end(); ++it)
+	for (std::set<Guest *>::iterator it = guests.begin(); it != guests.end(); )
 	{
 		Guest *g = *it;
 
@@ -320,38 +322,59 @@ void Hotel::advance(double dt)
 			g->state = Person::kResting;
 		}
 		// Wake up.
-		else if (g->atHotel && g->state == Person::kResting && t >= g->wakeTime && t < g->checkoutTime)
+		else if (g->atHotel && g->state == Person::kResting &&
+		         t >= g->wakeTime && t < g->checkoutTime)
 		{
 			g->state = Person::kHome;
 		}
-		// Checkout — room becomes dirty.
-		else if (g->atHotel && t >= g->checkoutTime)
+		// Checkout is the hotel's revenue boundary. Charge exactly once even
+		// if the guest is already out at dinner or a route is temporarily
+		// unavailable; a negative checkoutTime is the durable latch.
+		else if (g->checkoutTime >= 0 && t >= g->checkoutTime)
 		{
+			const int stay = openSkyQuarterlyRent(prototype->id, 0);
+			game->transferFunds(stay, "hotel_income", "Hotel room checkout");
+			g->checkoutTime = -1;
 			const Route &r = game->findRoute(this, game->mainLobby);
-			if (!r.empty())
-			{
+			if (g->at == this)
 				Item::removePerson(g);
-				g->atHotel = false;
-				g->state = Person::kReturning;
-				g->from = prototype->name;
-				g->goingTo = "Exit";
+			g->atHotel = false;
+			g->state = Person::kReturning;
+			g->from = prototype->name;
+			g->goingTo = "Exit";
+			if (!r.empty())
 				g->journey.set(r);
-				// Drive home: free the parking slot.
-				releaseParking(g->parkingUsed);
-				g->parkingUsed = NULL;
-			}
+			releaseParking(g->parkingUsed);
+			g->parkingUsed = NULL;
 			roomState = kDirty;
 			dirtySince = t;
 			spriteNeedsUpdate = true;
 		}
+		// Retire checked-out guests once their exit journey reaches the lobby.
+		// Keeping them in the room set would make the hotel population grow
+		// without bound and would retain stale evaluation records.
+		if (g->checkoutTime < 0 && !g->atHotel && !g->at)
+		{
+			it = guests.erase(it);
+			delete g;
+		}
+		else
+		{
+			++it;
+		}
 	}
 
-	// Dispatch a housekeeper when the room is dirty.
+	// Housekeepers are service staff: they must use service elevators and
+	// stairs-only paths rather than the passenger lobby route.
 	if (roomState == kDirty && housekeeper == NULL && !lobbyRoute.empty())
 	{
-		Housekeeper *h = new Housekeeper(this);
-		housekeeper = h;
-		h->journey.set(lobbyRoute);
+		Route serviceRoute = game->findRoute(game->mainLobby, this, true);
+		if (!serviceRoute.empty())
+		{
+			Housekeeper *h = new Housekeeper(this);
+			housekeeper = h;
+			h->journey.set(serviceRoute);
+		}
 	}
 
 	// Housekeeper finished cleaning?
@@ -361,7 +384,7 @@ void Hotel::advance(double dt)
 		{
 			roomState = kClean;
 			spriteNeedsUpdate = true;
-			const Route &r = game->findRoute(this, game->mainLobby);
+			Route r = game->findRoute(this, game->mainLobby, true);
 			if (!r.empty())
 			{
 				Item::removePerson(housekeeper);
@@ -390,7 +413,6 @@ void Hotel::addPerson(Person *p)
 		g->atHotel = true;
 		g->state = Person::kHome;
 		g->eval = 50;
-		g->addStress(-5);
 		roomState = kOccupied;
 		spriteNeedsUpdate = true;
 		return;
