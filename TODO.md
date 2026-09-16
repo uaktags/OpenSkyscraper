@@ -379,10 +379,10 @@ Reference Index (codemap.md → implementation)
 | People animation                  | codemap.md:108-141    | source/Item/Item.cpp (AnimPeple)| PARTIAL  |
 | Bitmap loading                    | codemap.md:207-237    | source/BitmapManager.*          | PORTED   |
 | Blocks                            | codemap.md:238-272    | source/Item/Floor.*             | REIMPL   |
-| Church                            | codemap.md:274-312    | —                               | MISSING  |
+| Church                            | codemap.md:274-312    | source/Item/Cathedral.* + source/EventSystem.* | PARTIAL  |
 | Clouds/Sky                        | codemap.md:313-343    | source/Sky.*                    | PORTED   |
 | Command buttons                   | codemap.md:344-378    | source/ToolboxWindow.*          | REIMPL   |
-| Count/Statistics                  | codemap.md:414-447    | —                               | MISSING  |
+| Count/Statistics                  | codemap.md:414-447    | source/JudgeSystem.*            | PORTED   |
 | Draw utilities                    | codemap.md:518-550    | source/Sprite.*                 | REIMPL   |
 | Dust/Cleaning                     | codemap.md:586-618    | —                               | MISSING  |
 | Emergency                         | codemap.md:749-773    | source/EventSystem.*            | PARTIAL  |
@@ -391,7 +391,7 @@ Reference Index (codemap.md → implementation)
 | File operations                   | codemap.md:864-893    | source/Game encode/decode XML   | PARTIAL  |
 | Find dialogs                      | codemap.md:895-956    | —                               | MISSING  |
 | Fire                              | codemap.md:958-990    | source/EventSystem.*            | PARTIAL  |
-| Guard/Security                    | codemap.md:1020-1049  | source/Item/Security.*          | STUB     |
+| Guard/Security                    | codemap.md:1020-1049  | source/Item/Security.* + source/EventSystem.* | PARTIAL  |
 | Hotel                             | codemap.md:1051-1098  | source/Item/Hotel.*             | PORTED   |
 | Info destination                  | codemap.md:1124-1146  | —                               | MISSING  |
 | Info/HUD                          | codemap.md:1148-1193  | source/TimeWindow.*             | PARTIAL  |
@@ -400,7 +400,7 @@ Reference Index (codemap.md → implementation)
 | Judge/Evaluation                  | codemap.md:1225-1251  | source/JudgeSystem.*            | PORTED   |
 | Kinsoku/Placement                 | codemap.md:1253-1277  | source/JudgeSystem.cpp (noise)  | PARTIAL  |
 | Level/Progression                 | codemap.md:1279-1343  | source/Game.cpp ratingMayIncrease, source/VipSystem.*, source/LevelUpDialog.* | PARTIAL  |
-| Maintenance                       | codemap.md:1344-1377  | —                               | MISSING  |
+| Maintenance                       | codemap.md:1344-1377  | source/Game.cpp (quarterly settlement) | PARTIAL  |
 | Main window                       | codemap.md:1378-1408  | source/Application.*            | PORTED   |
 | Map/minimap                       | codemap.md:1410-1460  | source/MapWindow.*              | PORTED   |
 | Medical                           | codemap.md:1462-1489  | source/Item/MedicalCenter.*     | STUB     |
@@ -416,14 +416,14 @@ Reference Index (codemap.md → implementation)
 | Quick drawing                     | codemap.md:1864-1891  | (SFML-native)                   | REIMPL   |
 | Restaurant                        | codemap.md:1893-1923  | source/Item/Restaurant.*        | PARTIAL  |
 | Route/Pathfind                    | codemap.md:1925-1955  | source/PathFinder/*             | GOOD     |
-| Santa                             | codemap.md:1957-1985  | —                               | MISSING  |
+| Santa                             | codemap.md:1957-1985  | source/EventSystem.*              | PARTIAL  |
 | Side rendering                    | codemap.md:1987-2015  | —                               | MISSING  |
 | Sound                             | codemap.md:2017-2049  | source/Sound.*                  | PORTED   |
 | Status overlays                   | codemap.md:2051-2079  | —                               | MISSING  |
 | Stress                            | codemap.md:2111-2137  | source/Person.*                 | PORTED   |
-| Subway                            | codemap.md:2168-2195  | source/Item/Metro.*             | STUB     |
+| Subway                            | codemap.md:2168-2195  | source/Item/Metro.*              | PARTIAL  |
 | Tenants                           | codemap.md:2221-2275  | (spread)                        | PARTIAL  |
-| Thief                             | codemap.md:2277-2305  | —                               | MISSING  |
+| Thief                             | codemap.md:2277-2305  | —                               | RETIRED  |
 | Time                              | codemap.md:2307-2334  | source/Time.*                   | PORTED   |
 | Toolbox                           | codemap.md:2336-2366  | source/ToolboxWindow.*          | PORTED   |
 | VIP                               | codemap.md:2653-2690  | source/VipSystem.*              | PARTIAL  |
@@ -619,3 +619,251 @@ walking animation, wedding processions, fireworks particle effects.
   tile, mirroring OpenSkyWeb gamemap.js last-writer-wins. Known follow-up:
   on save load, a lobby encoded AFTER its stair still overwrites the stair's
   link silently (both repos), leaving that stair unhaukable until re-placed.
+
+-------------------------------------------------------------------------------
+Concilia-tower adoption review (2026-09-14)
+-------------------------------------------------------------------------------
+
+Review of Jonahss/concilia-tower (clean-room C reimplementation reverse-
+engineered from a Ghidra + hand-disassembly of SIMTOWER.EXE v1.1) against our
+tree. Every adopted value was verified against the EXE itself: resource bytes
+dumped from SIMTOWER.EXE (types 0x7F05/0x7F0b ids 1000-1002) and in-program
+disassembly of the imported binary (Ghidra; concilia segment = Ghidra selector
+-8). Full evidence log: `scratch/artifacts/ground-truth.md` (repo-local
+artifact; generated from the imported binary).
+
+Phase 1a conflict verdicts (blocking, all byte-adjudicated):
+- **No star-promotion bonus exists.** Errata §3c's "$200k/$300k/$500k on
+  star-up" misread the buried-treasure payout: the ceremony pays nothing; the
+  treasure is a one-shot BUILD-triggered dig payout (star 1/2/3, basement
+  B(star+2) extent > star*25 cells), latch re-seeded at each promotion
+  (NotifyFacilityBuilt -> condition -> AwardMoney, 1150:0194..026f in our
+  Ghidra mapping; `IMUL DX,DX,0x19` is the x25).
+- **Express elevators get NO full-queue +1000 route surcharge.** Direct ride:
+  express = queue_len + 640; std/svc = 8*|dx| + 640 (+1000 when the 40-queue
+  is full). Transfers: +3000 base, 6000 full; express transfer = queue + 3000.
+- **Disaster-day income gate scope**: restaurant/fast-food CLOSE income is
+  suppressed on fire days (day%84==83) and bomb days (day%60==59); shops have
+  no close income to gate; cinema/party/hotel paths are not day-gated.
+
+Disposition (R = render, S = sim, E = economy; U rows are sequenced follow-ups
+below, NOT implemented this campaign):
+
+1. [ADOPT] Venue crowd tiers: patrons >=10 packed / >=1 busy / 0 empty
+   (replaces min(ceil(people/5),2) in FastFood/Restaurant).
+2. [ADOPT] Occupant people animation: 6-slot occupant bands, re-pose every 16
+   sim ticks, EXE frame tables per venue/variant (sheets 0x85E8-0x85EE); keep
+   our overlay architecture.
+3. [ADOPT] Shop tenant type: new Item + Factory registration, 11 variants,
+   For RENT/shutters shared frames, walk-in quota economy.
+4. [ADOPT] Parking visuals: 15-frame merged sheet 0x86A8+0x86A9 (empty bay /
+   red X / 13 car variants), pick 2+id%13, fill by ordinal.
+5. [ADOPT] Parking usability: B1-anchored ramp chain (same-x consecutive
+   floors), quota 2x usable per category, suite-guest-can't-park cancels stay,
+   $0 income, ramp $10k/qtr (res 0x3EA item 44).
+6. [ADOPT] Hotel room frames: door + 8 frames (occupied/clean/dirty/infested
+   x day/night) + 4AM lights-out clamp.
+7. [ADOPT] Red shaft floor digits: plate lights when a car of the group is on
+   that floor (IsCarOnFloor); replaces runtime tint.
+8. [ADOPT] Security office 3-frame palette cycle (197<->198 etc.).
+9. [ADOPT] Construction crane: left-edge park, >=7 cells, hidden above
+   displayed floor 100 / under cathedral, x captured only on top-floor-number
+   change (stuck crane is intended).
+10. [ADOPT] Restaurant 5th variant ("Steak House") — fix the 4*24 loader
+    buffer in SimTowerLoader.cpp.
+11. [FIX] YootCondo double-draw (residentSprite + renderPeople both draw).
+12. [ADOPT] Event scheduler calendar: fire day%84==83 @10AM (star>2 + security
+    + no cathedral + extent>=32), bomb day%60==59 (stars 2/3/4), santa day%12;
+    no RNG (TimeT 1208:0342 byte-verified in our Ghidra pass).
+13. [RETIRE] Burglar event — does not exist in the EXE. Candidate future
+    OpenSky mod (kept in git history).
+14. [ADOPT] Fire model: per-floor L/R 12-cell fronts, 1 cell/7 frames,
+    upward-only +80 frames/floor, die at extent, 9PM hard stop, $500k chopper
+    sweeps right->left 1 cell/frame, foot guards (6/office, 5-tick douse)
+    free path, rubble 0x8FA8, clock jump 4PM if <16:00, no cash damage charge.
+    DIVERGENCE: fix original B7 (chopper stops at origin-floor left extent) —
+    sweep to actual leftmost front.
+15. [ADOPT] Bomb: ransom $200k/$300k/$1M by star (tuning 0xDE1C/1E/20),
+    floor hidden, guard hunt 6/office deterministic sweep 1 cell/2 frames,
+    catch on exact cell, detonate 13:00 (frame 0x4B0 verified in TimeT),
+    blast t-2..t+3 x +-20 cells -> rubble.
+16. [ADOPT] Disaster-day income: restaurant/FF close income $0 on bomb/fire
+    days (scope per 1a verdict above).
+17. [ADOPT] Buried treasure: star 1/2/3, B(star+2) extent > star*25 cells ->
+    next build pays $200k/$300k/$500k (tuning +0xA8), one-shot latch re-seeded
+    at each promotion, over-dig forfeits. Byte-exact (1150:01ac condition).
+18. [ADOPT] Santa flyby day%12 @9PM, x-10/tick, y bob (art/sound ids exist).
+19. [ADOPT] VIP: real suite guest arriving by car (voids on failed park),
+    arms day%9==3 at star 3 while unsatisfied, judged on own banked stress
+    <=150, gates 3->4 only, promotion ceremony clears flag, reservation
+    dialog names first bookable suite floor, NO cash reward (drop our
+    $50k/$25k); keep our persistence plumbing.
+20. [KEEP] Star thresholds 300/1000/5000/10000/15000 — already authentic
+    (tuning +0x44..0x50 verified: 300/1000/5000/10000).
+21. [ADOPT] Promotion gates: 2->3 security; 3->4 suites + recycling adequate
+    + medical adequate + VIP + weekday-evening window; 4->5 metro + recycling
+    + medical + window.
+22. [RESOLVED] Promotion bonus: none (see 1a verdict). Row folded into 17.
+23. [ADOPT] Cathedral: stops fires forever (0xB3EC gate); 5->TOWER needs
+    cathedral + 15000 pop + weekend wedding: 40 guests fill by 12:30 ->
+    ceremony (star 6 mid-ceremony), couple animation 0x8828 + 6 ceremony
+    strips 0x8CE9..0x8DEA (SimTowerLoader slicing needed).
+24. [ADOPT] Starting funds $2,000,000 + corner-click doubler (virgin tower,
+    B10 cell 0, exact-balance check; build dispatcher 11f8:0955-098c).
+25. [ADOPT] Express capacity 42 / std+svc 21 (push literals 0x2a/0x15
+    verified at 1200:0a4b-0a57 in our pass).
+26. [ADOPT] Car speed = 4-gear distance table (CalcMoveSpeed verified
+    byte-exact; see ground-truth.md); express {<=1: crawl, <=4: cruise, else
+    3f/t}, std/svc {<=1: crawl, <=3: middle, else 1f/t}.
+27. [ADOPT] Door choreography: 5-tick door timer (tick5 = ding + unboard all
+    + patience*30 dwell; odd ticks one boarder; tick1 bulk; full car departs
+    instantly; idle cars park open; door-open steals calls).
+28. [ADOPT] Queue cap 40/dir/floor, +5 full penalty once/16 frames, 300-frame
+    watchdog -> bank full stress + storm off + 1/16 retry.
+29. [ADOPT] Service elevators never bank wait stress; grand-lobby forgiveness
+    25 (2-story) / 50 (3-story) ticks per bank.
+30. [ADOPT] Stress model: banked felt-wait 0-300 delivered to home-tenant
+    pool at final arrival; daily category passes; demand categories with bars
+    150/200; no-route = instant 300; span stress 16/esc-floor + 35/stair-
+    floor; walk-to-transport >=80 +30 / >=125 +60 once per trip; queue tint
+    pink >=80 / red >=150. Retire our 0-100 addStress scale and per-activity
+    venue reliefs.
+31. [ADOPT] Route costs (byte-verified this session): escalator 8*d (+640
+    flagged variant); stairs 8*d+640; express queue+640 (NO full surcharge);
+    std/svc 8*d+640 (+1000 full); transfer 3000/6000; express transfer
+    queue+3000; early-accept escalator hop <640; walking-leg caps 6 floors
+    all-esc / 3 with any stair; ONE transfer slot; 16 routing slots (6/4
+    cells); staff stairs-only <=3.
+32. [FIX+ADOPT] Service routing: pass serviceRoute (currently never passed ->
+    service elevators unroutable) + staff/maid routing rules.
+33. [ADOPT] Elevator schedules: per-group [WD/WE][6 editable periods] mode
+    (Full/ExpressUp/ExpressDown) + threshold 5 + patience 0-3 (*30 ticks),
+    night period hidden, cars consume at dispatch/dwell.
+34. [ADOPT] Shaft/car caps: 24 shafts, 8 cars/shaft, 29-floor non-express
+    span (express uncapped), metro-depth rule, express sky-lobby anchoring,
+    shaft clearance x+-8 different type.
+35. [ADOPT] Car economics remainder: add-car home = clicked floor; removal
+    refunds nothing. (Add-car prices $80k/$150k/$50k already authentic.)
+36. [ADOPT] Maintenance: quarterly sweep from res 0x3EA (verified bytes):
+    elevators per car (std $10k / express $20k / svc $10k), escalator $5k,
+    lobby per-cell star-gated 0/300/1000, metro $100k, housekeeping $10k,
+    security $20k, recycling $50k, ramp $10k. Retire invented daily table.
+37. [ADOPT] Rent cadence: quarterly 4:59AM lumps from res 0x3E9 class table
+    (verified bytes: office 15k/10k/5k/2k, single 3k/2k/1.5k/0.5k, twin
+    4.5k/3k/2k/0.8k, suite 9k/6k/4k/1.5k, shop 20k/15k/10k/4k, condo
+    200k/150k/100k/40k); move-outs before rent (leavers pay nothing); hotels
+    per-checkout; shops quarterly; condo one-time + buyback; rent-class writer
+    in info dialog (cut = instant re-judge, class 3 forces metric 0).
+38. [ADOPT] Retail economy: quota caps by period (WD/WE/rainy 35/50/25 food,
+    25/30/18 shop), walk-in pacing (rand%36 day / rand%6 evening), door
+    admission (bounce closed / refuse >=40), income tiers restaurant
+    >=50/35/25 -> +10k/6k/4k else -6k; FF +5k/3k/2k else -3k; late-shopper
+    elevator grading (+2/+1/+0).
+39. [ADOPT] Hotel economy: checkout lump by class (single $3k .. suite $9k
+    class 0), ka-ching cadence (every 2nd <20 then every 8th). Fixes our
+    zero-revenue bug.
+40. [ADOPT] Hotel lifecycle: 5PM demand pass arms booking; neglect fuse (3rd
+    dirty-day closed -> infested), roach spread to abutting rooms, checkout
+    cures, maids 6/unit floors-mod-6 <=4PM never during disasters 64-tick
+    dwell never clean infested.
+41. [ADOPT] Cinema: quota by age tier (hits 60/60/40/20; ordinary
+    40/40/40/20), hourly show cycle (10AM reset/noon open/1PM matinee/3PM
+    summon/4PM out/5PM evening/8PM bank), income tiers <40:0 / <80:2k /
+    <100:10k / >=100:15k, movie change $300k/$150k (tuning +0x96/98) with
+    deterministic stepping, ids 0-13 (index 14 unreachable, B12), films 3/6
+    silent (B13).
+42. [ADOPT] Party hall: opens 1PM closes 5PM, flat $20,000 if anyone came.
+43. [ADOPT] Metro: 240-person visitor pool, rand%36==0 per 16-tick visit
+    10AM-5PM, no commuters, no fare income, train toggle frames 0/2.
+44. [ADOPT] Office presence counter 0-6 (+1/-1), night idle sentinel; keep
+    our lunch routing plumbing.
+45. [ADOPT] Condo/restaurant flows: even-room hotel dinner parity, weekend
+    every-4th-condo per-floor dining, condo homebody shopping once/day,
+    no-venue -> leaves tower.
+46. [ADOPT] Noise model: same-floor 20-cell restaurant/shop/FF/office/cinema/
+    party -> +60 hotel verdict. Retire radii model.
+47. [ADOPT] No-route feedback: instant 300 stress + latched per-floor
+    "People on Floor X need a path to Floor Y" message.
+48. [ADOPT] Escalator landing validated once at placement against commercial
+    whitelist; never re-validated (bulldoze trick stands).
+49. [U] Financial report on 0x81f4 art, expense rows reconcile maintenance
+    categories, hotels-show-income-at-zero-population quirk.
+50. [U] Minimap overlays: mode colors/order per MapPaint, true-color elevator
+    lines, abandoned/construction colors.
+51. [U] Fast Mode = tick-throttle bypass semantics onto our speed UI.
+52. [U] Hidden debug menu recreation (9000 Terrorist / 9001 Treasure / 9002
+    Fire + 9003 redraw) as dev tool.
+53. [U] Drop build-complete sound (EXE plays none; only jackhammer during).
+54. [KEEP OURS] Tenancy length persisted across load (EXE-faithful omission
+    has no .TDT field; strictly nicer, matches concilia mod note).
+55. [ADOPT-S] Cinema movie-id space 0-13 (sim side, Wave S); soundtrack
+    wiring (ids 9001+movie_id, films 3/6 silent) deferred to U.
+56. [ADOPT] Elevator car add path remainder: home = clicked floor, caps,
+    funds gate.
+57. [FIX] Latent bugs unconditionally: queue give-up wrong stress scale,
+    stairlike double-increment, queue tint scale, hourToAbsolute>24.
+58. [KEEP OURS] OpenSky-additive features: plugin/edition art, TDT import/
+    export, drag-build, zoom, lighting, spiral stairs, dark UI, inspector.
+
+Retired by this review: burglar event (13), venue stress reliefs (30),
+noise radii model (46), invented daily maintenance table (36), invented
+weekly office rent (37), our $4M start (24), VIP cash rewards (19),
+promotion bonus claim (22).
+
+Deliberate divergences from the EXE (keep our fixed behavior):
+- B7 chopper left-escape fixed (row 14).
+- Shop population counter recomputed leak-free (B3).
+- Medical center single-band registration (B4).
+- InParkingCar double-assign prevented (B2).
+- Tenancy length persisted (row 54).
+
+## Wave S / closeout review (2026-09-15)
+
+Implemented this review's adopted runtime semantics through Wave S:
+
+- Banked person stress is clamped to 0..300, delivered once at final journey
+  arrival, with the adopted stair/escalator/walking thresholds and latched
+  no-route feedback.
+- Tenant and visitor evaluations now use the replacement same-floor noise rule,
+  live capacity/pool counters, daily category passes, and bounded venue quotas.
+- Quarterly settlement is idempotent at the 4:59AM/5:00AM boundary, processes
+  Office/Condo move-out eligibility before rent, applies the verified rent and
+  maintenance classes, and charges hotel rooms at checkout.
+- Retail, cinema, party-hall, and metro pacing/caps follow the adopted Wave S
+  rules. Promotion, VIP, disaster, parking, and loader changes remain intact.
+
+Known deliberate divergences / deferred items:
+
+- Office and Condo rent class is neutral class 1 because their existing public
+  save/API surface has no rent-class field; Shop rent class is persisted.
+- Cinema soundtrack IDs and silent-film audio suppression remain deferred to
+  Wave U.
+- Bomb hunt freeze/destruction details and the financial-report art remain
+  explicit Wave E/U follow-ups; current event behavior uses the implemented
+  deterministic safeguards documented in the source.
+- The no-route API accepts explicit floor pairs; an empty Route alone has no
+  destination metadata, so its compatibility fallback latches the current
+  journey pair.
+
+Verification performed after Wave S integration: `cmake --build build
+-j$(nproc)`, `build/OpenSkyTests`, and the default-tower load smoke under
+  `xvfb-run`; all completed successfully.
+
+## YootTower edition-rules research (2026-09-15)
+
+- Implemented policy: `--ruleset simtower`, `--ruleset opensky` (the default),
+  and `--ruleset yoottower` are the stable CLI identifiers. Horizontal
+  placement enforces SimTower's `[-187, 188)` lot only; OpenSky and generic
+  YootTower remain unbounded. A YootTower World plugin may later add a
+  scenario boundary, but only after its data is semantically decoded.
+- Proven resource shapes only: Tokyo `BINF` begins `[61,46]` followed by a
+  `61*46` grid payload; Hawai `BINF` begins `[31,50]` followed by `31*50`;
+  Kegon `FINF` begins `[44,192]` followed by `44*192`. Correlated `WORLDDEF`
+  values are observed, but neither their axis/header meaning nor enforcement
+  semantics is decoded; they MUST NOT become numeric build limits.
+- Priority candidates once evidence exists: scenario boundary; `BlockT` frame
+  boundaries; `Kinsoku` neighbor compatibility; `DPDF` placement/economy;
+  transport costs and shaft span; `ATTR` unlock/prerequisite gating.
+- Smallest next step: recover the plugin `.text` consumer that assigns these
+  headers their meanings, then derive any scenario-boundary enforcement from
+  that code rather than from resource dimensions alone.
