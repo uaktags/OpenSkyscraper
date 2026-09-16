@@ -10,6 +10,8 @@
 #include <fstream>
 #include <sstream>
 
+#include <climits>
+
 #include "../source/Time.h"
 #include "../source/Route.h"
 #include "../source/Money.h"
@@ -26,6 +28,8 @@
 #include "../source/PluginBitmapLoader.h"
 #include "../source/OspPlugin.h"
 #include "../source/TdtLoader.h"
+
+#include "../source/BuildRules.h"
 
 static int g_failures = 0;
 
@@ -68,6 +72,52 @@ static void testSmoke()
     EXPECT(true);
     EXPECT(sizeof(int) >= 4);
     EXPECT(std::string("hello").size() == 5u);
+}
+
+static void testBuildRules()
+{
+	using OT::BuildRules;
+
+	BuildRules simTower(BuildRules::Ruleset::SimTower);
+	BuildRules openSky(BuildRules::Ruleset::OpenSky);
+	BuildRules yootTower(BuildRules::Ruleset::YootTower);
+
+	EXPECT(std::string(simTower.identifier()) == "simtower");
+	EXPECT(std::string(simTower.displayName()) == "SimTower");
+	EXPECT(std::string(openSky.identifier()) == "opensky");
+	EXPECT(std::string(openSky.displayName()) == "OpenSky");
+	EXPECT(std::string(yootTower.identifier()) == "yoottower");
+	EXPECT(std::string(yootTower.displayName()) == "YootTower");
+
+	BuildRules::Ruleset parsed = BuildRules::Ruleset::OpenSky;
+	EXPECT(BuildRules::parseIdentifier("simtower", parsed));
+	EXPECT(parsed == BuildRules::Ruleset::SimTower);
+	EXPECT(BuildRules::parseIdentifier("opensky", parsed));
+	EXPECT(parsed == BuildRules::Ruleset::OpenSky);
+	EXPECT(BuildRules::parseIdentifier("yoottower", parsed));
+	EXPECT(parsed == BuildRules::Ruleset::YootTower);
+	EXPECT(!BuildRules::parseIdentifier("SimTower", parsed));
+
+	EXPECT(simTower.hasFixedHorizontalBoundary());
+	EXPECT(!openSky.hasFixedHorizontalBoundary());
+	EXPECT(!yootTower.hasFixedHorizontalBoundary());
+
+	// SimTower's 375-cell lot is exactly [-187, 188).
+	EXPECT(simTower.allowsHorizontalFootprint(-187, 375));
+	EXPECT(simTower.allowsHorizontalFootprint(-187, 1));
+	EXPECT(simTower.allowsHorizontalFootprint(187, 1));
+	EXPECT(!simTower.allowsHorizontalFootprint(-188, 1));
+	EXPECT(!simTower.allowsHorizontalFootprint(187, 2));
+
+	// The other rulesets have no generic fixed horizontal boundary.
+	EXPECT(openSky.allowsHorizontalFootprint(-500000, 1000000));
+	EXPECT(yootTower.allowsHorizontalFootprint(-500000, 1000000));
+
+	EXPECT(!simTower.allowsHorizontalFootprint(0, 0));
+	EXPECT(!openSky.allowsHorizontalFootprint(0, -1));
+	EXPECT(!yootTower.allowsHorizontalFootprint(INT_MAX, 1));
+	EXPECT(!openSky.allowsHorizontalFootprint(INT_MAX, 1));
+	EXPECT(!simTower.allowsHorizontalFootprint(1, INT_MAX));
 }
 
 // Time seam: hourToAbsolute / absoluteToHour are pure static conversions.
@@ -1777,11 +1827,13 @@ static void testTdtLoaderTruncated()
 	std::remove(path.c_str());
 }
 
+
 int main()
 {
 	testTdtLoader();
 	testTdtLoaderTruncated();
 	testSmoke();
+	testBuildRules();
 	testTimeConversion();
 	testNightSpeedMultiplier();
 	testRouteClear();

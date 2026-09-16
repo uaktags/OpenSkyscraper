@@ -188,6 +188,7 @@ endif()
 # seam tests focused and fast.
 add_executable(OpenSkyTests
   tests/test_main.cpp
+  source/BuildRules.cpp
   source/Time.cpp
   source/Route.cpp
   source/SaveHash.cpp

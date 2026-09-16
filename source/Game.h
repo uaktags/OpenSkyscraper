@@ -33,6 +33,8 @@
 #include "LevelUp.h"
 #include "VipSystem.h"
 #include "EventSystem.h"
+#include "BuildRules.h"
+
 
 namespace OT {
 	namespace Item { class AbstractPrototype; }
@@ -43,6 +45,9 @@ namespace OT {
 	public:
 		Application & app;
 		Game(Application & app);
+		BuildRules activeRules;
+
+
 		virtual ~Game();
 
 		typedef std::set<Sprite *> Sprites;
@@ -75,7 +80,7 @@ namespace OT {
 		Item::Item * metroStation;
 		void addItem(Item::Item * item);
 		void removeItem(Item::Item * item);
-		void extendFloor(int floor, int minX, int maxX, bool free = false);
+		bool extendFloor(int floor, int minX, int maxX, bool free = false);
 		/// Mint free stub floor slabs where a loaded tower lost them
 		/// (OpenSkyWeb ISSUE-041 self-heal). Returns true when repaired.
 		bool repairFloorCoverage();

@@ -24,6 +24,25 @@ static double autosaveWallClock()
 	return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
 }
 
+static bool allowsFloorSpan(const BuildRules & rules, int minX, int maxX)
+{
+	const long long width = (long long)maxX - minX;
+	return width > 0 && width <= INT_MAX &&
+		rules.allowsHorizontalFootprint(minX, (int)width);
+}
+
+static bool canExtendFloor(const Game & game, int floor, int minX, int maxX)
+{
+	if (maxX <= minX) return false;
+	Game::FloorItems::const_iterator existing = game.floorItems.find(floor);
+	if (existing != game.floorItems.end())
+	{
+		minX = std::min(minX, existing->second->position.x);
+		maxX = std::max(maxX, existing->second->getRect().maxX());
+	}
+	return allowsFloorSpan(game.activeRules, minX, maxX);
+}
+
 void Game::askEventChoice(const std::string & title, const std::string & text,
                           const std::string & yesLabel, const std::string & noLabel,
                           const std::function<void(bool)> & onChoice)
@@ -84,6 +103,7 @@ void Game::closeEventChoice()
 
 Game::Game(Application & app)
 :	State("game"),
+	activeRules(app.selectedRuleset()),
 	app(app),
 	itemFactory(this),
 	toolboxWindow(this),
@@ -440,6 +460,13 @@ if (toolboxWindow.window && toolboxWindow.window->isMouseOnWidget(tgui::Vector2f
 return false;
 
 if (batchDragActive()) updateBatchDrag();
+if (draggingElevator &&
+    !activeRules.allowsHorizontalFootprint(draggingElevator->position.x, draggingElevator->size.x)) {
+	timeWindow.showMessage("Cannot extend elevator outside the " +
+		std::string(activeRules.displayName()) + " build boundary.");
+	draggingElevator = NULL;
+}
+
 
 if (draggingElevator && draggingElevator->repositionMotor(draggingMotor, toolPosition.y)) {
 				// Construct floors
@@ -1045,7 +1072,13 @@ void Game::removeItem(Item::Item * item)
 	delete item;
 }
 
-void Game::extendFloor(int floor, int minX, int maxX, bool free) {
+bool Game::extendFloor(int floor, int minX, int maxX, bool free) {
+	if (!canExtendFloor(*this, floor, minX, maxX)) {
+		LOG(WARNING, "refused floor extension on floor %i outside the %s horizontal build policy",
+		    floor, activeRules.displayName());
+		return false;
+	}
+
 	if (floorItems.count(floor) != 0) {
 		// Look for existing floor to extend
 		Item::Floor * f = floorItems[floor];
@@ -1089,6 +1122,7 @@ void Game::extendFloor(int floor, int minX, int maxX, bool free) {
 			playOnce("simtower/construction/normal");
 		}
 	}
+	return true;
 }
 
 bool Game::writeTowerFile(const std::string & path)
@@ -1141,6 +1175,13 @@ bool Game::repairFloorCoverage()
 	for (ItemSet::iterator i = items.begin(); i != items.end(); i++) {
 		Item::Item * item = *i;
 		if (item->prototype->icon == ICON_FLOOR) continue;
+		// Loaded geometry is retained verbatim, but repair must never create
+		// a slab outside the active ruleset to support it.
+		if (!activeRules.allowsHorizontalFootprint(item->position.x, item->size.x)) {
+			LOG(WARNING, "skipped floor repair for %s outside the %s horizontal build policy",
+			    item->desc().c_str(), activeRules.displayName());
+			continue;
+		}
 		const int h = std::max(1, item->size.y);
 		for (int yy = item->position.y; yy < item->position.y + h; yy++) {
 			// Haulers only need a slab where the level has none at all;
@@ -1161,8 +1202,8 @@ bool Game::repairFloorCoverage()
 		const int y = i->first;
 		Item::Floor * f = floorItems.count(y) ? floorItems[y] : NULL;
 		if (!f || f->position.x > i->second.first || f->getRect().maxX() < i->second.second) {
-			extendFloor(y, i->second.first, i->second.second, true);
-			repaired = true;
+			if (extendFloor(y, i->second.first, i->second.second, true))
+				repaired = true;
 		}
 	}
 	if (repaired) updateRoutes();
@@ -1220,6 +1261,8 @@ void Game::encodeXML(tinyxml2::XMLPrinter & xml)
 	xml.PushAttribute("speed", speedMode);
 	xml.PushAttribute("rainy", sky.rainyDay);
 	xml.PushAttribute("tool", selectedTool.c_str());
+
+	xml.PushAttribute("ruleset", activeRules.identifier());
 
 	xml.PushAttribute("x", (int)poi.x);
 	xml.PushAttribute("y", (int)poi.y);
@@ -1283,6 +1326,21 @@ void Game::decodeXML(tinyxml2::XMLDocument & xml)
 {
 	tinyxml2::XMLElement * root = xml.RootElement();
 	assert(root);
+	if (!app.hasRulesetOverride()) {
+		const char * savedIdentifier = root->Attribute("ruleset");
+		if (savedIdentifier) {
+			BuildRules::Ruleset savedRuleset = BuildRules::Ruleset::OpenSky;
+			if (!BuildRules::parseIdentifier(savedIdentifier, savedRuleset))
+				LOG(WARNING, "invalid saved ruleset '%s'; defaulting to opensky", savedIdentifier);
+			activeRules = BuildRules(savedRuleset);
+		} else if (activeRules.ruleset() == app.selectedRuleset()) {
+			// Normal native XML loads begin at the application's default,
+			// so old saves safely select OpenSky. A TDT conversion marks
+			// its preselected SimTower policy directly before decode.
+			activeRules = BuildRules(BuildRules::Ruleset::OpenSky);
+		}
+	}
+
 
 	clearWorld();
 
@@ -1537,6 +1595,16 @@ void Game::toggleElevatorService(Item::Elevator::Elevator * e, int floor)
 bool Game::constructToolAt(int2 pos)
 {
 	toolPosition = pos;
+	if (!activeRules.allowsHorizontalFootprint(pos.x, toolPrototype->size.x)) {
+		const std::string reason = "Horizontal footprint is outside the " +
+			std::string(activeRules.displayName()) + " build boundary";
+		LOG(DEBUG, "cannot construct %s at %ix%i: %s",
+		    toolPrototype->id.c_str(), pos.x, pos.y, reason.c_str());
+		playOnce("simtower/construction/impossible");
+		timeWindow.showMessage("Cannot place item there. " + reason + ".");
+		return false;
+	}
+
 	const size_t itemsBefore = items.size();
 	int height = toolPrototype->size.y;
 	int yHeightOffset = height;
@@ -1584,6 +1652,16 @@ if (!handled) {
 	std::string blockReason;
 	int minFloorX = INT_MAX;
 	int maxFloorX = INT_MIN;
+	for (int i = 0; i < toolPrototype->size.y; ++i) {
+		if (!canExtendFloor(*this, toolPosition.y + i, toolPosition.x,
+		                    toolPosition.x + toolPrototype->size.x)) {
+			constructionBlocked = true;
+			blockReason = "Horizontal footprint is outside the " +
+				std::string(activeRules.displayName()) + " build boundary";
+			break;
+		}
+	}
+
 
 	// Star-rating gate: some prototypes require a minimum tower
 	// rating to build. Reject early so the player gets feedback.
@@ -1785,6 +1863,18 @@ if (!handled) {
 							int diffLeft = 0, diffRight = 0;
 							int oldMinX = l->position.x;
 							int oldMaxX = l->getRect().maxX();
+							const int newMinX = std::min(l->position.x, toolPosition.x);
+							const int newMaxX = std::max(lobbyRight, toolRight);
+							for (int f = l->position.y; f < l->position.y + l->size.y; ++f) {
+								if (!canExtendFloor(*this, f, newMinX, newMaxX)) {
+									constructionBlocked = true;
+									blockReason = "Horizontal footprint is outside the " +
+										std::string(activeRules.displayName()) + " build boundary";
+									break;
+								}
+							}
+							if (constructionBlocked) break;
+
 							if (toolPosition.x < l->position.x) {
 								diffLeft = l->position.x - toolPosition.x;
 								l->size.x += diffLeft;
@@ -1826,6 +1916,26 @@ if (!handled) {
 			if (!constructionBlocked)
 				blockReason = "Floor " + std::string(toolPosition.y > 0 ? "below" : "above") + " is not wide enough";
 			constructionBlocked = true;
+		}
+
+		if (!constructionBlocked && toolPrototype->icon == ICON_LOBBY) {
+			const ItemSet &itemsOnFloor = itemsByFloor[toolPosition.y];
+			for (ItemSet::const_iterator ii = itemsOnFloor.begin(); ii != itemsOnFloor.end(); ++ii) {
+				Item::Item * item = *ii;
+				if (item->prototype->icon != ICON_LOBBY) continue;
+				const int newMinX = std::min(item->position.x, toolPosition.x);
+				const int newMaxX = std::max(item->getRect().maxX(),
+					toolPosition.x + toolPrototype->size.x);
+				for (int f = item->position.y; f < item->position.y + item->size.y; ++f) {
+					if (!canExtendFloor(*this, f, newMinX, newMaxX)) {
+						constructionBlocked = true;
+						blockReason = "Horizontal footprint is outside the " +
+							std::string(activeRules.displayName()) + " build boundary";
+						break;
+					}
+				}
+				break;
+			}
 		}
 
 		if (!constructionBlocked) {
@@ -2005,6 +2115,12 @@ void Game::cancelBatchDrag()
 
 bool Game::validateBatchCell(Item::AbstractPrototype * proto, int x, int y, std::string & reason, const std::set<int> & simulatedSlabs) const
 {
+	if (!activeRules.allowsHorizontalFootprint(x, proto->size.x)) {
+		reason = "Horizontal footprint is outside the " +
+			std::string(activeRules.displayName()) + " build boundary";
+		return false;
+	}
+
 	const int minRating = LevelUp::minRatingToBuild(proto->id);
 	if (minRating > rating) {
 		reason = proto->name + " unlocks at " + std::to_string(minRating + 1) + " stars";

@@ -44,7 +44,9 @@ Application::Application(int argc, char *argv[])
     : data(this),
       fonts(this),
       bitmaps(this),
-      sounds(this)
+      sounds(this),
+      m_ruleset(BuildRules::Ruleset::OpenSky),
+      m_rulesetExplicit(false)
 {
     assert(App == NULL && "Application initialized multiple times");
     App = this;
@@ -128,6 +130,22 @@ Application::Application(int argc, char *argv[])
             assert(i + 1 < argc && "--simtower-exe is missing path");
             simTowerExecutable = argv[++i];
             LOG(INFO, "SimTower executable override set to %s", simTowerExecutable.c_str());
+        }
+        if (strcmp(argv[i], "--ruleset") == 0)
+        {
+            assert(i + 1 < argc && "--ruleset is missing value");
+            const char * identifier = argv[++i];
+            BuildRules::Ruleset parsed;
+            if (BuildRules::parseIdentifier(identifier, parsed))
+            {
+                m_ruleset = parsed;
+                m_rulesetExplicit = true;
+                LOG(INFO, "ruleset override set to %s", identifier);
+            }
+            else
+            {
+                LOG(ERROR, "invalid ruleset '%s'; expected simtower, opensky, or yoottower", identifier);
+            }
         }
         if (strcmp(argv[i], "--new-game") == 0)
         {
@@ -341,6 +359,11 @@ void Application::loadGameFromFile(const std::string &filename)
             if (createdNewGame) delete game;
             return;
         }
+        if (!hasRulesetOverride())
+        {
+            game->activeRules = BuildRules(BuildRules::Ruleset::SimTower);
+            LOG(INFO, "TDT import selected SimTower ruleset");
+        }
         game->decodeXML(xml);
         game->reloadGUI();
         // Point autosave/save at our own extension so the original save is
@@ -394,6 +417,11 @@ void Application::loadGameFromFile(const std::string &filename)
         }
         if (xml.Parse(text.c_str()) == tinyxml2::XML_SUCCESS)
         {
+            // A native save's attribute (or the safe OpenSky fallback for
+            // an old save) owns its ruleset. Clear any prior TDT import
+            // preselection before Game decodes this normal XML load.
+            if (!hasRulesetOverride())
+                game->activeRules = BuildRules(selectedRuleset());
             game->decodeXML(xml);
             game->reloadGUI();
             game->saveFilename = filename;

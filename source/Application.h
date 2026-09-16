@@ -16,6 +16,8 @@
 #include "State.h"
 #include "SoundManager.h"
 
+#include "BuildRules.h"
+
 #include <TGUI/TGUI.hpp>
 #include <TGUI/Backend/SFML-Graphics.hpp>
 
@@ -58,6 +60,9 @@ namespace OT
 		void saveSettings();
 		void showSettingsDialog();
 		const std::string & simTowerExecutablePath() const { return simTowerExecutable; }
+		BuildRules::Ruleset selectedRuleset() const { return m_ruleset; }
+		bool hasRulesetOverride() const { return m_rulesetExplicit; }
+
 
 		void setAudioVolume(float volume);
 		void setAudioMuted(bool mute);
@@ -110,6 +115,8 @@ namespace OT
 		double startupViewportScrollVertical;
 		bool fullscreen;
 		std::string simTowerExecutable;
+		BuildRules::Ruleset m_ruleset;
+		bool m_rulesetExplicit;
 	};
 
 	extern Application * App;
