@@ -47,8 +47,22 @@ namespace OT {
 		/// resting or at home; subclasses override to drive state transitions.
 		virtual void advance(double dt);
 
-		/// Apply a stress delta, clamping the resulting value to [0, 100].
-		void addStress(double amount) { stress += amount; if (stress < 0) stress = 0; if (stress > 100) stress = 100; }
+		/// Felt-wait stress is a bounded bank in the original 0..300 scale.
+		/// Keep the field public for existing inspector/evaluation consumers,
+		/// but funnel mutations through this clamp.
+		static const double kMaxStress;
+		void addStress(double amount);
+		void recoverStress(double amount) { addStress(-amount); }
+
+		/// Queue and movement penalties are accumulated for the active trip and
+		/// deposited once when Journey reaches its final node.
+		void addJourneyStress(double amount);
+		void deliverJourneyStress();
+		double journeyStress() const { return pendingJourneyStress; }
+
+		/// Record an unreachable destination. The stress hit is immediate; the
+		/// diagnostic itself is latched per game/floor pair.
+		void recordNoRoute(int fromFloor, int toFloor);
 
 		virtual void encodeXML(tinyxml2::XMLPrinter &xml);
 		virtual void decodeXML(tinyxml2::XMLElement &xml);
@@ -72,13 +86,14 @@ namespace OT {
 			std::queue<Route::Node> nodes;
 		};
 		Journey journey;
+		double stress;
+		double eval;
+		double pendingJourneyStress;
 		Type type;
 		State state;
 		std::string name;
 		std::string from;
 		std::string goingTo;
-		double stress;
-		double eval;
 
 		/// Random per-person offset so walking animations don't sync.
 		double animOffset;
