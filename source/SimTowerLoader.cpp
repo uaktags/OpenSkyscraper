@@ -765,6 +765,18 @@ void SimTowerLoader::loadBitmaps()
 		{0x8F6C, "fire/small"},
 		{0x8F6D, "fire/chopper"},
 		{0x8FA8, "fire/destroyed"},
+		//ChurchT wedding art. 0x8828 is the 128x36 procession sheet: eight
+		//16px cells, 0 bride walk / 1 groom walk / 2..6 ceremony / 7 held
+		//pose. The six 224x36 ceremony strips stack above the cathedral
+		//(ceremony0 topmost); strips 0-3 key their sky border out, while 4
+		//and 5 are opaque congregation interior (no sky pixels in the DIB).
+		{0x8828, "church/couple",    sf::Color::White},
+		{0x8CE9, "church/ceremony0", sf::Color(0x4A, 0xB4, 0xFF)},
+		{0x8D29, "church/ceremony1", sf::Color(0x4A, 0xB4, 0xFF)},
+		{0x8D69, "church/ceremony2", sf::Color(0x4A, 0xB4, 0xFF)},
+		{0x8DA9, "church/ceremony3", sf::Color(0x4A, 0xB4, 0xFF)},
+		{0x8DE9, "church/ceremony4"},
+		{0x8DEA, "church/ceremony5"},
 
 		{0x8F28, "metro/tracks"},
 
