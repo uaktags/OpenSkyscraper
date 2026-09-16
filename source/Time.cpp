@@ -33,15 +33,20 @@ double Time::absoluteToHour(double a)
 
 double Time::hourToAbsolute(double h)
 {
-	if (h == 24.0)
+	// Callers occasionally carry a next-day hour (or a UI value beyond
+	// midnight). Clamp outside the representable SimTower day instead of
+	// returning an uninitialized value for h > 24.
+	if (h >= 24.0)
 		return 1.0;
+	if (h <= 0.0)
+		return 0.0;
 
 	double a;
 	if      (h < 1)  a = (h -  0) /  1 *  100 +    0;
 	else if (h < 7)  a = (h -  1) /  6 *  200 +  100;
 	else if (h < 12) a = (h -  7) /  5 *  400 +  300;
 	else if (h < 13) a = (h - 12) /  1 *  800 +  700;
-	else if (h < 24) a = (h - 13) / 11 * 1100 + 1500;
+	else              a = (h - 13) / 11 * 1100 + 1500;
 	a /= 2600;
 	assert(a >= 0 && a <= 1);
 	return a;

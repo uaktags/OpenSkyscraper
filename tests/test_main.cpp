@@ -84,6 +84,10 @@ static void testTimeConversion()
     EXPECT_NEAR(Time::hourToAbsolute(12.0), 7.0 / 26.0, 1e-9);
     EXPECT_NEAR(Time::hourToAbsolute(13.0), 15.0 / 26.0, 1e-9);
     EXPECT_NEAR(Time::hourToAbsolute(24.0), 1.0, 1e-9);
+    // Next-day UI values clamp at the end of the displayed day rather than
+    // entering the old uninitialized branch; negative values clamp to dawn.
+    EXPECT_NEAR(Time::hourToAbsolute(25.0), 1.0, 1e-9);
+    EXPECT_NEAR(Time::hourToAbsolute(-1.0), 0.0, 1e-9);
 
     // Mid-segment spot check inside the long 12:00-13:00 band.
     EXPECT_NEAR(Time::hourToAbsolute(12.5),
