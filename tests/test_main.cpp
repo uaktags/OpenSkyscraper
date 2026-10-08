@@ -9,6 +9,8 @@
 #include <cstdio>
 #include <fstream>
 #include <sstream>
+#include <map>
+#include <vector>
 
 #include <climits>
 
@@ -24,6 +26,10 @@
 #include "../source/SaveHash.h"
 #include "../source/PluginManager.h"
 #include "../source/PluginResources.h"
+#include "../source/PluginDefs.h"
+#include "../source/SubPluginDefs.h"
+#include "../source/PluginResourceCodec.h"
+#include "../source/ItemTypeCatalog.h"
 #include "../source/PluginObjmap.h"
 #include "../source/PluginBitmapLoader.h"
 #include "../source/OspPlugin.h"
@@ -866,7 +872,8 @@ static void testDecompiledPlugin()
     // Typed accessors decode the synthesised metadata.
     OT::PluginAttr attr;
     EXPECT(office->getAttr(attr));
-    EXPECT(attr.itemType == "CFFO");
+    EXPECT(attr.id == "CFFO");          // v1 "itemType" = file-order plugin id
+    EXPECT(attr.itemType == 1);         // v1 "id" = numeric item type
     EXPECT(attr.name == "Office");
 
     OT::PluginDesc desc;
@@ -904,13 +911,106 @@ static void testDecompiledPlugin()
     EXPECT(!pm.has("OpenTower/DoesNotExist"));
 }
 
-// PluginResources seam: typed parsers for the HIGH-confidence resource
-// types documented in doc/yoottower/resource-formats.md. Tests run at two
-// levels:
-//   (a) byte-level: hand-crafted buffers from the calibration hex dumps
-//       (the proof that the layouts reproduce known game data).
-//   (b) integration: Plugin::getAttr/getDesc/getDpdf on real vendored
-//       plugins (the proof that PluginManager wires the parsers correctly).
+// PluginResources / PluginDefs / SubPluginDefs / PluginResourceCodec seam:
+// typed decode + byte-exact encode of every YootTower plugin resource type
+// (doc/yoottower/plugin-schema.md, world-and-sp-formats.md §3). Three levels:
+//   (a) byte-level: fixtures copied from real plugins (hex below), decoded,
+//       checked field by field, and re-encoded to the identical bytes.
+//   (b) spot checks of known values through the Plugin accessors, taken
+//       from `python3 -I tools/yoottower/t2p_schema.py dump <plugin>`.
+//   (c) a population sweep: every resource of every plugin in data/Plugins
+//       decodes and re-encodes byte-identically.
+
+static std::string fromHex(const char * hex)
+{
+    std::string out;
+    auto nib = [](char c) -> int {
+        if (c >= '0' && c <= '9') return c - '0';
+        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+        if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+        return -1;
+    };
+    for (size_t i = 0; hex[i] && hex[i + 1]; i += 2)
+        out.push_back(char((nib(hex[i]) << 4) | nib(hex[i + 1])));
+    return out;
+}
+
+static bool readFileBytes(const std::string & path, std::string & out)
+{
+    std::ifstream f(path, std::ios::binary);
+    if (!f) return false;
+    std::ostringstream ss;
+    ss << f.rdbuf();
+    out = ss.str();
+    return true;
+}
+
+// Burger.t2p TNDF id 1 (334 bytes)
+static const char * const kBurgerTndf =
+    "011505000010000000010000000100000080040001275468652063617465676f7279206f662072657374617572616e74"
+    "7320796f75206d616e6167652e000b52657374617572616e747300320000001400000000000000000000000000000080"
+    "0000002c0100000100000007243230303030300006243830302f4d0030546865206661737420666f6f642073746f7265"
+    "2077686572652074686520796f756e672070656f706c6520636f6d652e000b427572676572206c616e64000b42757267"
+    "6572206c616e6400d00700000800000081000000820000002c0100000800000014000000000000000100000000000000"
+    "8c000000960000000000000000000000010000000a000000000000000300000001000000040000000300000000000000"
+    "000000000e000000000000000e000000e0010000280500000f000000000000008000000081000000800000000000";
+// Burger.t2p SLDF id 1 (155 bytes)
+static const char * const kBurgerSldf =
+    "0106000000ec03000002000000010000002c0100000657616974657200ed03000002000000010000002d010000085761"
+    "69747265737300f00300000200000001000000360100000657616974657200f103000002000000010000003701000008"
+    "576169747265737300ee03000002000000010000002e0100000657616974657200ef03000002000000010000002f0100"
+    "0008576169747265737300";
+// Billboard.t2p OODF id 1 (248 bytes)
+static const char * const kBillboardOodf =
+    "01d007000014000000020000000100000080040000294974656d7320746f20626520706c61636564207768696c652069"
+    "6e206f757473696465206d6f64652e00124f75747369646520466163696c697469657300c80000000a00000000000000"
+    "0000000049506f42800000002c01000001000000072431303030303000022430003f5468652062696c6c626f61726420"
+    "77686963682063616e20626520706c61636564206f6e207468652077616c6c206f662074686520737472756374757265"
+    "2e000942696c6c626f617264000942696c6c626f61726400e80300000000000081000000820000002c01000032000000"
+    "0000000000000000";
+// StdElev.t2p MVDF id 1 (409 bytes)
+static const char * const kStdElevMvdf =
+    "0112070000040000000100000001000000028900013d5468652063617465676f7279206f66207472616e736974207379"
+    "7374656d7320737563682061732073746169727320616e6420656c657661746f72732e000f5472616e73697420537973"
+    "74656d7300140000000a0000001300000001000000000000007f0000002c0100000100000012243135303030303a2435"
+    "303030302f63617200082431323030302f510032412073696d706c6520656c657661746f722063616e20626520657874"
+    "656e64656420757020746f20313520666c6f6f72732e000f53696d706c6520456c657661746f72000f53696d706c6520"
+    "456c657661746f7200dc0500007800000080000000820000002c01000014000000110000000000000003000000000000"
+    "000000000096000000000000000000000000000000ffffffff0000000001000000000000000f00000001000000000000"
+    "000f0000000300000001000000030000000000000006000000010000000000000000000000f401000002000000020000"
+    "00fefffffffeffffff71170000721700000000000000000000";
+// Subway.t2p RT_STRING id 64 (80 bytes)
+static const char * const kSubwayStrings64 =
+    "0000000000000000000000000000000000000000000000000000000000001800430072006f0077006400650064002000"
+    "77006900740068002000700061007300730065006e0067006500720073002e00";
+// Hawai.t2p STRTBL id 1 (121 bytes)
+static const char * const kHawaiStrtbl =
+    "010b000000272746726f6d206e6f772061742074686520746f70206f66207468652043617468656472616c2c20001974"
+    "68652077656464696e672077696c6c2073746172742e27270010436f6e67726174756c6174696f6e732100034d722e00"
+    "034d732e00026f66000000000003616e6400026f6600012c00";
+// Burger.t2p DESC id 128 (9 bytes)
+static const char * const kBurgerDesc =
+    "016c506e5403000000";
+// PlArt.t2p HEDF id 128 (133 bytes)
+static const char * const kPlArtHedf =
+    "010e4172742045786869626974696f6e000000000080000000020000000300000058020000fc0300001f0f0000fa0000"
+    "0080000000e8030000320000000a0000003c000000810000002e4d6f6465726e206172742065786869626974696f6e2e"
+    "0d0a506f70756c617220776974682073747564656e74732e000a48455f4172742e4d4f5600";
+// PlArt.t2p PPDF id 128 (25 bytes)
+static const char * const kPlArtPpdf =
+    "015a000000d007000000000000000000000a00000064000000";
+// MV_1stContact.t2p MODF id 128 (197 bytes)
+static const char * const kMv1stContactModf =
+    "010b31737420436f6e746163740000000000800000000000000000000000060000001200000003000000010000002076"
+    "61636361206d6f64652f5075626c6973686564206279203a204f4239303033000d53205370696e68616d62757267000d"
+    "4a6f6520487572726963616e650078000000f4010000164120736369656e63652066696374696f6e2066696c6d008000"
+    "00005f000000650000002c010000460000000100000000000000810000008c000000114d565f317374436f6e74616374"
+    "2e4d4f5600";
+// MV_1stContact.t2p TMDF id 128 (47 bytes)
+static const char * const kMv1stContactTmdf =
+    "01ffffffff000000000000000000000000010000000000ffffffff120000001f000000ffffffff6400000000000000";
+
+
 static void testFourCC()
 {
     using OT::FourCC;
@@ -923,9 +1023,17 @@ static void testFourCC()
     // Short string doesn't match either.
     EXPECT(f != "GRU");
     EXPECT(f.str() == "GRUB");
+    // Mac source order is the reversed file order ('BURG').
+    EXPECT(f.macStr() == "BURG");
+    EXPECT(f.toUint32LE() == 0x42555247u);
+    EXPECT(FourCC::fromMacOrder("BURG") == f);
+    EXPECT(FourCC::fromUint32LE(0x42555247u) == f);
+    EXPECT(FourCC::fromFileOrder("GRUB") == f);
     // lPnT as bytes == 0x546E506C, the literal ConstructProgramPlugin passes.
     FourCC lpnt; lpnt.c[0]='l'; lpnt.c[1]='P'; lpnt.c[2]='n'; lpnt.c[3]='T';
     EXPECT(lpnt.toUint32LE() == 0x546E506Cu);
+    EXPECT(lpnt.macStr() == "TnPl");
+    EXPECT(FourCC::fromFileOrder("****").isNone());
 
     FourCC a, b;
     a.c[0]='A'; a.c[1]='B'; a.c[2]='C'; a.c[3]='D';
@@ -936,68 +1044,62 @@ static void testFourCC()
 static void testParseAttrBinary()
 {
     using OT::PluginAttr;
-    // Exact bytes of Coin.t2p ATTR id=128 (49 B incl. trailing pad NUL):
-    //   v=1 mItemType=ADEM f5=16 "****" gameLevel=3 mustItem=0 mID=1683
-    //   name="Coin Press Machine"
-    static const unsigned char kCoin[] = {
-        0x01,
-        'A','D','E','M',
-        0x10,0x00,0x00,0x00,
-        '*','*','*','*',
-        0x03,0x00,0x00,0x00,
-        0x00,0x00,0x00,0x00,
-        0x93,0x06,0x00,0x00,
-        0x00,0x00,0x00,0x00,
-        0x12,
-        'C','o','i','n',' ','P','r','e','s','s',' ','M','a','c','h','i','n','e',
-        0x00  // trailing pad
-    };
+    // Exact bytes of Burger.t2p ATTR id=128 (42 B). Read order (CFilePlugin
+    // ctor 0x1000df20): mID 'BURG', mAttrib 1, mDependID '****',
+    // mGameLevel 1, mSecretItem 0, mItemType 1301, mMustItem 0, name.
+    const std::string bytes = fromHex(
+        "0147525542010000002a2a2a2a01000000000000001505000000000000"
+        "0b4275726765722" "06c616e6400");
+    EXPECT(bytes.size() == 42u);
     PluginAttr a;
-    const bool ok = OT::parsePluginAttr(reinterpret_cast<const char *>(kCoin),
-                                        int(sizeof(kCoin)), a);
+    const bool ok = OT::parsePluginAttr(bytes.data(), int(bytes.size()), a);
     EXPECT(ok);
     if (ok) {
         EXPECT(a.valid);
         EXPECT(!a.isTextForm);
-        EXPECT(a.version == 1);
-        EXPECT(a.itemType == "ADEM");
-        EXPECT(a.marker == "****");
-        EXPECT(a.gameLevel == 3u);      // Coin unlocks at Star 3
-        EXPECT(a.mustItem == 0u);
-        EXPECT(a.id == 1683u);
-        EXPECT(a.name == "Coin Press Machine");
+        EXPECT(a.id == "GRUB");
+        EXPECT(a.id.macStr() == "BURG");
+        EXPECT(a.attrib == 1u);
+        EXPECT(a.dependID.isNone());
+        EXPECT(!a.hasDependency());
+        EXPECT(a.gameLevel == 1);
+        EXPECT(a.secretItem == 0);
+        EXPECT(a.itemType == 1301);
+        EXPECT(a.mustItem == 0);
+        EXPECT(a.name == "Burger land");
+        std::string again;
+        EXPECT(OT::encodePluginAttr(a, again));
+        EXPECT(again == bytes);
     }
 
-    // The marker field is variable: "****" on most plugins, "NORF" on the
-    // hotel-room family (Singleroom/Suiteroom/Twinroom/Maintenance). The
-    // parser must accept either (discovered in the population sweep).
-    static const unsigned char kNorf[] = {
-        0x01, 'N','E','R','H',              // Apartment-style itemType
-        0x02,0x00,0x00,0x00,
-        'N','O','R','F',                    // hotel-room marker
-        0x01,0x00,0x00,0x00, 0,0,0,0, 0x4e,0x04,0,0, 0,0,0,0,
-        0x09, 'R','o','o','m',' ','t','e','s','t'
-    };
-    PluginAttr norf;
-    const bool norfOk = OT::parsePluginAttr(reinterpret_cast<const char *>(kNorf),
-                                            int(sizeof(kNorf)), norf);
-    EXPECT(norfOk);
-    if (norfOk) {
-        EXPECT(norf.marker == "NORF");
-        EXPECT(norf.name == "Room test");
-    }
+    // Hotel rooms depend on the Front desk: mDependID bytes "NORF" = 'FRON'.
+    PluginAttr room = a;
+    room.dependID = OT::FourCC::fromMacOrder("FRON");
+    EXPECT(room.dependID == "NORF");
+    EXPECT(room.hasDependency());
+    std::string roomBytes;
+    EXPECT(OT::encodePluginAttr(room, roomBytes));
+    EXPECT(roomBytes.compare(9, 4, "NORF") == 0);
+    PluginAttr room2;
+    EXPECT(OT::parsePluginAttr(roomBytes.data(), int(roomBytes.size()), room2));
+    EXPECT(room2.dependID.macStr() == "FRON");
 
-    // Truncated / null input is rejected cleanly (no crash).
+    // Truncated / null / trailing input is rejected cleanly (no crash).
     PluginAttr bad;
     EXPECT(!OT::parsePluginAttr(nullptr, 0, bad));
-    EXPECT(!OT::parsePluginAttr(reinterpret_cast<const char *>(kCoin), 5, bad));
+    EXPECT(!OT::parsePluginAttr(bytes.data(), 5, bad));
+    std::string trailing = bytes + "x";
+    EXPECT(!OT::parsePluginAttr(trailing.data(), int(trailing.size()), bad));
+    // A non-zero string terminator is not representable -> rejected.
+    std::string badTerm = bytes;
+    badTerm.back() = 1;
+    EXPECT(!OT::parsePluginAttr(badTerm.data(), int(badTerm.size()), bad));
 }
 
 static void testParseAttrText()
 {
     using OT::PluginAttr;
-    // DefaultToolPalette's text-form ATTR. The integer mItemType decodes
-    // back to the "LPOT" 4cc (the same value as its DESC classTag).
+    // DefaultToolPalette's text-form ATTR (the only one), byte for byte.
     static const char kText[] =
         "(mID)\t\t1000\r\n"
         "(mAttrib)\t16777215\r\n"
@@ -1013,12 +1115,22 @@ static void testParseAttrText()
     if (ok) {
         EXPECT(a.valid);
         EXPECT(a.isTextForm);
-        EXPECT(a.id == 1000u);
+        EXPECT(a.id.toUint32LE() == 1000u);
         EXPECT(a.attrib == 16777215u);
-        EXPECT(a.gameLevel == 1u);
-        EXPECT(a.mustItem == 1u);
-        EXPECT(a.itemType == "LPOT");              // 1414484044 == 0x544F504C
+        EXPECT(a.dependID.toUint32LE() == 0u);
+        EXPECT(a.gameLevel == 1);
+        EXPECT(a.itemType == 1414484044);   // 0x544F504C == 'TOPL'
+        EXPECT(a.mustItem == 1);
         EXPECT(a.name == "Default Tool palette");
+        std::string again;
+        EXPECT(OT::encodePluginAttr(a, again));
+        EXPECT(again == std::string(kText, sizeof(kText) - 1));
+        // Editing a value regenerates the text, which parses back.
+        a.gameLevel = 3;
+        EXPECT(OT::encodePluginAttr(a, again));
+        PluginAttr b;
+        EXPECT(OT::parsePluginAttr(again.data(), int(again.size()), b));
+        EXPECT(b.isTextForm && b.gameLevel == 3 && b.name == "Default Tool palette");
     }
 }
 
@@ -1036,20 +1148,26 @@ static void testParseDesc()
             EXPECT(d.classTag == tag);
             EXPECT(d.value == 3u);
             EXPECT(d.kind == kind);
+            std::string again;
+            EXPECT(OT::encodePluginDesc(d, again));
+            EXPECT(again == std::string(bytes, size_t(len)));
         }
     };
-    // lPnT (0x546E506C) -> TenantPlugin
-    static const char kTenant[] = {0x01,'l','P','n','T', 3,0,0,0};
-    check(kTenant, 9, "lPnT", PluginDesc::TenantPlugin);
-    // lPvM (0x4D76506C) -> MoverPlugin
+    const std::string burger = fromHex(kBurgerDesc);
+    check(burger.data(), int(burger.size()), "lPnT", PluginDesc::TenantPlugin);
     static const char kMover[]  = {0x01,'l','P','v','M', 3,0,0,0};
     check(kMover, 9, "lPvM", PluginDesc::MoverPlugin);
-    // LPOT (0x544F504C) -> ToolPalette
     static const char kPalette[]= {0x01,'L','P','O','T', 3,0,0,0};
     check(kPalette, 9, "LPOT", PluginDesc::ToolPalette);
+    static const char kMovie[]  = {0x01,'l','P','o','M', 3,0,0,0};
+    check(kMovie, 9, "lPoM", PluginDesc::MoviePlugin);
+    static const char kHall[]   = {0x01,'l','P','e','H', 3,0,0,0};
+    check(kHall, 9, "lPeH", PluginDesc::HallEventPlugin);
+    static const char kAd[]     = {0x01,'l','P','d','A', 3,0,0,0};
+    check(kAd, 9, "lPdA", PluginDesc::AdvertisePlugin);
+    EXPECT(OT::pluginTagFromKind(PluginDesc::OuterObjPlugin) == "lPoO");
 
-    // Unknown tag still parses; kind stays Unknown (forward-compatible for
-    // plugin kinds we haven't calibrated yet, e.g. T2EquipPlugin).
+    // Unknown tag still parses; kind stays Unknown.
     static const char kUnk[] = {0x01,'l','P','e','Q', 3,0,0,0};
     PluginDesc u;
     EXPECT(OT::parsePluginDesc(kUnk, 9, u));
@@ -1059,215 +1177,769 @@ static void testParseDesc()
     // Truncation is rejected.
     PluginDesc bad;
     EXPECT(!OT::parsePluginDesc(nullptr, 0, bad));
-    EXPECT(!OT::parsePluginDesc(kTenant, 5, bad));
+    EXPECT(!OT::parsePluginDesc(kMover, 5, bad));
 }
 
-static void testParseDpdf()
+// DPDF = T2DayParamDef mPercent[EDay][EWhether] (not a placement record).
+static void testDayParamCodec()
 {
-    using OT::PluginDpdf;
-    // Coin.t2p / Burger.t2p DPDF id=128: 70, 50, 100, 80.
-    static const char kCoin[] = {
-        0x01,
-        70,0,0,0, 50,0,0,0, 100,0,0,0, 80,0,0,0
-    };
-    PluginDpdf d;
-    const bool ok = OT::parsePluginDpdf(kCoin, int(sizeof(kCoin)), d);
-    EXPECT(ok);
-    if (ok) {
-        EXPECT(d.valid);
-        EXPECT(d.version == 1);
-        EXPECT(d.w == 70u);
-        EXPECT(d.h == 50u);
-        EXPECT(d.baseX == 100u);
-        EXPECT(d.baseY == 80u);
-    }
-    // Truncation.
-    PluginDpdf bad;
-    EXPECT(!OT::parsePluginDpdf(nullptr, 0, bad));
-    EXPECT(!OT::parsePluginDpdf(kCoin, 10, bad));
+    // Burger.t2p / Coin.t2p DPDF id=128.
+    static const char kBurger[] = {0x01, 70,0,0,0, 50,0,0,0, 100,0,0,0, 80,0,0,0};
+    OT::DayParamDef d;
+    EXPECT(OT::decodeDayParamDef(kBurger, sizeof(kBurger), d));
+    EXPECT(d.percent[0][0] == 70u && d.percent[0][1] == 50u);
+    EXPECT(d.percent[1][0] == 100u && d.percent[1][1] == 80u);
+    std::string again;
+    EXPECT(OT::encodeDayParamDef(d, again));
+    EXPECT(again == std::string(kBurger, sizeof(kBurger)));
+    OT::DayParamDef bad;
+    EXPECT(!OT::decodeDayParamDef(kBurger, 10, bad));
+    EXPECT(!OT::decodeDayParamDef(nullptr, 0, bad));
 }
 
-// PLDF price list. Calibration: resource-formats.md §3.10 — Burger.t2p
-// PLDF id=128 decodes to [40, 1000, 10, 300, 50, 100], where 1000 is the
-// construction cost. The on-disk resource is 25 bytes (version + 6 u32s).
-static void testParsePldf()
+// PLDF = T2PlaceParamDef 3 x {percent, score} (not a price list).
+static void testPlaceParamCodec()
 {
-    using OT::PluginPldf;
-    // Exact bytes of Burger.t2p PLDF id=128 (25 B):
-    //   v=1  f1=40  basePrice=1000  f2=10  f3=300  f4=50  f5=100
+    // Burger.t2p PLDF id=128: (40,1000) (10,300) (50,100).
     static const unsigned char kBurger[] = {
-        0x01,
-        0x28,0x00,0x00,0x00,                       // 40
-        0xE8,0x03,0x00,0x00,                       // 1000
-        0x0A,0x00,0x00,0x00,                       // 10
-        0x2C,0x01,0x00,0x00,                       // 300
-        0x32,0x00,0x00,0x00,                       // 50
-        0x64,0x00,0x00,0x00                        // 100
-    };
-    PluginPldf p;
-    const bool ok = OT::parsePluginPldf(reinterpret_cast<const char *>(kBurger),
-                                        int(sizeof(kBurger)), p);
+        0x01, 0x28,0,0,0, 0xE8,0x03,0,0, 0x0A,0,0,0, 0x2C,0x01,0,0, 0x32,0,0,0, 0x64,0,0,0 };
+    OT::PlaceParamDef p;
+    EXPECT(OT::decodePlaceParamDef(reinterpret_cast<const char *>(kBurger), sizeof(kBurger), p));
+    EXPECT(p.places[0].percent == 40u && p.places[0].score() == 1000);
+    EXPECT(p.places[1].percent == 10u && p.places[1].score() == 300);
+    EXPECT(p.places[2].percent == 50u && p.places[2].score() == 100);
+    std::string again;
+    EXPECT(OT::encodePlaceParamDef(p, again));
+    EXPECT(again == std::string(reinterpret_cast<const char *>(kBurger), sizeof(kBurger)));
+
+    // Restroom.t2p PLDF id=128: a negative score stored sign-extended.
+    const std::string restroom = fromHex("01000000000000000000000000b4000000640000009cffffff");
+    OT::PlaceParamDef r;
+    EXPECT(OT::decodePlaceParamDef(restroom.data(), restroom.size(), r));
+    EXPECT(r.places[1].score() == 180);
+    EXPECT(r.places[2].percent == 100u);
+    EXPECT(r.places[2].score() == -100);
+    EXPECT(r.places[2].scoreSlot == -100);
+    EXPECT(OT::encodePlaceParamDef(r, again));
+    EXPECT(again == restroom);
+}
+
+// TMDF = T2TenantMemberTableDef (id 1 employees, id 2 customers).
+static void testMemberTableCodec()
+{
+    // Burger.t2p TMDF id=1 (73 B): econo -1, 2 members.
+    const std::string burger1 = fromHex(
+        "01ffffffff000000000000000000000000" "02000000"
+        "0000" "04000000" "12000000" "12000000" "01000000" "00000000" "01000000"
+        "0000" "04000000" "13000000" "13000000" "02000000" "00000000" "02000000");
+    EXPECT(burger1.size() == 73u);
+    OT::MemberTableDef t;
+    const bool ok = OT::decodeMemberTableDef(burger1.data(), burger1.size(), t);
     EXPECT(ok);
     if (ok) {
-        EXPECT(p.valid);
-        EXPECT(p.version == 1);
-        EXPECT(p.f1 == 40u);
-        EXPECT(p.basePrice == 1000u);
-        EXPECT(p.f2 == 10u);
-        EXPECT(p.f3 == 300u);
-        EXPECT(p.f4 == 50u);
-        EXPECT(p.f5 == 100u);
+        EXPECT(t.econoType == 0xFFFFFFFFu);
+        EXPECT(t.specialFlag == 0u);
+        EXPECT(t.dayParamID == 0 && t.placeParamID == 0);
+        EXPECT(t.members.size() == 2u);
+        if (t.members.size() == 2u) {
+            EXPECT(t.members[0].name.empty());
+            EXPECT(t.members[0].demandType == 4);
+            EXPECT(t.members[0].startSilhouetteType == 18 && t.members[0].endSilhouetteType == 18);
+            EXPECT(t.members[0].optionType == 1);
+            EXPECT(t.members[0].numOfPeople == 1u);
+            EXPECT(t.members[1].optionType == 2 && t.members[1].numOfPeople == 2u);
+        }
+        std::string again;
+        EXPECT(OT::encodeMemberTableDef(t, again));
+        EXPECT(again == burger1);
     }
-    // Truncation: below the 21-byte minimum is rejected.
-    PluginPldf bad;
-    EXPECT(!OT::parsePluginPldf(nullptr, 0, bad));
-    EXPECT(!OT::parsePluginPldf(reinterpret_cast<const char *>(kBurger), 20, bad));
-
-    // Integration: Burger.t2p carries PLDF; Stair (transport) does not.
-    OT::Plugin burger("Burger.t2p", "../data/Plugins/Burger.t2p");
-    EXPECT(burger.ensureLoaded());
-    PluginPldf bp;
-    EXPECT(burger.getPldf(bp));
-    if (bp.valid) {
-        EXPECT(bp.basePrice == 1000u);
-        EXPECT(bp.f1 == 40u);
-    }
-    OT::Plugin stair("Stair.t2p", "../data/Plugins/Stair.t2p");
-    EXPECT(stair.ensureLoaded());
-    PluginPldf sp;
-    EXPECT(!stair.getPldf(sp));
+    // SP movie audience table (MV_1stContact TMDF 128).
+    const std::string mv = fromHex(kMv1stContactTmdf);
+    OT::MemberTableDef m;
+    EXPECT(OT::decodeMemberTableDef(mv.data(), mv.size(), m));
+    EXPECT(m.members.size() == 1u);
+    std::string again;
+    EXPECT(OT::encodeMemberTableDef(m, again) && again == mv);
 }
 
-// MVDF mover definition. The header is 18 bytes; the body carries an
-// irregular tagged-pstr array whose exact framing is confirmed by T2DLL.dll
-// disassembly (Ghidra-pending). We parse the header fields and extract the
-// body strings robustly (printable-ASCII runs) so price/name/category survive.
-// Calibration: resource-formats.md §3.9 + the known transport prices.
-static void testParseMvdf()
+// PADF = T2PeopleAnimeDef.
+static void testPeopleAnimeCodec()
 {
-    using OT::PluginMvdf;
-    // Integration against the 7 vendored Mover plugins. Stair carries the
-    // simplest price ("$5000"); StdElev carries the two-part elevator price
-    // ("$150000:$50000/car") plus a quarterly ("$12000/Q").
-    {
-        OT::Plugin stair("Stair.t2p", "../data/Plugins/Stair.t2p");
-        EXPECT(stair.ensureLoaded());
-        PluginMvdf m;
-        EXPECT(stair.getMvdf(m));
-        if (m.valid) {
-            EXPECT(m.version == 1);
-            EXPECT(m.itemID == 1800u);             // == Stair's ATTR mID
-            EXPECT(!m.priceString.empty());
-            EXPECT(m.priceString == "$5000");      // Stair's construction cost
-            EXPECT(m.name == "Stairs");
-        }
+    // Burger.t2p PADF id=1 (61 B).
+    // param1 1, param2 3, count 3, elems (2,2,1,13) (0,2,1,13) (4,2,1,13).
+    const std::string fixed = fromHex(
+        "01" "01000000" "03000000" "03000000"
+        "02000000" "02000000" "01000000" "0d000000"
+        "00000000" "02000000" "01000000" "0d000000"
+        "04000000" "02000000" "01000000" "0d000000");
+    EXPECT(fixed.size() == 61u);
+    OT::PeopleAnimeDef d;
+    EXPECT(OT::decodePeopleAnimeDef(fixed.data(), fixed.size(), d));
+    EXPECT(d.param1 == 1 && d.param2 == 3);
+    EXPECT(d.elems.size() == 3u);
+    if (d.elems.size() == 3u) {
+        EXPECT(d.elems[0].position == 2 && d.elems[0].pattern == 2);
+        EXPECT(d.elems[0].silhouette == 1 && d.elems[0].animeID == 13);
+        EXPECT(d.elems[2].position == 4);
     }
-    {
-        OT::Plugin elev("StdElev.t2p", "../data/Plugins/StdElev.t2p");
-        EXPECT(elev.ensureLoaded());
-        PluginMvdf m;
-        EXPECT(elev.getMvdf(m));
-        if (m.valid) {
-            EXPECT(m.itemID == 1810u);             // == StdElev's ATTR mID
-            EXPECT(m.priceString == "$150000:$50000/car");
-            EXPECT(m.quarterlyString == "$12000/Q");
-            EXPECT(m.name == "Simple Elevator");
-        }
-    }
-    // Escalator: quarterly present ($5000/Q), no per-car price.
-    {
-        OT::Plugin esc("Escalator.t2p", "../data/Plugins/Escalator.t2p");
-        EXPECT(esc.ensureLoaded());
-        PluginMvdf m;
-        EXPECT(esc.getMvdf(m));
-        if (m.valid) {
-            EXPECT(m.priceString == "$20000");
-            EXPECT(m.quarterlyString == "$5000/Q");
-            EXPECT(m.name == "Escalators");
-        }
-    }
-    // A Tenant plugin has no MVDF (it uses PLDF instead).
-    {
-        OT::Plugin condo("Condo.t2p", "../data/Plugins/Condo.t2p");
-        EXPECT(condo.ensureLoaded());
-        PluginMvdf m;
-        EXPECT(!condo.getMvdf(m));
-    }
-    // Truncation: below the 18-byte header is rejected.
-    PluginMvdf bad;
-    EXPECT(!OT::parsePluginMvdf(nullptr, 0, bad));
-    EXPECT(!OT::parsePluginMvdf("short", 5, bad));
+    std::string again;
+    EXPECT(OT::encodePeopleAnimeDef(d, again) && again == fixed);
 }
 
-// Integration: the Plugin accessors reach into the real vendored plugins
-// and reproduce the calibration values end-to-end.
+// TNDF / MVDF / OODF: the ToolDef -> EquipDef -> TenantDef/MoverDef chain.
+static void testTemplateDefCodec()
+{
+    using OT::TemplateDef;
+    {
+        const std::string b = fromHex(kBurgerTndf);
+        TemplateDef d;
+        const bool ok = OT::decodeTemplateDef(TemplateDef::Tenant, b.data(), b.size(), d);
+        EXPECT(ok);
+        if (ok) {
+            EXPECT(d.tool.toolType == 1301);
+            EXPECT(d.tool.width == 16 && d.tool.height == 1 && d.tool.level == 1);
+            EXPECT(d.tool.attribute == 16778368u);
+            EXPECT(d.tool.categoryName == "Restaurants");
+            EXPECT(d.tool.category == 50 && d.tool.toolNo == 20);
+            EXPECT(d.tool.subPluginType.isZero());
+            EXPECT(d.tool.skip3 == 128 && d.tool.skip4 == 300);
+            EXPECT(d.tool.variations.size() == 1u);
+            if (!d.tool.variations.empty()) {
+                const OT::ToolVariation & v = d.tool.variations[0];
+                EXPECT(v.priceString == "$200000");
+                EXPECT(v.outMoneyString == "$800/M");
+                EXPECT(v.name == "Burger land");
+                EXPECT(v.price == 2000 && v.outMoney == 8);
+                EXPECT(v.consumptionPower == 8);
+            }
+            EXPECT(d.equip.capacity == 20 && d.equip.skip8 == 1);
+            EXPECT(d.equip.variations.size() == 1u);
+            EXPECT(d.equip.inMoney.size() == 1u && d.equip.inMoney[0] == 10);
+            EXPECT(d.tenant.downFlag == 3u);
+            EXPECT(d.tenant.numOfKind == 1 && d.tenant.numOfPattern == 4);
+            EXPECT(d.tenant.belongCapacity == 3);
+            EXPECT(d.tenant.entranceH == 14 && d.tenant.exitH == 14);
+            EXPECT(d.tenant.openTime == 480 && d.tenant.closeTime == 1320);
+            EXPECT(d.tenant.bindTime == 15);
+            EXPECT(d.tenant.movieName.empty());
+            std::string again;
+            EXPECT(OT::encodeTemplateDef(d, again));
+            EXPECT(again == b);
+
+            // Inconsistent EquipDef/ToolDef variation counts cannot encode.
+            TemplateDef broken = d;
+            broken.equip.variations.push_back({});
+            EXPECT(!OT::encodeTemplateDef(broken, again));
+            // Nor can a string longer than 255 bytes.
+            TemplateDef longStr = d;
+            longStr.tool.categoryHelp.assign(256, 'x');
+            EXPECT(!OT::encodeTemplateDef(longStr, again));
+        }
+        // Decoding the tenant stream as a mover fails (strict layout).
+        TemplateDef wrong;
+        EXPECT(!OT::decodeTemplateDef(TemplateDef::Mover, b.data(), b.size(), wrong));
+    }
+    {
+        const std::string b = fromHex(kStdElevMvdf);
+        TemplateDef d;
+        const bool ok = OT::decodeTemplateDef(TemplateDef::Mover, b.data(), b.size(), d);
+        EXPECT(ok);
+        if (ok) {
+            EXPECT(d.tool.toolType == 1810);
+            EXPECT(d.tool.width == 4);
+            EXPECT(d.tool.skip1 == 19 && d.tool.skip2 == 1 && d.tool.skip3 == 127);
+            EXPECT(d.tool.variations.size() == 1u);
+            if (!d.tool.variations.empty()) {
+                EXPECT(d.tool.variations[0].priceString == "$150000:$50000/car");
+                EXPECT(d.tool.variations[0].outMoneyString == "$12000/Q");
+                EXPECT(d.tool.variations[0].price == 1500);
+                EXPECT(d.tool.variations[0].outMoney == 120);
+            }
+            EXPECT(d.equip.capacity == 17 && d.equip.skip8 == 3);
+            EXPECT(d.equip.inMoney.empty());
+            EXPECT(d.mover.addSize == (OT::PluginRect{-1, 0, 1, 0}));
+            EXPECT(d.mover.maxLength == 15 && d.mover.minLength == 1);
+            EXPECT(d.mover.score == 15 && d.mover.defaultWait == 3);
+            EXPECT(d.mover.speed[0] == 1 && d.mover.speed[1] == 3 && d.mover.speed[2] == 0);
+            EXPECT(d.mover.maxModule == 6);
+            EXPECT(d.mover.moduleParam2 == 500);
+            EXPECT(d.mover.moduleInset == (OT::PluginRect{2, 2, -2, -2}));
+            EXPECT(d.mover.skip14 == 6001 && d.mover.skip15 == 6002);
+            std::string again;
+            EXPECT(OT::encodeTemplateDef(d, again) && again == b);
+        }
+    }
+    {
+        const std::string b = fromHex(kBillboardOodf);
+        TemplateDef d;
+        const bool ok = OT::decodeTemplateDef(TemplateDef::OuterObj, b.data(), b.size(), d);
+        EXPECT(ok);
+        if (ok) {
+            EXPECT(d.tool.toolType == 2000);
+            EXPECT(d.tool.subPluginType.macStr() == "BoPI");
+            EXPECT(d.tool.category == 200);
+            EXPECT(d.unreadA == 0 && d.unreadB == 0);
+            EXPECT(std::string(d.resourceType()) == "OODF");
+            std::string again;
+            EXPECT(OT::encodeTemplateDef(d, again) && again == b);
+        }
+    }
+}
+
+// SLDF / PPDF / WODF / STRTABLE: count-prefixed record lists.
+static void testListCodecs()
+{
+    {
+        const std::string b = fromHex(kBurgerSldf);
+        OT::SilhouetteList l;
+        EXPECT(OT::decodeSilhouetteList(b.data(), b.size(), l));
+        EXPECT(l.size() == 6u);
+        if (l.size() == 6u) {
+            EXPECT(l[0].silhouetteType == 1004 && l[0].width == 2 && l[0].routeType == 1);
+            EXPECT(l[0].bitmapID == 300 && l[0].name == "Waiter");
+            EXPECT(l[1].name == "Waitress");
+        }
+        std::string again;
+        EXPECT(OT::encodeSilhouetteList(l, again) && again == b);
+    }
+    {
+        // One T2PeopleDef record (Hawai/Kegon/Tokyo PPDF entry 0).
+        OT::PeopleList l(1);
+        l[0].peopleType = 8;
+        l[0].silhouetteType = 300;
+        std::string bytes;
+        EXPECT(OT::encodePeopleList(l, bytes));
+        EXPECT(bytes == fromHex("01" "01000000" "08000000" "00000000" "2c010000"
+                                "2c010000" "64000000" "e6000000"));
+        OT::PeopleList back;
+        EXPECT(OT::decodePeopleList(bytes.data(), bytes.size(), back));
+        EXPECT(back.size() == 1u && back[0].peopleType == 8 && back[0].stressMax == 300);
+        EXPECT(back[0].stressBlueLimit == 100 && back[0].stressYellowLimit == 230);
+    }
+    {
+        // Burger WODF entry 0: sex 3, age 0xFF, flags 0, special 0.
+        const std::string text = "Let me have the potato too.";
+        std::string b = fromHex("01" "01000000" "03000000" "ff000000" "00000000" "00000000");
+        b.push_back(char(text.size()));
+        b += text;
+        b.push_back('\0');
+        OT::WordList l;
+        EXPECT(OT::decodeWordList(b.data(), b.size(), l));
+        EXPECT(l.size() == 1u);
+        if (!l.empty()) {
+            EXPECT(l[0].sexMask == 3u && l[0].ageMask == 0xFFu);
+            EXPECT(l[0].flags == 0u && l[0].special == 0u && l[0].text == text);
+        }
+        std::string again;
+        EXPECT(OT::encodeWordList(l, again) && again == b);
+    }
+    {
+        const std::string b = fromHex(kHawaiStrtbl);
+        OT::StringTableDef l;
+        EXPECT(OT::decodeStringTableDef(b.data(), b.size(), l));
+        EXPECT(l.size() == 11u);
+        if (l.size() == 11u) {
+            EXPECT(l[2] == "Congratulations!");
+            EXPECT(l[6].empty());
+        }
+        std::string again;
+        EXPECT(OT::encodeStringTableDef(l, again) && again == b);
+    }
+}
+
+// RT_STRING blocks and the SP sub-plugin payloads.
+static void testStringAndSubPluginCodecs()
+{
+    {
+        const std::string b = fromHex(kSubwayStrings64);
+        OT::StringBlock blk;
+        EXPECT(OT::decodeStringBlock(b.data(), b.size(), blk));
+        EXPECT(blk.strings.size() == 16u);
+        if (blk.strings.size() == 16u) {
+            EXPECT(blk.strings[15] == u"Crowded with passengers.");
+            EXPECT(blk.strings[0].empty());
+        }
+        std::string again;
+        EXPECT(OT::encodeStringBlock(blk, again) && again == b);
+    }
+    {
+        const std::string b = fromHex(kPlArtHedf);
+        OT::HallEventDef h;
+        EXPECT(OT::decodeHallEventDef(b.data(), b.size(), h));
+        EXPECT(h.header.title == "Art Exhibition");
+        EXPECT(h.header.tieupDate == 0u);
+        EXPECT(h.imageID == 128);
+        EXPECT(h.unkCC == 2u && h.bookingDays == 3u);
+        EXPECT(h.openTime == 600u && h.closeTime == 1020u);
+        EXPECT(h.monthMask == 0xF1Fu);
+        EXPECT(h.cost == 250 && h.customerTableID == 128);
+        EXPECT(h.unkDC == 1000 && h.unkE0 == 50 && h.unkE4 == 10);
+        EXPECT(h.bindTime == 60 && h.stillImageID == 129);
+        EXPECT(h.movieFile == "HE_Art.MOV");
+        std::string again;
+        EXPECT(OT::encodeHallEventDef(h, again) && again == b);
+    }
+    {
+        const std::string b = fromHex(kPlArtPpdf);
+        OT::SubPluginPeopleParamDef p;
+        EXPECT(OT::decodeSubPluginPeopleParamDef(b.data(), b.size(), p));
+        EXPECT(p.values[0] == 90 && p.values[1] == 2000 && p.values[4] == 10 && p.values[5] == 100);
+        std::string again;
+        EXPECT(OT::encodeSubPluginPeopleParamDef(p, again) && again == b);
+        // The PE PPDF codec rejects this layout.
+        OT::PeopleList pl;
+        EXPECT(!OT::decodePeopleList(b.data(), b.size(), pl));
+    }
+    {
+        const std::string b = fromHex(kMv1stContactModf);
+        OT::MovieDef m;
+        EXPECT(OT::decodeMovieDef(b.data(), b.size(), m));
+        EXPECT(m.header.title == "1st Contact");
+        EXPECT(m.imageID == 128 && m.filmKind == 0);
+        EXPECT(m.phase2Months == 6 && m.phase3Months == 18);
+        EXPECT(m.phase4Months == 3 && m.cycleMonths == 1);
+        EXPECT(m.production == "vacca mode/Published by : OB9003");
+        EXPECT(m.director == "S Spinhamburg");
+        EXPECT(m.starring == "Joe Hurricane");
+        EXPECT(m.runningTime == 120);
+        EXPECT(m.customerTableID == 128);
+        EXPECT(m.extra.empty());
+        EXPECT(m.stillImageID == 129);
+        EXPECT(m.movieFile == "MV_1stContact.MOV");
+        std::string again;
+        EXPECT(OT::encodeMovieDef(m, again) && again == b);
+    }
+    {
+        // AirJamaica.t2p ADDF 128 (40 B).
+        const std::string b = fromHex(
+            "010b416972204a616d61696361000000000049506f4280000000010000000c000000f40100000000");
+        OT::AdvertiseDef a;
+        EXPECT(OT::decodeAdvertiseDef(b.data(), b.size(), a));
+        EXPECT(a.header.title == "Air Jamaica");
+        EXPECT(a.subType == "IPoB" && a.subType.macStr() == "BoPI");
+        EXPECT(a.imageID == 128 && a.unkD0 == 1u && a.days == 12u && a.money == 500);
+        EXPECT(a.path.empty());
+        std::string again;
+        EXPECT(OT::encodeAdvertiseDef(a, again) && again == b);
+    }
+    {
+        // A synthetic SP container round-trips; offsets are recomputed.
+        OT::SpContainer c;
+        OT::SpContainer::Entry e1; e1.type = 0x41545452u; e1.id = 128; e1.data = "\x01" "abc";
+        OT::SpContainer::Entry e2; e2.type = 0; e2.id = 129; e2.data = "dib";
+        c.entries = {e1, e2};
+        std::string bytes;
+        EXPECT(OT::encodeSpContainer(c, bytes));
+        EXPECT(bytes.size() == 6u + 32u + 4u + 3u);
+        EXPECT(bytes.compare(0, 2, "SP") == 0);
+        OT::SpContainer back;
+        EXPECT(OT::decodeSpContainer(bytes.data(), bytes.size(), back));
+        EXPECT(back.entries.size() == 2u);
+        if (back.entries.size() == 2u) {
+            EXPECT(back.entries[0].typeName() == "ATTR");
+            EXPECT(back.entries[1].typeName() == "BITMAP");
+            EXPECT(back.entries[1].offset == 6u + 32u + 4u);
+            EXPECT(back.find("ATTR", 128) != nullptr);
+        }
+        std::string again;
+        EXPECT(OT::encodeSpContainer(back, again) && again == bytes);
+        EXPECT(!OT::decodeSpContainer("XX", 2, back));
+    }
+}
+
+// Spot checks of known values through the Plugin accessors (values from
+// `python3 -I tools/yoottower/t2p_schema.py dump` / world_sp.py dump).
 static void testPluginTypedAccessors()
 {
     using OT::Plugin;
     using OT::PluginDesc;
     using OT::PluginAttr;
-    using OT::PluginDpdf;
 
-    Plugin condo("Condo.t2p", "../data/Plugins/Condo.t2p");
-    EXPECT(condo.ensureLoaded());
-
-    PluginAttr a;
-    EXPECT(condo.getAttr(a));
-    if (a.valid) {
-        EXPECT(a.itemType == "TRPA");
-        EXPECT(a.id == 1101u);
-        EXPECT(a.gameLevel == 1u);
-        EXPECT(a.name == "Condo");
+    // Burger (restaurant tenant).
+    {
+        Plugin burger("Burger.t2p", "../data/Plugins/Burger.t2p");
+        EXPECT(burger.ensureLoaded());
+        EXPECT(burger.container() == OT::ResourceContainer::PE);
+        PluginAttr a;
+        EXPECT(burger.getAttr(a));
+        EXPECT(a.id.macStr() == "BURG");
+        EXPECT(a.itemType == 1301);
+        EXPECT(a.name == "Burger land");
+        OT::DayParamDef day;
+        EXPECT(burger.getDayParamDef(day));
+        EXPECT(day.percent[0][0] == 70u && day.percent[0][1] == 50u);
+        EXPECT(day.percent[1][0] == 100u && day.percent[1][1] == 80u);
+        OT::PlaceParamDef place;
+        EXPECT(burger.getPlaceParamDef(place));
+        EXPECT(place.places[0].percent == 40u && place.places[0].score() == 1000);
+        OT::TemplateDef def;
+        EXPECT(burger.getTemplateDef(def));
+        EXPECT(def.kind == OT::TemplateDef::Tenant);
+        EXPECT(def.tool.toolType == a.itemType);
+        const auto tables = burger.getMemberTables();
+        EXPECT(tables.size() == 2u);
+        if (tables.count(2)) {
+            const OT::MemberTableDef & c = tables.at(2);
+            EXPECT(c.econoType == 1u && c.specialFlag == 1u);
+            EXPECT(c.dayParamID == 128 && c.placeParamID == 128);
+            EXPECT(c.members.size() == 3u);
+            if (c.members.size() == 3u) EXPECT(c.members[0].percent == 70u);
+        }
+        OT::PeopleAnimeDef anime;
+        EXPECT(burger.getPeopleAnimeDef(anime));
+        EXPECT(anime.elems.size() == 3u);
+        OT::SilhouetteList sil;
+        EXPECT(burger.getSilhouettes(sil) && sil.size() == 6u);
+        OT::WordList words;
+        EXPECT(burger.getWords(words) && words.size() == 28u);
+        OT::MovieDef none;
+        EXPECT(!burger.getMovieDef(none));
     }
-    PluginDesc d;
-    EXPECT(condo.getDesc(d));
-    EXPECT(d.kind == PluginDesc::TenantPlugin);
-
-    Plugin stair("Stair.t2p", "../data/Plugins/Stair.t2p");
-    EXPECT(stair.ensureLoaded());
-    PluginAttr sa;
-    EXPECT(stair.getAttr(sa));
-    if (sa.valid) {
-        EXPECT(sa.itemType == "RATS");
-        EXPECT(sa.id == 1800u);
-        EXPECT(sa.name == "Stairs");
+    // StdElev (mover): price $150000 (1500 x $100), per-car tier 500, max
+    // length 15 floors, 6 cars.
+    {
+        Plugin elev("StdElev.t2p", "../data/Plugins/StdElev.t2p");
+        PluginAttr a;
+        EXPECT(elev.getAttr(a));
+        EXPECT(a.id.macStr() == "StdE" && a.itemType == 1810);
+        OT::TemplateDef def;
+        EXPECT(elev.getTemplateDef(def));
+        EXPECT(def.kind == OT::TemplateDef::Mover);
+        EXPECT(std::string(def.resourceType()) == "MVDF");
+        if (!def.tool.variations.empty()) {
+            EXPECT(def.tool.variations[0].price == 1500);
+            EXPECT(def.tool.variations[0].priceString == "$150000:$50000/car");
+            EXPECT(def.tool.variations[0].name == "Simple Elevator");
+        }
+        EXPECT(def.mover.moduleParam2 == 500);
+        EXPECT(def.mover.maxLength == 15);
+        EXPECT(def.mover.maxModule == 6);
+        EXPECT(def.equip.capacity == 17);
     }
-    PluginDesc sd;
-    EXPECT(stair.getDesc(sd));
-    EXPECT(sd.kind == PluginDesc::MoverPlugin);
-
-    // Coin carries DPDF; Stair does not (transport uses MVDF instead).
-    Plugin coin("Coin.t2p", "../data/Plugins/Coin.t2p");
-    EXPECT(coin.ensureLoaded());
-    PluginDpdf dp;
-    EXPECT(coin.getDpdf(dp));
-    if (dp.valid) {
-        EXPECT(dp.w == 70u);
-        EXPECT(dp.h == 50u);
+    // Stair (mover with no shaft): 'STAR' 1800, $5000.
+    {
+        Plugin stair("Stair.t2p", "../data/Plugins/Stair.t2p");
+        PluginAttr a;
+        EXPECT(stair.getAttr(a));
+        EXPECT(a.id.macStr() == "STAR" && a.itemType == 1800 && a.name == "Stairs");
+        PluginDesc d;
+        EXPECT(stair.getDesc(d) && d.kind == PluginDesc::MoverPlugin);
+        OT::TemplateDef def;
+        EXPECT(stair.getTemplateDef(def));
+        EXPECT(def.mover.maxLength == 0 && def.mover.score == 50 && def.equip.stress == 30);
+        if (!def.tool.variations.empty()) EXPECT(def.tool.variations[0].priceString == "$5000");
+        OT::DayParamDef none;
+        EXPECT(!stair.getDayParamDef(none));   // movers carry no DPDF
     }
-    PluginDpdf nodp;
-    EXPECT(!stair.getDpdf(nodp));
-
-    // Text-form ATTR integration: DefaultToolPalette.
-    Plugin pal("DefaultToolPalette.t2p", "../data/Plugins/DefaultToolPalette.t2p");
-    EXPECT(pal.ensureLoaded());
-    PluginAttr pa;
-    EXPECT(pal.getAttr(pa));
-    if (pa.valid) {
+    // Condo (residential): mID 'APRT', mAttrib 2, four sale prices.
+    {
+        Plugin condo("Condo.t2p", "../data/Plugins/Condo.t2p");
+        PluginAttr a;
+        EXPECT(condo.getAttr(a));
+        EXPECT(a.id == "TRPA" && a.id.macStr() == "APRT");
+        EXPECT(a.itemType == 1101 && a.attrib == 2u && a.gameLevel == 1);
+        OT::TemplateDef def;
+        EXPECT(condo.getTemplateDef(def));
+        EXPECT(def.equip.inMoney == (std::vector<int32_t>{1000, 1200, 1500, 2000}));
+    }
+    // Floor: two variations (Floor / Lobby).
+    {
+        Plugin floor("Floor.t2p", "../data/Plugins/Floor.t2p");
+        OT::TemplateDef def;
+        EXPECT(floor.getTemplateDef(def));
+        EXPECT(def.tool.variations.size() == 2u);
+        if (def.tool.variations.size() == 2u) {
+            EXPECT(def.tool.variations[0].name == "Floor" && def.tool.variations[0].price == 5);
+            EXPECT(def.tool.variations[1].name == "Lobby" && def.tool.variations[1].price == 50);
+        }
+        EXPECT(def.equip.variations.size() == 2u);
+    }
+    // Billboard (outer object): OODF with the 'BoPI' ad sub-plugin type.
+    {
+        Plugin bb("Billboard.t2p", "../data/Plugins/Billboard.t2p");
+        PluginAttr a;
+        EXPECT(bb.getAttr(a) && a.id.macStr() == "BILL" && a.itemType == 2100);
+        OT::TemplateDef def;
+        EXPECT(bb.getTemplateDef(def));
+        EXPECT(def.kind == OT::TemplateDef::OuterObj);
+        EXPECT(def.tool.toolType == 2000);
+        EXPECT(def.tool.subPluginType.macStr() == "BoPI");
+    }
+    // Hotel room: depends on the Front desk.
+    {
+        Plugin room("Singleroom.t2p", "../data/Plugins/Singleroom.t2p");
+        PluginAttr a;
+        EXPECT(room.getAttr(a));
+        EXPECT(a.dependID.macStr() == "FRON");
+        EXPECT(a.hasDependency());
+    }
+    // World plugins: people types and string tables.
+    {
+        Plugin hawai("Hawai.t2p", "../data/Plugins/Hawai.t2p");
+        OT::PeopleList people;
+        EXPECT(hawai.getPeopleDefs(people));
+        EXPECT(people.size() == 23u);
+        if (!people.empty()) EXPECT(people[0].peopleType == 8 && people[0].silhouetteType == 300);
+        OT::StringTableDef st;
+        EXPECT(hawai.getStringTable(st, 8100) && st.size() == 6u);
+        EXPECT(hawai.getStringTable(st, 1) && st.size() == 11u);   // STRTBL
+        OT::StringBlock blk;
+        EXPECT(hawai.getStringBlock(blk, 251));
+        Plugin tokyo("Tokyo.t2p", "../data/Plugins/Tokyo.t2p");
+        EXPECT(tokyo.getPeopleDefs(people) && people.size() == 25u);
+    }
+    // Text-form ATTR: DefaultToolPalette.
+    {
+        Plugin pal("DefaultToolPalette.t2p", "../data/Plugins/DefaultToolPalette.t2p");
+        PluginAttr pa;
+        EXPECT(pal.getAttr(pa));
         EXPECT(pa.isTextForm);
-        EXPECT(pa.itemType == "LPOT");
-        EXPECT(pa.id == 1000u);
+        EXPECT(pa.id.toUint32LE() == 1000u);
+        EXPECT(pa.itemType == 1414484044);
+        PluginDesc pd;
+        EXPECT(pal.getDesc(pd) && pd.kind == PluginDesc::ToolPalette);
+        OT::VersionInfo vi;
+        EXPECT(pal.getVersionInfo(vi));
+        EXPECT(vi.root.keyString() == "VS_VERSION_INFO");
     }
-    PluginDesc pd;
-    EXPECT(pal.getDesc(pd));
-    EXPECT(pd.kind == PluginDesc::ToolPalette);
+    // SP sub-plugins.
+    {
+        Plugin mv("MV_1stContact.t2p", "../data/Plugins/MV_1stContact.t2p");
+        EXPECT(mv.container() == OT::ResourceContainer::SP);
+        PluginDesc d;
+        EXPECT(mv.getDesc(d) && d.kind == PluginDesc::MoviePlugin);
+        PluginAttr a;
+        EXPECT(mv.getAttr(a) && a.name == "1st Contact");
+        OT::MovieDef m;
+        EXPECT(mv.getMovieDef(m) && m.movieFile == "MV_1stContact.MOV");
+        OT::MemberTableDef audience;
+        EXPECT(mv.getMemberTable(audience, m.customerTableID));
+
+        Plugin art("PlArt.t2p", "../data/Plugins/PlArt.t2p");
+        EXPECT(art.getDesc(d) && d.kind == PluginDesc::HallEventPlugin);
+        OT::HallEventDef h;
+        EXPECT(art.getHallEventDef(h) && h.openTime == 600u && h.closeTime == 1020u);
+        OT::SubPluginPeopleParamDef pp;
+        EXPECT(art.getSubPluginPeopleParamDef(pp) && pp.values[1] == 2000);
+        OT::PeopleList notPe;
+        EXPECT(!art.getPeopleDefs(notPe));
+        OT::DayParamDef day;
+        EXPECT(art.getDayParamDef(day));
+
+        Plugin ad("AirJamaica.t2p", "../data/Plugins/AirJamaica.t2p");
+        EXPECT(ad.getDesc(d) && d.kind == PluginDesc::AdvertisePlugin);
+        OT::AdvertiseDef adv;
+        EXPECT(ad.getAdvertiseDef(adv) && adv.days == 12u && adv.money == 500);
+    }
 
     // Broken plugin: accessors return false, no crash.
     Plugin broken("broken.t2p", "../data/Plugins/DoesNotExist.t2p");
-    PluginAttr ba; PluginDesc bb; PluginDpdf bc;
+    PluginAttr ba; PluginDesc bb; OT::DayParamDef bc; OT::TemplateDef bd;
     EXPECT(!broken.getAttr(ba));
     EXPECT(!broken.getDesc(bb));
-    EXPECT(!broken.getDpdf(bc));
+    EXPECT(!broken.getDayParamDef(bc));
+    EXPECT(!broken.getTemplateDef(bd));
+    EXPECT(broken.getMemberTables().empty());
+}
+
+// Population sweep: every resource of every plugin in data/Plugins (105 PE +
+// 51 SP) decodes and re-encodes byte-identically, and every SP container
+// re-encodes byte-identically. Prints per-type counts.
+static void testPluginPopulationSweep()
+{
+    using namespace OT;
+    PluginManager pm;
+    pm.addPluginDirectory("../data/Plugins");
+
+    struct Count { int total = 0; int typed = 0; int identical = 0; std::map<std::string, int> codecs; };
+    std::map<std::string, Count> byType;
+    int pePlugins = 0, spPlugins = 0, resources = 0, identical = 0, spContainersOk = 0;
+    std::vector<std::string> failures;
+
+    for (const std::string & name : pm.enumerate())
+    {
+        if (name.size() < 4 || name.compare(name.size() - 4, 4, ".t2p") != 0) continue;
+        AbstractPlugin * ap = pm.get(name);
+        Plugin * p = dynamic_cast<Plugin *>(ap);
+        if (!p || !p->ensureLoaded()) { failures.push_back(name + ": load"); continue; }
+        const bool sp = p->container() == ResourceContainer::SP;
+        (sp ? spPlugins : pePlugins)++;
+
+        for (const AbstractPlugin::ResourceKey & k : p->enumerateResources())
+        {
+            const WindowsPEExecutable::Resource * r = p->getResource(k.type, k.id);
+            if (!r) continue;
+            const std::string original(r->data, size_t(r->length));
+            DecodedResource d = decodeResource(k.type, k.id, r->data, size_t(r->length), p->container());
+            std::string again;
+            const bool ok = encodeResource(d, again) && again == original;
+            const std::string tkey = (sp ? "SP:" : "") + resourceTypeDisplayName(k.type);
+            Count & c = byType[tkey];
+            ++c.total;
+            ++resources;
+            const bool typed = d.codec != ResourceCodec::Raw && d.codec != ResourceCodec::Text;
+            if (typed) ++c.typed;
+            ++c.codecs[resourceCodecName(d.codec)];
+            if (ok) { ++c.identical; ++identical; }
+            else failures.push_back(name + ": " + tkey + " " + std::to_string(k.id));
+            // A type we have a codec for must not fall back to Raw.
+            const ResourceCodec want = codecForResourceType(k.type, p->container());
+            if (want != ResourceCodec::Raw && d.codec != want)
+                failures.push_back(name + ": " + tkey + " " + std::to_string(k.id) + " not typed");
+        }
+
+        if (sp)
+        {
+            std::string bytes;
+            SpContainer c;
+            std::string again;
+            if (readFileBytes(p->path().str(), bytes) && decodeSpContainer(bytes.data(), bytes.size(), c)
+                && encodeSpContainer(c, again) && again == bytes
+                && c.entries.size() == p->enumerateResources().size())
+                ++spContainersOk;
+            else
+                failures.push_back(name + ": SP container");
+        }
+    }
+
+    std::cout << "Plugin population sweep: " << pePlugins << " PE + " << spPlugins << " SP plugins, "
+              << resources << " resources, " << identical << " byte-identical, "
+              << spContainersOk << " SP containers byte-identical\n";
+    int typedPairs = 0;
+    for (const auto & kv : byType)
+    {
+        std::cout << "  " << kv.first << ": " << kv.second.identical << "/" << kv.second.total
+                  << " identical, " << kv.second.typed << " typed (";
+        bool first = true;
+        for (const auto & cc : kv.second.codecs)
+        {
+            std::cout << (first ? "" : ", ") << cc.first << " " << cc.second;
+            first = false;
+        }
+        std::cout << ")\n";
+        if (kv.second.typed) typedPairs += kv.second.typed;
+    }
+    std::cout << "  typed resources: " << typedPairs << "\n";
+    for (const std::string & f : failures) std::cerr << "  sweep failure: " << f << "\n";
+
+    EXPECT(pePlugins == 105);
+    EXPECT(spPlugins == 51);
+    EXPECT(resources == 2983 + 349);   // PE (t2p_schema.py) + SP (world_sp.py) resources
+    EXPECT(identical == resources);
+    EXPECT(spContainersOk == 51);
+    EXPECT(failures.empty());
+    // Every typed type is fully typed (no fallbacks) across the population.
+    EXPECT(byType["TNDF"].typed == 93);
+    EXPECT(byType["MVDF"].typed == 7);
+    EXPECT(byType["OODF"].typed == 1);
+    EXPECT(byType["TMDF"].typed == 148);
+    EXPECT(byType["ATTR"].typed == 105);
+    EXPECT(byType["RT_VERSION"].typed == 105);
+    EXPECT(byType["SP:MODF"].typed == 38);
+    EXPECT(byType["SP:HEDF"].typed == 6);
+    EXPECT(byType["SP:ADDF"].typed == 7);
+}
+
+// ItemTypeCatalog: keyed by plugin id (ATTR mID) with the numeric item type.
+static void testItemTypeCatalog()
+{
+    const OT::ItemTypeEntry * burger = OT::lookupPluginId("BURG");
+    EXPECT(burger != nullptr);
+    if (burger) {
+        EXPECT(burger->itemType == 1301);
+        EXPECT(std::string(burger->file) == "Burger");
+        EXPECT(burger->id() == "GRUB");
+    }
+    EXPECT(OT::lookupPluginId(OT::FourCC::fromFileOrder("GRUB")) == burger);
+    EXPECT(OT::lookupPluginId("burg") == burger);   // case-insensitive
+    EXPECT(OT::lookupItemType(1301) == burger);
+    const OT::ItemTypeEntry * elev = OT::lookupItemType(1810);
+    EXPECT(elev && std::string(elev->cls) == "Mover" && elev->pluginId == OT::fourcc("StdE"));
+    EXPECT(OT::lookupPluginId("ZZZZ") == nullptr);
+    EXPECT(OT::lookupItemType(-5) == nullptr);
+
+    // The catalog agrees with every PE plugin's ATTR.
+    OT::PluginManager pm;
+    pm.addPluginDirectory("../data/Plugins");
+    int checked = 0, mismatches = 0;
+    for (const OT::ItemTypeEntry & e : OT::kItemTypeCatalog)
+    {
+        OT::AbstractPlugin * p = pm.get(std::string(e.file) + ".t2p");
+        OT::PluginAttr a;
+        if (!p || !p->getAttr(a)) { ++mismatches; continue; }
+        ++checked;
+        if (a.id.toUint32LE() != e.pluginId || a.itemType != e.itemType || a.name != e.name) ++mismatches;
+    }
+    EXPECT(checked == 105);
+    EXPECT(mismatches == 0);
+}
+
+// OSP manifests: v1 (legacy key names) still load and map onto the corrected
+// fields; v2 round-trips the DPDF/PLDF tables.
+static void testOspAttrCompat()
+{
+    using namespace OT;
+    // A v1 manifest as the old editor wrote it for Burger: "itemType" was the
+    // file-order mID, "id" the numeric item type, "marker" the dependency,
+    // "placement"/"price" the DPDF/PLDF slots.
+    const std::string v1 =
+        "{\n  \"format\": \"openskyscraper-plugin\",\n  \"formatVersion\": 1,\n"
+        "  \"class\": \"Tenant\",\n"
+        "  \"attr\": {\n    \"itemType\": \"GRUB\",\n    \"name\": \"Burger land\",\n"
+        "    \"gameLevel\": 1,\n    \"id\": 1301,\n    \"marker\": \"NORF\",\n"
+        "    \"mustItem\": 0,\n    \"dependID\": 0,\n    \"secretItem\": 0\n  },\n"
+        "  \"placement\": {\n    \"w\": 70,\n    \"h\": 50,\n    \"baseX\": 100,\n    \"baseY\": 80\n  },\n"
+        "  \"price\": {\n    \"basePrice\": 1000,\n    \"f1\": 40,\n    \"f2\": 10,\n    \"f3\": 300,\n"
+        "    \"f4\": 50,\n    \"f5\": 100\n  }\n}\n";
+    PluginAttr a;
+    EXPECT(readOspAttr(v1, a));
+    EXPECT(a.id.macStr() == "BURG");
+    EXPECT(a.itemType == 1301);
+    EXPECT(a.dependID.macStr() == "FRON");
+    EXPECT(a.name == "Burger land");
+
+    const std::string dir = "test_osp_v1compat.osp-plugin";
+    {
+        std::string mk = "mkdir -p " + dir;
+        (void)std::system(mk.c_str());
+        std::ofstream(dir + "/plugin.json", std::ios::trunc) << v1;
+    }
+    OspPlugin p;
+    // The v1 sample has no sprites; loadOspPlugin only requires sheets the
+    // manifest declares, so it loads.
+    const OspResult r = loadOspPlugin(dir, p);
+    EXPECT(r.ok);
+    if (r.ok) {
+        EXPECT(p.attr.id.macStr() == "BURG" && p.attr.itemType == 1301);
+        EXPECT(p.dayParam.has_value());
+        if (p.dayParam) {
+            EXPECT(p.dayParam->percent[0][0] == 70u && p.dayParam->percent[1][1] == 80u);
+        }
+        EXPECT(p.placeParam.has_value());
+        if (p.placeParam) {
+            EXPECT(p.placeParam->places[0].percent == 40u && p.placeParam->places[0].scoreSlot == 1000);
+            EXPECT(p.placeParam->places[2].percent == 50u && p.placeParam->places[2].scoreSlot == 100);
+        }
+        // Save as v2 and reload: the new keys carry the same values.
+        EXPECT(saveOspPlugin(dir, p, true).ok);
+        std::string json;
+        EXPECT(readFileBytes(dir + "/plugin.json", json));
+        EXPECT(json.find("\"formatVersion\": 2") != std::string::npos);
+        EXPECT(json.find("\"pluginId\": \"BURG\"") != std::string::npos);
+        EXPECT(json.find("\"itemType\": 1301") != std::string::npos);
+        EXPECT(json.find("\"dependPluginId\": \"FRON\"") != std::string::npos);
+        EXPECT(json.find("\"percent\": [[70, 50], [100, 80]]") != std::string::npos);
+        EXPECT(json.find("\"places\": [[40, 1000], [10, 300], [50, 100]]") != std::string::npos);
+        OspPlugin q;
+        EXPECT(loadOspPlugin(dir, q).ok);
+        EXPECT(q.attr.id == p.attr.id && q.attr.itemType == 1301 && q.attr.dependID == p.attr.dependID);
+        EXPECT(q.dayParam && q.dayParam->percent[1][0] == 100u);
+        EXPECT(q.placeParam && q.placeParam->places[1].scoreSlot == 300);
+    }
+    std::remove((dir + "/plugin.json").c_str());
+    std::remove((dir + "/meta/objmap_100.txt").c_str());
+    std::remove((dir + "/meta/objmap_1000.txt").c_str());
+    std::remove((dir + "/meta/objmap_200.txt").c_str());
 }
 
 // OBJMAP sprite-layout parser. Two layers:
@@ -1422,7 +2094,8 @@ static void testOspRoundTrip()
     EXPECT(p.sourceFile == "Condo.t2p");
     EXPECT(p.pluginClass == PluginDesc::TenantPlugin);
     EXPECT(p.attr.valid);
-    EXPECT(p.attr.itemType == "TRPA");
+    EXPECT(p.attr.id == "TRPA");
+    EXPECT(p.attr.itemType == 1101);
     EXPECT(p.attr.name == "Condo");
     // Condo ships a toolbox sheet (100), primary sheet (1000), and resident
     // overlay (1100). The known magenta/white masks come from YootCondo.cpp.
@@ -1461,9 +2134,10 @@ static void testOspRoundTrip()
     EXPECT(reloaded.sourceFormat == "openskyscraper-plugin");
     EXPECT(reloaded.sourceFile == "Condo.t2p");
     EXPECT(reloaded.pluginClass == PluginDesc::TenantPlugin);
-    EXPECT(reloaded.attr.itemType == "TRPA");
+    EXPECT(reloaded.attr.id == "TRPA");
     EXPECT(reloaded.attr.name == "Condo");
-    EXPECT(reloaded.attr.id == p.attr.id);
+    EXPECT(reloaded.attr.itemType == p.attr.itemType);
+    EXPECT(reloaded.attr.attrib == p.attr.attrib);
     // Sprite dimensions survive PNG encode/decode.
     EXPECT(reloaded.ingame.image.getSize() == p.ingame.image.getSize());
     EXPECT(reloaded.toolbox.present && reloaded.ingame.present && reloaded.occupants.present);
@@ -1510,7 +2184,7 @@ static void testOspRoundTripMover()
     if (!cr.ok) return;
 
     EXPECT(p.pluginClass == PluginDesc::MoverPlugin);
-    EXPECT(p.attr.itemType == "RATS");
+    EXPECT(p.attr.id == "RATS");
     EXPECT(p.attr.name == "Stairs");
     // MVDF transport pricing came through.
     EXPECT(p.transport.valid);
@@ -1520,7 +2194,7 @@ static void testOspRoundTripMover()
     EXPECT(p.walking.present);
     EXPECT(!p.walking.blocks.empty());
     // Stairs have no PLDF (transport uses MVDF) and no occupants sheet.
-    EXPECT(!p.price.valid);
+    EXPECT(!p.placeParam.has_value());
 
     const std::string tmpDir = "test_osp_mover.osp-plugin";
     const OspResult sr = saveOspPlugin(tmpDir, p, true);
@@ -1640,7 +2314,7 @@ static void testOspCanonicalSheetNames()
     p.sourceFormat = "scratch";
     p.pluginClass = PluginDesc::TenantPlugin;
     p.attr.valid = true;
-    p.attr.itemType.c[0]='T'; p.attr.itemType.c[1]='E'; p.attr.itemType.c[2]='S'; p.attr.itemType.c[3]='T';
+    p.attr.id = FourCC::fromFileOrder("TEST");
     p.attr.name = "Canonical";
     p.ingame.present = true;
     p.ingame.relPath = "sprites/ingame.png";
@@ -2355,10 +3029,16 @@ int main()
 	testParseAttrBinary();
 	testParseAttrText();
 	testParseDesc();
-	testParseDpdf();
-	testParsePldf();
-	testParseMvdf();
+	testDayParamCodec();
+	testPlaceParamCodec();
+	testMemberTableCodec();
+	testPeopleAnimeCodec();
+	testTemplateDefCodec();
+	testListCodecs();
+	testStringAndSubPluginCodecs();
 	testPluginTypedAccessors();
+	testPluginPopulationSweep();
+	testItemTypeCatalog();
 	testPluginObjmap();
 	testObjmapRoundTrip();
 	testOspRoundTrip();
@@ -2372,6 +3052,7 @@ int main()
 	testYootCalendar();
 	testYootUnlocks();
 	testYootGrades();
+	testOspAttrCompat();
     if (g_failures > 0)
     {
         std::cerr << g_failures << " test(s) failed\n";
