@@ -228,14 +228,18 @@ target_link_libraries(OpenSkyTests PRIVATE SFML::Graphics)
 add_test(NAME OpenSkyTests COMMAND OpenSkyTests)
 
 # ---------------------------------------------------------------------------
-# PluginEditor — standalone editor for the OpenSkyscraper plugin format.
+# PluginEditor — standalone editor for YootTower plugins and the OSP format.
 # Links the same SFML 3 + TGUI stack as the game plus the pure plugin seam
 # (mirroring OpenSkyTests' isolation of those files). New editor code lives
-# under tools/PluginEditor/. Tenant vertical slice only.
+# under tools/PluginEditor/. Edits every resource of every YootTower plugin
+# class, saves OSP v3 and exports .t2p.
 # ---------------------------------------------------------------------------
 add_executable(PluginEditor
   tools/PluginEditor/src/main.cpp
   tools/PluginEditor/src/EditorApp.cpp
+  tools/PluginEditor/src/EditorTheme.cpp
+  tools/PluginEditor/src/FieldSchema.cpp
+  tools/PluginEditor/src/ResourceForm.cpp
   source/Path.cpp
   source/Logger.cpp
   source/WindowsPEExecutable.cpp
@@ -257,7 +261,7 @@ add_executable(PluginEditor
 )
 target_include_directories(PluginEditor PRIVATE source)
 target_link_libraries(PluginEditor PRIVATE
-  SFML::Graphics SFML::Window SFML::System
+  SFML::Graphics SFML::Window SFML::System SFML::Audio
   TGUI::TGUI
 )
 

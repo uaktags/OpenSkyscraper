@@ -1144,10 +1144,17 @@ namespace OT
 		if (p.container == ResourceContainer::PE)
 		{
 			const std::string name = p.sourceFile;
-			convertSheetBytes(resourceBytes(p, "2", 100), resourceBytes(p, "OBJMAP", 100), name, 100, "sprites/100.png", p.toolbox);
-			convertSheetBytes(resourceBytes(p, "2", 1000), resourceBytes(p, "OBJMAP", 1000), name, 1000, "sprites/1000.png", p.ingame);
-			convertSheetBytes(resourceBytes(p, "2", 1100), nullptr, name, 1100, "sprites/1100.png", p.occupants);
-			convertSheetBytes(resourceBytes(p, "2", 200), resourceBytes(p, "OBJMAP", 200), name, 200, "sprites/200.png", p.walking);
+			// Only sheets backed by a bitmap resource are re-derived, so a v2
+			// plugin with synthesized resources keeps its PNG sheets.
+			auto sheet = [&](int id, int objmapId, const char * rel, OspSpriteSheet & sh) {
+				const std::string * dib = resourceBytes(p, "2", id);
+				if (!dib) return;
+				convertSheetBytes(dib, objmapId >= 0 ? resourceBytes(p, "OBJMAP", objmapId) : nullptr, name, id, rel, sh);
+			};
+			sheet(100, 100, "sprites/100.png", p.toolbox);
+			sheet(1000, 1000, "sprites/1000.png", p.ingame);
+			sheet(1100, -1, "sprites/1100.png", p.occupants);
+			sheet(200, 200, "sprites/200.png", p.walking);
 		}
 	}
 
