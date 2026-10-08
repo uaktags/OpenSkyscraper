@@ -261,69 +261,44 @@ namespace OT
 			}
 
 			/// PushOutAllCustomer: customers inside and on their way leave.
-			void pushOutCustomers(TenantModel & m) { m.inside.clear(); m.arriving.clear(); }
+			void pushOutCustomers(TenantModel & m) { m.inside.clear(); }
 			/// PushOutAll: customers and staff leave.
 			void pushOutAll(TenantModel & m) { pushOutCustomers(m); m.staffIn = 0; }
 
 			void pay(TenantModel & m, const YootTenantDef & def, TenantEvents & ev)
 			{
 				ev.paid = true;
+				ev.paidCustomers = m.customers;
 				ev.income += tenantIncome(m, def);
 			}
 
-			/// T2Tenant::CollectCustomer 0x1005f440 over the customer table.
-			/// The pool (PGDF/PZDF demand), the route navigator and the
-			/// people on the floor are not modelled per person: a called
-			/// customer comes with the probability of its source
-			/// (pool: DPDF day x PLDF place 0 percent; tenant/floor: PLDF
-			/// place 1/2 percent while the tower has people) and walks for
-			/// kCustomerWalkMinutes.
+			/// UT2Utils::Float2Int of a stored percent x 0.01 rate (DPDF /
+			/// PLDF floats): non-zero with the rate's probability.
+			bool rateRoll(uint32_t percent, const RngFn & rng)
+			{
+				return float2IntRng((float)percent * 0.01f, [&rng]() { return rng(); }) != 0;
+			}
+
+			/// T2Tenant::CollectCustomer 0x1005f440: room, all staff in, the
+			/// window open .. close - bindTime - 60, then the pool, tenant and
+			/// floor sources in that order, each gated by its PLDF rate (the
+			/// pool also by the DPDF holiday rate, weather 0:
+			/// T2TenantMemberTableDef::IsCollectFromPool 0x10063430).
 			void collectCustomers(TenantModel & m, const YootTenantDef & def, const TenantInputs & in, const RngFn & rng)
 			{
-				if (!def.hasCustomers || def.customers.members.empty()) return;
-				const int pending = (int)(m.inside.size() + m.arriving.size());
-				if (pending >= def.capacity) return;
+				if (!def.hasCustomers || !in.sources) return;
+				if (m.insideCount() + m.walking >= def.capacity) return;
 				if (m.staffIn != def.belongCapacity) return;
 				if (!withinMinutes(in.minute, def.openMinute, def.closeMinute - def.bindMinutes - 60)) return;
+				auto freeRoom = [&]() { return std::max(0, def.capacity - m.insideCount() - m.walking); };
 
-				const float units = customerUnits(def.capacity, def.bindMinutes);
-				const int day = in.holiday ? 1 : 0;
-				int dayPercent = 100;
-				if (def.hasDayParam) dayPercent = (int)def.dayParam.percent[day][in.rain ? 1 : 0];
-				// IsCollectFromPool: PLDF place 0 rate and the DPDF day rate
-				// (weather 0) must be non-zero; IsCollectFromTenant/Floor:
-				// PLDF place 1/2 rate.
-				bool source[3];
-				int accept[3];
-				source[0] = in.reachable && (!def.hasPlaceParam || def.placeParam.places[0].percent > 0) &&
-					(!def.hasDayParam || def.dayParam.percent[day][0] > 0);
-				accept[0] = (def.hasPlaceParam ? (int)def.placeParam.places[0].percent : 100) * dayPercent / 100;
-				for (int s = 1; s < 3; ++s)
-				{
-					source[s] = def.hasPlaceParam && def.placeParam.places[s].percent > 0 && in.peopleAround && in.reachable;
-					accept[s] = def.hasPlaceParam ? (int)def.placeParam.places[s].percent : 0;
-				}
-
-				int free = def.capacity - pending;
-				const int n = (int)def.customers.members.size();
-				for (int s = 0; s < 3 && free > 0; ++s)
-				{
-					if (!source[s]) continue;
-					// T2CustomerTableIterator: one pass from a random member.
-					const int start = (rng() % n + n) % n;
-					for (int k = 0; k < n && free > 0; ++k)
-					{
-						const MemberDef & member = def.customers.members[(start + k) % n];
-						int count = float2Int(memberRate(member.percent, units), rng());
-						count = std::min(count, free);
-						for (int c = 0; c < count; ++c)
-						{
-							if ((rng() % 100 + 100) % 100 >= accept[s]) continue;
-							m.arriving.push_back(in.absMinute + kCustomerWalkMinutes);
-							--free;
-						}
-					}
-				}
+				bool pool = !def.hasPlaceParam || rateRoll(def.placeParam.places[0].percent, rng);
+				if (pool && def.hasDayParam && !rateRoll(def.dayParam.percent[in.holiday ? 1 : 0][0], rng)) pool = false;
+				if (pool) m.walking += in.sources->fromPool(def, freeRoom(), in);
+				if (def.hasPlaceParam && rateRoll(def.placeParam.places[1].percent, rng))
+					m.walking += in.sources->fromTenant(def, freeRoom(), in);
+				if (def.hasPlaceParam && rateRoll(def.placeParam.places[2].percent, rng))
+					m.walking += in.sources->fromFloor(def, freeRoom(), in);
 			}
 
 			/// Shop / restaurant ChangeStatusOnIdle (Barber/Burger FUN_1000bc20).
@@ -345,7 +320,7 @@ namespace OT
 							if (restaurant)
 							{
 								m.customers = 0;
-								m.arriving.clear();
+								m.walking = 0;
 								updateEstimate(m, def, ev);
 							}
 						}
@@ -361,7 +336,7 @@ namespace OT
 								if (!restaurant)
 								{
 									m.customers = 0;
-									m.arriving.clear();
+									m.walking = 0;
 								}
 								m.status = kStatusOpen;
 								setPattern(m, 1, ev);
@@ -409,7 +384,7 @@ namespace OT
 					{
 						// Open around the clock: only the books are closed.
 						m.customers = 0;
-						if (!restaurant) m.arriving.clear();
+						if (!restaurant) m.walking = 0;
 					}
 					else if (restaurant)
 					{
@@ -450,7 +425,7 @@ namespace OT
 						setPattern(m, 1, ev);
 						updateEstimate(m, def, ev);
 						m.customers = 0;
-						m.arriving.clear();
+						m.walking = 0;
 						return;
 					}
 					if (!isOpen(s)) return;
@@ -465,7 +440,7 @@ namespace OT
 					if (open == close)
 					{
 						m.customers = 0;
-						m.arriving.clear();
+						m.walking = 0;
 						return;
 					}
 				}
@@ -494,24 +469,77 @@ namespace OT
 				if (m.inside[i] <= absMinute) m.inside.erase(m.inside.begin() + i);
 				else ++i;
 			}
-			// EnterTenant: arrivals (EnterCustomer counts them for CalcInMoney).
-			for (size_t i = 0; i < m.arriving.size();)
-			{
-				if (m.arriving[i] <= absMinute)
-				{
-					m.arriving.erase(m.arriving.begin() + i);
-					if (!isOpen(m.status)) continue;
-					m.inside.push_back(absMinute + std::max(1, def.bindMinutes));
-					++m.customers;
-				}
-				else ++i;
-			}
 			if (patterned && isOpen(m.status))
 			{
 				const int p = commercialPattern(m.status, m.insideCount(), def.capacity);
 				m.status = p == 1 ? kStatusOpen : p == 2 ? kStatusOpen1 : kStatusOpen2;
 				setPattern(m, p, ev);
 			}
+		}
+	}
+
+	namespace Yoot
+	{
+		bool customerArrives(TenantModel & m, const YootTenantDef & def, long long absMinute, TenantEvents & ev)
+		{
+			if (m.walking > 0) --m.walking;
+			if (!isOpen(m.status)) return false;
+			m.inside.push_back(absMinute + std::max(1, def.bindMinutes));
+			++m.customers;
+			if (def.family != YootTenantFamily::Vending)
+			{
+				const int p = commercialPattern(m.status, m.insideCount(), def.capacity);
+				m.status = p == 1 ? kStatusOpen : p == 2 ? kStatusOpen1 : kStatusOpen2;
+				setPattern(m, p, ev);
+			}
+			return true;
+		}
+
+		void customerCancelled(TenantModel & m)
+		{
+			if (m.walking > 0) --m.walking;
+		}
+
+		int customerEconoType(const YootTenantDef & def)
+		{
+			const uint32_t e = def.customers.econoType;
+			return e == 0xFFFFFFFFu ? -1 : int(e & ~0x10u);
+		}
+
+		int customerScore(const YootTenantDef & def, int place)
+		{
+			if (def.hasPlaceParam) return def.placeParam.places[place].score();
+			return place == 0 ? 1000 : 0;
+		}
+
+		int collectFromPool(const YootTenantDef & def, Pool & pool, unsigned routeMask, int free, int nowMinute,
+			const PoolRng & rng, const std::function<void(const PeopleType &, int)> & onCalled)
+		{
+			if (!def.hasCustomers || routeMask == 0) return 0;
+			const int n = (int)def.customers.members.size();
+			if (n == 0) return 0;
+			const int econo = customerEconoType(def);
+			const float units = customerUnits(def.capacity, def.bindMinutes);
+			int called = 0;
+			// T2CustomerTableIterator: from a random member, once round.
+			const int first = rng() % n;
+			for (int k = 0; k < n && free > 0; ++k)
+			{
+				const MemberDef & member = def.customers.members[(first + k) % n];
+				int count = float2IntRng(memberRate(member.percent, units), rng);
+				if (count == 0) continue;
+				count = std::min(count, free);
+				int start = nowMinute;
+				for (int c = 0; c < count; ++c, start += 2)
+				{
+					PeopleType t;
+					if (!pool.call(member, econo, routeMask, t, rng)) break;
+					onCalled(t, start);
+					++called;
+					--free;
+				}
+			}
+			return called;
 		}
 	}
 

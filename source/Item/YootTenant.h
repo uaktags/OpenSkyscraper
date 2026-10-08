@@ -28,7 +28,7 @@ namespace OT {
 		 * minute with an idle every 8 minutes; this class feeds it the
 		 * clock, books the income and draws RT_BITMAP 1000 sliced by the
 		 * OBJMAP 1000 `View` patterns (pattern = numOfPattern x kind + p). */
-		class YootTenant : public Item
+		class YootTenant : public Item, public Yoot::CustomerSources
 		{
 		public:
 			YootTenant(Game * game, AbstractPrototype * prototype);
@@ -42,6 +42,14 @@ namespace OT {
 			virtual void decodeXML(tinyxml2::XMLElement & xml);
 
 			virtual bool isOccupied() const { return true; }
+			/// A called visitor reaching the door (T2Tenant::EnterTenant).
+			virtual void addPerson(Person * p);
+
+			// Yoot::CustomerSources: the pool, nearby tenants and the floor
+			// (PeopleSystem); YootTower visitors walk.
+			int fromPool(const YootTenantDef & def, int free, const Yoot::TenantInputs & in);
+			int fromTenant(const YootTenantDef & def, int free, const Yoot::TenantInputs & in);
+			int fromFloor(const YootTenantDef & def, int free, const Yoot::TenantInputs & in);
 			bool isOpen() const { return model.status >= Yoot::kStatusOpen && model.status < 10000; }
 
 			Yoot::TenantModel model;
@@ -58,6 +66,9 @@ namespace OT {
 			const sf::Texture * view = nullptr;
 			const std::vector<sf::IntRect> * bands = nullptr;
 			void updateSprite();
+			/// Visitors whose stay (or call elsewhere) is up, or who no longer
+			/// fit the model after PushOutAllCustomer, leave (PushOutPeople).
+			void releaseVisitors(long long absMinute);
 		};
 
 		/// Shops (Barber.t2p family, 28 plugins + Spa).

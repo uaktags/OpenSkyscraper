@@ -290,6 +290,13 @@ void Person::Journey::jumpToDestination()
 	if (item) item->addPerson(person);
 }
 
+void Person::Journey::clear()
+{
+	while (!nodes.empty()) nodes.pop();
+	item = NULL;
+	toFloor = fromFloor;
+}
+
 int Person::getWidth()
 {
 	return (type >= kHousekeeper ? 16 : 8);

@@ -32,6 +32,7 @@
 #pragma once
 
 #include "PluginDefs.h"
+#include "YootPool.h"
 #include "YootRules.h"
 
 #include <cstdint>
@@ -136,6 +137,22 @@ namespace OT
 			kStatusOpen2 = 32,       ///< at least half full
 		};
 
+		struct TenantModel;
+		struct TenantInputs;
+
+		/// The three customer sources of T2Tenant::CollectCustomer 0x1005f440
+		/// (CollectCustomerFromPool 0x1005ef70 / FromTenant 0x1005f0c0 /
+		/// FromFloor 0x1005f250). Each returns how many people it called
+		/// (they are on their way: TenantModel::walking); `free` is the
+		/// capacity minus the people inside and on their way.
+		struct CustomerSources
+		{
+			virtual ~CustomerSources() {}
+			virtual int fromPool(const YootTenantDef & def, int free, const TenantInputs & in) { (void)def; (void)free; (void)in; return 0; }
+			virtual int fromTenant(const YootTenantDef & def, int free, const TenantInputs & in) { (void)def; (void)free; (void)in; return 0; }
+			virtual int fromFloor(const YootTenantDef & def, int free, const TenantInputs & in) { (void)def; (void)free; (void)in; return 0; }
+		};
+
 		/// What the tower offers the tenant at an idle (CollectCustomer and
 		/// CollectEmployee inputs, reduced to what OpenSky models).
 		struct TenantInputs
@@ -145,7 +162,8 @@ namespace OT
 			bool holiday = false;
 			bool rain = false;
 			bool reachable = true;   ///< a route from the lobby exists
-			bool peopleAround = false; ///< tower population > 0 (floor / tenant sources)
+			/// The customer sources; null = nobody comes.
+			CustomerSources * sources = nullptr;
 		};
 
 		/// Outcome of one call, for the item (money, art, messages).
@@ -154,6 +172,7 @@ namespace OT
 			bool patternChanged = false;
 			bool paid = false;
 			int income = 0;          ///< dollars (CalcInMoney x 100), may be < 0
+			int paidCustomers = 0;   ///< TotalCustomer (+0xa8) at the payment
 			bool estimateChanged = false;
 		};
 
@@ -164,7 +183,7 @@ namespace OT
 			int pattern = 0;               ///< +0x3c (within kind 0)
 			int staff = 0;                 ///< hired staff (belong people)
 			int staffIn = 0;               ///< +0x9c staff at work
-			std::vector<long long> arriving; ///< +0x98 customers on their way (arrival minute)
+			int walking = 0;               ///< +0x98 customers called and on their way
 			std::vector<long long> inside;   ///< +0xa0 customers inside (leave minute)
 			int customers = 0;             ///< +0xa8 customers since opening (CalcInMoney)
 			int estimate = 0;              ///< +0x90 1..300 (0 = not yet)
@@ -172,18 +191,34 @@ namespace OT
 			int insideCount() const { return (int)inside.size(); }
 		};
 
-		/// Walk time of a called customer (T2Pool::Call + SetDestination); the
-		/// tower's real route length is not modelled.
-		const int kCustomerWalkMinutes = 4;
-
 		/// One ChangeStatusOnIdle call for the def's family. `rng` returns
 		/// rand()-like values (tests pass a deterministic sequence).
 		template <typename Rng>
 		void tenantIdle(TenantModel & m, const YootTenantDef & def, const TenantInputs & in, Rng && rng, TenantEvents & ev);
 
-		/// Per-minute bookkeeping: arrivals enter (EnterTenant), stays end
-		/// (LeaveTenant). Updates the pattern like the family overrides.
+		/// Per-minute bookkeeping: stays that ended leave (LeaveTenant).
+		/// Updates the pattern like the family overrides.
 		void tenantMinute(TenantModel & m, const YootTenantDef & def, long long absMinute, TenantEvents & ev);
+		/// A called customer reaches the tenant (T2Tenant::EnterTenant +
+		/// the family EnterTenant / EnterCustomer): false when the tenant is
+		/// not open (the person turns back with -100 estimate). The stay
+		/// ends at absMinute + bindTime.
+		bool customerArrives(TenantModel & m, const YootTenantDef & def, long long absMinute, TenantEvents & ev);
+		/// A customer on the way gave up or was removed.
+		void customerCancelled(TenantModel & m);
+
+		/// T2Tenant::CollectCustomerFromPool 0x1005ef70 against a pool with
+		/// the CheckRouteFromPool mask: the customer table is walked from a
+		/// random member (T2CustomerTableIterator), each member asks for
+		/// Float2Int(rate) people (at most `free` in total) and stops at the
+		/// first failed T2Pool::Call. `onCalled` gets each person's type and
+		/// start minute (now + 2 per person of the member). Returns the count.
+		int collectFromPool(const YootTenantDef & def, Pool & pool, unsigned routeMask, int free, int nowMinute,
+			const PoolRng & rng, const std::function<void(const PeopleType &, int)> & onCalled);
+		/// T2TenantMemberTableDef::GetEconoType of the customer table.
+		int customerEconoType(const YootTenantDef & def);
+		/// GetScore(EPlace): PLDF score, or 1000 for the pool without a PLDF.
+		int customerScore(const YootTenantDef & def, int place);
 
 		/// Pattern of the shop/restaurant overrides for `inside` customers:
 		/// 0 closed, 1 open and empty, 2 from 1 customer, 3 from half the

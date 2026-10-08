@@ -83,6 +83,7 @@ EventSystem::EventSystem(Game * game)
 , venues(game)
 , specials(game)
 , extras(game)
+, people(game)
 , yoot(false)
 {
 	reset();
@@ -125,6 +126,7 @@ void EventSystem::reset()
 	venues.reset();
 	specials.reset();
 	extras.reset();
+	people.reset();
 	prevHour = game ? game->time.hour : 0.0;
 	lastDispatchDay = -1;
 	santaActive = false;
@@ -996,6 +998,7 @@ void EventSystem::encodeXML(tinyxml2::XMLPrinter & xml) const
 	power.encodeXML(xml);
 	venues.encodeXML(xml);
 	extras.encodeXML(xml);
+	people.encodeXML(xml);
 	// Active events are not persisted mid-resolution; they end on reload.
 }
 
@@ -1021,6 +1024,7 @@ void EventSystem::decodeXML(tinyxml2::XMLElement & xml)
 	power.decodeXML(xml);
 	venues.decodeXML(xml);
 	extras.decodeXML(xml);
+	people.decodeXML(xml);
 
 	// A save with an active event reloads safe.
 	type = Type::None;

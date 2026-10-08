@@ -88,6 +88,8 @@ namespace OT {
 			/// T2People::JumpToDestination: leave the current mover and
 			/// arrive at the final node directly.
 			void jumpToDestination();
+			/// Drop the remaining nodes without arriving anywhere.
+			void clear();
 			int fromFloor;
 			Item::Item * item;
 			int toFloor;

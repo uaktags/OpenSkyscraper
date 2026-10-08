@@ -313,6 +313,9 @@ void Subway::trainArrives(int riders)
 {
 	trainPresent = true;
 	showTrain(true);
+	// With the visitor pool, riders are pool people of transport 3 called by
+	// the tenants while the train is in (CheckRouteFromPool bit 8).
+	if (game->eventSystem.people.enabled() && !game->eventSystem.people.pool.empty()) return;
 	// CheckRouteFromPool 0x10060bf0: subway riders are pool visitors bound
 	// for any tenant reachable from the station (not only underground ones,
 	// as for the SimTower metro).

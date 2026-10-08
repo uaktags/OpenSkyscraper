@@ -1,5 +1,6 @@
 /* Copyright (c) 2026 OpenSkyscraper Project */
 #include "../Game.h"
+#include "../PeopleSystem.h"
 #include "../PluginManager.h"
 #include "../PluginObjmap.h"
 #include "../YootItemArt.h"
@@ -98,6 +99,7 @@ void YootTenant::advance(double dt)
 		reachable = position.y == 0 || !lobbyRoute.empty();
 	Yoot::TenantEvents ev;
 	for (long long m = lastMinute + 1; m <= now; ++m) {
+		releaseVisitors(m);
 		Yoot::tenantMinute(model, d, m, ev);
 		if ((int)(((m % Yoot::kTenantIdleMinutes) + Yoot::kTenantIdleMinutes) % Yoot::kTenantIdleMinutes) != idlePhase)
 			continue;
@@ -107,20 +109,25 @@ void YootTenant::advance(double dt)
 		in.holiday = game->time.isHoliday();
 		in.rain = game->sky.rainyDay;
 		in.reachable = reachable && game->mainLobby != NULL;
-		in.peopleAround = game->population > 0;
+		in.sources = game->eventSystem.people.enabled() && !game->eventSystem.people.pool.empty() ? this : nullptr;
+		releaseVisitors(m);
 		Yoot::tenantIdle(model, d, in, [] { return std::rand(); }, ev);
+		releaseVisitors(m);
 	}
 	lastMinute = now;
 
 	if (ev.paid) {
 		const char * message = incomeMessage();
 		game->yootBook(ev.income, incomeCategory(), message ? message : "");
+		game->recordSimEvent(def().prototypeId + " customers: " + std::to_string(ev.paidCustomers));
 	}
 	if (ev.estimateChanged) {
 		yootEstimate = model.estimate;
 		evaluation = model.estimate / 3.0;
 	}
-	population = model.insideCount() + model.staffIn;
+	// Staff are pool people kept by the tenant; visitors are counted by
+	// the pool (T2Pool::GetPopulation).
+	population = model.staff;
 	if (ev.patternChanged) updateSprite();
 }
 
@@ -155,12 +162,69 @@ void YootTenant::decodeXML(tinyxml2::XMLElement & xml)
 	model.estimate = yootEstimate;
 	// Customers inside are transient: they finish their stay from now.
 	model.inside.clear();
-	model.arriving.clear();
+	model.walking = 0;
 	const long long now = Yoot::absoluteMinute(game->time.absolute);
 	const int inside = std::max(0, std::min(d.capacity, xml.IntAttribute("inside", 0)));
 	for (int i = 0; i < inside; ++i) model.inside.push_back(now + std::max(1, d.bindMinutes));
 	lastMinute = -1;
 	updateSprite();
+}
+
+void YootTenant::addPerson(Person * p)
+{
+	Item::addPerson(p);
+	YootVisitor * v = dynamic_cast<YootVisitor *>(p);
+	if (!v || v->dest != this) return;
+	const long long now = Yoot::absoluteMinute(game->time.absolute);
+	Yoot::TenantEvents ev;
+	const bool admitted = Yoot::customerArrives(model, def(), now, ev);
+	v->stayEnd = admitted ? model.inside.back() : -1;
+	game->eventSystem.people.arrived(v, this, admitted, v->stayEnd);
+	if (ev.patternChanged) updateSprite();
+}
+
+void YootTenant::releaseVisitors(long long absMinute)
+{
+	if (people.empty()) return;
+	std::vector<YootVisitor *> inside;
+	for (Person * p : people)
+	{
+		YootVisitor * v = dynamic_cast<YootVisitor *>(p);
+		if (v && v->phase == YootVisitor::kInTenant && v->inside == this) inside.push_back(v);
+	}
+	// T2People::Idle case 11: the start minute (end of stay, or the call of
+	// another tenant) came.
+	for (size_t k = 0; k < inside.size();)
+	{
+		YootVisitor * v = inside[k];
+		if (v->startMinute > absMinute) { ++k; continue; }
+		std::vector<long long>::iterator e = std::find(model.inside.begin(), model.inside.end(), v->stayEnd);
+		if (e != model.inside.end()) model.inside.erase(e);
+		inside.erase(inside.begin() + k);
+		game->eventSystem.people.pushOut(v);
+	}
+	// PushOutAllCustomer emptied the model: everyone inside leaves.
+	while ((int)inside.size() > model.insideCount())
+	{
+		YootVisitor * v = inside.back();
+		inside.pop_back();
+		game->eventSystem.people.pushOut(v);
+	}
+}
+
+int YootTenant::fromPool(const YootTenantDef & d, int free, const Yoot::TenantInputs & in)
+{
+	return game->eventSystem.people.callFromPool(this, d, free, in.absMinute);
+}
+
+int YootTenant::fromTenant(const YootTenantDef & d, int free, const Yoot::TenantInputs & in)
+{
+	return game->eventSystem.people.callFromTenant(this, d, free, in.absMinute);
+}
+
+int YootTenant::fromFloor(const YootTenantDef & d, int free, const Yoot::TenantInputs & in)
+{
+	return game->eventSystem.people.callFromFloor(this, d, free, in.absMinute);
 }
 
 const char * YootShop::incomeMessage() const

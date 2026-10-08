@@ -62,6 +62,9 @@ namespace OT
 		void beginWedding();
 		bool baseballActive() const { return baseball.active; }
 		bool weddingActive() const { return wedding.active; }
+		/// The cruise is at the Boat Deck (CREV: 30 minutes from each
+		/// sailing, grade 3+): T2Transport::GetAvailable for ship visitors.
+		bool cruiseDocked() const;
 
 		// --- movies ---
 		struct Movie

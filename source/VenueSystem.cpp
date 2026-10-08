@@ -607,6 +607,17 @@ void VenueSystem::cruiseTick(int minute)
 		}
 }
 
+bool VenueSystem::cruiseDocked() const
+{
+	Item::YootVenue * deck = firstBuilt<Item::YootVenue>(game, "boatdeck");
+	if (!deck || !deck->isOpen() || grade() < 3 || game->activeRules.profile().worldId != "hawaii") return false;
+	const int minute = std::max(0, std::min(1439, (int)std::floor(game->time.hour * 60.0)));
+	static const int kSailings[] = {420, 660, 900, 1140};
+	for (int t : kSailings)
+		if (minute >= t && minute < t + cruiseDockMinutes) return true;
+	return false;
+}
+
 // ------------------------------------------------------------ final items
 
 void VenueSystem::beginBaseball()

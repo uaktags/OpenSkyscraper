@@ -1066,6 +1066,7 @@ void Game::advanceSimTick(double dt)
 		for (ItemSet::iterator i = items.begin(); i != items.end(); i++) {
 			p += (*i)->population;
 		}
+		p += eventSystem.people.visitorPopulation(); // YootTower: the pool's visitors
 		setPopulation(p);
 	}
 
@@ -1526,6 +1527,7 @@ void Game::removeItem(Item::Item * item)
 		}
 	}
 
+	eventSystem.people.itemRemoved(item);
 	if (item == itemBelowCursor) itemBelowCursor = NULL;
 	if (item == mainLobby) mainLobby = NULL;
 	if (item == metroStation) metroStation = NULL;

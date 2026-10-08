@@ -12,6 +12,7 @@
 #include <map>
 #include <set>
 #include <vector>
+#include <functional>
 
 #include <climits>
 #include <cstring>
@@ -4501,22 +4502,52 @@ static void testYootTenants()
 	// pays CalcInMoney at 20:00 and closes; the vending machine runs round
 	// the clock; the restaurant passes
 	// through status 15 after closing.
-	struct Run { int opened = -1, closed = -1, paid = 0, income = 0, maxInside = 0, maxPattern = 0, statusAfterClose = 0; };
-	auto simulate = [](const YootTenantDef & def, int days) {
+	struct Run { int opened = -1, closed = -1, paid = 0, income = 0, maxInside = 0, maxPattern = 0, statusAfterClose = 0, called = 0, entered = 0; };
+	// The customers come from the Tokyo pool (grade 1) through
+	// CollectCustomerFromPool and walk for 4 minutes.
+	Yoot::PoolDef tokyoPool;
+	{
+		const AbstractPlugin * w = pm.get("Tokyo.t2p");
+		EXPECT(w && w->ensureLoaded() && Yoot::loadPoolDef(*w, tokyoPool));
+	}
+	struct PoolSource : Yoot::CustomerSources
+	{
+		Yoot::Pool * pool = nullptr;
+		std::function<int()> rng;
+		std::vector<long long> due;
+		int called = 0;
+		int fromPool(const YootTenantDef & def, int free, const Yoot::TenantInputs & in) override
+		{
+			const int n = Yoot::collectFromPool(def, *pool, Yoot::kRouteLobby, free, in.minute, rng,
+				[&](const Yoot::PeopleType &, int start) { due.push_back(in.absMinute + (start - in.minute) + 4); });
+			called += n;
+			return n;
+		}
+	};
+	auto simulate = [&tokyoPool](const YootTenantDef & def, int days) {
 		Run r;
 		Yoot::TenantModel m;
 		unsigned seed = 12345;
 		auto rng = [&seed]() { seed = seed * 1103515245u + 12345u; return (int)((seed >> 16) & 0x7fff); };
+		Yoot::Pool pool;
+		pool.create(tokyoPool, 1, 0);
+		PoolSource src;
+		src.pool = &pool;
+		src.rng = rng;
 		for (long long t = 0; t < days * 1440LL; ++t)
 		{
 			Yoot::TenantEvents ev;
+			if (t % 60 == 0 && t > 0) pool.incHour((int)((t % 1440) / 60));
+			for (size_t k = 0; k < src.due.size();)
+				if (src.due[k] <= t) { src.due.erase(src.due.begin() + k); if (Yoot::customerArrives(m, def, t, ev)) r.entered++; }
+				else ++k;
 			Yoot::tenantMinute(m, def, t, ev);
 			if (t % Yoot::kTenantIdleMinutes == 0)
 			{
 				Yoot::TenantInputs in;
 				in.minute = (int)(t % 1440);
 				in.absMinute = t;
-				in.peopleAround = true;
+				in.sources = &src;
 				const int before = m.status;
 				Yoot::tenantIdle(m, def, in, rng, ev);
 				if (before < Yoot::kStatusOpen && m.status >= Yoot::kStatusOpen && r.opened < 0) r.opened = in.minute;
@@ -4530,6 +4561,7 @@ static void testYootTenants()
 			r.maxInside = std::max(r.maxInside, m.insideCount());
 			r.maxPattern = std::max(r.maxPattern, m.pattern);
 		}
+		r.called = src.called;
 		return r;
 	};
 	const Run shop = simulate(*ice, 2);
