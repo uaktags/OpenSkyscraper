@@ -38,6 +38,7 @@
 #include "../source/BuildRules.h"
 #include "../source/Skin.h"
 #include "../source/YootWorld.h"
+#include "../source/YootEvents.h"
 
 static int g_failures = 0;
 
@@ -3002,6 +3003,178 @@ static void testYootGrades()
 	EXPECT(kegon.vips.size() == 3u && kegon.vips[2].vipFlag == 256u && kegon.vips[2].beginMinute == 600);
 }
 
+// Steps 10-11: T2EV scheduler (grade bits, cycle days, begin minutes),
+// event bodies and the T2BlackOut power model.
+static void testYootEventsAndPower()
+{
+	using namespace OT;
+	const PluginManager & pm = yootTestPlugins();
+	const YootWorld::Id ids[3] = {YootWorld::Id::Tokyo, YootWorld::Id::Hawaii, YootWorld::Id::Kegon};
+
+	for (int w = 0; w < 3; ++w)
+	{
+		const YootWorld world = loadYootWorld(pm, ids[w]);
+		const std::vector<YootEventSpec> plugin = yootEventSpecs(world);
+		const std::vector<YootEventSpec> builtin = builtinYootEventSpecs(w);
+		// The built-in table matches the plugin headers, in T2EV order.
+		EXPECT(plugin.size() == builtin.size());
+		for (size_t i = 0; i < plugin.size() && i < builtin.size(); ++i)
+		{
+			EXPECT(plugin[i].type == builtin[i].type && plugin[i].resId == builtin[i].resId);
+			EXPECT(plugin[i].levelBit == builtin[i].levelBit && plugin[i].cycleDay == builtin[i].cycleDay);
+			EXPECT(plugin[i].beginMin == builtin[i].beginMin && plugin[i].endMin == builtin[i].endMin);
+			EXPECT(plugin[i].exclusive == builtin[i].exclusive && plugin[i].text == builtin[i].text);
+		}
+		// 120-day schedule at every grade == levelBit & (totalDays - 11) % cycle.
+		for (size_t i = 0; i < plugin.size(); ++i)
+			for (int grade = 1; grade <= 5; ++grade)
+			{
+				std::vector<int> expect;
+				if (plugin[i].levelBit & (1 << (grade - 1)))
+					for (int d = 0; d < 120; ++d)
+						if ((d - 11) % plugin[i].cycleDay == 0) expect.push_back(d);
+				EXPECT(yootEventDays(plugin[i], grade, 0, 119) == expect);
+			}
+		// The profile carries the same list (VIEV stays with VipSystem).
+		const RulesProfile profile = RulesProfile::yootTower(world);
+		EXPECT(profile.events.size() == plugin.size() && profile.worldWidth == world.width);
+	}
+
+	// Concrete cadences (game-parity V2-V5).
+	const std::vector<YootEventSpec> tokyo = builtinYootEventSpecs(0);
+	const std::vector<YootEventSpec> hawaii = builtinYootEventSpecs(1);
+	const std::vector<YootEventSpec> kegon = builtinYootEventSpecs(2);
+	EXPECT(yootEventDays(tokyo[0], 3, 0, 119) == std::vector<int>({11, 71}));  // fire, 60 days
+	EXPECT(yootEventDays(tokyo[0], 2, 0, 119).empty());                        // fire only at 3-4
+	EXPECT(yootEventDays(tokyo[1], 2, 0, 119) == std::vector<int>({11, 47, 83, 119})); // terrorist, 36
+	EXPECT(yootEventDays(hawaii[1], 2, 0, 119).empty());                       // Hawaii: grade 3 only
+	EXPECT(yootEventDays(tokyo[4], 1, 0, 119).size() == 10u);                  // Santa: day 12 of each year
+	EXPECT(yootEventDays(tokyo[4], 1, 0, 119)[0] == 11);
+	EXPECT(yootEventDays(tokyo[9], 2, 0, 119).empty());                        // Reggae: grade 3+
+	EXPECT(yootEventDays(tokyo[9], 3, 0, 119).size() == 5u);                   // 25 days: 11,36,61,86,111
+	bool kegonCalm = true;
+	for (size_t i = 0; i < kegon.size(); ++i)
+		kegonCalm = kegonCalm && kegon[i].type != "FBEV" && kegon[i].type != "TREV" &&
+		            kegon[i].type != "BOEV" && kegon[i].type != "SAEV";
+	EXPECT(kegonCalm);
+	EXPECT(yootEventBeginMinute(tokyo[4], 368) == 1440 - 184);  // Santa ctor override
+	EXPECT(yootEventBeginMinute(tokyo[0], 368) == 720);
+	EXPECT(yootEventBeginDay(12, -1) && !yootEventBeginDay(12, 0) && yootEventBeginDay(1, 5));
+
+	// Scheduler over 120 days at grade 3, 10-minute steps: begins land on
+	// the begin minute of each begin day; a running event does not restart.
+	YootEventScheduler sched;
+	sched.setEvents(tokyo, 368);
+	std::vector<int> fireDays, blackoutDays, santaMinutes;
+	for (int d = 0; d < 120; ++d)
+		for (int m = 0; m < 1440; m += 10)
+		{
+			const std::vector<int> b = sched.advance(d, m, 3);
+			for (size_t k = 0; k < b.size(); ++k)
+			{
+				const std::string & t = tokyo[b[k]].type;
+				if (t == "FBEV") { fireDays.push_back(d); EXPECT(m == 720); }
+				if (t == "BOEV") blackoutDays.push_back(d);
+				if (t == "SAEV") santaMinutes.push_back(m);
+			}
+		}
+	EXPECT(fireDays == std::vector<int>({11, 71}));
+	EXPECT(blackoutDays.size() == 120u);
+	EXPECT(santaMinutes.size() == 10u && santaMinutes[0] == 1260); // first step >= 1256
+	sched.reset();
+	sched.advance(0, 650, 3);
+	sched.setRunning(sched.find("BOEV"), true);
+	EXPECT(sched.advance(0, 670, 3).empty());
+
+	// Event bodies.
+	YootFireDef fire;
+	EXPECT(decodeYootFire(tokyo[0], fire) && fire.heliPrice == 3000 && fire.bitmaps.size() == 4u);
+	YootTerroristDef terror;
+	EXPECT(decodeYootTerrorist(tokyo[1], terror) && terror.ransom == 3000 && terror.deadlineMin == 720);
+	YootMetroDef metro;
+	EXPECT(decodeYootMetro(tokyo[2], metro) && metro.trains.size() == 12u &&
+	       metro.trains[0] == std::make_pair(410, 1) && metro.trains[11] == std::make_pair(1420, 1));
+	YootOutDecorationDef deco;
+	EXPECT(decodeYootOutDecoration(tokyo[6], deco) && deco.items.size() == 8u && deco.items[0].first == 9102);
+	YootCloudDef clouds;
+	EXPECT(decodeYootCloud(tokyo[5], clouds) && clouds.bitmaps.size() == 4u && clouds.zones.size() == 4u);
+	YootReggaeDef maru, reggae;
+	EXPECT(decodeYootReggae(tokyo[8], maru) && !maru.isReggae());
+	EXPECT(decodeYootReggae(tokyo[9], reggae) && reggae.isReggae() && reggae.tenantCategory == 50);
+	const YootWorld tokyoWorld = loadYootWorld(pm, YootWorld::Id::Tokyo);
+	const YootEvent * maev = 0;
+	for (size_t i = 0; i < tokyoWorld.events.size(); ++i)
+		if (tokyoWorld.events[i].resType == "MAEV" && tokyoWorld.events[i].resId == 129) maev = &tokyoWorld.events[i];
+	EXPECT(maev && maev->text == "'Uncle Reggae is noisy.'" && maev->body.size() == 4u);
+	YootHotSpringDef spring;
+	EXPECT(decodeYootHotSpring(kegon[1], spring) && spring.a == 100 && spring.tenantA == 0x546e5049u);
+
+	// Power: supply = 5000 + 5000 x transformers (max 5), warn under 50 spare.
+	YootPowerModel power;
+	YootBlackoutDef bo;
+	EXPECT(decodeYootBlackout(tokyo[3], bo) && bo.defSupply == 5000 && bo.addSupply == 5000 &&
+	       bo.transformerPrice == 5000);
+	power.def = bo;
+	power.reset();
+	EXPECT(power.supply() == 5000);
+	power.setTransformers(1);
+	EXPECT(power.supply() == 10000);
+	power.setTransformers(5);
+	EXPECT(power.supply() == 30000);
+	power.setTransformers(9);
+	EXPECT(power.supply() == 30000);
+	power.setTransformers(1);
+	power.setConsumption(9950);
+	EXPECT(!power.shortage());
+	power.setConsumption(9951);
+	EXPECT(power.shortage());
+	power.setConsumption(10000);
+	EXPECT(power.start() == YootPowerModel::None && !power.isBlackOut()); // needs supply < demand
+	// Blackout window: 11:00 start, escape at 14:00 (+1 minute), lasts until fixed.
+	power.setConsumption(10001);
+	EXPECT(power.start() == YootPowerModel::Started && power.status() == YootPowerModel::Dark);
+	bool quiet = true;
+	for (int m = 661; m < 840; ++m) quiet = quiet && power.minute(m) == YootPowerModel::None;
+	EXPECT(quiet && power.status() == YootPowerModel::Dark);
+	EXPECT(power.minute(840) == YootPowerModel::None && power.status() == YootPowerModel::EscapeDue);
+	EXPECT(power.minute(841) == YootPowerModel::Escape && power.status() == YootPowerModel::Escaped);
+	EXPECT(power.minute(900) == YootPowerModel::None && power.isBlackOut());
+	power.setTransformers(2);
+	EXPECT(power.minute(901) == YootPowerModel::None && power.status() == YootPowerModel::Ending);
+	EXPECT(power.minute(902) == YootPowerModel::Ended && !power.isBlackOut());
+	// Fixed before 14:00: no escape.
+	power.setTransformers(1);
+	EXPECT(power.start() == YootPowerModel::Started);
+	power.setConsumption(9000);
+	EXPECT(power.minute(700) == YootPowerModel::None && power.minute(701) == YootPowerModel::Ended);
+	// Breakers back on end it too.
+	power.setConsumption(20000);
+	EXPECT(power.start() == YootPowerModel::Started);
+	power.breakerOn();
+	EXPECT(power.minute(800) == YootPowerModel::Ended);
+
+	// Per-item demand comes from the plugin ToolDef (+0xf0).
+	TemplateDef def;
+	AbstractPlugin * burger = pm.get("Burger.t2p");
+	EXPECT(burger && burger->ensureLoaded() && burger->getTemplateDef(def) &&
+	       !def.tool.variations.empty() && def.tool.variations[0].consumptionPower == 8);
+	AbstractPlugin * room = pm.get("PowerRoom.t2p");
+	EXPECT(room && room->ensureLoaded() && room->getTemplateDef(def) &&
+	       def.tool.variations[0].consumptionPower == 0 && def.tool.variations[0].price == 5000);
+
+	// Power Room: YootTower-only, grade 3, absent from Kegon.
+	EXPECT(BuildRules(BuildRules::Ruleset::SimTower).minRatingToBuild("powerroom") == BuildRules::kUnavailable);
+	EXPECT(BuildRules(BuildRules::Ruleset::OpenSky).minRatingToBuild("powerroom") == BuildRules::kUnavailable);
+	EXPECT(BuildRules(BuildRules::Ruleset::YootTower).minRatingToBuild("powerroom") == 2);
+	const std::map<std::string, YootUnlock> tu = resolveYootUnlocks(pm, 0x7);
+	const std::map<std::string, YootUnlock> ku = resolveYootUnlocks(pm, 0xF0);
+	EXPECT(tu.count("powerroom") && tu.at("powerroom").available && tu.at("powerroom").minGrade == 3);
+	EXPECT(ku.count("powerroom") && !ku.at("powerroom").available);
+	// SimTower/OpenSky profiles carry no T2EV events.
+	EXPECT(RulesProfile::simTower().events.empty() && RulesProfile::openSky().events.empty());
+	EXPECT(RulesProfile::yootTowerStub().events.size() == tokyo.size());
+}
+
 int main()
 {
 	testTdtLoader();
@@ -3052,6 +3225,7 @@ int main()
 	testYootCalendar();
 	testYootUnlocks();
 	testYootGrades();
+	testYootEventsAndPower();
 	testOspAttrCompat();
     if (g_failures > 0)
     {
