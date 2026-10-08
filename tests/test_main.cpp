@@ -39,6 +39,8 @@
 #include "../source/Skin.h"
 #include "../source/YootWorld.h"
 #include "../source/YootEvents.h"
+#include "../source/YootCatalog.h"
+#include "../source/YootRules.h"
 
 static int g_failures = 0;
 
@@ -3175,6 +3177,240 @@ static void testYootEventsAndPower()
 	EXPECT(RulesProfile::yootTowerStub().events.size() == tokyo.size());
 }
 
+// Step 4: data-driven item catalog from TNDF/MVDF.
+static void testYootCatalog()
+{
+	using namespace OT;
+	const PluginManager & pm = yootTestPlugins();
+
+	// The parsed StdElev: $150,000 + $50,000/car, 15 floors, 6 cars of 17.
+	YootItemStats elev;
+	AbstractPlugin * stdElev = pm.get("StdElev.t2p");
+	EXPECT(stdElev && loadYootItemStats(*stdElev, 0, elev));
+	EXPECT(elev.mover && elev.plugin == "StdElev.t2p" && elev.name == "Simple Elevator");
+	EXPECT(elev.price == 150000);
+	EXPECT(elev.carPrice == 50000);
+	EXPECT(elev.maxLength == 15);
+	EXPECT(elev.maxCars == 6);
+	EXPECT(elev.capacity == 17);
+	EXPECT(elev.outMoney == 12000 && elev.routeScore == 15 && elev.power == 20);
+	EXPECT(elev.paysQuarterly());
+
+	const std::map<std::string, YootItemStats> tokyo = resolveYootCatalog(pm, 0x7);
+	const std::map<std::string, YootItemStats> kegon = resolveYootCatalog(pm, 0xF0);
+	EXPECT(tokyo.count("elevator-standard") && tokyo.at("elevator-standard").plugin == "StdElev.t2p");
+	// Large Elevator: any height, at most 8 stops, 8 cars of 40.
+	EXPECT(tokyo.count("elevator-express"));
+	if (tokyo.count("elevator-express"))
+	{
+		const YootItemStats & big = tokyo.at("elevator-express");
+		EXPECT(big.price == 500000 && big.carPrice == 150000);
+		EXPECT(big.maxLength == 0 && big.maxStops == 8 && big.maxCars == 8 && big.capacity == 40);
+		EXPECT(big.routeScore == 5);
+	}
+	if (tokyo.count("office"))
+	{
+		const YootItemStats & office = tokyo.at("office");
+		EXPECT(office.price == 100000 && office.outMoney == 0);
+		EXPECT(office.inMoney == std::vector<int>({1000, 2000, 3000, 4000}));
+		EXPECT(office.senseOfNoise == 100 && office.capacity == 6);
+	}
+	else EXPECT(false);
+	// Lobby is variation 1 of Floor.t2p, maintained per unit.
+	if (tokyo.count("lobby"))
+	{
+		const YootItemStats & lobby = tokyo.at("lobby");
+		EXPECT(lobby.price == 5000 && lobby.outMoney == 1000 && lobby.maintenancePerUnit());
+	}
+	else EXPECT(false);
+	if (tokyo.count("floor")) EXPECT(tokyo.at("floor").price == 500);
+	if (tokyo.count("stairs")) EXPECT(tokyo.at("stairs").price == 5000 && tokyo.at("stairs").routeScore == 50);
+	if (tokyo.count("fastfood"))
+	{
+		const YootItemStats & burger = tokyo.at("fastfood");
+		EXPECT(burger.price == 200000 && burger.outMoney == 800 && !burger.paysQuarterly());
+		EXPECT(burger.openMinute == 8 * 60 && burger.closeMinute == 22 * 60);
+	}
+	else EXPECT(false);
+	if (tokyo.count("cinema")) EXPECT(tokyo.at("cinema").maxBuild == 1);
+	// Kegon has no Stair.t2p; its standard elevator is the K-variant.
+	EXPECT(kegon.count("stairs") == 0u);
+	EXPECT(kegon.count("elevator-standard") && kegon.at("elevator-standard").plugin == "KElev.t2p");
+	// Every catalogued plugin decodes; no OuterObj sneaks in.
+	for (std::map<std::string, YootItemStats>::const_iterator it = tokyo.begin(); it != tokyo.end(); ++it)
+		EXPECT(it->second.price > 0);
+}
+
+// Step 7: economy timing and values, with a ledger fixture over one quarter.
+static void testYootEconomy()
+{
+	using namespace OT;
+	namespace Y = OT::Yoot;
+	const std::map<std::string, YootItemStats> cat = resolveYootCatalog(yootTestPlugins(), 0x7);
+	EXPECT(cat.count("office") && cat.count("lobby") && cat.count("elevator-standard") &&
+	       cat.count("fastfood") && cat.count("hotel_single") && cat.count("escalator"));
+	if (!(cat.count("office") && cat.count("lobby") && cat.count("elevator-standard") &&
+	      cat.count("fastfood") && cat.count("hotel_single") && cat.count("escalator")))
+		return;
+	const YootItemStats & office = cat.at("office");
+	const YootItemStats & lobby = cat.at("lobby");
+	const YootItemStats & elev = cat.at("elevator-standard");
+	const YootItemStats & burger = cat.at("fastfood");
+	const YootItemStats & single = cat.at("hotel_single");
+	const YootItemStats & esc = cat.at("escalator");
+
+	// E3 maintenance per kind.
+	EXPECT(Y::maintenanceCost(lobby, 20, 0) == 20000);    // $1,000 per unit
+	EXPECT(Y::maintenanceCost(elev, 4, 3) == 36000);      // $12,000 per car
+	EXPECT(Y::maintenanceCost(esc, 8, 2) == 5000);        // escalator: attr 0x2000 halves 2 modules
+	EXPECT(Y::maintenanceCost(esc, 8, 1) == 0);
+	EXPECT(Y::maintenanceCost(office, 9, 0) == 0);        // outMoney 0
+	EXPECT(Y::maintenanceCost(burger, 16, 0) == 0);       // no attr 0x100: paid daily
+	// Power Room (attr 0x401900): $50,000 per quarter through the same path.
+	EXPECT(cat.count("powerroom") && Y::maintenanceCost(cat.at("powerroom"), 23, 0) == 50000);
+	EXPECT(Y::opensQuarter(0) && !Y::opensQuarter(1) && !Y::opensQuarter(2) && Y::opensQuarter(3));
+
+	// E4 rent window: 04:52..04:59 on day 1 only.
+	EXPECT(!Y::officeRentWindow(0, 291) && Y::officeRentWindow(0, 292));
+	EXPECT(Y::officeRentWindow(3, 299) && !Y::officeRentWindow(3, 300));
+	EXPECT(!Y::officeRentWindow(1, 295) && !Y::officeRentWindow(2, 295));
+	EXPECT(Y::officeQuarterRent(office, 0) == 3000 && Y::officeQuarterRent(office, 3) == 12000);
+
+	// E5 price index / rent class mapping.
+	EXPECT(Y::priceIndex(0, 4) == 1 && Y::priceIndex(3, 4) == 4 && Y::priceIndex(0, 1) == 0);
+	EXPECT(Y::selectionFromRentClass(0, 4) == 3 && Y::selectionFromRentClass(3, 4) == 0);
+	EXPECT(Y::selectionFromRentClass(1, 1) == 0);
+
+	// E6 commercial: customers x inMoney / 100 - outMoney (units), estimate 70 x gross / outMoney.
+	EXPECT(Y::calcInMoneyUnits(100, 10, 8) == 2);
+	EXPECT(Y::commercialIncome(100, burger) == 200);
+	EXPECT(Y::commercialIncome(50, burger) == -300);
+	EXPECT(Y::profitEstimate(80, 10, 8) == 70);           // break-even
+	EXPECT(Y::profitEstimate(160, 10, 8) == 140);
+	EXPECT(Y::profitEstimate(0, 10, 8) == 1);
+	EXPECT(Y::profitEstimate(10000, 10, 8) == 300);
+	EXPECT(Y::profitEstimate(5, 10, 0) == 1);             // no maintenance: 0 x 70 -> clamp
+
+	// E7 hotel per-room income.
+	EXPECT(Y::hotelRoomIncome(single, 0) == 800 && Y::hotelRoomIncome(single, 3) == 3200);
+
+	// Ledger over the quarter that opens on day 3 (days 3..5), from 23:00 on day 2.
+	std::vector<Y::LedgerItem> tower(6);
+	tower[0].kind = Y::LedgerItem::Maintained; tower[0].stats = &lobby; tower[0].widthUnits = 30;
+	tower[1].kind = Y::LedgerItem::Maintained; tower[1].stats = &elev; tower[1].cars = 2;
+	tower[2].kind = Y::LedgerItem::Office; tower[2].stats = &office; tower[2].selection = 1;
+	tower[3].kind = Y::LedgerItem::Office; tower[3].stats = &office; tower[3].selection = 2;
+	tower[4].kind = Y::LedgerItem::Commercial; tower[4].stats = &burger; tower[4].customersPerDay = 120;
+	tower[5].kind = Y::LedgerItem::HotelRoom; tower[5].stats = &single; tower[5].selection = 1;
+	const long long from = 2 * Y::kMinutesPerDay + 23 * 60;
+	const long long to = 6 * Y::kMinutesPerDay - 1;
+	const std::vector<Y::LedgerEntry> ledger = Y::simulateLedger(tower, from, to);
+	int maintenance = 0, rent = 0, retail = 0, hotel = 0;
+	long long maintenanceAt = -1, firstRentAt = -1;
+	int maintenanceCount = 0, rentCount = 0;
+	for (size_t i = 0; i < ledger.size(); ++i)
+	{
+		const Y::LedgerEntry & e = ledger[i];
+		if (e.category == "maintenance") { maintenance += e.amount; maintenanceAt = e.minute; ++maintenanceCount; }
+		else if (e.category == "rent_income") { rent += e.amount; ++rentCount; if (firstRentAt < 0) firstRentAt = e.minute; }
+		else if (e.category == "retail_income") retail += e.amount;
+		else if (e.category == "hotel_income") hotel += e.amount;
+	}
+	EXPECT(maintenanceCount == 1 && maintenanceAt == 3 * Y::kMinutesPerDay);  // midnight, day 1
+	EXPECT(maintenance == -(30 * 1000 + 2 * 12000));
+	EXPECT(rentCount == 2 && firstRentAt == 3 * Y::kMinutesPerDay + 292);     // 04:52, day 1
+	EXPECT(rent == 3 * 2000 + 3 * 3000);
+	EXPECT(retail == 3 * 400);                                                 // (120x10/100 - 8) x $100, 3 days
+	EXPECT(hotel == 3 * 1200);
+	// The opening maintenance precedes the rent of the same quarter.
+	EXPECT(maintenanceAt < firstRentAt);
+}
+
+// Step 8: 1..300 tenant estimate and the 70/200 decisions.
+static void testYootEvaluation()
+{
+	namespace Y = OT::Yoot;
+	Y::ResidentialInputs in;
+	in.peopleEstimates = {250, 230, 210};       // mean 230
+	in.senseOfNoise = 100;
+	in.trafficRange = 0;
+	in.priceIndex = 2;                          // +30
+	in.yearsSinceBuilt = 0;
+	int people = 0;
+	EXPECT(Y::residentialEstimate(in, &people) == 260 && people == 230);
+	in.trafficRange = 1;                        // -100 (office/apartment noise sense)
+	EXPECT(Y::residentialEstimate(in) == 160);
+	in.priceIndex = 4;                          // most expensive: -30
+	EXPECT(Y::residentialEstimate(in) == 100);
+	in.yearsSinceBuilt = 5;
+	EXPECT(Y::residentialEstimate(in) == 95);
+	in.trafficRange = 3; in.senseOfNoise = 150; // condo next to heavy traffic
+	EXPECT(Y::residentialEstimate(in) == 1);
+	in.priceIndex = 0; in.trafficRange = 0; in.yearsSinceBuilt = 0;
+	in.peopleEstimates = {300, 300};
+	EXPECT(Y::residentialEstimate(in) == 300);
+	in.hasBelongs = false;
+	EXPECT(Y::residentialEstimate(in) == 1);
+	// No residents: the previous mean is kept.
+	Y::ResidentialInputs empty;
+	empty.previousPeopleEstimate = 180;
+	empty.priceIndex = 1;                       // +60
+	EXPECT(Y::residentialEstimate(empty) == 240);
+
+	int counter = 0;
+	EXPECT(Y::decideResidential(69, counter) == Y::Decision::MoveOut);
+	EXPECT(Y::decideResidential(201, counter) == Y::Decision::Grow);
+	EXPECT(counter == 0);
+	for (int i = 0; i < 4; ++i)
+		EXPECT(Y::decideResidential(150, counter) == Y::Decision::Stay);
+	EXPECT(Y::decideResidential(70, counter) == Y::Decision::Grow);   // every 5th call
+	EXPECT(counter == 0);
+	EXPECT(Y::decideResidential(200, counter) == Y::Decision::Stay);
+
+	EXPECT(Y::estimateColor(69) == 14 && Y::estimateColor(70) == 9 &&
+	       Y::estimateColor(200) == 9 && Y::estimateColor(201) == 12 && Y::estimateColor(0) == -1);
+
+	// People estimate: running average over up to 4 trips.
+	EXPECT(Y::calcCurrEstimate(300, 0, 50) == 250);
+	EXPECT(Y::calcCurrEstimate(250, 1, 100) == 225);       // (250 - 100 + 300) / 2
+	EXPECT(Y::calcCurrEstimate(250, 1, 100, true) == 150); // residents: (250 - 100) / 1
+	EXPECT(Y::calcCurrEstimate(10, 0, 300) == 1);
+	int est = Y::kPeopleEstimateStart, trips = 0, stress = 60;
+	Y::updateEstimation(est, trips, stress);
+	EXPECT(est == 240 && trips == 1 && stress == 0);
+	for (int i = 0; i < 6; ++i) Y::updateEstimation(est, trips, stress);
+	EXPECT(trips == Y::kMaxTrips);
+	EXPECT(Y::incEstimate(40, -50) == 1 && Y::incEstimate(280, 50) == 300);
+}
+
+// Step 9: wait stress, no-route stress and the mover route score.
+static void testYootStress()
+{
+	namespace Y = OT::Yoot;
+	int stress = 0;
+	int ticks = 0;
+	bool gaveUp = false;
+	while (!gaveUp && ticks < 1000)
+	{
+		gaveUp = Y::waitTick(stress);
+		++ticks;
+	}
+	EXPECT(ticks == 60 && stress == 300);
+	// 60 people-idle ticks = 120 game minutes of waiting.
+	EXPECT(ticks * Y::kPeopleIdleMinutes == 120);
+
+	stress = 0;
+	int tries = 0;
+	while (!Y::noRouteTry(stress)) ++tries;
+	EXPECT(tries + 1 == 10 && stress == 300);
+	EXPECT(Y::incStress(290, 30) == 300 && Y::incStress(10, -30) == 0);
+
+	// Route cost = mover score x floors (Stairs 50, Escalator 30, Simple 15, Large 5).
+	EXPECT(Y::moverRouteScore(15, 10) == 150);
+	EXPECT(Y::moverRouteScore(5, -10) == 50);
+	EXPECT(Y::moverRouteScore(50, 1) == 50);
+}
+
 int main()
 {
 	testTdtLoader();
@@ -3226,6 +3462,10 @@ int main()
 	testYootUnlocks();
 	testYootGrades();
 	testYootEventsAndPower();
+	testYootCatalog();
+	testYootEconomy();
+	testYootEvaluation();
+	testYootStress();
 	testOspAttrCompat();
     if (g_failures > 0)
     {
