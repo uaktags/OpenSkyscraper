@@ -904,9 +904,27 @@ void VenueSystem::draw(sf::RenderTarget & target) const
 		s.setPosition({c.x - profile.unitOriginX * 8.f, (c.y - profile.groundRow) * 36.f});
 		target.draw(s);
 	}
-	// T2Cruise: the ship (Hawai.t2p bitmap 8800 at 2x) sails in from the
-	// left at one unit a minute, docks for 30 minutes and sails back.
-	if (profile.worldId == "hawaii" && firstBuilt<Item::YootVenue>(game, "boatdeck") && grade() >= 3)
+	// T2Cruise (Hawai.t2p): bitmap 8800 is loaded at 2x and cut by OBJMAP
+	// 8800 into `Ship` (368x136), `ShBo` (364x24) and `Pier` (100x24); the
+	// rects below are the half-scale sheet's. Positions start from
+	// UnitToQD of a point on the ground row, its interior top (row top + 8;
+	// oracle). Init 0x10012d60 shows the pier for good at unit dock - 2,
+	// moved 4 px left and 4 px down.
+	sf::Texture * sheet = profile.worldId == "hawaii" ? worldTexture(8800) : nullptr;
+	if (sheet)
+	{
+		Sprite pier;
+		pier.SetImage(*sheet);
+		pier.setTextureRect(sf::IntRect({0, 80}, {50, 12}));
+		pier.setScale({2.f, 2.f});
+		pier.setPosition({(cruiseDockX - 2 - profile.unitOriginX) * 8.f - 4.f, 8.f + 4.f});
+		target.draw(pier);
+	}
+	// The ship sails in from the left at one unit a minute, docks for 30
+	// minutes and sails back. Exec 0x100134b0: the Ship's right edge at
+	// the unit and its bottom 34 px below that point; ShBo hangs under it
+	// from 2 px above the Ship's bottom.
+	if (sheet && firstBuilt<Item::YootVenue>(game, "boatdeck") && grade() >= 3)
 	{
 		const int minute = std::max(0, std::min(1439, (int)std::floor(game->time.hour * 60.0)));
 		for (int t0 : cruiseTimes)
@@ -917,14 +935,19 @@ void VenueSystem::draw(sf::RenderTarget & target) const
 			else if (minute >= t0 + cruiseDockMinutes && minute < t0 + cruiseDockMinutes + cruiseDockX)
 				unit = cruiseDockX - (minute - t0 - cruiseDockMinutes);
 			else continue;
-			sf::Texture * ship = worldTexture(8800);
-			if (!ship) break;
-			Sprite s;
-			s.SetImage(*ship);
-			s.setScale({2.f, 2.f});
-			s.setOrigin({(float)ship->getSize().x, (float)ship->getSize().y});
-			s.setPosition({(unit - profile.unitOriginX) * 8.f, 34.f});
-			target.draw(s);
+			const float right = (unit - profile.unitOriginX) * 8.f;
+			Sprite ship;
+			ship.SetImage(*sheet);
+			ship.setTextureRect(sf::IntRect({0, 0}, {184, 68}));
+			ship.setScale({2.f, 2.f});
+			ship.setPosition({right - 368.f, 8.f + 34.f - 136.f});
+			target.draw(ship);
+			Sprite bottom;
+			bottom.SetImage(*sheet);
+			bottom.setTextureRect(sf::IntRect({0, 68}, {182, 12}));
+			bottom.setScale({2.f, 2.f});
+			bottom.setPosition({right - 368.f, 8.f + 32.f});
+			target.draw(bottom);
 		}
 	}
 }
