@@ -521,10 +521,14 @@ void Hotel::encodeXML(tinyxml2::XMLPrinter &xml)
 	Item::encodeXML(xml);
 	xml.PushAttribute("variant", variant);
 	xml.PushAttribute("subVariant", subVariant);
-	xml.PushAttribute("yootKind", yootKind);
+	// YootTower-only attributes: SimTower/OpenSky saves stay byte-identical
+	// to the pre-YootTower format (decodeXML defaults yootKind).
+	if (game && game->activeRules.profile().yootWorld)
+	{
+		xml.PushAttribute("yootKind", yootKind);
+		if (yootStayBooked) xml.PushAttribute("yootStayBooked", true);
+	}
 	xml.PushAttribute("roomState", roomState);
-	xml.PushAttribute("dirtySince", dirtySince);
-	if (yootStayBooked) xml.PushAttribute("yootStayBooked", true);
 
 	for (std::set<Guest *, SimLess>::iterator it = guests.begin(); it != guests.end(); ++it)
 	{

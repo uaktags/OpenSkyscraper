@@ -185,12 +185,16 @@ void Person::encodeXML(tinyxml2::XMLPrinter &xml)
 	xml.PushAttribute("name", name.c_str());
 	xml.PushAttribute("from", from.c_str());
 	xml.PushAttribute("goingTo", goingTo.c_str());
-	if (yootTrips != 0 || yootEstimate != Yoot::kPeopleEstimateStart)
+	// YootTower-only attributes (byte-identical SimTower/OpenSky saves).
+	if (yootRules())
 	{
-		xml.PushAttribute("yootEstimate", yootEstimate);
-		xml.PushAttribute("yootTrips", yootTrips);
+		if (yootTrips != 0 || yootEstimate != Yoot::kPeopleEstimateStart)
+		{
+			xml.PushAttribute("yootEstimate", yootEstimate);
+			xml.PushAttribute("yootTrips", yootTrips);
+		}
+		if (yootFlags != 0) xml.PushAttribute("yootFlags", yootFlags);
 	}
-	if (yootFlags != 0) xml.PushAttribute("yootFlags", yootFlags);
 }
 
 void Person::decodeXML(tinyxml2::XMLElement &xml)

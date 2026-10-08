@@ -278,12 +278,18 @@ void Item::encodeXML(tinyxml2::XMLPrinter &xml)
 	xml.PushAttribute("x", position.x);
 	xml.PushAttribute("y", position.y);
 	xml.PushAttribute("evaluation", evaluation);
-	if (yootEstimate != 0)
-		xml.PushAttribute("yootEstimate", yootEstimate);
-	if (yootBuildDay >= 0)
-		xml.PushAttribute("buildDay", yootBuildDay);
-	if (yootPeopleEstimate != 300)
-		xml.PushAttribute("yootPeopleEstimate", yootPeopleEstimate);
+	// YootTower-only attributes. The values keep their defaults under the
+	// SimTower/OpenSky rules, so gating on the ruleset keeps those saves
+	// byte-identical to the pre-YootTower format.
+	if (game && game->activeRules.profile().yootWorld)
+	{
+		if (yootEstimate != 0)
+			xml.PushAttribute("yootEstimate", yootEstimate);
+		if (yootBuildDay >= 0)
+			xml.PushAttribute("buildDay", yootBuildDay);
+		if (yootPeopleEstimate != 300)
+			xml.PushAttribute("yootPeopleEstimate", yootPeopleEstimate);
+	}
 	if (underConstruction)
 	{
 		xml.PushAttribute("underConstruction", underConstruction);

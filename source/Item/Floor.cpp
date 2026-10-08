@@ -41,7 +41,9 @@ void Floor::encodeXML(tinyxml2::XMLPrinter &xml)
 {
 	Item::encodeXML(xml);
 	xml.PushAttribute("width", size.x);
-	if (!holes.empty()) {
+	// YootTower-only floor holes; SimTower/OpenSky saves never carry them
+	// (byte-identical to the pre-YootTower format).
+	if (game && game->activeRules.profile().yootWorld && !holes.empty()) {
 		std::string h;
 		for (size_t i = 0; i < holes.size(); i++)
 			h += (i ? "," : "") + std::to_string(holes[i].first) + ":" + std::to_string(holes[i].second);
