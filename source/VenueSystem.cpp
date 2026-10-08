@@ -279,7 +279,8 @@ void VenueSystem::collect(Item::YootVenue * v, int minute, int stay)
 	(void)minute;
 	if (!reachable(v)) return;
 	const int cap = v->capacity();
-	const int n = Yoot::venueArrivals(cap, v->users(), percentFor(v), stay, v->arrivalCarry);
+	// The arrivals are people of the visitor pool (T2Pool::Call).
+	const int n = game->eventSystem.people.drawVisitors(v, Yoot::venueArrivals(cap, v->users(), percentFor(v), stay, v->arrivalCarry));
 	const long long now = Yoot::absoluteMinute(game->time.absolute);
 	for (int k = 0; k < n; ++k) v->leaveAt.push_back(now + std::max(1, stay));
 	v->visitorsToday += n;
@@ -600,7 +601,8 @@ void VenueSystem::cruiseTick(int minute)
 		if (minute == t)
 		{
 			// MoveToShip / CheckRouteFromPool: the ship brings pool visitors.
-			const int n = std::max(0, std::min(deck->capacity() - deck->users(), deck->capacity() / 2));
+			const int n = game->eventSystem.people.drawVisitors(deck,
+				std::max(0, std::min(deck->capacity() - deck->users(), deck->capacity() / 2)));
 			const long long now = Yoot::absoluteMinute(game->time.absolute);
 			for (int k = 0; k < n; ++k) deck->leaveAt.push_back(now + cruiseDockMinutes);
 			deck->visitorsToday += n;

@@ -279,6 +279,7 @@ void Hotel::advance(double dt)
 		if (!lobbyRoute.empty() && (!yoot || game->eventSystem.specials.roomMayTakeGuests(this)))
 		{
 			int n = capacity();
+			if (yoot) n = game->eventSystem.people.drawVisitors(this, n); // guests come from the pool
 			for (int i = 0; i < n; i++)
 			{
 				Guest *g = new Guest(this);

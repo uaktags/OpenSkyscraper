@@ -98,6 +98,12 @@ namespace OT
 		void arrived(YootVisitor * v, Item::Item * tenant, bool admitted, long long leaveMinute);
 		/// T2Tenant::PushOutPeople 0x1005f720: the visitor leaves `tenant`.
 		void pushOut(YootVisitor * v);
+		/// Counted visitors of the items that do not walk them (venues, the
+		/// cruise, hotel guests): up to `n` people are called out of the pool
+		/// with the item plugin's customer table (TMDF 2, PLDF pool score,
+		/// CheckRouteFromPool mask) and return at once. Returns how many came
+		/// (`n` when the pool or the table is missing).
+		int drawVisitors(Item::Item * item, int n);
 		/// Visitors bound for / inside a removed item.
 		void itemRemoved(Item::Item * item);
 
@@ -113,6 +119,8 @@ namespace OT
 		std::string pendingPool;  ///< decoded before the pool def was loaded
 		std::map<std::pair<unsigned long long, unsigned long long>, int> routeCache;
 		size_t routeCacheItems = 0;
+		struct Table { bool valid = false; MemberTableDef table; bool hasPlace = false; PlaceParamDef place; };
+		std::map<std::string, Table> tables;
 
 		bool ensurePool();
 		void minuteTick(long long absMinute);
