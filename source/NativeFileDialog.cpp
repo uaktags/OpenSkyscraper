@@ -80,12 +80,13 @@ namespace OT
 			if (kind == FileKind::TowerLegacy)
 			{
 				// Opening also accepts original 1994 SimTower .TDT saves
-				// (imported via TdtLoader); saving stays .tower-only.
+				// (TdtLoader) and YootTower .bld saves (BldLoader); saving
+				// stays .tower-only.
 				FilterInfo f;
-				f.winFilter = buildWinFilter("Tower saves (*.tower;*.tdt)", "*.tower;*.tdt");
+				f.winFilter = buildWinFilter("Tower saves (*.tower;*.tdt;*.bld)", "*.tower;*.tdt;*.bld");
 				f.defExt = "tower";
-				f.zenityFilter = "Tower saves (*.tower *.tdt) | *.tower *.tdt";
-				f.kdialogFilter = "*.tower *.tdt|Tower saves";
+				f.zenityFilter = "Tower saves (*.tower *.tdt *.bld) | *.tower *.tdt *.bld";
+				f.kdialogFilter = "*.tower *.tdt *.bld|Tower saves";
 				f.appleType = "";
 				return f;
 			}

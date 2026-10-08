@@ -34,6 +34,8 @@
 #include "SaveHash.h"
 #include "SimTowerLoader.h"
 #include "TdtLoader.h"
+#include "BldImport.h"
+#include "BldLoader.h"
 #include "OpenGL.h"
 #include "tinyxml2.h"
 
@@ -433,6 +435,22 @@ void Application::loadGameFromFile(const std::string &filename)
         for (size_t i = 0; i < report.size(); i++)
             LOG(INFO, "TDT import: %s", report[i].c_str());
         LOG(IMPORTANT, "SimTower save imported from %s", filename.c_str());
+        if (createdNewGame)
+        {
+            popState();
+            pushState(game);
+        }
+        return;
+    }
+    // YootTower .bld saves ('002T' magic): converted to native XML in
+    // YootTower mode by BldLoader; the .bld is never written back.
+    if (OT::Bld::looksLikeBld(filename))
+    {
+        if (!OT::importBldSave(*game, filename))
+        {
+            if (createdNewGame) delete game;
+            return;
+        }
         if (createdNewGame)
         {
             popState();
