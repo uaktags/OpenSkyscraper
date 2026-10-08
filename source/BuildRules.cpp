@@ -256,6 +256,8 @@ namespace {
 		{"gatheringarea", 3, "GatheringArea.t2p"},  // GatheringArea.t2p, grade 4
 		{"boatdeck", 2, "Boatdeck.t2p"},       // Boatdeck.t2p, grade 3
 		{"subway", 1, "Subway.t2p"},         // Subway.t2p, grade 2
+		{"school", 3, "School.t2p"},         // School.t2p, grade 4 (Tokyo)
+		{"skybridge", 0, "SkyBrdge.t2p"},    // SkyBrdge.t2p, grade 1
 	};
 }
 

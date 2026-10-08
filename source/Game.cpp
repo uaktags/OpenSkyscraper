@@ -25,6 +25,7 @@
 #include "YootRules.h"
 #include "YootPlacementGame.h"
 #include "YootItemArt.h"
+#include "YootMisc.h"
 #include "YootWorld.h"
 #include "SimHarness.h"
 
@@ -1526,6 +1527,9 @@ bool Game::extendFloor(int floor, int minX, int maxX, bool free) {
 	if (floorItems.count(floor) != 0) {
 		// Look for existing floor to extend
 		Item::Floor * f = floorItems[floor];
+		// YootTower (E2): Floor.t2p charges per cell that had no floor, and
+		// a detached run leaves a hole between the two towers.
+		const int yootFresh = activeRules.profile().yootWorld ? f->yootCover(minX, maxX) : -1;
 		std::multiset<int> &interval = f->interval;
 		interval.erase(interval.find(f->position.x));
 		interval.erase(interval.find(f->getRect().maxX()));
@@ -1546,10 +1550,11 @@ bool Game::extendFloor(int floor, int minX, int maxX, bool free) {
 		interval.insert(f->position.x);
 		interval.insert(f->getRect().maxX());
 		gameMap.addNode(MapNode::Point(f->position.x + f->size.x/2, f->position.y + f->prototype->entrance_offset), f);
-		if (diff_left + diff_right > 0) {
+		if (diff_left + diff_right > 0 || yootFresh > 0) {
 			decorations.updateFloor(f->position.y);
 			if (!free) {
-				transferFunds(-f->prototype->price * (diff_left + diff_right), "construction", "Floor extension");
+				transferFunds(yootFresh >= 0 ? -f->prototype->price * yootFresh
+				                             : -f->prototype->price * (diff_left + diff_right), "construction", "Floor extension");
 				playOnce("simtower/construction/flexible");
 			}
 		}
@@ -1562,7 +1567,9 @@ bool Game::extendFloor(int floor, int minX, int maxX, bool free) {
 		f->updateSprite();
 		addItem(f);
 		if (!free) {
-			transferFunds(-f->prototype->price, "construction", "Floor");
+			// YootTower: T2TenantDef::CalcPayment charges every empty cell (E2).
+			transferFunds(activeRules.profile().yootWorld ? -Yoot::floorCharge(f->prototype->price, maxX - minX)
+			                                              : -f->prototype->price, "construction", "Floor");
 			playOnce("simtower/construction/normal");
 		}
 	}
@@ -1621,6 +1628,7 @@ bool Game::repairFloorCoverage()
 	for (ItemSet::iterator i = items.begin(); i != items.end(); i++) {
 		Item::Item * item = *i;
 		if (item->prototype->icon == ICON_FLOOR) continue;
+		if (item->prototype->id == "skybridge") continue; // spans a hole, no slab
 		// Loaded geometry is retained verbatim, but repair must never create
 		// a slab outside the active ruleset to support it.
 		if (!activeRules.allowsHorizontalFootprint(item->position.x, item->size.x)) {
@@ -2399,6 +2407,9 @@ bool Game::constructToolAt(int2 pos)
 		return true; // click consumed (no item built)
 	}
 	const size_t itemsBefore = items.size();
+	const int fundsBefore = funds;
+	if (toolPrototype->id == "skybridge" && activeRules.profile().yootWorld)
+		return Yoot::constructSkyBridge(*this, toolPrototype, toolPosition);
 	int height = toolPrototype->size.y;
 	int yHeightOffset = height;
 	if (toolPrototype->icon == ICON_LOBBY) {
@@ -2676,6 +2687,7 @@ if (!handled) {
 				for (ItemSet::const_iterator ii = itemsNearby.begin(); !constructionBlocked && ii != itemsNearby.end(); ii++) {
 					Item::Item * i = *ii;
 					if (i->canHaulPeople()) continue;
+					if (toolPrototype->icon == ICON_FLOOR && i->prototype->id == "skybridge") continue; // split below
 					if (toolBoundary.intersectsRect(i->getRect())) {
 						constructionBlocked = true;
 						blockReason = i->prototype->name + " is in the way";
@@ -2788,9 +2800,10 @@ if (!handled) {
 			LOG(DEBUG, "construct %s at %ix%i, size %ix%i", toolPrototype->id.c_str(), toolPosition.x, toolPosition.y, toolPrototype->size.x, toolPrototype->size.y);
 
 			// Construct floors
+			const bool yootLobby = activeRules.profile().yootWorld && toolPrototype->icon == ICON_LOBBY;
 			for (int i = 0; i < toolPrototype->size.y; i++)
 				if (!yootSpecial || activeRules.profile().allowsCell(toolPosition.x, toolPosition.y + i))
-					extendFloor(toolPosition.y + i, toolPosition.x, toolPosition.x + toolPrototype->size.x);
+					extendFloor(toolPosition.y + i, toolPosition.x, toolPosition.x + toolPrototype->size.x, yootLobby);
 
 			if (toolPrototype->icon == ICON_LOBBY) {
 				// Look for existing lobby to extend
@@ -2832,7 +2845,8 @@ if (!handled) {
 									interval.insert(newMaxX);
 								}
 							}
-							transferFunds(-toolPrototype->price * 4 / diff, "construction", "Lobby extension");
+							transferFunds(yootLobby ? -Yoot::floorCharge(toolPrototype->price, diff * l->size.y)
+							                        : -toolPrototype->price * 4 / diff, "construction", "Lobby extension");
 							playOnce("simtower/construction/flexible");
 						}
 						existingLobby = true;
@@ -2843,7 +2857,8 @@ if (!handled) {
 					Item::Item * item = itemFactory.make(toolPrototype, toolPosition);
 					LOG(INFO, "created new lobby item %p", item);
 					addItem(item);
-					transferFunds(-toolPrototype->price, "construction", toolPrototype->name);
+					transferFunds(yootLobby ? -Yoot::floorCharge(toolPrototype->price, toolPrototype->size.x * toolPrototype->size.y)
+					                        : -toolPrototype->price, "construction", toolPrototype->name);
 					playOnce("simtower/construction/normal");
 				}
 			} else if (toolPrototype->icon != ICON_FLOOR) {
@@ -2856,6 +2871,8 @@ if (!handled) {
 				} else
 					item->updateRoutes();
 				playOnce("simtower/construction/normal");
+			} else {
+				Yoot::skyBridgeFloorBuilt(*this, toolPosition.y, toolPosition.x, toolPosition.x + toolPrototype->size.x);
 			}
 		} else {
 			LOG(DEBUG, "cannot construct %s at %ix%i, size %ix%i, reason: %s", toolPrototype->id.c_str(), toolPosition.x, toolPosition.y, toolPrototype->size.x, toolPrototype->size.y, blockReason.c_str());

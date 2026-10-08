@@ -688,6 +688,8 @@ namespace OT
 			{"housekeeping",      {"Maintenance.t2p", "RMaintenance.t2p", nullptr}},
 			{"firedept",          {"FireDepartment.t2p", nullptr}},
 			{"apartment",         {"Apartment.t2p", nullptr}},
+			{"school",            {"School.t2p", nullptr}},
+			{"skybridge",         {"SkyBrdge.t2p", nullptr}},
 		};
 		// Plugin-backed tenants (YootTenants.h) come first so that a covered
 		// plugin resolves to its own prototype (BLD import, VIP targets)

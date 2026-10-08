@@ -1,5 +1,7 @@
 #pragma once
 #include <set>
+#include <utility>
+#include <vector>
 #include "../Sprite.h"
 #include "Item.h"
 
@@ -39,6 +41,18 @@ namespace OT {
 			*/
 			std::multiset<int> interval;
 			void render(sf::RenderTarget & target) const;
+
+			/// YootTower only: [l, r) gaps inside the slab's extent where no
+			/// floor exists, so one row can hold two separate towers (the
+			/// Sky Bridge spans such a gap). Always empty elsewhere.
+			std::vector<std::pair<int, int> > holes;
+			/// True when cell x is inside the extent and not in a hole.
+			bool coversCell(int x) const;
+			/// Covers [minX, maxX) before the extent grows to include it:
+			/// returns the cells that had no floor, closes the holes it
+			/// overlaps and opens one when the range is detached from the
+			/// extent (YootTower floors are separate tenants per run).
+			int yootCover(int minX, int maxX);
 		};
 	}
 }

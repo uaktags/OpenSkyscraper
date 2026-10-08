@@ -1,6 +1,8 @@
 #include <cassert>
 #include <algorithm>
 #include <vector>
+#include <cstdlib>
+#include <string>
 #include "../Game.h"
 #include "Floor.h"
 
@@ -38,6 +40,40 @@ void Floor::encodeXML(tinyxml2::XMLPrinter &xml)
 {
 	Item::encodeXML(xml);
 	xml.PushAttribute("width", size.x);
+	if (!holes.empty()) {
+		std::string h;
+		for (size_t i = 0; i < holes.size(); i++)
+			h += (i ? "," : "") + std::to_string(holes[i].first) + ":" + std::to_string(holes[i].second);
+		xml.PushAttribute("holes", h.c_str());
+	}
+}
+
+bool Floor::coversCell(int x) const
+{
+	if (x < position.x || x >= position.x + size.x) return false;
+	for (size_t i = 0; i < holes.size(); i++)
+		if (x >= holes[i].first && x < holes[i].second) return false;
+	return true;
+}
+
+int Floor::yootCover(int minX, int maxX)
+{
+	int fresh = 0;
+	for (int x = minX; x < maxX; x++)
+		if (!coversCell(x)) fresh++;
+	std::vector<std::pair<int, int> > kept;
+	for (size_t i = 0; i < holes.size(); i++) {
+		const std::pair<int, int> & h = holes[i];
+		if (h.second <= minX || h.first >= maxX) { kept.push_back(h); continue; }
+		if (h.first < minX) kept.push_back(std::make_pair(h.first, minX));
+		if (h.second > maxX) kept.push_back(std::make_pair(maxX, h.second));
+	}
+	const int left = position.x, right = position.x + size.x;
+	if (minX > right) kept.push_back(std::make_pair(right, minX));
+	if (maxX < left) kept.push_back(std::make_pair(maxX, left));
+	std::sort(kept.begin(), kept.end());
+	holes.swap(kept);
+	return fresh;
 }
 
 void Floor::decodeXML(tinyxml2::XMLElement &xml)
@@ -52,6 +88,23 @@ void Floor::decodeXML(tinyxml2::XMLElement &xml)
 	interval.clear();
 	interval.insert(position.x);
 	interval.insert(getRect().maxX());
+	holes.clear();
+	if (const char * h = xml.Attribute("holes")) {
+		std::string s(h);
+		size_t pos = 0;
+		while (pos < s.size()) {
+			size_t end = s.find(',', pos);
+			if (end == std::string::npos) end = s.size();
+			const std::string tok = s.substr(pos, end - pos);
+			const size_t colon = tok.find(':');
+			if (colon != std::string::npos) {
+				const int l = atoi(tok.substr(0, colon).c_str()), r = atoi(tok.substr(colon + 1).c_str());
+				if (l < r) holes.push_back(std::make_pair(l, r));
+			}
+			pos = end + 1;
+		}
+		std::sort(holes.begin(), holes.end());
+	}
 	updateSprite();
 }
 
@@ -118,8 +171,25 @@ void Floor::render(sf::RenderTarget &target) const
 		game->drawnSprites++;
 	};
 
-	const int floorLeft = getRect().minX();
-	const int floorRight = getRect().maxX();
+	// YootTower holes split the slab into separately drawn runs.
+	std::vector<Span> runs;
+	{
+		int from = getRect().minX();
+		for (size_t i = 0; i < holes.size(); i++) {
+			if (holes[i].first > from) runs.push_back({from, holes[i].first});
+			from = std::max(from, holes[i].second);
+		}
+		if (from < getRect().maxX()) runs.push_back({from, getRect().maxX()});
+	}
+	const std::vector<Span> allMerged = merged;
+	for (size_t run = 0; run < runs.size(); run++) {
+	const int floorLeft = runs[run].left;
+	const int floorRight = runs[run].right;
+	merged.clear();
+	for (size_t k = 0; k < allMerged.size(); k++) {
+		const int l = std::max(floorLeft, allMerged[k].left), r = std::min(floorRight, allMerged[k].right);
+		if (l < r) merged.push_back({l, r});
+	}
 	// YootTower skin: the world 1004 roof strip along the whole floor, and
 	// on the spans no tenant covers the Floor.t2p empty-floor view plus the
 	// floor strip (8 + 24 + 4 px, the original's row layout). Under the
@@ -146,7 +216,7 @@ void Floor::render(sf::RenderTarget &target) const
 		}
 		emptySpan(from, floorRight);
 		game->drawnSprites += 2 + static_cast<int>(merged.size());
-		return;
+		continue;
 	}
 
 	int cursor = floorLeft;
@@ -157,4 +227,5 @@ void Floor::render(sf::RenderTarget &target) const
 		cursor = it->right;
 	}
 	drawSpan(b, cursor, floorRight);
+	}
 }
