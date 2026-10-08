@@ -1,4 +1,4 @@
-# OpenSkyscraper Plugin Format (OSP) — v1
+# OpenSkyscraper Plugin Format (OSP) — v2
 
 **Status:** Implemented (Tenant slice). Spec is the source of truth for the
 `PluginEditor` and the `source/OspPlugin.{h,cpp}` reader/writer.
@@ -49,23 +49,23 @@ Missing sprite sheets are tolerated: a plugin without occupants simply omits
 ```json
 {
   "format": "openskyscraper-plugin",
-  "formatVersion": 1,
+  "formatVersion": 2,
   "sourceFormat": "yoottower-t2p",
-  "sourceFile": "Condo.t2p",
+  "sourceFile": "Burger.t2p",
   "class": "Tenant",
   "attr": {
-    "itemType": "NERH",
-    "name": "Apartment",
-    "gameLevel": 2,
-    "id": 1684,
-    "marker": "****",
-    "mustItem": 0,
-    "dependID": 0,
-    "secretItem": 0
+    "pluginId": "BURG",
+    "itemType": 1301,
+    "name": "Burger land",
+    "gameLevel": 1,
+    "attrib": 1,
+    "dependPluginId": "****",
+    "secretItem": 0,
+    "mustItem": 0
   },
-  "placement": { "w": 70, "h": 50, "baseX": 100, "baseY": 80 },
-  "price":     { "basePrice": 50000, "f1": 40, "f2": 10, "f3": 300, "f4": 50, "f5": 100 },
-  "transport": { "priceString": "$150000:$50000/car", "quarterlyString": "$12000/Q", "name": "Simple Elevator" },
+  "dayParam":   { "percent": [[70, 50], [100, 80]] },
+  "placeParam": { "places": [[40, 1000], [10, 300], [50, 100]] },
+  "transport":  { "priceString": "$150000:$50000/car", "outMoneyString": "$12000/Q", "name": "Simple Elevator" },
   "bitmaps": {
     "toolbox":   { "present": true, "width": 26,  "height": 130, "transparentColor": null,         "maskDiscovery": "none", "relPath": "sprites/100.png" },
     "ingame":    { "present": true, "width": 128, "height": 360, "transparentColor": [105,33,104], "maskDiscovery": "manual", "relPath": "sprites/1000.png" },
@@ -81,16 +81,34 @@ Missing sprite sheets are tolerated: a plugin without occupants simply omits
 | Field | Required | Notes |
 |---|---|---|
 | `format` | yes | Must be `"openskyscraper-plugin"`. |
-| `formatVersion` | yes | Must be `1` for this version of the editor. |
+| `formatVersion` | yes | `2` is written; `1` and `2` are read (v1 key mapping below). |
 | `sourceFormat` | yes | `"yoottower-t2p"` (converted), `"openskyscraper-plugin"` (re-saved), or `"scratch"` (new). |
 | `sourceFile` | no | The original `.t2p` filename, when converted. Absent for scratch plugins. |
 | `class` | yes | One of `Tenant`, `Mover`, `ToolPalette`, `World`, `OuterObj`. |
-| `attr` | yes | Item identity; see `PluginAttr` in `source/PluginResources.h`. `itemType`/`marker` are 4-char codes. |
-| `placement` | no | DPDF values; present on placement-driven items, absent on transport. |
-| `price` | no | PLDF values (Tenant shops); `basePrice` is the construction cost. Present on shops, absent on residences/transport. |
-| `transport` | no | MVDF values (Mover plugins): human-readable `priceString` (e.g. `"$150000:$50000/car"`), `quarterlyString` (e.g. `"$12000/Q"`), and `name`. Only the price strings round-trip today; the binary header dwords (capacity/speed) are inferred pending the T2DLL Ghidra pass. |
+| `attr` | yes | ATTR id 128 (`PluginAttr` in `source/PluginResources.h`, doc/yoottower/plugin-schema.md §2.1). `pluginId` = mID, the plugin's unique 4cc in Mac order (`"BURG"`; the file bytes are `GRUB`). `itemType` = mItemType, the numeric item type (== the TNDF/MVDF mToolType). `attrib` = world-availability mask (Tokyo 0x1/0x2/0x4, Kegon 0x10, Hawai 0x100). `dependPluginId` = mDependID in Mac order (`"****"` none, `"FRON"` = needs a hotel Front). |
+| `dayParam` | no | DPDF id 128 (T2DayParamDef): `percent[EDay][EWhether]`, customer rate by weekday/holiday × fine/rain. |
+| `placeParam` | no | PLDF id 128 (T2PlaceParamDef): `[percent, score]` for EPlace 0 floor, 1 tenant, 2 pool. `score` is the full 4-byte slot (the engine reads its low 16 bits). |
+| `transport` | no | Mover plugins: the first MVDF variation's `priceString` (e.g. `"$150000:$50000/car"`), `outMoneyString` (e.g. `"$12000/Q"`) and `name`. The full MVDF is decoded by `TemplateDef` (`source/PluginDefs.h`) but is not yet part of the manifest. |
 | `bitmaps` | yes | Per-sheet dimensions + transparency. `transparentColor` is `null` or `[r,g,b]`. `relPath` (optional) points at the sheet PNG relative to the plugin dir; the loader falls back to the numeric then canonical names when absent. `walking` is present only on Mover plugins. |
 | `spriteLayout` | yes | Relative paths to the OBJMAP text files under `meta/`. `walking` (`objmap_200.txt`) is present only on Mover plugins. |
+
+### Reading v1 manifests
+
+v1 used names that turned out to be wrong (doc/yoottower/plugin-schema.md §0).
+`readOspAttr` / `loadOspPlugin` map them onto the corrected fields, and the
+OpenTower plugins under `data/Plugins/OpenTower/` still ship v1 manifests:
+
+| v1 key | Meaning | Read as |
+|---|---|---|
+| `attr.itemType` (string) | ATTR offset 1, file-order bytes (`"GRUB"`) | `pluginId` (`"BURG"`) |
+| `attr.id` (number) | ATTR offset 21 | numeric `itemType` |
+| `attr.marker` (string) | ATTR offset 9, file-order bytes (`"NORF"`) | `dependPluginId` (`"FRON"`) |
+| `attr.dependID` (number) | never populated from binary plugins | `dependPluginId` only when non-zero and no `marker` |
+| `placement` `{w, h, baseX, baseY}` | DPDF slots 0..3 | `dayParam.percent` `[[w, h], [baseX, baseY]]` |
+| `price` `{f1, basePrice, f2, f3, f4, f5}` | PLDF slots 0..5 | `placeParam.places` `[[f1, basePrice], [f2, f3], [f4, f5]]` |
+| `transport.quarterlyString` | MVDF mOutMoneyString | `transport.outMoneyString` |
+
+Saving always writes v2.
 
 ### `maskDiscovery`
 
@@ -107,7 +125,9 @@ Records how the transparent color was chosen, so a reload can re-evaluate:
 The `convertT2pToOsp` function (`source/OspPlugin.cpp`) is the read-only bridge
 from the YootTower format:
 
-1. Pulls `ATTR`/`DESC`/`DPDF`/`PLDF`/`MVDF` via the existing typed accessors.
+1. Pulls `ATTR`/`DESC`, `DPDF` 128 and `PLDF` 128 through the typed
+   accessors (`getAttr`, `getDesc`, `getDayParamDef`, `getPlaceParamDef`), and
+   for movers the first `MVDF` variation through `getTemplateDef`.
 2. Rasterizes each `RT_BITMAP` (100/1000/1100/200) into an `sf::Image` via
    `PluginBitmapLoader::decodeBitmapResource`. The `200` (walking) sheet is
    pulled for Mover plugins; it's absent on tenants.
@@ -122,11 +142,11 @@ edit and Save As. Saving to `.t2p` is intentionally unsupported.
 ## Scope of this version (Tenant + Mover slices)
 
 **Implemented:**
-- Full read/write of the `attr`, `placement`, `price` (PLDF), `transport`
-  (MVDF), and `bitmaps` sections.
+- Full read/write of the `attr`, `dayParam` (DPDF), `placeParam` (PLDF),
+  `transport` (MVDF strings), and `bitmaps` sections.
 - **Tenant class** end-to-end: Condo/Burger/etc. convert, edit, save, reload.
 - **Mover class**: stairs/escalators/elevators convert (DESC class preserved,
-  MVDF transport pricing extracted), edit (price strings in the inspector),
+  MVDF price strings extracted), edit (price strings in the inspector),
   save, reload. The walking-frames sheet (RT_BITMAP 200 + OBJMAP 200) round-
   trips and is selectable in the preview canvas.
 - OBJMAP parse → write → parse identity (toolbox + ingame + walking layouts).
@@ -136,9 +156,10 @@ edit and Save As. Saving to `.t2p` is intentionally unsupported.
 - **Other classes** (`World`, `OuterObj`, `ToolPalette`): the format records
   their `class`, and convert still pulls their metadata, but the editor UI is
   Tenant/Mover-focused.
-- **MVDF binary header fields**: only the human-readable price strings round-
-  trip today; the capacity/speed/max-floors dwords are captured generically
-  but not editor-exposed, pending the T2DLL Ghidra pass to confirm semantics.
+- **The full template definitions** (TNDF/MVDF/OODF, TMDF, PADF, SLDF, WODF):
+  every field is decoded and re-encoded byte-exactly by `source/PluginDefs.h`
+  and exposed through `AbstractPlugin` (`getTemplateDef`, `getMemberTables`,
+  ...), but the manifest does not carry them yet.
 - **Free-form rect drawing** on the canvas: rects arrive from convert and are
   shown/overlaid; numeric editing of individual rects is a follow-up.
 - **Animation playback** in the canvas (frame scrubbing): static sheets only.
