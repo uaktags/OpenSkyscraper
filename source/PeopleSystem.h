@@ -48,8 +48,19 @@ namespace OT
 		long long arriveMinute = -1;  ///< kStopping: arrival minute
 		long long stayEnd = -1;       ///< the tenant's TenantModel::inside entry
 
+		/// Floor walk (T2People +0x38 curH, +0x3c curV, +0x40 dstH, +0x58
+		/// direction): `walking` people are on the floor `curV`, heading
+		/// for `walkTarget`, which they enter on arrival.
+		enum WalkKind { kWalkNode, kWalkDest, kWalkExit };
+		bool walking = false;
+		int curH = 0, curV = 0, dstH = 0;
+		bool facingLeft = false;
+		Item::Item * walkTarget = nullptr;
+		WalkKind walkKind = kWalkNode;
+
 		/// T2People::CalcFreeTime 0x100495b0 at `now`.
 		long long freeTime(long long now) const;
+		bool yootWalkTo(Item::Item * next, int floor) override;
 	};
 
 	/** The YootTower visitor pool and its walking visitors (game-parity.md
@@ -106,10 +117,16 @@ namespace OT
 		int drawVisitors(Item::Item * item, int n);
 		/// Visitors bound for / inside a removed item.
 		void itemRemoved(Item::Item * item);
+		/// YootVisitor::yootWalkTo: starts the walk to a route node.
+		bool walkToNode(YootVisitor * v, Item::Item * next, int floor);
+		/// T2RoutingTable::SelectNearTenant 0x10055db0 from `tenant`'s
+		/// entrance within `score` (null if none).
+		Item::Item * selectNearTenant(Item::Item * tenant, int score);
 
 		/// Diagnostics for the sim summary.
 		int calledToday = 0;
 		int enteredToday = 0;
+		int returnedToday[3] = {0, 0, 0};  ///< T2Pool::Enter by estimate: <= 70, 71..200, > 200
 
 	private:
 		std::string worldId;
@@ -130,6 +147,9 @@ namespace OT
 		void enterTower(YootVisitor * v, long long now);
 		void walkTo(YootVisitor * v, Item::Item * from, Item::Item * to, long long now);
 		void goOutTower(YootVisitor * v);
+		int entranceX(Item::Item * item, const YootVisitor * v) const;
+		void beginWalk(YootVisitor * v, Item::Item * target, int floor, YootVisitor::WalkKind kind);
+		void walkStep(YootVisitor * v);
 		bool reachableWithin(Item::Item * from, Item::Item * to, int score);
 		void destroy(YootVisitor * v);
 		bool waitingAt(Item::Elevator::Elevator * e, Person * p) const;

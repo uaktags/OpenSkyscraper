@@ -90,6 +90,8 @@ namespace OT {
 			void jumpToDestination();
 			/// Drop the remaining nodes without arriving anywhere.
 			void clear();
+			/// The next node is the end of the route.
+			bool atLastNode() const { return nodes.size() == 1; }
 			int fromFloor;
 			Item::Item * item;
 			int toFloor;
@@ -114,6 +116,10 @@ namespace OT {
 		int yootFlags = 0;
 		/// Arrival at the end of a trip (T2Tenant::EnterTenant hooks).
 		void yootArrived(Item::Item * destination);
+		/// YootTower visitors walk along `floor` to the next route node
+		/// before they enter it (T2People::IsReachDestination); true when
+		/// the person walks and enters the node on arrival.
+		virtual bool yootWalkTo(Item::Item * next, int floor) { (void)next; (void)floor; return false; }
 		double pendingJourneyStress;
 		Type type;
 		State state;

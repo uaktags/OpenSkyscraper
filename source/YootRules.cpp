@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 
 namespace OT
 {
@@ -179,6 +180,19 @@ namespace Yoot
 	{
 		stress = incStress(stress, kNoRouteStress);
 		return stress >= kMaxStress;
+	}
+
+	int walkStep(int & curH, int dstH)
+	{
+		const int d = dstH - curH;
+		const int step = std::min(kWalkStep, std::abs(d));
+		curH += d < 0 ? -step : step;
+		return step;
+	}
+
+	bool passesTenant(int curH, int left, int right, int score)
+	{
+		return left - score < curH && curH < score + right;
 	}
 
 	int moverRouteScore(int score, int floors)

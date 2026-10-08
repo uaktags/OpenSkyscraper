@@ -60,6 +60,11 @@ long long YootVisitor::freeTime(long long now) const
 	return startMinute > now ? startMinute - now : 0;
 }
 
+bool YootVisitor::yootWalkTo(Item::Item * next, int floor)
+{
+	return game->eventSystem.people.walkToNode(this, next, floor);
+}
+
 PeopleSystem::PeopleSystem(Game * game) : GameObject(game)
 {
 }
@@ -83,6 +88,7 @@ void PeopleSystem::reset()
 	routeCache.clear();
 	tables.clear();
 	calledToday = enteredToday = 0;
+	returnedToday[0] = returnedToday[1] = returnedToday[2] = 0;
 }
 
 bool PeopleSystem::enabled() const
@@ -136,6 +142,25 @@ void PeopleSystem::minuteTick(long long m)
 	{
 		pool.incHour(minute / 60);
 		routeCache.clear();
+		{
+			// The visitors by T2People status (1 pool, 5/10/12 walking, 6
+			// waiting for a mover, 8 riding, 11 inside), for the oracle.
+			int pooled = 0, walking = 0, waiting = 0, riding = 0, inside = 0, other = 0;
+			for (YootVisitor * v : visitorList)
+			{
+				if (v->phase == YootVisitor::kInPool) ++pooled;
+				else if (v->phase == YootVisitor::kInTenant) ++inside;
+				else if (v->walking) ++walking;
+				else if (v->at && v->at->isElevator()) (waitingAt(static_cast<Item::Elevator::Elevator *>(v->at), v) &&
+					!static_cast<Item::Elevator::Elevator *>(v->at)->cars.empty() && std::none_of(
+						static_cast<Item::Elevator::Elevator *>(v->at)->cars.begin(), static_cast<Item::Elevator::Elevator *>(v->at)->cars.end(),
+						[v](Item::Elevator::Car * c) { return c->passengers.count(v) > 0; }) ? waiting : riding)++;
+				else ++other;
+			}
+			game->recordSimEvent("people " + std::to_string(minute / 60) + "h: pool " + std::to_string(pooled) + " walking " +
+				std::to_string(walking) + " waiting " + std::to_string(waiting) + " riding " + std::to_string(riding) +
+				" inside " + std::to_string(inside) + " other " + std::to_string(other));
+		}
 		if (minute == 0)
 		{
 			int phases[5] = {0, 0, 0, 0, 0};
@@ -143,8 +168,10 @@ void PeopleSystem::minuteTick(long long m)
 			game->recordSimEvent("pool: called " + std::to_string(calledToday) + " entered " + std::to_string(enteredToday) +
 				" population " + std::to_string(pool.population) + " visitors " + std::to_string(visitorList.size()) +
 				" (pool " + std::to_string(phases[0]) + " walking " + std::to_string(phases[1] + phases[2]) +
-				" inside " + std::to_string(phases[3]) + " leaving " + std::to_string(phases[4]) + ")");
+				" inside " + std::to_string(phases[3]) + " leaving " + std::to_string(phases[4]) + ")" +
+				" returned " + std::to_string(returnedToday[0]) + "/" + std::to_string(returnedToday[1]) + "/" + std::to_string(returnedToday[2]));
 			calledToday = enteredToday = 0;
+			returnedToday[0] = returnedToday[1] = returnedToday[2] = 0;
 		}
 	}
 	// T2.exe FUN_0041da20: T2Pool::GameLevelChanged on every grade change.
@@ -278,20 +305,86 @@ namespace
 	}
 }
 
-int PeopleSystem::callFromTenant(Item::YootTenant * tenant, const YootTenantDef & def, int free, long long now)
+namespace
 {
-	// T2RouteNavigator::SelectNearTenant 0x10055170: a random tenant with
-	// people inside within the PLDF tenant score of the entrance.
-	const int score = Yoot::customerScore(def, 1);
+	/// T2People +0x6c holds the equip type of the last tenant left, so a
+	/// person is not called to the same kind of tenant twice in a row.
+	bool sameKind(const Item::Item * a, const Item::Item * b)
+	{
+		return a && b && a->prototype == b->prototype;
+	}
+
+	/// Movers a person can board on `floor` (T2FloorInfo mover list of the
+	/// floor, T2RoutingTable::IsRelatedMover), in the item order.
+	std::vector<Item::Item *> moversOnFloor(Game * game, int floor)
+	{
+		std::vector<Item::Item *> out;
+		for (Item::Item * i : game->items)
+			if (!i->underConstruction && (i->isElevator() || i->isStairlike()) && i->canHaulPeople() && i->connectsFloor(floor))
+				out.push_back(i);
+		return out;
+	}
+}
+
+Item::Item * PeopleSystem::selectNearTenant(Item::Item * tenant, int score)
+{
+	// T2RoutingTable::SelectNearTenant 0x10055db0 from the tenant's entrance:
+	// a random related mover of the entrance floor (scanning on from a
+	// random start), then T2MoverRoutingTable::SelectNearFloor 0x100428d0:
+	// the walk to the mover (CalcHScore = |dx|) comes off the score, and a
+	// random floor the mover serves within the rest (MoverDef score x
+	// floors, P3) becomes the search floor, at the mover, with what is left.
+	// Without one the entrance floor is searched (with the score already
+	// reduced by the walk when that left something).
+	int floor = tenant->position.y;
+	int x = centerX(tenant);
+	int s = score;
+	const std::vector<Item::Item *> movers = moversOnFloor(game, floor);
+	if (!movers.empty())
+	{
+		Item::Item * m = movers[std::rand() % movers.size()];
+		const int mx = centerX(m);
+		const int left = s - std::abs(mx - x);
+		if (left > 0)
+		{
+			s = left;
+			const int moverScore = m->prototype->yoot ? m->prototype->yoot->routeScore : 0;
+			std::vector<std::pair<int, int> > floors;  // floor, score left
+			for (int f = m->position.y; f < m->position.y + m->size.y; ++f)
+			{
+				if (!m->connectsFloor(f)) continue;
+				const int cost = Yoot::moverRouteScore(moverScore, f - tenant->position.y);
+				if (cost < s && s - cost != 0) floors.push_back(std::make_pair(f, s - cost));
+			}
+			if (!floors.empty())
+			{
+				const std::pair<int, int> & pick = floors[std::rand() % floors.size()];
+				floor = pick.first;
+				x = mx;
+				s = pick.second;
+			}
+		}
+	}
+	// T2RoutingTable::SelectNearTenant 0x10055ec0: tenants of that floor in
+	// [x - s, x + s] with people inside, one at random.
 	std::vector<Item::Item *> near;
 	for (Item::Item * i : game->items)
 	{
-		if (i == tenant || i->underConstruction || !dynamic_cast<Item::YootTenant *>(i)) continue;
-		if (visitorsInside(i).empty()) continue;
-		if (reachableWithin(i, tenant, score)) near.push_back(i);
+		if (i == tenant || i->underConstruction || i->position.y != floor) continue;
+		if (i->position.x + i->size.x <= x - s || i->position.x >= x + s) continue;
+		if (!visitorsInside(i).empty()) near.push_back(i);
 	}
-	if (near.empty()) return 0;
-	Item::Item * from = near[std::rand() % near.size()];
+	if (near.empty()) return nullptr;
+	return near[std::rand() % near.size()];
+}
+
+int PeopleSystem::callFromTenant(Item::YootTenant * tenant, const YootTenantDef & def, int free, long long now)
+{
+	// T2Tenant::CollectCustomerFromTenant 0x1005f0c0: the people inside a
+	// tenant near the entrance (SelectNearTenant) within the PLDF tenant
+	// score.
+	Item::Item * from = selectNearTenant(tenant, Yoot::customerScore(def, 1));
+	if (!from) return 0;
 	const int econo = Yoot::customerEconoType(def);
 	const unsigned flag = def.customers.specialFlag;
 	return forEachMember(def, free, [&](const MemberDef & m, int count) {
@@ -301,7 +394,7 @@ int PeopleSystem::callFromTenant(Item::YootTenant * tenant, const YootTenantDef 
 			if (got >= count) break;
 			// T2People::CalledInTenant 0x10049550.
 			if (((unsigned)v->yootFlags & flag) != flag) continue;
-			if (v->freeTime(now) <= def.bindMinutes || v->prevTenant == tenant || v->dest) continue;
+			if (v->freeTime(now) <= def.bindMinutes || sameKind(v->prevTenant, tenant)) continue;
 			if (!Yoot::checkWithDemand(v->peopleType, m, econo)) continue;
 			v->dest = tenant;
 			v->startMinute = now;
@@ -315,9 +408,11 @@ int PeopleSystem::callFromTenant(Item::YootTenant * tenant, const YootTenantDef 
 int PeopleSystem::callFromFloor(Item::YootTenant * tenant, const YootTenantDef & def, int free, long long now)
 {
 	// T2Tenant::CollectCustomerFromFloor 0x1005f250 / StopOnHisWay
-	// 0x100494b0: people passing on the tenant's floor within the score
-	// (negative: without the free-time check) turn in, pushing their
-	// destination onto the return stack.
+	// 0x100494b0: people walking on the tenant's floor (the floor tenant's
+	// people) whose position is within the score of the tenant (negative:
+	// without the free-time check) and who are not heading for the same
+	// kind of tenant turn in, pushing their destination onto the return
+	// stack (3 deep).
 	int score = Yoot::customerScore(def, 2);
 	const bool checkFree = score >= 0;
 	score = std::abs(score);
@@ -325,23 +420,8 @@ int PeopleSystem::callFromFloor(Item::YootTenant * tenant, const YootTenantDef &
 	const int left = tenant->position.x, right = tenant->position.x + tenant->size.x;
 	std::vector<YootVisitor *> passing;
 	for (YootVisitor * v : visitorList)
-	{
-		if ((v->phase != YootVisitor::kWalking && v->phase != YootVisitor::kLeaving) || !v->at) continue;
-		// People waiting in a mover queue on the floor (not riding a car).
-		bool onFloor;
-		if (v->at->isElevator())
-		{
-			onFloor = false;
-			if (v->journey.fromFloor == floor)
-				for (Item::Elevator::Queue * q : static_cast<Item::Elevator::Elevator *>(v->at)->queues)
-					if (std::find(q->people.begin(), q->people.end(), v) != q->people.end()) onFloor = true;
-		}
-		else
-			onFloor = v->at->position.y <= floor && floor < v->at->position.y + v->at->size.y;
-		if (!onFloor) continue;
-		const int x = centerX(v->at);
-		if (left - score < x && x < score + right) passing.push_back(v);
-	}
+		if (v->walking && v->curV == floor && Yoot::passesTenant(v->curH, left, right, score) && !sameKind(v->dest, tenant))
+			passing.push_back(v);
 	if (passing.empty()) return 0;
 	const int econo = Yoot::customerEconoType(def);
 	const unsigned flag = def.customers.specialFlag;
@@ -350,20 +430,20 @@ int PeopleSystem::callFromFloor(Item::YootTenant * tenant, const YootTenantDef &
 		for (YootVisitor * v : passing)
 		{
 			if (got >= count) break;
-			if (v->phase == YootVisitor::kStopping) continue;
+			if (v->dest == tenant || !v->walking) continue;
 			if (((unsigned)v->yootFlags & flag) != flag) continue;
 			if (checkFree && v->freeTime(now) <= def.bindMinutes) continue;
-			if (v->prevTenant == tenant || v->dest == tenant) continue;
+			if (sameKind(v->prevTenant, tenant)) continue;
 			if (!Yoot::checkWithDemand(v->peopleType, m, econo)) continue;
 			if (v->returns.size() >= 3) continue;  // SetDestinationToReturn failed
 			v->returns.push_back(std::make_pair(v->dest, v->startMinute));
 			v->dest = tenant;
 			v->startMinute = now;
 			v->goingTo = tenant->prototype->name;
-			if (v->at) v->at->removePerson(v);
+			v->state = Person::kShopping;
+			// ChangeStatus(3): a new route from where the person stands.
 			v->journey.clear();
-			v->phase = YootVisitor::kStopping;
-			v->arriveMinute = now + 1;
+			beginWalk(v, tenant, floor, YootVisitor::kWalkDest);
 			++got;
 		}
 		return got;
@@ -463,7 +543,69 @@ void PeopleSystem::enterTower(YootVisitor * v, long long now)
 	Item::Item * from = entranceFor(v);
 	if (!from || !v->dest) { goOutTower(v); return; }
 	if (from != game->mainLobby) game->eventSystem.facilities.onEnterTower(v);
+	// MoveToLobby 0x10048990: transport 0 appears at the lobby's left
+	// edge, the others at its right edge - 2.
+	v->curH = entranceX(from, v);
+	v->curV = from->position.y;
 	walkTo(v, from, v->dest, now);
+}
+
+int PeopleSystem::entranceX(Item::Item * item, const YootVisitor * v) const
+{
+	if (item->isLobby())
+		return v->peopleType.transport == Yoot::kTransportLobbyLeft ? item->position.x : item->position.x + item->size.x - 2;
+	return centerX(item);
+}
+
+void PeopleSystem::beginWalk(YootVisitor * v, Item::Item * target, int floor, YootVisitor::WalkKind kind)
+{
+	if (v->at) v->at->removePerson(v);
+	v->walking = true;
+	v->walkTarget = target;
+	v->walkKind = kind;
+	v->curV = floor;
+	v->dstH = entranceX(target, v);
+	if (kind != YootVisitor::kWalkNode) v->phase = kind == YootVisitor::kWalkExit ? YootVisitor::kLeaving : YootVisitor::kStopping;
+}
+
+bool PeopleSystem::walkToNode(YootVisitor * v, Item::Item * next, int floor)
+{
+	// Movers and the end of the route are walked to; a lobby on the way is
+	// crossed by the lobby's own atrium walk.
+	if (!enabled() || (!v->journey.atLastNode() && !next->isElevator() && !next->isStairlike())) return false;
+	beginWalk(v, next, floor, YootVisitor::kWalkNode);
+	if (v->curH != v->dstH) return true;
+	v->walking = false;
+	v->walkTarget = nullptr;
+	return false;
+}
+
+void PeopleSystem::walkStep(YootVisitor * v)
+{
+	// T2People::IsReachDestination 0x10049310, once per people idle: 16
+	// units towards the destination; off the ground floor each step costs
+	// IncStress(step / 4).
+	v->facingLeft = v->dstH < v->curH;
+	const int step = Yoot::walkStep(v->curH, v->dstH);
+	if (v->curV != (game->mainLobby ? game->mainLobby->position.y : 0)) v->addStress(step / 4);
+	if (v->curH != v->dstH) return;
+	Item::Item * t = v->walkTarget;
+	v->walking = false;
+	v->walkTarget = nullptr;
+	switch (v->walkKind)
+	{
+	case YootVisitor::kWalkNode:
+		if (v->journey.atLastNode()) v->yootArrived(t);
+		t->addPerson(v);
+		break;
+	case YootVisitor::kWalkDest:
+		if (v->dest) v->dest->addPerson(v);
+		else goOutTower(v);
+		break;
+	case YootVisitor::kWalkExit:
+		goOutTower(v);
+		break;
+	}
 }
 
 void PeopleSystem::walkTo(YootVisitor * v, Item::Item * from, Item::Item * to, long long now)
@@ -483,12 +625,10 @@ void PeopleSystem::walkTo(YootVisitor * v, Item::Item * from, Item::Item * to, l
 	}
 	if (sameFloor)
 	{
-		// A walk along the floor (OpenSky has no walking positions).
-		if (v->at) v->at->removePerson(v);
+		// A walk along the floor.
 		if (from->isLobby() && v->dest) game->eventSystem.facilities.onEnterTower(v);
-		if (v->phase == YootVisitor::kLeaving) { goOutTower(v); return; }
-		v->phase = YootVisitor::kStopping;
-		v->arriveMinute = now + std::max(1, std::abs(centerX(from) - centerX(to)) / 16);
+		beginWalk(v, to, to->isLobby() ? from->position.y : to->position.y,
+			v->phase == YootVisitor::kLeaving ? YootVisitor::kWalkExit : YootVisitor::kWalkDest);
 		return;
 	}
 	// T2People::SolveNoRoute 0x10048c40: +30 stress per try; at 300 the
@@ -505,6 +645,11 @@ void PeopleSystem::walkTo(YootVisitor * v, Item::Item * from, Item::Item * to, l
 
 void PeopleSystem::visitorTick(YootVisitor * v, long long now)
 {
+	if (v->walking)
+	{
+		if (now % Yoot::kPeopleIdleMinutes == 0) walkStep(v);
+		return;
+	}
 	switch (v->phase)
 	{
 	case YootVisitor::kInPool:
@@ -540,6 +685,7 @@ void PeopleSystem::visitorTick(YootVisitor * v, long long now)
 		}
 		break;
 	case YootVisitor::kStopping:
+		// Jumped to the destination (SolveNoRoute gave up).
 		if (now >= v->arriveMinute)
 		{
 			if (v->dest) v->dest->addPerson(v);
@@ -558,6 +704,8 @@ void PeopleSystem::arrived(YootVisitor * v, Item::Item * tenant, bool admitted, 
 		// T2Tenant::EnterTenant: ClearDestination, UpdateEstimation, stay.
 		v->phase = YootVisitor::kInTenant;
 		v->inside = tenant;
+		v->curH = centerX(tenant);
+		v->curV = tenant->position.y;
 		v->dest = nullptr;
 		v->startMinute = leaveMinute;
 		v->noRouteTries = 0;
@@ -567,6 +715,8 @@ void PeopleSystem::arrived(YootVisitor * v, Item::Item * tenant, bool admitted, 
 	}
 	// Not open: T2People::Return and -100 estimate.
 	v->yootEstimate = Yoot::incEstimate(v->yootEstimate, -100);
+	v->curH = centerX(tenant);
+	v->curV = tenant->position.y;
 	v->inside = tenant;
 	v->dest = nullptr;
 	pushOut(v);
@@ -600,6 +750,8 @@ void PeopleSystem::goOutTower(YootVisitor * v)
 {
 	// T2People::GoOutTower 0x10048f40 -> T2Pool::Enter 0x10050610.
 	if (v->at) v->at->removePerson(v);
+	v->walking = false;
+	v->walkTarget = nullptr;
 	for (Item::Item * i : game->itemsByType["parkinglot"])
 	{
 		Item::ParkingLot * lot = dynamic_cast<Item::ParkingLot *>(i);
@@ -607,6 +759,7 @@ void PeopleSystem::goOutTower(YootVisitor * v)
 	}
 	if (v->yootFlags & Yoot::kPeopleNeedsToilet) v->yootEstimate = Yoot::incEstimate(v->yootEstimate, -30);
 	v->yootFinishTrip();
+	++returnedToday[v->yootEstimate > 200 ? 2 : v->yootEstimate > 70 ? 1 : 0];
 	pool.enter(v->peopleType, v->yootEstimate, rngInt);
 	destroy(v);
 }
@@ -630,7 +783,7 @@ void PeopleSystem::itemRemoved(Item::Item * item)
 			else ++k;
 		if (v->prevTenant == item) v->prevTenant = nullptr;
 		const bool walking = v->phase == YootVisitor::kWalking || v->phase == YootVisitor::kLeaving;
-		const bool bound = v->dest == item || v->inside == item || v->at == item;
+		const bool bound = v->dest == item || v->inside == item || v->at == item || v->walkTarget == item;
 		if (bound || (walking && item->canHaulPeople()))
 		{
 			v->dest = nullptr;

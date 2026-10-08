@@ -269,6 +269,7 @@ void Person::Journey::next()
 	item    = nodes.front().item;
 	toFloor = nodes.front().toFloor;
 	assert(item);
+	if (person->yootWalkTo(item, fromFloor)) return;
 	// The last node is the destination tenant, which takes the person in
 	// addPerson (and may hand it straight on), so arrive first.
 	if (nodes.size() == 1 && person->yootRules()) person->yootArrived(item);

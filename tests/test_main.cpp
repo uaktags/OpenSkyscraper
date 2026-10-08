@@ -3931,6 +3931,18 @@ static void testYootStress()
 
 	// Route cost = mover score x floors (Stairs 50, Escalator 30, Simple 15, Large 5).
 	EXPECT(Y::moverRouteScore(15, 10) == 150);
+	// Floor walk (IsReachDestination): 16 units a people idle, the rest on
+	// arrival; StopOnHisWay's window is open on both ends.
+	{
+		int h = 0;
+		EXPECT(Y::walkStep(h, 40) == 16 && h == 16);
+		EXPECT(Y::walkStep(h, 40) == 16 && h == 32);
+		EXPECT(Y::walkStep(h, 40) == 8 && h == 40);
+		EXPECT(Y::walkStep(h, 40) == 0 && h == 40);
+		EXPECT(Y::walkStep(h, 30) == 10 && h == 30);
+		EXPECT(Y::passesTenant(10, 20, 30, 15) && !Y::passesTenant(5, 20, 30, 15) && !Y::passesTenant(45, 20, 30, 15));
+		EXPECT(Y::passesTenant(44, 20, 30, 15) && Y::passesTenant(25, 20, 30, 0));
+	}
 	EXPECT(Y::moverRouteScore(5, -10) == 50);
 	EXPECT(Y::moverRouteScore(50, 1) == 50);
 }

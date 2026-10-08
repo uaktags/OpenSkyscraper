@@ -139,6 +139,16 @@ namespace OT
 		/// to destination.", jump to destination, -150 estimate).
 		bool noRouteTry(int & stress);
 
+		// ---- floor walk ----
+		const int kWalkStep = 16;  ///< units per people idle
+		/// T2People::IsReachDestination 0x10049310, one people idle of a walk
+		/// from `curH` to `dstH`: moves up to 16 units and returns the units
+		/// moved; off the ground floor the step costs IncStress(step / 4).
+		int walkStep(int & curH, int dstH);
+		/// T2People::StopOnHisWay 0x100494b0: a walker at `curH` passes a
+		/// tenant spanning [left, right) within `score` units.
+		bool passesTenant(int curH, int left, int right, int score);
+
 		// ---- P3 route score ----
 		/// T2Mover::CalcScore 0x1003ef20: MoverDef score x |floors|; 0x7fff
 		/// when the mover has no def.
