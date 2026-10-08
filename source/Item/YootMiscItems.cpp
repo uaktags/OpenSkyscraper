@@ -1,6 +1,8 @@
 /* Copyright (c) 2026 OpenSkyscraper Project */
 #include "../Game.h"
 #include "../YootCatalog.h"
+#include "../YootItemArt.h"
+#include "../YootWorldArt.h"
 #include "YootMiscItems.h"
 
 #include <algorithm>
@@ -57,6 +59,20 @@ void SkyBridge::render(sf::RenderTarget & target) const
 	const float left = position.x * 8.0f;
 	const float top = -(position.y + 1) * 36.0f;
 	const float width = size.x * 8.0f;
+	// Skin::Yoot: the View loop of RT_BITMAP 1000 (64x24, windows keyed so
+	// the sky shows through; 1001..1003 are the Outside view facades) over
+	// the world's roof and floor strips, like a floor row.
+	const YootWorldArt * yoot = game->yootSkinArt();
+	const YootPluginView * view = yoot ? yootPluginView(game->app, "SkyBrdge.t2p", kYootWindowKey) : nullptr;
+	if (view && !view->bands.empty() && yoot->hasSlab())
+	{
+		const sf::Color tint = game->lighting.compose(sf::Color::White);
+		yoot->drawRoof(target, left, left + width, top, tint);
+		yootDrawLoop(target, *view, view->band(3), left, top + 8.0f, width, tint);
+		yoot->drawFloorStrip(target, left, left + width, top + 32.0f, tint);
+		game->drawnSprites++;
+		return;
+	}
 	if (texture)
 	{
 		const int h = std::min(24, (int)texture->getSize().y);
