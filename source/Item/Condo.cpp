@@ -286,7 +286,7 @@ void Condo::removeOccupants()
 	// occupant pointers (and Item::removePerson remains assertion-safe).
 	while (!occupants.empty())
 	{
-		std::set<CondoOccupant *>::iterator it = occupants.begin();
+		std::set<CondoOccupant *, SimLess>::iterator it = occupants.begin();
 		CondoOccupant *occupant = *it;
 		occupants.erase(it);
 		if (occupant->at == this)
@@ -299,7 +299,7 @@ void Condo::removePerson(Person *p)
 {
 	assert(p);
 	Item::removePerson(p);
-	for (std::set<CondoOccupant *>::iterator it = occupants.begin(); it != occupants.end(); ++it)
+	for (std::set<CondoOccupant *, SimLess>::iterator it = occupants.begin(); it != occupants.end(); ++it)
 	{
 		if (*it == p)
 		{

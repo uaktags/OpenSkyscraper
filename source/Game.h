@@ -80,6 +80,14 @@ namespace OT {
 
 		bool handleEvent(sf::Event & event);
 		void advance(double dt);
+		/// Headless sim step (--sim, SimHarness): the sim ticks of
+		/// advance() plus the weather roll, with no rendering or input.
+		/// A pending event choice is answered "yes" deterministically.
+		void advanceHeadless(double dt);
+		/// Event log for the headless summary; recording is off in play.
+		bool simRecording = false;
+		std::vector<std::string> simEvents;
+		void recordSimEvent(const std::string & message);
 
 		/// Jump the game clock to `h` (0..24) of the current day. The clock's
 		/// absolute-to-hour mapping is non-linear, so this goes through
@@ -92,9 +100,9 @@ namespace OT {
 
 		Item::Factory itemFactory;
 
-		typedef std::set<Item::Item *> ItemSet;
+		typedef std::set<Item::Item *, SimLess> ItemSet;
 		ItemSet items;
-		typedef std::set<class Person *> PersonSet;
+		typedef std::set<class Person *, SimLess> PersonSet;
 		PersonSet people;
 		typedef std::map<int, ItemSet> ItemSetByInt;
 		typedef std::map<std::string, ItemSet> ItemSetByString;

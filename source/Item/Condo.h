@@ -108,7 +108,7 @@ namespace OT
 
 			Sprite sprite;
 			bool spriteNeedsUpdate;
-			std::set<CondoOccupant *> occupants;
+			std::set<CondoOccupant *, SimLess> occupants;
 			std::priority_queue<CondoOccupant *, std::deque<CondoOccupant *>, CondoOccupant::departsLaterThan> departureQueue;
 			std::priority_queue<CondoOccupant *, std::deque<CondoOccupant *>, CondoOccupant::returnsLaterThan> returnQueue;
 		};

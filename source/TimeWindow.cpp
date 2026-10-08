@@ -298,6 +298,7 @@ void TimeWindow::updateTooltip() {
 void TimeWindow::showMessage(std::string msg)
 {
 	LOG(IMPORTANT, msg.c_str());
+	game->recordSimEvent(msg);
 	message = msg;
 	messageTimer = 3;
 	updateTooltip();

@@ -233,7 +233,7 @@ void VipSystem::advanceGuest()
 	{
 		Item::Hotel::Guest *candidate = NULL;
 		double latestArrival = 0.0;
-		for (std::set<Item::Hotel::Guest *>::const_iterator it = bookedSuite->guests.begin(); it != bookedSuite->guests.end(); ++it)
+		for (std::set<Item::Hotel::Guest *, SimLess>::const_iterator it = bookedSuite->guests.begin(); it != bookedSuite->guests.end(); ++it)
 		{
 			Item::Hotel::Guest *guest = *it;
 			latestArrival = std::max(latestArrival, guest->arrivalTime);

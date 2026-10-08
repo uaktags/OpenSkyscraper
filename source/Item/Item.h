@@ -101,7 +101,7 @@ namespace OT {
 		/// size, in absolute-time units. Subclasses may override.
 		virtual double constructionDuration() const;
 
-		typedef std::set<Person *> People;
+		typedef std::set<Person *, SimLess> People;
 			People people;
 			virtual void addPerson(Person * p);
 			virtual void removePerson(Person * p);

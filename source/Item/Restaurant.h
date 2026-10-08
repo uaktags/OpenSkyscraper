@@ -61,7 +61,7 @@ namespace OT
 			};
 			std::priority_queue<Customer *, std::deque<Customer *>, Customer::laterThan> arrivingCustomers; // Priority queue to facilitate selection of customers spawned by Restaurant due to arrive at tower
 			std::list<Person *> eatingCustomers;															// List (in order of arrival) to facilitate selection of customers due to leave Restaurant
-			typedef std::set<Customer *> Customers;
+			typedef std::set<Customer *, SimLess> Customers;
 			Customers customers;
 			void clearCustomers();
 
@@ -69,7 +69,7 @@ namespace OT
 			{
 				double arrivalTime; // when the customer arrived at the Restaurant
 			};
-			typedef std::map<Person *, CustomerMetadata> CustomerMetadataMap;
+			typedef std::map<Person *, CustomerMetadata, SimLess> CustomerMetadataMap;
 			CustomerMetadataMap customerMetadata;
 
 			Sprite sprite;

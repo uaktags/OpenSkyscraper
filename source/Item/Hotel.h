@@ -70,7 +70,7 @@ namespace OT
 			};
 
 			std::priority_queue<Guest *, std::deque<Guest *>, Guest::laterThan> arrivingGuests;
-			std::set<Guest *> guests;
+			std::set<Guest *, SimLess> guests;
 			Housekeeper *housekeeper;
 
 			virtual void init();

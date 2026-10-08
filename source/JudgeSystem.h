@@ -106,10 +106,10 @@ namespace OT
 
 		/// Visitor pass de-duplication: a person contributes once per day even
 		/// when evaluateAll is also triggered by a rating/facility change.
-		std::map<Person *, int> visitorDaySeen;
+		std::map<Person *, int, SimLess> visitorDaySeen;
 		/// Item pointer -> consecutive bad days. Used by
 		/// reviewUnderperformers to only complain about persistently
 		/// unhappy tenants rather than transient dips.
-		std::map<Item::Item *, int> badDayStreak;
+		std::map<Item::Item *, int, SimLess> badDayStreak;
 	};
 }

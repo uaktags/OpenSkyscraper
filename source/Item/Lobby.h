@@ -34,7 +34,7 @@ namespace OT {
 			virtual int dailyMaintenanceCost() const override { return size.x * 20; }
 
 			/// Per-person atrium walk timer (see advance); mirrors Stairlike.
-			std::map<Person *, double> transitionTimes;
+			std::map<Person *, double, SimLess> transitionTimes;
 		};
 	}
 }

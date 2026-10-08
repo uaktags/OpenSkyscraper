@@ -27,7 +27,7 @@ int frame;
 		/// Clicks outside the sprite pass through to the tenant behind.
 		virtual bool containsPoint(const double2 & pt);
 			
-			std::map<Person *, double> transitionTimes;
+			std::map<Person *, double, SimLess> transitionTimes;
 			virtual void addPerson(Person * p);
 			virtual void removePerson(Person * p);
 		};

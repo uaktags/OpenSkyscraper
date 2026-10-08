@@ -140,7 +140,7 @@ return out;
 
 			Sprite sprite;
 			bool spriteNeedsUpdate;
-			typedef std::set<Worker *> Workers;
+			typedef std::set<Worker *, SimLess> Workers;
 			Workers workers;
 
 			std::priority_queue<Worker *, std::deque<Worker *>, Worker::arrivesLaterThan> arrivalQueue;

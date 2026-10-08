@@ -202,7 +202,7 @@ void Hotel::scheduleGuest(Guest *g)
 }
 void Hotel::clearAll()
 {
-	for (std::set<Guest *>::iterator it = guests.begin(); it != guests.end(); ++it)
+	for (std::set<Guest *, SimLess>::iterator it = guests.begin(); it != guests.end(); ++it)
 	{
 		Guest *guest = *it;
 		releaseParking(guest->parkingUsed);
@@ -264,7 +264,7 @@ void Hotel::advance(double dt)
 
 	// Process guest schedules.
 	double t = game->time.absolute;
-	for (std::set<Guest *>::iterator it = guests.begin(); it != guests.end(); )
+	for (std::set<Guest *, SimLess>::iterator it = guests.begin(); it != guests.end(); )
 	{
 		Guest *g = *it;
 
@@ -465,7 +465,7 @@ void Hotel::encodeXML(tinyxml2::XMLPrinter &xml)
 	xml.PushAttribute("roomState", roomState);
 	xml.PushAttribute("dirtySince", dirtySince);
 
-	for (std::set<Guest *>::iterator it = guests.begin(); it != guests.end(); ++it)
+	for (std::set<Guest *, SimLess>::iterator it = guests.begin(); it != guests.end(); ++it)
 	{
 		Guest *g = *it;
 		xml.OpenElement("guest");

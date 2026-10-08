@@ -19,6 +19,7 @@
 #include "Skin.h"
 #include "YootWorld.h"
 #include "BuildRules.h"
+#include "SimHarness.h"
 #include <map>
 
 #include <TGUI/TGUI.hpp>
@@ -162,6 +163,9 @@ namespace OT
 		std::map<int, RulesProfile> m_yootProfiles;
 		bool m_loadedSimTowerResources;
 		bool m_debugMenu;
+		/// Headless deterministic simulation (--sim); see SimHarness.h.
+		Sim::Options m_sim;
+		int runSim();
 	};
 
 	extern Application * App;

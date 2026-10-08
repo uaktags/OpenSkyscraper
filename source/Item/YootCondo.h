@@ -104,7 +104,7 @@ namespace OT
 			mutable Sprite residentSprite;
 			bool spriteNeedsUpdate;
 
-			std::set<YootCondoOccupant *> occupants;
+			std::set<YootCondoOccupant *, SimLess> occupants;
 			std::priority_queue<YootCondoOccupant *, std::deque<YootCondoOccupant *>, YootCondoOccupant::departsLaterThan> departureQueue;
 			std::priority_queue<YootCondoOccupant *, std::deque<YootCondoOccupant *>, YootCondoOccupant::returnsLaterThan> returnQueue;
 

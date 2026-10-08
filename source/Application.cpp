@@ -121,6 +121,8 @@ Application::Application(int argc, char *argv[])
     bool uiScaleExplicit = settingsLoaded;
     for (int i = 1; i < argc; i++)
     {
+        if (Sim::parseArg(argc, argv, i, m_sim))
+            continue;
         if (strcmp(argv[i], "--debug") == 0)
         {
             logger.setLevel(Logger::DEBUG);
@@ -255,6 +257,15 @@ Application::Application(int argc, char *argv[])
         }
     }
 
+    // Headless sim: seed every rand() consumer before any Game exists and
+    // switch the wall-clock dependent paths to their deterministic form.
+    if (m_sim.enabled)
+    {
+        startNewGame = true;
+        Sim::setDeterministic(true);
+        srand(m_sim.seed);
+    }
+
     // The skin defaults to the ruleset's own era unless --skin was given.
     if (!m_skinExplicit)
         m_skin = defaultSkinForRuleset(m_ruleset);
@@ -290,6 +301,8 @@ int Application::run()
 
     if (exitCode == 0)
         init();
+    if (exitCode == 0 && m_sim.enabled)
+        return runSim();
     if (exitCode == 0)
         loop();
     if (exitCode == 0)
@@ -852,6 +865,8 @@ void Application::init()
     {
         window.create(videoMode, "OpenSkyscraper SFML");
     }
+    if (m_sim.enabled)
+        window.setVisible(false);
     window.setVerticalSyncEnabled(true);
 
     gui.setWindow(window);
@@ -1081,6 +1096,28 @@ void Application::cleanup()
     statesToDelete.clear();
 
     window.close();
+}
+
+/** Runs the headless --sim session on the startup game, then tears the
+ *  states down without the interactive loop or a settings write. */
+int Application::runSim()
+{
+    Game *game = states.empty() ? NULL : dynamic_cast<Game *>(states.top());
+    int code = 2;
+    if (!game)
+        LOG(ERROR, "sim: no game state to simulate");
+    else if (loadGameAtStartup && game->saveFilename != startupLoadPath)
+        LOG(ERROR, "sim: could not load %s", startupLoadPath.c_str());
+    else
+        code = Sim::run(*game, m_sim);
+    while (!states.empty())
+        popState();
+    for (State *state : statesToDelete)
+        delete state;
+    statesToDelete.clear();
+    window.close();
+    running = false;
+    return code;
 }
 
 /** Pushes the given State ontop of the state stack, causing it to receive events. */

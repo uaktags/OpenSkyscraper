@@ -41,7 +41,7 @@ namespace OT {
 				Customer(Cinema *cinema);
 				bool evening;
 			};
-			typedef std::set<Customer *> Customers;
+			typedef std::set<Customer *, SimLess> Customers;
 			Customers customers;
 			void clearCustomers();
 			

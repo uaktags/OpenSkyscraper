@@ -34,7 +34,7 @@ namespace OT {
 			public:
 				Visitor(PartyHall *hall);
 			};
-			typedef std::set<Visitor *> Visitors;
+			typedef std::set<Visitor *, SimLess> Visitors;
 			Visitors visitors;
 			void clearVisitors();
 

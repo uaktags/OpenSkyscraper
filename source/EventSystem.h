@@ -241,7 +241,7 @@ namespace OT
 
 		// --- buried treasure state ---
 		bool   treasureLatched; ///< true = paid/forfeited for this tier
-		std::set<Item::Item *> pendingBuilds; ///< items seen under construction
+		std::set<Item::Item *, SimLess> pendingBuilds; ///< items seen under construction
 
 		// --- rubble ---
 		std::set<long> rubble;

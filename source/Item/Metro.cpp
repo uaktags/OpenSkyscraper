@@ -67,7 +67,7 @@ void Metro::encodeXML(tinyxml2::XMLPrinter &xml)
 	xml.PushAttribute("nextTrainTime", nextTrainTime);
 	xml.PushAttribute("visitorsToday", visitorsToday);
 	xml.PushAttribute("lastVisitorDay", lastVisitorDay);
-	for (std::set<Visitor *>::iterator it = visitors.begin(); it != visitors.end(); ++it) {
+	for (std::set<Visitor *, SimLess>::iterator it = visitors.begin(); it != visitors.end(); ++it) {
 		Visitor *v = *it;
 		xml.OpenElement("visitor");
 		xml.PushAttribute("arrivalTime", v->arrivalTime);
@@ -174,7 +174,7 @@ void Metro::boardReturnedVisitors()
 {
 	// Metro passenger travel is a visitor pool, not a fare source in the EXE.
 	// Boarding removes only visitors that actually reached the platform.
-	for (std::set<Visitor *>::iterator it = visitors.begin(); it != visitors.end();) {
+	for (std::set<Visitor *, SimLess>::iterator it = visitors.begin(); it != visitors.end();) {
 		Visitor *v = *it;
 		if (v->returnedToMetro || v->at == this) {
 			delete v;
@@ -185,7 +185,7 @@ void Metro::boardReturnedVisitors()
 
 void Metro::clearAllVisitors()
 {
-	for (std::set<Visitor *>::iterator it = visitors.begin(); it != visitors.end(); ++it)
+	for (std::set<Visitor *, SimLess>::iterator it = visitors.begin(); it != visitors.end(); ++it)
 		delete *it;
 	visitors.clear();
 }
@@ -219,7 +219,7 @@ void Metro::advance(double dt)
 		if (game->time.hour >= 10.0 && game->time.hour < 17.0 &&
 			visitorsToday < 240 && game->time.checkTick(16.0 / 2600.0) &&
 			rand() % 36 == 0) spawnVisitors(1);
-		for (std::set<Visitor *>::iterator it = visitors.begin(); it != visitors.end(); ++it) {
+		for (std::set<Visitor *, SimLess>::iterator it = visitors.begin(); it != visitors.end(); ++it) {
 			Visitor *v = *it;
 			if (v->state == Person::kCommuting && v->at && v->at != this) {
 				v->state = Person::kShopping;

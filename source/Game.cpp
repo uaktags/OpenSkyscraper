@@ -23,6 +23,7 @@
 #include "OpenGL.h"
 #include "YootRules.h"
 #include "YootPlacementGame.h"
+#include "SimHarness.h"
 
 using namespace OT;
 #ifdef _WIN32
@@ -1026,6 +1027,18 @@ void Game::advanceSimTick(double dt)
 	}
 }
 
+void Game::advanceHeadless(double dt)
+{
+	if (eventChoiceCallback) {
+		recordSimEvent("event choice answered: yes");
+		answerEventChoice(true);
+	}
+	const int simTicks = (speedMode == kFastSpeedMode) ? kFastTicksPerFrame : 1;
+	for (int tick = 0; tick < simTicks; tick++)
+		advanceSimTick(dt / simTicks);
+	sky.advance(dt);
+}
+
 void Game::advance(double dt)
 {
 	sf::RenderWindow & win = app.window;
@@ -1531,6 +1544,8 @@ void Game::autosaveIfDue()
 {
 	// Policy ported from OpenSkyWeb (src/core/autosave.js): snapshot on an
 	// in-game day change, throttled to at most one write per 60 real seconds.
+	// Headless runs (--sim) never autosave: the throttle reads the wall clock.
+	if (Sim::deterministic()) return;
 	const int day = (int)floor(time.absolute);
 	if (day == lastAutosaveDay) return;
 	const double now = autosaveWallClock();
@@ -2012,6 +2027,7 @@ void Game::setRating(int r)
 	if (rating != r) {
 		bool improved = (r > rating);
 		rating = r;
+		recordSimEvent("rating " + std::to_string(rating));
 		if (improved) {
 			//TODO: show window
 			LOG(IMPORTANT, "rating increased to %i", rating);
@@ -3066,6 +3082,9 @@ void Game::pumpRouteBuilds()
 		Item::Item * item = routeBuildQueue.back();
 		routeBuildQueue.pop_back();
 		item->computeLobbyRoute();
+		// Headless runs (--sim) drain the queue: a wall-clock budget
+		// would make route timing depend on host speed.
+		if (Sim::deterministic()) continue;
 		if (std::chrono::steady_clock::now() - start > budget) break;
 	}
 }

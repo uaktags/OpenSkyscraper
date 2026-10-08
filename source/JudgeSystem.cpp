@@ -352,7 +352,7 @@ void JudgeSystem::evaluateAll(Game * game)
 			id == "hotel_suite" || id == "hotel" || id == "fastfood" ||
 			id == "restaurant" || id == "shop" || id == "cinema" ||
 			id == "partyhall";
-		std::map<Person *, int>::iterator seen = visitorDaySeen.find(person);
+		std::map<Person *, int, SimLess>::iterator seen = visitorDaySeen.find(person);
 		if (seen != visitorDaySeen.end() && seen->second == day) continue;
 		visitorDaySeen[person] = day;
 		++lastCounts.dailyArrivals;
@@ -366,7 +366,7 @@ void JudgeSystem::evaluateAll(Game * game)
 		else if (id == "cinema" || id == "partyhall")
 			++lastCounts.dailyLeisureArrivals;
 	}
-	for (std::map<Person *, int>::iterator p = visitorDaySeen.begin();
+	for (std::map<Person *, int, SimLess>::iterator p = visitorDaySeen.begin();
 	     p != visitorDaySeen.end(); )
 	{
 		if (game->people.find(p->first) == game->people.end())
@@ -510,7 +510,7 @@ void JudgeSystem::reviewUnderperformers(Game * game)
 
 	// Build the current set of underperformers so we can prune stale
 	// entries below.
-	std::set<Item::Item *> stillBad;
+	std::set<Item::Item *, SimLess> stillBad;
 	for (Game::ItemSet::iterator it = game->items.begin(); it != game->items.end(); ++it)
 	{
 		Item::Item * item = *it;
@@ -545,7 +545,7 @@ void JudgeSystem::reviewUnderperformers(Game * game)
 
 	// Decay/clear streaks for items that recovered, and prune entries for
 	// items that have been removed from the world.
-	for (std::map<Item::Item *, int>::iterator it = badDayStreak.begin();
+	for (std::map<Item::Item *, int, SimLess>::iterator it = badDayStreak.begin();
 	     it != badDayStreak.end(); )
 	{
 		if (stillBad.find(it->first) == stillBad.end())

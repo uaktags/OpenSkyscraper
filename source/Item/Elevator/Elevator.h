@@ -98,7 +98,7 @@ namespace OT {
 				/// dialog). When false the shaft interior is transparent.
 				bool showShaft = true;
 
-				typedef std::set<Car *> Cars;
+				typedef std::set<Car *, SimLess> Cars;
 				Cars cars;
 				void clearCars();
 				void addCar(int floor);
@@ -112,7 +112,7 @@ namespace OT {
 				virtual void addPerson(Person * p);
 				virtual void removePerson(Person * p);
 
-				typedef std::set<Queue *> Queues;
+				typedef std::set<Queue *, SimLess> Queues;
 				Queues queues;
 				Queue * getQueue(int floor, Direction dir);
 				void cleanQueues();

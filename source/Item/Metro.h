@@ -54,7 +54,7 @@ namespace OT {
 				};
 			};
 
-			std::set<Visitor *> visitors;
+			std::set<Visitor *, SimLess> visitors;
 
 			Sprite station;
 			Sprite platform;
