@@ -81,7 +81,8 @@ namespace OT
 		bool hasLobbyView(int height) const;
 		/// Lobby interior: the fixed left part (cut so the loop starts on a
 		/// unit u % 8 == 7) then the 256 px loop, phase-locked to unit 0.
-		void drawLobbyView(sf::RenderTarget & target, int height, float x0, float x1, float top, sf::Color tint) const;
+		/// `lobbyStart` false: a run after a tenant, the loop only.
+		void drawLobbyView(sf::RenderTarget & target, int height, float x0, float x1, float top, sf::Color tint, bool lobbyStart = true) const;
 
 		bool hasSides() const { return m_sidesReady; }
 		/// Kegon overrides T2WorldDef::DrawOptionObj (0x100725e0) and

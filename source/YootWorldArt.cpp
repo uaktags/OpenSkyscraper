@@ -399,13 +399,13 @@ bool YootWorldArt::hasLobbyView(int height) const
 	       findRect(m_floorMap, "View", 101000 + height * 100, loop);
 }
 
-void YootWorldArt::drawLobbyView(sf::RenderTarget & target, int height, float x0, float x1, float top, sf::Color tint) const
+void YootWorldArt::drawLobbyView(sf::RenderTarget & target, int height, float x0, float x1, float top, sf::Color tint, bool lobbyStart) const
 {
 	sf::IntRect left, loop;
 	if (!m_floorViewReady || !findRect(m_floorMap, "View", 1000 + height * 100, left) ||
 	    !findRect(m_floorMap, "View", 101000 + height * 100, loop))
 		return;
-	drawViewRun(target, &left, loop, x0, x1, top, tint);
+	drawViewRun(target, lobbyStart ? &left : nullptr, loop, x0, x1, top, tint);
 }
 
 void YootWorldArt::drawTents(sf::RenderTarget & target, float left, float right, float bottom, sf::Color tint) const
