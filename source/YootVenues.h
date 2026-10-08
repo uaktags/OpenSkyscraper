@@ -183,6 +183,16 @@ namespace OT
 		/// Type (MREV track 0..3) of the enabled train stopped at `minute`,
 		/// or -1; the world's 8000 `MET1`..`MET4` sprite is drawn for it.
 		int subwayStoppedTrainType(const std::vector<std::pair<int, int> > & trains, int level, int minute);
+		/// A train on the track row: MREV track (MET1..MET4) and left unit.
+		struct SubwayTrainPos { int track; int unit; };
+		/// T2MetroRailway FUN_1003dc80: every MREV train runs every day,
+		/// starting worldWidth / 4 minutes before its arrival at offset
+		/// -worldWidth and moving right one unit a tick (4 a minute); one
+		/// whose track < level stops at the station for 8 minutes; it is
+		/// gone once its left edge reaches worldWidth. `stationUnit` is the
+		/// Subway's left unit (worldWidth / 2 with none), `tick` 0..3.
+		std::vector<SubwayTrainPos> subwayTrains(const std::vector<std::pair<int, int> > & trains, int level,
+		                                         int worldWidth, int stationUnit, int minute, int tick);
 		/// Subway.t2p FUN_1000d1e0/d280: pattern 0 closed, 1 empty,
 		/// 2 occupied, 3 at half capacity or more.
 		int subwayPattern(bool open, int inside, int capacity);

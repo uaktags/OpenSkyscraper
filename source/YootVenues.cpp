@@ -291,6 +291,25 @@ namespace OT
 			return best;
 		}
 
+		std::vector<SubwayTrainPos> subwayTrains(const std::vector<std::pair<int, int> > & trains, int level,
+		                                         int worldWidth, int stationUnit, int minute, int tick)
+		{
+			std::vector<SubwayTrainPos> out;
+			for (const auto & t : trains)
+			{
+				const int arrive = t.first;
+				const bool stops = t.second < level;
+				if (minute < arrive - worldWidth / 4) continue;
+				int off;
+				if (minute < arrive) off = tick + 4 * (minute - arrive);
+				else if (stops && minute < arrive + kSubwayStopMinutes) off = 0;
+				else off = tick + 4 * (minute - (stops ? arrive + kSubwayStopMinutes : arrive));
+				if (stationUnit + off >= worldWidth) continue;
+				out.push_back({t.second, stationUnit + off});
+			}
+			return out;
+		}
+
 		int subwayPattern(bool open, int inside, int capacity)
 		{
 			if (!open) return 0;

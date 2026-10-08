@@ -1227,6 +1227,7 @@ void Game::advance(double dt)
 
 	//Draw the remaining items in the building
 	for (int layer = 0; layer < 2; layer++) {
+		if (layer == 1) eventSystem.drawUnderMovers(win);
 		for (ItemSet::iterator i = items.begin(); i != items.end(); i++) {
 			if ((*i)->layer != layer) continue;
 			const int2 & vp = (*i)->getPositionPixels();

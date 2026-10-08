@@ -116,6 +116,7 @@ namespace OT
 		YootExtrasSystem extras;
 		/// Layer-1 world sprites (the Kegon kite), drawn before the tower.
 		void drawBehindTower(sf::RenderTarget & target) const { if (yoot) extras.drawBehindTower(target); }
+		void drawUnderMovers(sf::RenderTarget & target) const { if (yoot) venues.drawTrains(target); }
 		/// YootTower visitor pool and walking visitors (P4). Inert elsewhere.
 		PeopleSystem people;
 		/// True while the YootTower T2EV scheduler drives the calendar.

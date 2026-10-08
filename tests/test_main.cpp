@@ -5244,6 +5244,21 @@ static void testYootVenues()
 	EXPECT(Y::subwayStoppedTrainType(metro.trains, 1, 410) == -1);  // type >= 1 not enabled
 	EXPECT(Y::subwayStoppedTrainType(metro.trains, 4, 410) >= 1);
 	EXPECT(Y::subwayStoppedTrainType(metro.trains, 4, 409) == -1);
+	{
+		// MREV run (FUN_1003dc80), Tokyo 368 units, station at unit 84.
+		const std::vector<std::pair<int, int> > one = {{600, 0}};
+		auto at = [&](int level, int minute, int tick) {
+			const std::vector<Y::SubwayTrainPos> v = Y::subwayTrains(one, level, 368, 84, minute, tick);
+			return v.empty() ? INT_MIN : v[0].unit;
+		};
+		EXPECT(at(1, 507, 3) == INT_MIN);         // starts 92 minutes early
+		EXPECT(at(1, 508, 0) == 84 - 368);
+		EXPECT(at(1, 599, 3) == 83);
+		EXPECT(at(1, 600, 0) == 84 && at(1, 607, 3) == 84);   // stops 8 minutes
+		EXPECT(at(1, 609, 1) == 89);
+		EXPECT(at(0, 600, 0) == 84 && at(0, 601, 0) == 88);   // passes through
+		EXPECT(at(1, 678, 3) == 367 && at(1, 679, 0) == INT_MIN);
+	}
 	EXPECT(Y::subwayOpen(390, 390, 1439) && !Y::subwayOpen(389, 390, 1439) && !Y::subwayOpen(1439, 390, 1439));
 	EXPECT(Y::subwayPattern(false, 5, 100) == 0 && Y::subwayPattern(true, 0, 100) == 1);
 	EXPECT(Y::subwayPattern(true, 49, 100) == 2 && Y::subwayPattern(true, 50, 100) == 3);

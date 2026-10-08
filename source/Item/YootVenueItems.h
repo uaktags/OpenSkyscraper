@@ -332,8 +332,6 @@ namespace OT {
 		private:
 			Sprite viewSprite;
 			const sf::Texture * view = nullptr;
-			Sprite trainSprite;       ///< Skin::Yoot: the stopped train
-			void showTrain(bool shown);
 		};
 	}
 }

@@ -41,6 +41,9 @@ namespace OT
 		/// Per-frame: runs minuteTick once per new game minute.
 		void advance();
 		void draw(sf::RenderTarget & target) const;
+		/// Skin::Yoot: the MREV trains on the track row (layer 2, under the
+		/// movers and people).
+		void drawTrains(sf::RenderTarget & target) const;
 
 		void encodeXML(tinyxml2::XMLPrinter & xml) const;
 		void decodeXML(tinyxml2::XMLElement & xml);

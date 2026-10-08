@@ -14,7 +14,9 @@
 #include "YootCatalog.h"
 #include "YootFacilities.h"
 #include "YootRules.h"
+#include "YootItemArt.h"
 #include "YootWorld.h"
+#include "YootWorldArt.h"
 
 #include <algorithm>
 #include <climits>
@@ -924,6 +926,39 @@ void VenueSystem::draw(sf::RenderTarget & target) const
 			s.setPosition({(unit - profile.unitOriginX) * 8.f, 34.f});
 			target.draw(s);
 		}
+	}
+}
+
+void VenueSystem::drawTrains(sf::RenderTarget & target) const
+{
+	const YootWorldArt * art = game->yootSkinArt();
+	if (!enabled() || !art) return;
+	const RulesProfile & profile = game->activeRules.profile();
+	YootMetroDef metro;
+	bool have = false;
+	for (const YootEventSpec & e : profile.events)
+		if (decodeYootMetro(e, metro)) { have = true; break; }
+	if (!have || profile.worldWidth <= 0) return;
+	// The run follows the clock in ticks (4 a minute); the station is the
+	// Subway's left edge, the world centre without one (SetStation).
+	const double minutes = std::max(0.0, game->time.hour * 60.0);
+	const int minute = std::min(1439, (int)std::floor(minutes));
+	const int tick = std::min(3, (int)std::floor((minutes - minute) * 4.0));
+	Item::Subway * s = firstBuilt<Item::Subway>(game, "subway");
+	const int station = s ? s->getPosition().x + profile.unitOriginX : profile.worldWidth / 2;
+	const int level = s ? s->level : 0;
+	// 320x32 at the top of the bottom row (WORLDDEF bottomFloorLine), the
+	// Subway's platform row; its 4 px floor strip stays visible.
+	const float top = float(-profile.lowestFloor * 36);
+	static const char * kParts[] = {"MET1", "MET2", "MET3", "MET4"};
+	for (const Yoot::SubwayTrainPos & t : Yoot::subwayTrains(metro.trains, level, profile.worldWidth, station, minute, tick))
+	{
+		const YootPluginView * v = yootPluginView(game->app, yootWorldPluginFile(art->worldId()),
+			sf::Color::Transparent, 8000, 8000, kParts[std::max(0, std::min(3, t.track))]);
+		if (!v || v->bands.empty()) continue;
+		sf::Sprite sprite(v->texture, v->band(0));
+		sprite.setPosition({float((t.unit - profile.unitOriginX) * 8), top});
+		target.draw(sprite);
 	}
 }
 
