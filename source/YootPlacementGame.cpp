@@ -165,6 +165,10 @@ bool Yoot::constructSkyBridge(Game & game, Item::AbstractPrototype * proto, int2
 		game.timeWindow.showMessage("Cannot place item there. " + reason + ".");
 		return false;
 	}
+	// Like every tenant, the bridge gets Floor tenants under its cells (the
+	// .bld unit map holds both ids), charged per empty cell: the oracle paid
+	// $5,000 + $500 x width ($25,000 for 40 units, $20,000 for 30).
+	game.extendFloor(pos.y, r.left - p.unitOriginX, r.right - p.unitOriginX);
 	Item::Item * bridge = placeBridge(game, proto, r.left - p.unitOriginX, pos.y, r.right - r.left);
 	game.transferFunds(-proto->price, "construction", proto->name); // CalcPayment: flat (no attr 0x2000)
 	game.playOnce("simtower/construction/normal");

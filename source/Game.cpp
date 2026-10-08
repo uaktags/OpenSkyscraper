@@ -1646,7 +1646,6 @@ bool Game::repairFloorCoverage()
 	for (ItemSet::iterator i = items.begin(); i != items.end(); i++) {
 		Item::Item * item = *i;
 		if (item->prototype->icon == ICON_FLOOR) continue;
-		if (item->prototype->id == "skybridge") continue; // spans a hole, no slab
 		// Loaded geometry is retained verbatim, but repair must never create
 		// a slab outside the active ruleset to support it.
 		if (!activeRules.allowsHorizontalFootprint(item->position.x, item->size.x)) {

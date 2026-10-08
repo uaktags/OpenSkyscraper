@@ -4250,10 +4250,11 @@ static void testBldShippedSaves()
 		const std::string bridged =
 			"<tower funds=\"9000000\" rating=\"1\" time=\"30.5\" ruleset=\"yoottower\" world=\"tokyo\" yootSecretItems=\"1\" yootTraffic=\",3:400\">"
 			"<item type=\"lobby\" x=\"-40\" y=\"0\" width=\"80\" height=\"1\"/>"
-			"<item type=\"floor\" x=\"-40\" y=\"8\" width=\"80\" holes=\"-20:20\" buildDay=\"12\"/>"
+			"<item type=\"floor\" x=\"-40\" y=\"7\" width=\"80\" holes=\"-20:20\" buildDay=\"12\"/>"
+			"<item type=\"floor\" x=\"-40\" y=\"8\" width=\"80\"/>"
 			"<item type=\"skybridge\" x=\"-20\" y=\"8\" width=\"40\" buildDay=\"25\"/></tower>";
 		EXPECT(parseTowerXml(bridged, state, error));
-		EXPECT(state.items.size() == 3 && state.items[1].holes.size() == 1 && state.items[2].buildDay == 25);
+		EXPECT(state.items.size() == 4 && state.items[1].holes.size() == 1 && state.items[3].buildDay == 25);
 		EXPECT(exportTower(state, tokyo, exported, exportReport, error, &yootTestPlugins()));
 		EXPECT(exportReport.imported["skybridge"] == 1 && exportReport.dropped.empty());
 		EXPECT(exported.f9c == 1 && exported.trafficMap.size() >= 8 && exported.trafficMap[4] == 3 && exported.trafficMap[6] == (400 & 0xff));
@@ -4264,7 +4265,8 @@ static void testBldShippedSaves()
 		EXPECT(floorRuns == 2);
 		EXPECT(toTowerXml(reread, bldTestPrototypes, again, againReport, error));
 		EXPECT(again.find("type=\"skybridge\" x=\"-20\" y=\"8\" evaluation=\"50.0\" width=\"40\" buildDay=\"25\"") != std::string::npos);
-		EXPECT(again.find("type=\"floor\" x=\"-40\" y=\"8\" evaluation=\"50.0\" width=\"80\" holes=\"-20:20\"") != std::string::npos);
+		EXPECT(again.find("type=\"floor\" x=\"-40\" y=\"7\" evaluation=\"50.0\" width=\"80\" holes=\"-20:20\"") != std::string::npos);
+		EXPECT(again.find("type=\"floor\" x=\"-40\" y=\"8\" evaluation=\"50.0\" width=\"80\"/>") != std::string::npos);
 		EXPECT(again.find("yootSecretItems=\"1\"") != std::string::npos && again.find("yootTraffic=\",3:400") != std::string::npos);
 	}
 

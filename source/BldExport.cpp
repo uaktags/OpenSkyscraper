@@ -359,22 +359,17 @@ namespace Bld {
 			if (!inGrid(area)) { drop(it.type, "outside the world grid"); continue; }
 			const int row = area.bottom - 1;   // the slab under the bottom floor
 			const int under = slabAt(row, area.left);
-			if (it.type == "skybridge")
-			{
-				// Spans the gap between two slabs: no floor under it.
-				Tenant & t = newTenant(*p, area, false);
-				t.patIndex = 3;                         // BuildFinish FUN_1000c3f0
-				t.estimate = 0;
-				t.hasBelongList = 0;
-				if (it.buildDay >= 0) t.buildDay = it.buildDay;
-				report.imported[it.type]++;
-				continue;
-			}
 			if (under < 0 || slabAt(row, area.right - 1) != under) { drop(it.type, "not on one floor slab"); continue; }
 			Tenant & t = newTenant(*p, area, false);
 			t.ce.ids = wordArray({(uint16_t)(1000 + under)});
 			if (it.buildDay >= 0) t.buildDay = it.buildDay;
-			if (it.type == "office" || it.type == "apartment")
+			if (it.type == "skybridge")
+			{
+				t.patIndex = 3;                         // BuildFinish FUN_1000c3f0
+				t.estimate = 0;
+				t.hasBelongList = 0;
+			}
+			else if (it.type == "office" || it.type == "apartment")
 			{
 				t.hdr.status = it.occupied ? 10 : 8;    // contracted / for rent
 				t.estimate = (int16_t)(it.yootEstimate > 0 ? it.yootEstimate : (it.occupied ? 300 : 0));
