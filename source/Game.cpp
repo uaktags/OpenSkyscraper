@@ -22,6 +22,7 @@
 #include "Item/Escalator.h"
 #include "OpenGL.h"
 #include "YootRules.h"
+#include "YootPlacementGame.h"
 
 using namespace OT;
 #ifdef _WIN32
@@ -713,9 +714,13 @@ bool Game::handleEvent(sf::Event & event)
 			}
 			else if (itemBelowCursor) {
 				if (selectedTool == "bulldozer") {
-					if (itemBelowCursor->prototype->icon == ICON_LOBBY || itemBelowCursor->prototype->icon == ICON_FLOOR || itemBelowCursor->prototype->icon == ICON_METRO) {
+					// YootTower: floors go top-down / bottom-up, parking from the outside (step 13).
+					std::string yootReason;
+					const bool yootOk = Yoot::removalAllowed(*this, itemBelowCursor, yootReason);
+					const bool yootFloor = activeRules.profile().yootWorld && itemBelowCursor->prototype->icon == ICON_FLOOR;
+					if (!yootOk || (!yootFloor && (itemBelowCursor->prototype->icon == ICON_LOBBY || itemBelowCursor->prototype->icon == ICON_FLOOR || itemBelowCursor->prototype->icon == ICON_METRO))) {
 						playOnce("simtower/construction/impossible");
-						timeWindow.showMessage("Cannot bulldoze " + itemBelowCursor->prototype->name);
+						timeWindow.showMessage(yootOk ? "Cannot bulldoze " + itemBelowCursor->prototype->name : yootReason);
 						break;
 					}
 					LOG(DEBUG, "destroy %s", itemBelowCursor->desc().c_str());
@@ -2283,7 +2288,10 @@ bool Game::constructToolAt(int2 pos)
 {
 	toolPosition = pos;
 	const int footprintHeight = toolPrototype->icon == ICON_LOBBY ? lobbyToolHeight() : toolPrototype->size.y;
-	if (!activeRules.allowsFootprint(pos.x, pos.y, toolPrototype->size.x, footprintHeight)) {
+	// YootTower final items and the subway leave the floor area (step 13).
+	const bool yootSpecial = Yoot::usesSpecialFootprint(*this, toolPrototype);
+	if (!(yootSpecial ? activeRules.allowsSpecialFootprint(pos.x, pos.y, toolPrototype->size.x, footprintHeight)
+	                  : activeRules.allowsFootprint(pos.x, pos.y, toolPrototype->size.x, footprintHeight))) {
 		const std::string reason = "Footprint is outside the " +
 			std::string(activeRules.displayName()) + " build boundary";
 		LOG(DEBUG, "cannot construct %s at %ix%i: %s",
@@ -2357,6 +2365,9 @@ if (!handled) {
 	int minFloorX = INT_MAX;
 	int maxFloorX = INT_MIN;
 	for (int i = 0; i < toolPrototype->size.y; ++i) {
+		const int f = toolPosition.y + i;
+		if (yootSpecial && (f < activeRules.profile().lowestFloor || f > activeRules.profile().highestFloor))
+			continue; // no slab outside the floor area (addItem fills in)
 		if (!canExtendFloor(*this, toolPosition.y + i, toolPosition.x,
 		                    toolPosition.x + toolPrototype->size.x)) {
 			constructionBlocked = true;
@@ -2405,10 +2416,15 @@ if (!handled) {
 		constructionBlocked = true;
 		blockReason = toolPrototype->name + " can only be placed once";
 	}
+	if (!constructionBlocked) {
+		// YootTower L1/L2/M6/I7 (top floor, subway, lobby, parking).
+		blockReason = Yoot::placementError(*this, toolPrototype, toolPosition.x, toolPosition.y, footprintHeight);
+		constructionBlocked = !blockReason.empty();
+	}
 
 	const int lowestFloor = activeRules.profile().lowestFloor;
-	if (toolPosition.y < lowestFloor &&
-	    (toolPrototype->icon != ICON_METRO || activeRules.profile().yootWorld)) {
+	// The YootTower subway sits below the lowest floor (placementError).
+	if (toolPosition.y < lowestFloor && toolPrototype->icon != ICON_METRO) {
 			constructionBlocked = true;
 			blockReason = "Cannot build below floor B" + std::to_string(-lowestFloor);
 		}
@@ -2690,7 +2706,8 @@ if (!handled) {
 
 			// Construct floors
 			for (int i = 0; i < toolPrototype->size.y; i++)
-				extendFloor(toolPosition.y + i, toolPosition.x, toolPosition.x + toolPrototype->size.x);
+				if (!yootSpecial || activeRules.profile().allowsCell(toolPosition.x, toolPosition.y + i))
+					extendFloor(toolPosition.y + i, toolPosition.x, toolPosition.x + toolPrototype->size.x);
 
 			if (toolPrototype->icon == ICON_LOBBY) {
 				// Look for existing lobby to extend
@@ -2862,7 +2879,8 @@ void Game::cancelBatchDrag()
 
 bool Game::validateBatchCell(Item::AbstractPrototype * proto, int x, int y, std::string & reason, const std::set<int> & simulatedSlabs) const
 {
-	if (!activeRules.allowsFootprint(x, y, proto->size.x, proto->size.y)) {
+	if (!(Yoot::usesSpecialFootprint(*this, proto) ? activeRules.allowsSpecialFootprint(x, y, proto->size.x, proto->size.y)
+	                                               : activeRules.allowsFootprint(x, y, proto->size.x, proto->size.y))) {
 		reason = "Footprint is outside the " +
 			std::string(activeRules.displayName()) + " build boundary";
 		return false;
@@ -2884,6 +2902,8 @@ bool Game::validateBatchCell(Item::AbstractPrototype * proto, int x, int y, std:
 			return false;
 		}
 	}
+	reason = Yoot::placementError(*this, proto, x, y, proto->size.y);
+	if (!reason.empty()) return false;
 	const int lowestFloor = activeRules.profile().lowestFloor;
 	if (y < lowestFloor) { reason = "Cannot build below floor B" + std::to_string(-lowestFloor); return false; }
 	if (metroStation != NULL && y < metroStation->position.y) {
