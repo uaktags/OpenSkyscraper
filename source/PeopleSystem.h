@@ -15,7 +15,7 @@ namespace tinyxml2 { class XMLPrinter; class XMLElement; }
 namespace OT
 {
 	struct YootTenantDef;
-	namespace Item { class Item; class YootTenant; class YootFacility; namespace Elevator { class Elevator; } }
+	namespace Item { class Item; class YootTenant; class YootFacility; class Hotel; class FrontDesk; namespace Elevator { class Elevator; } }
 
 	/** A YootTower visitor called from the pool (T2People with a
 	 * T2PeopleType): it waits in the pool until its start minute, enters
@@ -125,6 +125,15 @@ namespace OT
 		/// Visitors inside `item` (status 11), in the item's stable order.
 		std::vector<YootVisitor *> visitorsIn(Item::Item * item) const;
 
+		// --- hotel guests (YootHotelGuests.cpp; game-parity.md W4, E7) ---
+		/// The rooms' guests are pool people (true when the pool runs).
+		bool hotelGuests() const;
+		/// A guest reaches its room / the Front Desk queue.
+		void roomEnter(Item::Hotel * room, YootVisitor * v);
+		void deskEnter(Item::FrontDesk * desk, YootVisitor * v);
+		/// Room art: the guests in the room, asleep (33) or up (34).
+		void roomLook(const Item::Hotel * room, int & in, int & asleep, int & up) const;
+
 		/// The tenant took the visitor in (status 11) or turned it away.
 		void arrived(YootVisitor * v, Item::Item * tenant, bool admitted, long long leaveMinute);
 		/// T2Tenant::PushOutPeople 0x1005f720: the visitor leaves `tenant`.
@@ -161,6 +170,22 @@ namespace OT
 		std::map<std::string, YootTenantDef> venueDefs;
 		std::map<std::string, bool> venueDefValid;
 		Item::Item * collectDest = nullptr;  ///< collectVenue: where the called walk to
+
+		/// A guest room's stay (T2Tenant status 30..35, +0x88 outing flag,
+		/// the belong list of guests, the linked desk).
+		struct HotelStay
+		{
+			int status = 30;
+			std::vector<YootVisitor *> party;
+			Item::FrontDesk * desk = nullptr;
+		};
+		std::map<Item::Item *, HotelStay> stays;
+		std::map<Item::Item *, bool> roomOuting;  ///< +0x88 (kept across stays)
+		void hotelTick(long long now);
+		void roomIdle(Item::Hotel * room, int minute, long long now);
+		void deskIdle(Item::FrontDesk * desk, long long now);
+		bool callGuests(Item::Hotel * room, HotelStay & s, Item::FrontDesk * desk, long long now);
+		void leaveParty(YootVisitor * v);
 
 		bool ensurePool();
 		void minuteTick(long long absMinute);

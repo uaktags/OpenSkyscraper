@@ -26,6 +26,8 @@ namespace OT {
 
 			Yoot::FrontDeskLedger ledger;
 			int linkedRooms = 0;
+			/// A guest joins the check-in queue (PeopleSystem::deskEnter).
+			virtual void addPerson(Person * p);
 			int openMinute() const;
 			int closeMinute() const;
 			bool isOpen(int minuteOfDay) const;

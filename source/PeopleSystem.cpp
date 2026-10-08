@@ -87,6 +87,8 @@ void PeopleSystem::reset()
 	pendingPool.clear();
 	routeCache.clear();
 	tables.clear();
+	stays.clear();
+	roomOuting.clear();
 	calledToday = enteredToday = 0;
 	returnedToday[0] = returnedToday[1] = returnedToday[2] = 0;
 }
@@ -182,6 +184,7 @@ void PeopleSystem::minuteTick(long long m)
 	for (YootVisitor * v : list)
 		if (std::find(visitorList.begin(), visitorList.end(), v) != visitorList.end())
 			visitorTick(v, m);
+	hotelTick(m);
 }
 
 // ------------------------------------------------------------------ routes
@@ -850,6 +853,7 @@ void PeopleSystem::goOutTower(YootVisitor * v)
 
 void PeopleSystem::destroy(YootVisitor * v)
 {
+	leaveParty(v);
 	std::vector<YootVisitor *>::iterator it = std::find(visitorList.begin(), visitorList.end(), v);
 	if (it != visitorList.end()) visitorList.erase(it);
 	delete v;
@@ -857,6 +861,10 @@ void PeopleSystem::destroy(YootVisitor * v)
 
 void PeopleSystem::itemRemoved(Item::Item * item)
 {
+	stays.erase(item);
+	roomOuting.erase(item);
+	for (std::map<Item::Item *, HotelStay>::iterator s = stays.begin(); s != stays.end(); ++s)
+		if (s->second.desk == item) s->second.desk = nullptr;
 	// T2People::TenantRemoved: people bound for or inside the item, and
 	// everyone on a route (whose nodes may name the item), go home.
 	const std::vector<YootVisitor *> list = visitorList;
@@ -897,6 +905,7 @@ void PeopleSystem::decodeXML(tinyxml2::XMLElement & xml)
 {
 	for (YootVisitor * v : visitorList) delete v;
 	visitorList.clear();
+	stays.clear();
 	pool = Yoot::Pool();
 	lastMinute = -1;
 	const char * s = xml.Attribute("yootPool");

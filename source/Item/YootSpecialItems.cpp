@@ -1,5 +1,6 @@
 /* Copyright (c) 2026 OpenSkyscraper Project */
 #include "../Game.h"
+#include "../PeopleSystem.h"
 #include "../YootCatalog.h"
 #include "YootSpecialItems.h"
 
@@ -10,6 +11,12 @@ using namespace OT;
 using namespace OT::Item;
 
 // ---------------------------------------------------------------- front desk
+
+void FrontDesk::addPerson(Person * p)
+{
+	YootFacility::addPerson(p);
+	if (YootVisitor * v = dynamic_cast<YootVisitor *>(p)) game->eventSystem.people.deskEnter(this, v);
+}
 
 int FrontDesk::openMinute() const
 {

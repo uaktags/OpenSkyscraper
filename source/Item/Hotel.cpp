@@ -1,5 +1,6 @@
 /* Copyright © 2024 */
 #include "../Game.h"
+#include "../PeopleSystem.h"
 #include "../YootRules.h"
 #include "../YootSpecials.h"
 #include "../Math/Rand.h"
@@ -183,6 +184,7 @@ int Hotel::currentFrame() const
 		if (g->state == Person::kResting) ++asleep;
 		else if (game->time.absolute >= g->wakeTime) ++up;
 	}
+	game->eventSystem.people.roomLook(this, in, asleep, up);
 	const Yoot::RoomLook look = Yoot::roomLook(roomState == kOccupied, roomState == kDirty || roomState == kInfested, in, asleep, up);
 	const int kinds = std::max(1, (int)yootView->bands.size() / 5);
 	return Yoot::roomPatternIndex(look, yootKind, kinds);
@@ -273,7 +275,9 @@ void Hotel::advance(double dt)
 	// YootTower: a dirty room waits for a Housekeeping maid, and a room that
 	// depends on the Front Desk gets guests only while a desk links it (W4).
 	const bool yoot = prototype->yoot && game->eventSystem.specials.enabled();
-	if (game->time.checkHour(17) && !(yoot && roomState == kDirty))
+	// YootTower: the guests are pool people (PeopleSystem, YootHotelGuests.cpp).
+	const bool poolGuests = yoot && game->eventSystem.people.hotelGuests();
+	if (game->time.checkHour(17) && !(yoot && roomState == kDirty) && !poolGuests)
 	{
 		clearAll();
 		roomState = kClean;
@@ -282,8 +286,7 @@ void Hotel::advance(double dt)
 
 		if (!lobbyRoute.empty() && (!yoot || game->eventSystem.specials.roomMayTakeGuests(this)))
 		{
-			int n = capacity();
-			if (yoot) n = game->eventSystem.people.drawVisitors(this, n); // guests come from the pool
+			const int n = capacity();
 			for (int i = 0; i < n; i++)
 			{
 				Guest *g = new Guest(this);
@@ -464,6 +467,7 @@ void Hotel::advance(double dt)
 void Hotel::addPerson(Person *p)
 {
 	Item::addPerson(p);
+	if (YootVisitor * v = dynamic_cast<YootVisitor *>(p)) { game->eventSystem.people.roomEnter(this, v); return; }
 
 	Guest *g = dynamic_cast<Guest *>(p);
 	if (g)
