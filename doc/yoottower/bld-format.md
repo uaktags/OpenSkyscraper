@@ -75,7 +75,7 @@ It begins with `64 a1 00 00 00 00`, right after a `ret 4` + nop pad.
 | 21 | settlement | T2Settlement | §8 (H) |
 | 22 | movies | u32 n + n×(4cc id, u32 len, len bytes) | `T2MoviePluginList::Read` 0x10043a10. The payload is `T2MoviePlugin::Read` (u32 + 6×s16 = 12 bytes; persons R/F, schedule) |
 | 23 | towerEvent | u32 latestBuild, s16 n, n×event | `T2WorldDef::ReadTowerEvent` → `T2TowerEvent::Read` 0x10069fc0. §9 |
-| 24 | ui | 4×SRect + 2×s32 + 4 bytes | main window placement, scrollH, scrollV, Tools / Control / Message palette rects, an all-zero SRect, then 4 bytes that are always `01` (H) |
+| 24 | ui | 4×SRect + 2×s32 + 4 bytes | main window placement, then the main view scroll in 1:1 pixels: **vertical first** (36 px per row), then horizontal (8 px per unit), then the Tools / Control / Message palette rects, an all-zero SRect, and 4 bytes that are always `01` (H). bld.py names the two scroll values `scrollH`, `scrollV`; the order is the other way round (oracle: Tokyo's 3516, 918 = top row 97.7, left unit 114.75) |
 | 25 | searchedTenant | u16 | doc+0x174 tenant equipID, or 0 |
 | 26 | names | s32 n + n×T2Name | `T2NameList::Read` 0x10044e60. §10 |
 | 27 | worldStats | world-specific | `T2WorldDef` vtbl+0xd0 `ReadStatisticsProc`. §11 |
@@ -180,7 +180,12 @@ T2DLL (`T2TenantDef`, `T2MoverDef`, `T2EquipDef`) uses `T2EquipDef::LoadExtraDat
 0x1002f8c0, which reads `s32 n + n bytes`. The writer `SaveExtraData` 0x1002f900
 always writes `n=0`. If the def is missing, the same `s32 n + n` is skipped. A plugin
 could subclass the def and override this. None of the tenants in the saves seen so
-far do.
+far do, but **StdElev.t2p does** (MoverDef vtbl+0x50 `FUN_1000f4e0` / +0x54
+`FUN_1000f570`): it writes `n = 80` and then 2 × 10 four-byte records (a day-type ×
+period table, most likely the car schedule), and its reader reads those 20 records
+**whatever n says**. A Simple Elevator written with any other payload size desyncs the
+load and crashes T2.exe (verified under the oracle). A fresh shaft stores
+`00 00 06 00` in every record.
 
 ### 4.3 Mover (`T2Mover::LoadSelf` 0x1003f400 / `SaveSelf` 0x1003f530)
 
@@ -369,3 +374,39 @@ population 57). Both round-trip byte-identical, and the on-screen values match
 The decompiled C and the vtable dumps are in `~/yoottower-decomp/save-agent/decomp/`.
 In that copy, the T2Archive operators were renamed `ar_rd_u16` and so on, so the
 overloads can be told apart: Ghidra prints `char&` and `char*` identically.
+
+## 15. OpenSky import and export (`source/BldLoader.*`, `source/BldExport.*`)
+
+`BldLoader` is a C++ port of bld.py with the same symmetric reader/writer, so every save
+listed above rewrites byte-identical. `--load-game X.bld` (and the Load dialog) imports a
+save into YootTower mode: `toTowerXml` resolves each record's numeric item type through
+the save's plugin table and the shipped catalog (`ItemTypeCatalog.h`) to a plugin stem,
+then through `yootPrototypeLinks()` to an OpenSky prototype. Positions use
+`x = unit - width/2` and `floor = groundLine - bottomRow`.
+
+| Imported | How |
+|---|---|
+| world, star level, VIP flags (doc+0xa0) | `world`, `rating = level - 1`, `yootVipFlags` |
+| date | `time = (year-1)*12 + month0 + minutes/1440` (one YootTower month is one day) |
+| funds, previous funds | dollars (x100); `lastQuarterBalance` and the period's net change |
+| Floor.t2p | `floor` (one slab per level; several records on a level are coalesced), variation 1 = `lobby` with its height |
+| tenants with a linked prototype | footprint must match the prototype; 1..300 `estimate` -> `yootEstimate` (+ evaluation/3); status >= 10 -> occupied / let; filled belong-list slots -> office population; shop price index -> `rentClass` |
+| 16xx shops without a link (Ice Cream Stand, ...) | the generic `shop` when the footprint fits (reported) |
+| Simple / Service / Large elevators | span from `length` (the shaft rect adds a machine and a pit row), unserviced floors from the request-id pairs, every car's position and home |
+| stairs / escalators | one flight per stair module rect (no sample contains one, untested) |
+
+Dropped and reported: tenants without an OpenSky counterpart (in the samples the 7
+Restrooms and the Apartment), out-objects, people (the crowd re-simulates; OpenSky
+counts an occupied office's 6 staff at once, so populations differ), the visitor pool,
+traffic map, elevator stop tables and schedules, the per-category settlement totals,
+names, movies and tower-event state. The game speed is always imported as 1x.
+
+`BldExport` (`BldTool export IN.tower TEMPLATE.bld OUT.bld`) writes an OpenSky YootTower
+tower back: floors, lobbies, offices (Office.t2p), shops (as Ice Cream Stands) and Simple
+Elevators with cars, stop lists, waiting-area requests, unit map, cross-equip links and
+room numbers laid out as the game does. It reproduces the sample's request table exactly.
+The world-wide sections (plugin table, pool, movies, events, palettes, world statistics)
+are copied from a template save of the same world. Both an export of the imported
+Sample Tokyo Map and an OpenSky-authored Hawaii tower load and run in T2.exe under the
+oracle (screenshots in `~/yoottower-decomp/bld-agent/`). Kegon is refused (its unit map
+carries FINF flags).
