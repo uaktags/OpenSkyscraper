@@ -5,6 +5,7 @@
 #include "Person.h"
 #include "YootPool.h"
 
+#include <SFML/Graphics/RenderTarget.hpp>
 #include <map>
 #include <string>
 #include <utility>
@@ -65,6 +66,16 @@ namespace OT
 		/// a general visitor) and its index in the tenant's belong list.
 		Item::Item * home = nullptr;
 		int belongIndex = -1;
+
+		/// The T2Maru_Reggae VIPs (1 Mr. Maru, 2 Uncle Reggae): their own
+		/// silhouette (VIPL 223 -> SLDF 353, 224 -> 355; `style` 1 is the
+		/// next sheet, 354), the walk style frame (0..2) and `posing` while
+		/// they stand at a tenant instead of entering it.
+		int vip = 0;
+		int silhouette = -1;
+		int style = 0;
+		int walkStyle = 0;
+		bool posing = false;
 
 		/// T2People::CalcFreeTime 0x100495b0 at `now`.
 		long long freeTime(long long now) const;
@@ -162,6 +173,18 @@ namespace OT
 		/// A rider back at the station (Subway / Boat Deck): waits inside
 		/// for the next stopped train or ship.
 		void stationEnter(Item::Item * station, YootVisitor * v);
+
+		// --- VIP walkers (T2Maru_Reggae 0x1003a770) ---
+		/// BornVIP walking from the lobby to `target`, where he poses.
+		YootVisitor * spawnVip(int kind, int silhouetteId, Item::Item * target);
+		bool alive(const YootVisitor * v) const;
+		/// From the tenant he poses at to the next one / out of the tower.
+		void vipGo(YootVisitor * v, Item::Item * from, Item::Item * next);
+		void vipLeave(YootVisitor * v, Item::Item * from);
+
+		/// Skin::Yoot: the people walking on the floors and the posing VIPs
+		/// (T2People::Draw 0x10049b70: frame = walk style + 3 x direction).
+		void draw(sf::RenderTarget & target) const;
 
 		/// The tenant took the visitor in (status 11) or turned it away.
 		void arrived(YootVisitor * v, Item::Item * tenant, bool admitted, long long leaveMinute);

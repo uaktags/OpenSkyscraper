@@ -207,6 +207,7 @@ namespace OT
 			int  nextMinute = 0;   ///< +0x50
 			int  guardMinute = -1; ///< security arrival (approximation)
 			YootReggaeDef def;
+			YootVisitor * walker = nullptr; ///< the pool VIP who walks (PeopleSystem)
 		} reggae;
 		mutable std::map<int, sf::Texture> outDecoTextures;
 

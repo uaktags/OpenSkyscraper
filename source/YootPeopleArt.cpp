@@ -72,8 +72,9 @@ YootSilhouetteFrame OT::yootPersonSilhouette(Game * game, const Person * person)
 	const YootVisitor * v = dynamic_cast<const YootVisitor *>(person);
 	const int peopleType = v ? v->peopleType.silhouette : peopleTypeFor(person);
 	std::map<int, int>::const_iterator pt = w.peopleToSilhouette.find(peopleType);
-	if (pt == w.peopleToSilhouette.end()) return f;
-	std::map<int, SilhouetteDef>::const_iterator s = w.silhouettes.find(pt->second);
+	// The VIPs carry their own SLDF id (style 1 = the next sheet).
+	const int sil = v && v->silhouette >= 0 ? v->silhouette + v->style : pt != w.peopleToSilhouette.end() ? pt->second : -1;
+	std::map<int, SilhouetteDef>::const_iterator s = w.silhouettes.find(sil);
 	if (s == w.silhouettes.end()) return f;
 	std::unique_ptr<sf::Texture> & tex = w.textures[s->second.bitmapID];
 	if (!tex)

@@ -123,6 +123,9 @@ bool YootExtrasSystem::begin(const YootEventSpec & e, int index)
 		maru.target = t;
 		const long long now = Yoot::absoluteMinute(game->time.absolute);
 		maru.arriveAt = now + 3 * std::max(1, std::abs(t->position.y));
+		// With the visitor pool he walks (VIPL 223: silhouette 353 "Maru").
+		maru.walker = game->eventSystem.people.spawnVip(1, 353, t);
+		if (maru.walker) maru.arriveAt = -1;
 		LOG(IMPORTANT, "Mr. Maru visits %s on floor %d", t->prototype->name.c_str(), t->position.y);
 		return true;
 	}
@@ -212,9 +215,19 @@ Item::Item * YootExtrasSystem::pickMaruTarget(Item::Item * not_) const
 
 void YootExtrasSystem::maruMinute(long long now, int minute)
 {
+	PeopleSystem & people = game->eventSystem.people;
+	if (maru.walker && !people.alive(maru.walker)) maru.walker = nullptr, maru.target = nullptr;
 	if (maru.target && game->items.find(maru.target) == game->items.end()) maru.target = nullptr;
+	if (maru.walker && maru.arriveAt < 0)
+	{
+		// Walking: he reaches the tenant and stands there (MaruReception).
+		if (!maru.walker->posing && minute < maru.endMin && maru.target) return;
+		if (maru.walker->posing) maru.arriveAt = now;
+	}
 	if (minute >= maru.endMin || !maru.target)
 	{
+		if (maru.walker) people.vipLeave(maru.walker, maru.target);
+		maru.walker = nullptr;
 		// State 5 past endTime: he heads for the exit (DeadVIP ends the event).
 		LOG(IMPORTANT, "Mr. Maru leaves after %d visit(s)", maru.visits);
 		maru.active = false;
@@ -223,6 +236,13 @@ void YootExtrasSystem::maruMinute(long long now, int minute)
 	}
 	if (now < maru.arriveAt) return;
 	const int phase = Yoot::maruPhase((int)(now - maru.arriveAt));
+	if (maru.walker)
+	{
+		// ChangeStyle(1) (sheet 354) while he stays; walk style 0 sitting,
+		// 2 the howl of the dance.
+		maru.walker->style = phase < 3 ? 1 : 0;
+		maru.walker->walkStyle = phase == 1 ? 2 : 0;
+	}
 	if (phase == 1 && !maru.soundPlayed)
 	{
 		// State 3: "MR_Maru" (world WAVE 9003) while he dances on screen.
@@ -252,8 +272,9 @@ void YootExtrasSystem::maruMinute(long long now, int minute)
 		Item::Item * next = pickMaruTarget(maru.target);
 		if (!next) next = maru.target;
 		const int floors = std::max(1, std::abs(next->position.y - maru.target->position.y));
+		if (maru.walker) people.vipGo(maru.walker, maru.target, next);
 		maru.target = next;
-		maru.arriveAt = now + 3 * floors;
+		maru.arriveAt = maru.walker ? -1 : now + 3 * floors;
 		maru.soundPlayed = false;
 	}
 }

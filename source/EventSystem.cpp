@@ -901,6 +901,7 @@ void EventSystem::draw(sf::RenderTarget & target, sf::RenderStates /*states*/) c
 		power.drawDarkening(target);
 		drawOutDecorations(target);
 		venues.draw(target);
+		people.draw(target);
 		extras.drawInFront(target);
 	}
 

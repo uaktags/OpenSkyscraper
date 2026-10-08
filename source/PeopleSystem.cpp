@@ -9,6 +9,7 @@
 #include "Item/YootTenant.h"
 #include "Item/YootVenueItems.h"
 #include "YootFacilities.h"
+#include "YootPeopleArt.h"
 #include "YootRules.h"
 #include "YootTenants.h"
 #include "YootWorld.h"
@@ -521,6 +522,68 @@ int PeopleSystem::callFromFloor(Item::Item * tenant, const YootTenantDef & def, 
 	});
 }
 
+// ------------------------------------------------------------------- VIPs
+
+YootVisitor * PeopleSystem::spawnVip(int kind, int silhouetteId, Item::Item * target)
+{
+	if (!enabled() || pool.empty() || !target) return nullptr;
+	// T2Maru_Reggae::Start 0x1003a9f0: BornVIP (VIPL 223 / 224: people
+	// type 4 / 5), special flag 0x60, in by the lobby.
+	Yoot::PeopleType t = pool.bornVIP(kind == 2 ? 5 : 4, Yoot::kTransportLobbyLeft);
+	YootVisitor * v = spawn(t, target, Yoot::absoluteMinute(game->time.absolute), 0x60);
+	v->vip = kind;
+	v->silhouette = silhouetteId;
+	v->goingTo = target->prototype->name;
+	return v;
+}
+
+bool PeopleSystem::alive(const YootVisitor * v) const
+{
+	return v && std::find(visitorList.begin(), visitorList.end(), v) != visitorList.end();
+}
+
+void PeopleSystem::vipGo(YootVisitor * v, Item::Item * from, Item::Item * next)
+{
+	if (!alive(v) || !next) return;
+	v->posing = false;
+	v->style = v->walkStyle = 0;
+	v->dest = next;
+	v->goingTo = next->prototype->name;
+	walkTo(v, from ? from : game->mainLobby, next, Yoot::absoluteMinute(game->time.absolute));
+}
+
+void PeopleSystem::vipLeave(YootVisitor * v, Item::Item * from)
+{
+	if (!alive(v)) return;
+	v->posing = false;
+	v->style = v->walkStyle = 0;
+	v->dest = nullptr;
+	v->journey.clear();
+	if (v->at) v->at->removePerson(v);
+	v->goingTo = "Exit";
+	if (!from || v->walking) { goOutTower(v); return; }
+	walkTo(v, from, game->mainLobby, Yoot::absoluteMinute(game->time.absolute));
+}
+
+void PeopleSystem::draw(sf::RenderTarget & target) const
+{
+	if (!enabled() || !game->yootSkinArt()) return;
+	const sf::Color tint = game->lighting.compose(sf::Color::White);
+	for (const YootVisitor * v : visitorList)
+	{
+		if (!v->walking && !v->posing) continue;
+		const YootSilhouetteFrame f = yootPersonSilhouette(game, v);
+		if (!f.texture) continue;
+		sf::Sprite s(*f.texture);
+		s.setTextureRect(yootSilhouetteRect(v->walkStyle + (v->facingLeft ? 3 : 0)));
+		s.setOrigin({0.f, 36.f});
+		s.setPosition({v->curH * 8.f - 8.f, -(float)(v->curV * 36)});
+		s.setColor(tint);
+		target.draw(s);
+		game->drawnSprites++;
+	}
+}
+
 // --------------------------------------------------------- belong people
 
 bool PeopleSystem::hireBelong(Item::Item * tenant)
@@ -762,7 +825,7 @@ bool PeopleSystem::walkToNode(YootVisitor * v, Item::Item * next, int floor)
 	// crossed by the lobby's own atrium walk.
 	if (!enabled() || (!v->journey.atLastNode() && !next->isElevator() && !next->isStairlike())) return false;
 	beginWalk(v, next, floor, YootVisitor::kWalkNode);
-	if (v->curH != v->dstH) return true;
+	if (v->curH != v->dstH || (v->vip && v->journey.atLastNode() && v->dest)) return true;
 	v->walking = false;
 	v->walkTarget = nullptr;
 	return false;
@@ -780,6 +843,14 @@ void PeopleSystem::walkStep(YootVisitor * v)
 	Item::Item * t = v->walkTarget;
 	v->walking = false;
 	v->walkTarget = nullptr;
+	if (v->vip && v->dest && t == v->dest)
+	{
+		// MaruReception / ReggaeReception: he stands at the tenant.
+		v->journey.clear();
+		v->posing = true;
+		v->phase = YootVisitor::kInTenant;
+		return;
+	}
 	switch (v->walkKind)
 	{
 	case YootVisitor::kWalkNode:
@@ -947,6 +1018,12 @@ void PeopleSystem::goOutTower(YootVisitor * v)
 		if (lot) lot->leave(v);
 	}
 	if (v->yootFlags & Yoot::kPeopleNeedsToilet) v->yootEstimate = Yoot::incEstimate(v->yootEstimate, -30);
+	if (v->vip)
+	{
+		pool.deadVIP();  // T2Pool::DeadVIP: status 1 ends the event
+		destroy(v);
+		return;
+	}
 	if (v->home)
 	{
 		// Belong people go home and stay their tenant's (not general: no

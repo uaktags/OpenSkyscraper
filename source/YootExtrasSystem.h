@@ -18,6 +18,7 @@ namespace tinyxml2 { class XMLPrinter; class XMLElement; }
 
 namespace OT
 {
+	class YootVisitor;
 	struct YootEventSpec;
 	class YootEventScheduler;
 	namespace Item { class Item; }
@@ -77,9 +78,10 @@ namespace OT
 			int index = -1;
 			int endMin = 1380;
 			Item::Item * target = nullptr;
-			long long arriveAt = 0;   ///< absolute minute he reaches the target
+			long long arriveAt = 0;   ///< absolute minute he reached the target (-1 walking)
 			bool soundPlayed = false;
 			int visits = 0;
+			YootVisitor * walker = nullptr;  ///< the pool VIP who walks (PeopleSystem)
 		};
 
 		void configureTraffic();

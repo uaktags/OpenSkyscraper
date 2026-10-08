@@ -202,6 +202,8 @@ void EventSystem::startReggae(int index)
 	reggae.def = def;
 	reggae.target = pool[rand() % pool.size()];
 	reggae.nextMinute = (int)std::floor(game->time.hour * 60.0);
+	// With the visitor pool he walks there (VIPL 224: silhouette 355).
+	reggae.walker = people.spawnVip(2, 355, reggae.target);
 	LOG(IMPORTANT, "Uncle Reggae visits %s on floor %d",
 	    reggae.target->prototype->name.c_str(), reggae.target->position.y);
 }
@@ -212,10 +214,18 @@ void EventSystem::stepReggae(int minute)
 	const YootEventSpec & e = scheduler.events()[reggae.index];
 	if (minute >= e.endMin || minute + 720 < reggae.nextMinute) { endReggae(false); return; }
 	if (reggae.guardMinute >= 0 && minute >= reggae.guardMinute) { endReggae(true); return; }
+	if (reggae.walker)
+	{
+		if (!people.alive(reggae.walker)) { reggae.walker = nullptr; endReggae(false); return; }
+		// ReggaeReception plays at the tenant only.
+		if (!reggae.walker->posing) { reggae.nextMinute = minute; return; }
+	}
 
 	while (reggae.nextMinute <= minute) {
 		reggae.nextMinute += kReggaeTickMinutes;
 		reggae.counter++;
+		// Walk style 0 <-> 1 every tick: the two guitar frames.
+		if (reggae.walker) reggae.walker->walkStyle = reggae.counter & 1;
 		if (reggae.counter % kReggaeClaimTicks == 0) {
 			// MakeClaimMessage 0x1003b520 ("%s. There was a complaint from
 			// %s on the %sth floor RM# %s.") and the security call
@@ -253,6 +263,8 @@ void EventSystem::endReggae(bool caught)
 	} else {
 		LOG(IMPORTANT, "Uncle Reggae leaves");
 	}
+	if (reggae.walker) people.vipLeave(reggae.walker, reggae.target);
+	reggae.walker = nullptr;
 	reggae.active = false;
 	reggae.target = nullptr;
 }
