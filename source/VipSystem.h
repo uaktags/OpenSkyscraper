@@ -90,5 +90,10 @@ namespace OT
 		double yootArrivalTime;   ///< absolute time the pending VIP is judged
 		int    yootLastDay;       ///< day of the last reservation attempt
 		Item::Item * yootDestination;
+		/// The saved reservation's destination (prototype id and cell). Set
+		/// with yootDestination; a loaded reservation resolves it once.
+		std::string yootDestType;
+		int    yootDestX, yootDestY;
+		void resolveSavedDestination();
 	};
 }

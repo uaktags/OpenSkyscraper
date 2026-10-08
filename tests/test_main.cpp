@@ -4260,6 +4260,60 @@ static void testBldPluginSaveData()
 	}
 }
 
+// Every plugin that overrides its def's SaveExtraData/LoadExtraData (the
+// table in doc/yoottower/bld-format.md 4.2) keeps its record through
+// parse -> write byte for byte: the s32 n + n bytes path reads the record
+// whatever plugin wrote it, so each record size gets its own tenant here.
+static void testBldExtraRecordSizes()
+{
+	using namespace OT::Bld;
+	struct Case { const char * plugin; int itemType; size_t n; };
+	static const Case cases[] = {
+		{"Theater", 2010, 20}, {"ClassicTheater", 2011, 20}, {"EventCenter", 2012, 64 + 9},
+		{"Front", 1100, 20}, {"RFront", 1101, 20}, {"PowerRoom", 2013, 9}, {"Subway", 2014, 2},
+		{"Attraction", 2015, 2}, {"Attraction (no record)", 2016, 0}, {"Boatdeck", 2017, 0},
+	};
+	BldData d;
+	d.world = "KJNS";
+	d.level = 4;
+	d.people.resize(256);
+	d.vRange = 2; d.hRange = 3;
+	d.unitMap.assign(2 * 3 * 4, 0);
+	d.tenants.resize(128);
+	d.movers.resize(32);
+	d.requests.resize(64);
+	d.outObjs.resize(64);
+	d.outside.assign(6, 0);
+	d.trafficMap.assign(4284 * 4, 0);
+	for (uint8_t & f : d.uiFlags) f = 1;
+	d.hasWorldStats = true;
+	uint16_t id = 1000;
+	size_t slot = 0;
+	for (const Case & c : cases)
+	{
+		Tenant & t = d.tenants[slot++];
+		t.hdr.used = 1; t.hdr.status = 30; t.equipID = id++; t.equipType = (int16_t)c.itemType;
+		t.ce.tag = "AECx";
+		for (size_t k = 0; k < c.n; k++) t.extra.push_back((uint8_t)(0x30 + 7 * k));
+	}
+	std::vector<uint8_t> bytes, again;
+	std::string error;
+	EXPECT(writeBytes(d, bytes, error));
+	BldData back;
+	EXPECT(parseBytes(bytes, back, error));
+	if (!error.empty()) std::cerr << "bld extra records: " << error << "\n";
+	slot = 0;
+	for (const Case & c : cases)
+	{
+		const Tenant & t = back.tenants[slot++];
+		bool same = t.hdr.used && t.extra.size() == c.n;
+		for (size_t k = 0; same && k < c.n; k++) same = t.extra[k] == (uint8_t)(0x30 + 7 * k);
+		if (!same) std::cerr << "extra record of " << c.plugin << " changed\n";
+		EXPECT(same);
+	}
+	EXPECT(writeBytes(back, again, error) && again == bytes);
+}
+
 static void testBldShippedSaves()
 {
 	using namespace OT::Bld;
@@ -5707,6 +5761,7 @@ int main()
 {
 	testBldSyntheticRoundTrip();
 	testBldPluginSaveData();
+	testBldExtraRecordSizes();
 	testBldShippedSaves();
 	testTdtLoader();
 	testTdtLoaderTruncated();

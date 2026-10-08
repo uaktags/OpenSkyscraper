@@ -11,6 +11,7 @@
 #include "Person.h"
 #include "Time.h"
 #include "TimeWindow.h"
+#include "XmlUtil.h"
 
 #include <algorithm>
 #include <cctype>
@@ -59,6 +60,8 @@ void VipSystem::reset()
 	yootArrivalTime = 0.0;
 	yootLastDay = -1;
 	yootDestination = NULL;
+	yootDestType.clear();
+	yootDestX = yootDestY = 0;
 }
 
 void VipSystem::clearApproval()
@@ -329,6 +332,22 @@ Item::Item * VipSystem::findYootDestination(const std::vector<std::string> & pro
 	return NULL;
 }
 
+void VipSystem::resolveSavedDestination()
+{
+	// The saved cell's item of the saved type. Without one the reservation
+	// keeps its key (a later save still has it) and the arrival finds the
+	// destination gone.
+	Game::ItemSetByString::const_iterator bucket = game->itemsByType.find(yootDestType);
+	if (bucket == game->itemsByType.end())
+		return;
+	for (Game::ItemSet::const_iterator it = bucket->second.begin(); it != bucket->second.end(); ++it)
+		if ((*it)->position.x == yootDestX && (*it)->position.y == yootDestY)
+		{
+			yootDestination = *it;
+			return;
+		}
+}
+
 int VipSystem::yootVisitEstimate(Item::Item *dest) const
 {
 	// T2People::VIPEstimation: the VIP's CalcCurrEstimate > 200. No VIP
@@ -355,6 +374,7 @@ void VipSystem::resolveYootVisit()
 	Item::Item *dest = yootDestination;
 	yootPendingVip = -1;
 	yootDestination = NULL;
+	yootDestType.clear();
 	if (index < 0 || index >= (int)vips.size())
 		return;
 	const RulesProfile::Vip & vip = vips[index];
@@ -385,6 +405,8 @@ void VipSystem::advanceYoot()
 {
 	if (yootPendingVip >= 0)
 	{
+		if (!yootDestination && !yootDestType.empty())
+			resolveSavedDestination();
 		if (game->time.absolute >= yootArrivalTime)
 			resolveYootVisit();
 		return;
@@ -434,6 +456,9 @@ void VipSystem::advanceYoot()
 		}
 		yootPendingVip = (int)i;
 		yootDestination = dest;
+		yootDestType = dest->prototype->id;
+		yootDestX = dest->position.x;
+		yootDestY = dest->position.y;
 		yootArrivalTime = std::floor(game->time.absolute) + Time::hourToAbsolute(vip.arrivalMinute / 60.0);
 		const int h = vip.arrivalMinute / 60, m = vip.arrivalMinute % 60;
 		char when[32];
@@ -487,7 +512,19 @@ void VipSystem::encodeXML(tinyxml2::XMLPrinter & xml) const
 	// YootTower-only state: SimTower/OpenSky saves stay byte-identical to
 	// the pre-YootTower format (decode defaults to -1).
 	if (game->activeRules.profile().yootWorld)
+	{
 		xml.PushAttribute("yootVipLastDay", yootLastDay);
+		// A reservation waiting for its VIP: the index, the arrival time and
+		// the destination cell (the item pointer is rebuilt on load).
+		if (yootPendingVip >= 0 && !yootDestType.empty())
+		{
+			xml.PushAttribute("yootVipPending", yootPendingVip);
+			xml.PushAttribute("yootVipArrival", yootArrivalTime);
+			xml.PushAttribute("yootVipDestType", yootDestType.c_str());
+			xml.PushAttribute("yootVipDestX", yootDestX);
+			xml.PushAttribute("yootVipDestY", yootDestY);
+		}
+	}
 }
 
 void VipSystem::decodeXML(tinyxml2::XMLElement & xml)
@@ -500,10 +537,16 @@ void VipSystem::decodeXML(tinyxml2::XMLElement & xml)
 	suiteFloor = xml.IntAttribute("vipSuiteFloor", 0);
 	stressTotal = std::max(0.0, xml.DoubleAttribute("vipStressTotal", 0.0));
 	stressTrips = std::max(0, xml.IntAttribute("vipStressTrips", 0));
-	// A pending YootTower reservation is transient (item pointer); drop it.
-	yootPendingVip = -1;
+	// A pending YootTower reservation keeps its index, arrival time and
+	// destination cell; the item pointer is found again by advanceYoot.
+	yootPendingVip = xml.IntAttribute("yootVipPending", -1);
 	yootDestination = NULL;
-	yootArrivalTime = 0.0;
+	yootArrivalTime = xml.DoubleAttribute("yootVipArrival", 0.0);
+	yootDestType = yootPendingVip >= 0 ? std::string(xmlAttributeOr(xml, "yootVipDestType", "")) : std::string();
+	yootDestX = xml.IntAttribute("yootVipDestX", 0);
+	yootDestY = xml.IntAttribute("yootVipDestY", 0);
+	if (yootDestType.empty())
+		yootPendingVip = -1;
 	yootLastDay = xml.IntAttribute("yootVipLastDay", -1);
 
 	// Guest pointers are transient. A mid-stay reload voids the EXE visit;
