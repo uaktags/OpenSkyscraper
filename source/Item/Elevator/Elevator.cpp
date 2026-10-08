@@ -126,7 +126,9 @@ bool Elevator::canResizeTo(int bottom, int height) const
 {
 	if (height < 1) return false;
 	if (maxSpan() > 0 && height > maxSpan()) return false;
-	if (bottom <= -10) return false;
+	// Bottom limit: the profile's lowest floor (B9 in SimTower/OpenSky,
+	// deeper in YootTower worlds such as Kegon).
+	if (bottom < game->activeRules.profile().lowestFloor) return false;
 	if (game->metroStation && bottom < game->metroStation->position.y - kMetroClearanceFloors)
 		return false;
 
