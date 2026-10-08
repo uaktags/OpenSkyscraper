@@ -27,6 +27,7 @@
 #include <memory>
 
 #include "Application.h"
+#include "YootWorldArt.h"
 #include "Game.h"
 #include "MainMenu.h"
 #include "NativeFileDialog.h"
@@ -770,12 +771,6 @@ void Application::init()
         m_skin = Skin::OpenSky;
         bitmaps.setSkin(m_skin);
     }
-    if (selectedSkin() == Skin::Yoot && !hasSkinAssets(Skin::Yoot))
-    {
-        LOG(WARNING, "YootTower skin assets not found in data/bitmaps/yoottower; falling back to OpenSky art");
-        m_skin = Skin::OpenSky;
-        bitmaps.setSkin(m_skin);
-    }
     // A user-selected YootTower plugin folder (Settings dialog) is
     // cataloged alongside the automatic search-path Plugins/ dirs, so
     // SIMTOWER.EXE and YootTower media can both be provided at once.
@@ -794,6 +789,14 @@ void Application::init()
     LOG(INFO, "cataloged %zu first-party and %zu optional external plugin(s)",
         openTowerPluginCount, externalPluginCount);
 
+    // The YootTower skin draws from the world plugin and Floor.t2p, so it
+    // can only be judged once the catalog exists.
+    if (selectedSkin() == Skin::Yoot && !hasSkinAssets(Skin::Yoot))
+    {
+        LOG(WARNING, "YootTower skin needs %s and %s in a Plugins folder; falling back to OpenSky art",
+            yootWorldPluginFile(selectedWorld()), YootWorldArt::floorPluginFor(selectedWorld()));
+        m_skin = Skin::OpenSky;
+    }
     // Activate the selected skin once every art provider is cataloged, so
     // BitmapManager knows which provider wins for each texture key.
     bitmaps.setSkin(selectedSkin());
@@ -1496,10 +1499,11 @@ bool Application::hasSkinAssets(Skin skin) const
                data.exists("SIMTOWER.EXE") || data.exists("simtower.exe") ||
                data.exists("SIMTOWER.EX_") || data.exists("simtower.ex_");
     case Skin::Yoot:
-        // YootTower standalone skin requires base environmental art (sky, ground, lobby)
-        // which has not yet been produced. Until complete drop-ins exist (e.g. bitmaps/yoottower/sky.png),
-        // the skin is gated as incomplete.
-        return data.exists("bitmaps/yoottower/sky.png");
+        // Sky, ground, slabs and sides come from the world plugin, lobbies
+        // and empty floors from Floor.t2p (KFloor.t2p in Kegon); anything
+        // else falls back to OpenSky art per key.
+        return pluginManager.has(yootWorldPluginFile(selectedWorld())) &&
+               pluginManager.has(YootWorldArt::floorPluginFor(selectedWorld()));
     }
     return true;
 }
@@ -1734,7 +1738,7 @@ void Application::showNewTowerDialog()
             skinBtn->setText(std::string("🔒 Skin: ") + skinDisplayName(selectedSkin()) + " (Locked)");
             skinBtn->getRenderer()->setBorderColor(sf::Color(190, 110, 45));
             startBtn->setEnabled(false);
-            startBtn->setText("Skin Incomplete (Locked)");
+            startBtn->setText("Skin Unavailable (Locked)");
             auto r = startBtn->getRenderer();
             r->setBackgroundColor(sf::Color(48, 52, 60));
             r->setTextColor(sf::Color(140, 145, 155));
@@ -1743,7 +1747,8 @@ void Application::showNewTowerDialog()
             r->setBorders(1);
             r->setRoundedBorderRadius(4 * uiScale);
             if (selectedSkin() == Skin::Yoot)
-                warnSkinLabel->setText("⚠️ YootTower base assets (sky/ground) in development. Select OpenSky.");
+                warnSkinLabel->setText(std::string("⚠️ YootTower skin needs ") + yootWorldPluginFile(selectedWorld()) +
+                                       " and " + YootWorldArt::floorPluginFor(selectedWorld()) + ". Select OpenSky.");
             else
                 warnSkinLabel->setText("⚠️ SIMTOWER.EXE not found. Select OpenSky or provide in Settings.");
             warnSkinLabel->setVisible(true);
@@ -1759,10 +1764,11 @@ void Application::showNewTowerDialog()
         updateSkinState();
     });
 
-    worldBtn->onPress([this, worldBtn] {
+    worldBtn->onPress([this, worldBtn, updateSkinState] {
         YootWorld::Id next = static_cast<YootWorld::Id>((static_cast<int>(selectedWorld()) + 1) % 3);
         setWorldOverride(next);
         worldBtn->setText(std::string("World: ") + yootWorldDisplayName(next));
+        updateSkinState(); // Kegon needs KFloor.t2p
     });
 
     skinBtn->onPress([this, updateSkinState] {
@@ -1783,7 +1789,9 @@ void Application::showNewTowerDialog()
             if (selectedSkin() == Skin::Yoot)
             {
                 showMessageDialog("Skin Unavailable",
-                    "The YootTower skin is currently in development and lacks base environmental assets (sky, ground, and lobby).\n\nPlease select the OpenSky skin to play YootTower mode.");
+                    std::string("The YootTower skin draws its sky, ground and lobby from the YootTower plugins ") +
+                    yootWorldPluginFile(selectedWorld()) + " and " + YootWorldArt::floorPluginFor(selectedWorld()) +
+                    ", which were not found.\n\nAdd the YootTower Plugins folder in Settings or select the OpenSky skin.");
             }
             else if (selectedSkin() == Skin::Classic)
             {
