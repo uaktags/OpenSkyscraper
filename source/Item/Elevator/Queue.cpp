@@ -113,6 +113,10 @@ void Queue::advance(double dt)
 		// rather than continuously hammering dispatch.
 		if (frame >= waitStartFrame && ((int)frame % kQueueFullRetryFrames) == 0)
 			callElevator();
+		// YootTower: people left behind by a full car keep their T2Request
+		// and call again at once (16 SimTower frames are 2 game hours here).
+		else if (people.front()->yootRules())
+			callElevator();
 	}
 	if (!people.empty() && people.front()->yootRules())
 	{

@@ -224,12 +224,17 @@ void Car::advance(double dt)
 	const int passengersBefore = (int)passengers.size();
 	const int doorTicksBefore = doorTicks;
 	const State stateBefore = state;
-	const double frameDelta = game->time.dta / Time::kBaseSpeed;
+	// YootTower movers idle on every T2 sub-tick, 4 a game minute (T2.exe
+	// 0x41dc40 runs T2MoverArrayList::DispatchIdle after each
+	// IsIncDateTime): StdElev's crawl of 6 idles a floor is this car's
+	// 1 + 5 frames. SimTower keeps 192 frames a day.
+	const bool yoot = elevator->prototype->yoot != nullptr;
+	const double frameDelta = yoot ? game->time.dta * 1440.0 * 4.0 : game->time.dta / Time::kBaseSpeed;
 	journeyTime += frameDelta;
 	if (journeyTime < 1.0) return;
 	int steps = (int)journeyTime;
 	journeyTime -= steps;
-	if (steps > 64) steps = 64; // hitches cannot starve the door state machine
+	if (steps > (yoot ? 1024 : 64)) steps = yoot ? 1024 : 64; // hitches cannot starve the door state machine
 
 	for (int tick = 0; tick < steps; ++tick)
 	{
