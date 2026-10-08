@@ -16,6 +16,8 @@
 #include "Person.h"
 #include "Time.h"
 #include "TimeWindow.h"
+#include "YootItemArt.h"
+#include "YootWorldArt.h"
 
 #include <algorithm>
 #include <climits>
@@ -897,7 +899,26 @@ void EventSystem::draw(sf::RenderTarget & target, sf::RenderStates /*states*/) c
 		venues.draw(target);
 	}
 
-	// Rubble from past fires and blasts persists until rebuilt.
+	// Rubble from past fires and blasts persists until rebuilt. Skin::Yoot:
+	// the world's 1007 `Rubble` strip over the whole row (T2WorldDef::
+	// DrawRubble), each cell showing its 8 px column of the 640 px loop.
+	const YootWorldArt * yootArt = game->yootSkinArt();
+	const YootPluginView * yootRubble = yootArt ? yootPluginView(game->app,
+		yootWorldPluginFile(yootArt->worldId()), sf::Color::Transparent, 1007, 1007, "Rubble") : nullptr;
+	if (yootRubble && !yootRubble->bands.empty()) {
+		const sf::IntRect band = yootRubble->band(0);
+		sf::Sprite s(yootRubble->texture);
+		for (std::set<long>::const_iterator it = rubble.begin(); it != rubble.end(); ++it) {
+			int floor, x;
+			decodeTile(*it, floor, x);
+			const int u = ((x * 8) % band.size.x + band.size.x) % band.size.x;
+			s.setTextureRect(sf::IntRect({band.position.x + u, band.position.y}, {8, band.size.y}));
+			s.setPosition({x * 8.0f, -(floor + 1) * 36.0f});
+			target.draw(s);
+		}
+		game->drawnSprites += (int)rubble.size();
+	}
+	else
 	for (std::set<long>::const_iterator it = rubble.begin(); it != rubble.end(); ++it) {
 		int floor, x;
 		decodeTile(*it, floor, x);

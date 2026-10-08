@@ -4,6 +4,8 @@
 #include <string>
 #include "../Game.h"
 #include "../Time.h"
+#include "../YootItemArt.h"
+#include "../YootWorldArt.h"
 #include "Item.h"
 #include <cmath>
 #include "Condo.h"
@@ -114,6 +116,23 @@ void Item::render(sf::RenderTarget &target) const
 			progress = elapsed / duration;
 			if (progress < 0.0) progress = 0.0;
 			if (progress > 1.0) progress = 1.0;
+		}
+
+		// Skin::Yoot: T2WorldDef::DrawBuild tiles the world's 1004
+		// `BuildPrc` over every row, scaffolding (pattern 0) while the
+		// status is 0..1 and the boarded-up crates (1) after.
+		if (const YootWorldArt * art = game->yootSkinArt())
+		{
+			const YootPluginView * v = yootPluginView(game->app, yootWorldPluginFile(art->worldId()),
+				sf::Color::Transparent, 1004, 1004, "BuildPrc");
+			if (v && v->bands.size() >= 2)
+			{
+				const sf::IntRect band = v->band(progress < 0.2 ? 0 : 1);
+				for (int story = 0; story < size.y; story++)
+					yootDrawLoop(target, *v, band, (float)p.x, (float)-(p.y + (story + 1) * 36), (float)s.x);
+				game->drawnSprites += size.y;
+				return;
+			}
 		}
 
 		sf::Texture &gridTex = app->bitmaps["simtower/construction/grid"];
