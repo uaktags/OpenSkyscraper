@@ -293,6 +293,20 @@ foreach(sim_ruleset simtower opensky)
   endforeach()
 endforeach()
 
+# YootTower people (plan step 15): the visitor pool and walking customers
+# of a small Tokyo tower (tests/sim/yoot_people.tower, plugins from data/).
+add_test(NAME sim_people_yoottower
+  COMMAND ${CMAKE_COMMAND}
+    -DEXE=$<TARGET_FILE:${EXECUTABLE_NAME}>
+    -DTOWER=${PROJECT_SOURCE_DIR}/tests/sim/yoot_people.tower
+    -DRULESET=yoottower
+    -DTICKS=2000
+    -DGOLDEN=${PROJECT_SOURCE_DIR}/tests/sim/sim_people_yoottower.json
+    -DOUT_DIR=${CMAKE_BINARY_DIR}/sim-golden
+    -P ${PROJECT_SOURCE_DIR}/tests/sim/run_sim_golden.cmake)
+set_tests_properties(sim_people_yoottower PROPERTIES
+  SKIP_REGULAR_EXPRESSION "SKIP_NO_DISPLAY" TIMEOUT 600)
+
 # ---------------------------------------------------------------------------
 # PluginEditor — standalone editor for YootTower plugins and the OSP format.
 # Links the same SFML 3 + TGUI stack as the game plus the pure plugin seam
