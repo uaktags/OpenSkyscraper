@@ -28,6 +28,12 @@ namespace OT
 			case 67: return " can only be placed once.";
 			case kErrOnlyFinalOnTop: return "Only Final item can be placed on the top floor of building.";
 			case kErrFloorHasPeople: return "Can not remove the floor because there are people here.";
+			case kErrSkyBridgeClear: return "To place the Sky Bridge requires at least 3 floors of free space both above and below.";
+			case kErrSkyBridgeFar: return "The Sky Bridge can not be placed because the distance between the towers is too far.";
+			case kErrSkyBridgeLow: return "The Sky Bridge can only be placed above the 5th floor.";
+			case kErrSkyBridgeTowers: return "The Sky Bridge can only be placed between the towers.";
+			case kErrBoatDeckSite: return "The Boat Deck item can only be placed at left edge of the B2 floor.";
+			case kErrObservatorySite: return "The observatory can only be placed at left edge of the B32 floor.";
 			default: return "";
 			}
 		}
@@ -39,6 +45,11 @@ namespace OT
 			// T2TenantDef::AreaCheck: rect.top > topFloorLine, i.e. the
 			// item's top floor stays below the top floor.
 			return bottomFloor + height - 1 < highestFloor ? 0 : kErrOnlyFinalOnTop;
+		}
+
+		int fixedSiteRule(int leftUnit, int topRow, int wantLeft, int wantTop, int code)
+		{
+			return leftUnit == wantLeft && topRow == wantTop ? 0 : code;
 		}
 
 		int subwayRule(int bottomFloor, int lowestFloor)

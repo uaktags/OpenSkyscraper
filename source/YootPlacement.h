@@ -33,6 +33,17 @@ namespace OT
 		const int kErrFinalTopFloor = 66;        ///< "<item> can only be placed on the top floor."
 		const int kErrOnlyFinalOnTop = 68;       ///< "Only Final item can be placed on the top floor of building."
 		const int kErrFloorHasPeople = 73;       ///< "Can not remove the floor because there are people here."
+		const int kErrSkyBridgeClear = 59;       ///< "To place the Sky Bridge requires at least 3 floors of free space ..."
+		const int kErrSkyBridgeFar = 60;         ///< "... the distance between the towers is too far."
+		const int kErrSkyBridgeLow = 62;         ///< "The Sky Bridge can only be placed above the 5th floor."
+		const int kErrSkyBridgeTowers = 63;      ///< "The Sky Bridge can only be placed between the towers."
+		const int kErrBoatDeckSite = 74;         ///< "The Boat Deck item can only be placed at left edge of the B2 floor."
+		const int kErrObservatorySite = 75;      ///< "The observatory can only be placed at left edge of the B32 floor."
+
+		/// Boatdeck.t2p AreaCheck FUN_1000bef0 (rect.left == 56, rect.top ==
+		/// 55: Hawaii B2, left edge of the build area) and Observatory.t2p
+		/// FUN_1000cc70 (left 81, top 40: Kegon B32). World units and rows.
+		int fixedSiteRule(int leftUnit, int topRow, int wantLeft, int wantTop, int code);
 
 		/// T2.exe STRTABLE 9999 text for a BuildErr code ("" if unknown).
 		/// Codes 37, 41, 66 and 67 take the item name as a prefix.
