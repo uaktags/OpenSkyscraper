@@ -7,7 +7,7 @@
 using namespace OT;
 
 
-PathFinder::PathFinder() : SearchState(AStarSearch< MapSearchNode >::SEARCH_STATE_NOT_INITIALISED) {}
+PathFinder::PathFinder() : astarsearch(new AStarSearch< MapSearchNode >()), SearchState(AStarSearch< MapSearchNode >::SEARCH_STATE_NOT_INITIALISED) {}
 
 PathFinder::~PathFinder() { clear(); }
 
@@ -21,11 +21,11 @@ Route PathFinder::findRoute(const MapNode *start_mapnode, const MapNode *end_map
 	nodeStart.end_point = end_point;
 	nodeStart.serviceRoute = serviceRoute;
 	MapSearchNode nodeEnd(end_mapnode);
-	astarsearch.SetStartAndGoalStates(nodeStart, nodeEnd);
+	astarsearch->SetStartAndGoalStates(nodeStart, nodeEnd);
 
 	unsigned int SearchSteps = 0;
 	do {
-		SearchState = astarsearch.SearchStep();
+		SearchState = astarsearch->SearchStep();
 		SearchSteps++;
 	} while(SearchState == AStarSearch< MapSearchNode >::SEARCH_STATE_SEARCHING);
 
@@ -38,8 +38,10 @@ Route PathFinder::findRoute(const MapNode *start_mapnode, const MapNode *end_map
 
 
 void PathFinder::clear() {
-	if(SearchState == AStarSearch< MapSearchNode >::SEARCH_STATE_SUCCEEDED) astarsearch.FreeSolutionNodes();
-	astarsearch.EnsureMemoryFreed();
+	if(SearchState == AStarSearch< MapSearchNode >::SEARCH_STATE_SUCCEEDED) astarsearch->FreeSolutionNodes();
+	if(SearchState == AStarSearch< MapSearchNode >::SEARCH_STATE_OUT_OF_MEMORY)
+		astarsearch.reset(new AStarSearch< MapSearchNode >());
+	astarsearch->EnsureMemoryFreed();
 	SearchState = AStarSearch< MapSearchNode >::SEARCH_STATE_NOT_INITIALISED;
 }
 
@@ -54,8 +56,8 @@ void PathFinder::buildRoute(Route &r, Item::Item *start_item, Item::Item *end_it
 		return;
 	}
 
-	MapSearchNode *end_node = astarsearch.GetSolutionEnd();
-	MapSearchNode *start_node = astarsearch.GetSolutionStart();
+	MapSearchNode *end_node = astarsearch->GetSolutionEnd();
+	MapSearchNode *start_node = astarsearch->GetSolutionStart();
 
 	// IsGoal() matches on the map node alone, so a search whose start node
 	// already sits on the goal's map node succeeds with a one-node solution
@@ -70,9 +72,9 @@ void PathFinder::buildRoute(Route &r, Item::Item *start_item, Item::Item *end_it
 		MapSearchNode *n = start_node;
 		MapSearchNode *n_child;
 		r.add(start_item, n->mapNode->position.y);
-		n = astarsearch.GetSolutionNext();
+		n = astarsearch->GetSolutionNext();
 		while(n && n != end_node) {
-			n_child = astarsearch.GetSolutionNext();
+			n_child = astarsearch->GetSolutionNext();
 			if(!n_child) break;
 			Item::Item *i = n_child->parent_item;
 			if(i) {
