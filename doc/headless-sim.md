@@ -30,6 +30,10 @@ the Sky weather roll, but no rendering, input, sound pacing or UI refresh.
 A pending emergency choice (fire crew, ransom) is answered "yes" and
 logged. At speed 3 one game day is about 960 ticks.
 
+`--load-game` accepts anything the game can load: native `.tower`, SimTower
+`.tdt` and YootTower `.bld` (imported through BldLoader), e.g.
+`--ruleset yoottower --load-game "/abs/Sample Tokyo Map.bld" --sim 3d`.
+
 Use absolute `--load-game` paths: relative names are looked up in the user
 data directory (`~/.openskyscraper`) first. The ruleset follows the usual
 rules (`--ruleset` overrides the save's `ruleset=` attribute).

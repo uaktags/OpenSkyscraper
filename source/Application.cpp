@@ -1106,7 +1106,7 @@ int Application::runSim()
     int code = 2;
     if (!game)
         LOG(ERROR, "sim: no game state to simulate");
-    else if (loadGameAtStartup && game->saveFilename != startupLoadPath)
+    else if (loadGameAtStartup && game->saveFilename.empty())
         LOG(ERROR, "sim: could not load %s", startupLoadPath.c_str());
     else
         code = Sim::run(*game, m_sim);
