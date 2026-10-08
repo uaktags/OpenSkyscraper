@@ -417,7 +417,16 @@ namespace Bld {
 			const int under = slabAt(row, area.left);
 			if (under < 0 || slabAt(row, area.right - 1) != under) { drop(it.type, "not on one floor slab"); continue; }
 			Tenant & t = newTenant(*p, area, false);
-			t.ce.ids = wordArray({(uint16_t)(1000 + under)});
+			// T2Tenant::SetFloorID 0x1005dfa0: one floor id per row, bottom
+			// row first; GetFloorID(row) reads entry bottom - row (Hawai.t2p's
+			// DrawOptionObj dereferences the top row's floor).
+			std::vector<uint16_t> floorIds;
+			for (int r = area.bottom - 1; r >= area.top; r--)
+			{
+				const int slab = slabAt(r, area.left);
+				floorIds.push_back((uint16_t)(1000 + (slab >= 0 ? slab : under)));
+			}
+			t.ce.ids = wordArray(floorIds);
 			if (it.buildDay >= 0) t.buildDay = it.buildDay;
 			if (it.type == "skybridge")
 			{
