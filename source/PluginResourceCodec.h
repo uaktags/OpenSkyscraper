@@ -14,11 +14,12 @@
 ///   RT_VERSION                       VersionInfo (VS_VERSIONINFO node tree)
 ///   OBJMAP, T2DLG, TENANTDEF         Text (verbatim; OBJMAP has its own
 ///                                    parser in PluginObjmap.h)
-///   everything else                  Raw: RT_BITMAP, WAVE, SP DIBs, and the
-///                                    world resources (WORLDDEF, WATR, BINF,
-///                                    FINF, PTDF, PALETTE, T2EV, *EV, PODF,
-///                                    PGDF, PZDF, SPDF, CODF, VIPL), which
-///                                    are decoded by YootWorld.
+///   WORLDDEF, WATR, PODF, CODF, SPDF,
+///   T2EV, *EV, VIPL                  WorldRecord (Json, WorldResourceCodec.h)
+///   BINF, FINF, PTDF, PALETTE        WorldResourceCodec.h typed structs
+///   everything else                  Raw: RT_BITMAP, WAVE, SP DIBs, PGDF,
+///                                    PZDF. (YootWorld.h keeps the game's
+///                                    typed view of the world resources.)
 ///
 /// A typed decoder that rejects a resource (e.g. trailing bytes) falls back to
 /// Raw, so `decodeResource` never loses data; `codec` says which path won.
@@ -26,6 +27,7 @@
 #include "PluginDefs.h"
 #include "PluginResources.h"
 #include "SubPluginDefs.h"
+#include "WorldResourceCodec.h"
 
 #include <cstdint>
 #include <string>
@@ -100,6 +102,11 @@ namespace OT
 		SubPluginPeopleParam, // PPDF (SP)
 		StringBlock,          // RT_STRING
 		VersionInfo,          // RT_VERSION
+		WorldRecord,          // WORLDDEF/WATR/PODF/CODF/SPDF/T2EV/VIPL/*EV as a Json record
+		BkgndInfo,            // BINF
+		FloorInfoMask,        // FINF
+		PaletteAnime,         // PTDF
+		Palette,              // PALETTE
 	};
 
 	/// Human-readable codec name ("TemplateDef", "Raw", ...).
@@ -119,7 +126,8 @@ namespace OT
 		std::variant<std::monostate, PluginAttr, PluginDesc, TemplateDef, MemberTableDef,
 		             DayParamDef, PlaceParamDef, PeopleAnimeDef, SilhouetteList, PeopleList,
 		             WordList, StringTableDef, MovieDef, HallEventDef, AdvertiseDef,
-		             SubPluginPeopleParamDef, StringBlock, VersionInfo> value;
+		             SubPluginPeopleParamDef, StringBlock, VersionInfo, Json, BkgndInfoDef,
+		             FloorInfoMaskDef, PaletteAnimeDef, PaletteDef> value;
 		std::string bytes;            // Raw / Text payload
 	};
 

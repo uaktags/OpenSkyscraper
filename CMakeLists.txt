@@ -212,6 +212,8 @@ add_executable(OpenSkyTests
   source/PluginObjmap.cpp
   source/PluginBitmapLoader.cpp
   source/OspPlugin.cpp
+  source/ResourceJson.cpp
+  source/WorldResourceCodec.cpp
   source/AbstractPlugin.cpp
   source/DecompiledPlugin.cpp
 )
@@ -243,6 +245,8 @@ add_executable(PluginEditor
   source/PluginObjmap.cpp
   source/PluginBitmapLoader.cpp
   source/OspPlugin.cpp
+  source/ResourceJson.cpp
+  source/WorldResourceCodec.cpp
   source/AbstractPlugin.cpp
   source/DecompiledPlugin.cpp
   source/NativeFileDialog.cpp
