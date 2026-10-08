@@ -307,6 +307,21 @@ add_test(NAME sim_people_yoottower
 set_tests_properties(sim_people_yoottower PROPERTIES
   SKIP_REGULAR_EXPRESSION "SKIP_NO_DISPLAY" TIMEOUT 600)
 
+# YootTower visitors that walk to venues, hotel rooms and the Front Desk
+# (tests/sim/yoot_visitors.tower: Classic Theater, Event Center, Gathering
+# Area, Ticket Booth, Front Desk, rooms, Housekeeping on the people tower).
+add_test(NAME sim_visitors_yoottower
+  COMMAND ${CMAKE_COMMAND}
+    -DEXE=$<TARGET_FILE:${EXECUTABLE_NAME}>
+    -DTOWER=${PROJECT_SOURCE_DIR}/tests/sim/yoot_visitors.tower
+    -DRULESET=yoottower
+    -DTICKS=2000
+    -DGOLDEN=${PROJECT_SOURCE_DIR}/tests/sim/sim_visitors_yoottower.json
+    -DOUT_DIR=${CMAKE_BINARY_DIR}/sim-golden
+    -P ${PROJECT_SOURCE_DIR}/tests/sim/run_sim_golden.cmake)
+set_tests_properties(sim_visitors_yoottower PROPERTIES
+  SKIP_REGULAR_EXPRESSION "SKIP_NO_DISPLAY" TIMEOUT 600)
+
 # ---------------------------------------------------------------------------
 # PluginEditor — standalone editor for YootTower plugins and the OSP format.
 # Links the same SFML 3 + TGUI stack as the game plus the pure plugin seam
