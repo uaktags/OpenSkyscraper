@@ -36,6 +36,10 @@ namespace OT {
 			void setPattern(int p);
 			/// Pixels the art sits above the row's bottom edge.
 			int interiorLift() const;
+			/// The plugin's DrawProc paints the whole unit rect, not the
+			/// interior (Stadium.t2p).
+			virtual bool yootFullRect() const { return false; }
+			virtual bool yootCoversFloor() const { return yootFullRect() && game->skin == Skin::Yoot; }
 
 		protected:
 			/// Plugin file when no catalog entry is loaded.

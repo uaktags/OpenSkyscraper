@@ -1,5 +1,6 @@
 #include <cassert>
 #include <algorithm>
+#include <functional>
 #include <vector>
 #include <cstdlib>
 #include <string>
@@ -200,7 +201,24 @@ void Floor::render(sf::RenderTarget &target) const
 	{
 		const sf::Color yootTint = tinted ? game->lighting.compose(sf::Color::White) : sf::Color::White;
 		const float top = -(getPosition().y + 1) * 36.0f;
-		yoot->drawRoof(target, floorLeft * 8.0f, floorRight * 8.0f, top, yootTint);
+		// Tenants that paint their whole unit rect (Stadium.t2p DrawProc)
+		// own those cells: no roof or strips there, the backdrop shows
+		// through their transparent parts.
+		std::vector<Span> covered;
+		if (floorItems != game->itemsByFloor.end())
+			for (Game::ItemSet::const_iterator it = floorItems->second.begin(); it != floorItems->second.end(); ++it)
+				if ((*it)->yootCoversFloor())
+					covered.push_back({(*it)->getRect().minX(), (*it)->getRect().maxX()});
+		auto bare = [&](int left, int right, const std::function<void(float, float)> & draw) {
+			for (const Span & c : covered) {
+				if (c.right <= left || c.left >= right) continue;
+				if (c.left > left) draw(left * 8.0f, c.left * 8.0f);
+				left = std::max(left, c.right);
+			}
+			if (left < right) draw(left * 8.0f, right * 8.0f);
+		};
+		std::sort(covered.begin(), covered.end(), [](const Span & a, const Span & b) { return a.left < b.left; });
+		bare(floorLeft, floorRight, [&](float l, float r) { yoot->drawRoof(target, l, r, top, yootTint); });
 		auto emptySpan = [&](int left, int right) {
 			if (left >= right) return;
 			yoot->drawFloorView(target, left * 8.0f, right * 8.0f, top + 8.0f, yootTint);
@@ -210,8 +228,10 @@ void Floor::render(sf::RenderTarget &target) const
 		for (std::vector<Span>::const_iterator it = merged.begin(); it != merged.end(); ++it)
 		{
 			emptySpan(from, it->left);
-			yoot->drawFloorStrip(target, std::max(from, it->left) * 8.0f, it->right * 8.0f, top + 8.0f, yootTint);
-			yoot->drawFloorStrip(target, std::max(from, it->left) * 8.0f, it->right * 8.0f, top + 32.0f, yootTint);
+			bare(std::max(from, it->left), it->right, [&](float l, float r) {
+				yoot->drawFloorStrip(target, l, r, top + 8.0f, yootTint);
+				yoot->drawFloorStrip(target, l, r, top + 32.0f, yootTint);
+			});
 			from = std::max(from, it->right);
 		}
 		emptySpan(from, floorRight);

@@ -143,6 +143,7 @@ namespace OT {
 			virtual void encodeXML(tinyxml2::XMLPrinter & xml);
 			virtual void decodeXML(tinyxml2::XMLElement & xml);
 			std::string teamName;     ///< BBEV naming dialog (stadiumDef OptionProc(1))
+			bool yootFullRect() const { return true; }
 		protected:
 			const char * defaultPlugin() const { return "Stadium.t2p"; }
 			int defaultOpen() const { return 720; }
