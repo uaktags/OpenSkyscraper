@@ -7,6 +7,35 @@
 #include "Car.h"
 #include "Queue.h"
 #include <cmath>
+#include <SFML/Graphics/Text.hpp>
+
+namespace
+{
+	/// StdElev.t2p FUN_1000d370 draws the floor numbers with bold Times New
+	/// Roman (CreateFontA height 18, width 10; 7 for three characters).
+	/// The closest font on the machine, else OpenSky's own.
+	const sf::Font * yootFloorNumberFont(OT::Application * app)
+	{
+		static sf::Font font;
+		static int state = -1;
+		if (state < 0)
+		{
+			static const char * paths[] = {
+				"C:/Windows/Fonts/timesbd.ttf",
+				"/usr/share/fonts/liberation-serif-fonts/LiberationSerif-Bold.ttf",
+				"/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf",
+				"/usr/share/fonts/dejavu-serif-fonts/DejaVuSerif-Bold.ttf",
+				"/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf",
+				"/Library/Fonts/Times New Roman Bold.ttf",
+			};
+			state = 0;
+			for (const char * p : paths)
+				if (font.openFromFile(p)) { state = 1; break; }
+			if (state) font.setSmooth(false);
+		}
+		return state ? &font : &app->fonts["Play-Bold.ttf"];
+	}
+}
 
 using namespace OT;
 using namespace OT::Item::Elevator;
@@ -307,6 +336,27 @@ void Elevator::render(sf::RenderTarget &target) const
 				composed.a = (composed.a * statusTint.a) / 255;
 			}
 			d.setColor(composed);
+		}
+
+		if (game->skin == Skin::Yoot)
+		{
+			// The number in grey (common colour 5, sampled 63,63,63) drawn
+			// at y 10 and 11 of the row, centred on the shaft; basements "B1".
+			char label[8];
+			if (flr < 0) snprintf(label, sizeof(label), "B%d", -flr);
+			else snprintf(label, sizeof(label), "%d", flr + 1);
+			sf::Text text(*yootFloorNumberFont(app), label, 17);
+			const sf::Color grey = tinted ? game->lighting.compose(sf::Color(63, 63, 63)) : sf::Color(63, 63, 63);
+			text.setFillColor(grey);
+			const sf::FloatRect b = text.getLocalBounds();
+			const float tx = std::round(position.x * 8 + (size.x * 8 - b.size.x) / 2.f - b.position.x);
+			const float rowTop = -(y + 1) * 36.f;
+			for (int pass = 0; pass < 2; ++pass)
+			{
+				text.setPosition({tx, std::round(rowTop + 11.f + pass - b.position.y)});
+				target.draw(text);
+			}
+			continue;
 		}
 
 		char c[8];
