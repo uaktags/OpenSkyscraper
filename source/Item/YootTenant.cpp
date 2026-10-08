@@ -191,7 +191,7 @@ void YootTenant::rollStaffAnime()
 	staffAnime.clear();
 	if (!isOpen() || model.staffIn <= 0) return;
 	const YootTenantPeopleArt & art = yootTenantPeopleArt(game, def().plugin);
-	if (!art.loaded || !art.hasAnime) return;
+	if (!art.hasAnime) return; // the sim rolls even without the art (determinism)
 	for (int i = 0; i < model.staffIn; ++i)
 	{
 		int pattern = -1, x = 0;

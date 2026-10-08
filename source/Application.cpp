@@ -882,6 +882,11 @@ void Application::init()
     if (startNewGame)
     {
         Game *game = new Game(*this);
+        // Headless sim: seed again once the window and the audio device are
+        // up; the audio backend (PulseAudio client) calls rand() a
+        // host-dependent number of times while it connects.
+        if (m_sim.enabled)
+            srand(m_sim.seed);
         game->saveFilename = "";
         game->isDirty = false;
         if (startOfficeLunchQa)
