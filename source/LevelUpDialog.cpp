@@ -7,6 +7,8 @@
 #include "Item/Factory.h"
 #include "Item/Prototype.h"
 #include "LevelUp.h"
+#include "PluginManager.h"
+#include "YootWorld.h"
 
 #include <sstream>
 
@@ -30,7 +32,19 @@ void LevelUpDialog::close()
 		heading.reset();
 		unlocks.reset();
 		okButton.reset();
+		anim.reset();
 	}
+	animFrames.clear();
+}
+
+void LevelUpDialog::advance(double dt)
+{
+	if (!window || !anim || animFrames.empty()) return;
+	animClock += dt;
+	if (animClock < 0.1) return;
+	animClock = 0;
+	if (++animFrame >= (int)animFrames.size()) animFrame = std::min(animLoop, (int)animFrames.size() - 1);
+	anim->getRenderer()->setTexture(animFrames[animFrame]);
 }
 
 std::string LevelUpDialog::unlockedAt(int rating) const
@@ -116,4 +130,42 @@ void LevelUpDialog::showForRating(int newRating)
 	else
 		u << "New facilities unlocked:\n" << list;
 	unlocks->setText(u.str());
+
+	// YootTower: the grade row (new grade g uses row g - 2) names the
+	// animation bitmap and its loop frame (Tokyo 1207..1210, loop 8 / 6).
+	YootWorld::Id world;
+	const int grade = newRating + 1;
+	if (!game->activeRules.profile().yootWorld || !parseYootWorldIdentifier(game->activeRules.profile().worldId, world) || grade < 2)
+		return;
+	YootWorld w;
+	AbstractPlugin * plugin = app->pluginManager.get(yootWorldPluginFile(world));
+	if (!plugin || !plugin->ensureLoaded() || !loadYootWorld(*plugin, world, w)) return;
+	if (grade - 2 >= (int)w.grades.size() || w.grades[grade - 2].animId <= 0) return;
+	sf::Texture sheet;
+	if (!app->bitmaps.loadFromPlugin(yootWorldPluginFile(world), w.grades[grade - 2].animId, sheet)) return;
+	const sf::Image img = sheet.copyToImage();
+	const unsigned fw = 144, fh = 96;
+	if (img.getSize().x < fw || img.getSize().y < fh) return;
+	const int frames = w.grades[grade - 2].animFrames > 0 ? w.grades[grade - 2].animFrames : 1000;
+	for (unsigned y = 0; y + fh <= img.getSize().y && (int)animFrames.size() < frames; y += fh)
+	{
+		sf::Image frame({fw, fh});
+		if (!frame.copy(img, {0, 0}, sf::IntRect({0, (int)y}, {(int)fw, (int)fh}))) break;
+		tgui::Texture t;
+		t.loadFromPixelData(frame.getSize(), frame.getPixelsPtr());
+		animFrames.push_back(t);
+	}
+	if (animFrames.empty()) return;
+	animFrame = 0;
+	animClock = 0;
+	animLoop = std::max(0, w.grades[grade - 2].animParam);
+	const float s = app->uiScale;
+	window->setClientSize({260 * s, 250 * s});
+	anim = tgui::Picture::create(animFrames[0]);
+	anim->setSize({(float)fw * s, (float)fh * s});
+	anim->setPosition({58 * s, 8 * s});
+	window->add(anim);
+	heading->setPosition({12 * s, 108 * s});
+	unlocks->setPosition({12 * s, 136 * s});
+	okButton->setPosition({94 * s, 222 * s});
 }

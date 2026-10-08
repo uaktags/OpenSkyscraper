@@ -3194,6 +3194,9 @@ static void testYootWorldLoader()
 		EXPECT(tokyo.grades[3].population == 12000);
 		EXPECT(tokyo.grades[0].vipFlag == 1u && tokyo.grades[3].vipFlag == 4096u);
 		EXPECT(tokyo.grades[3].animId == 1210);
+		// The grade-up animation: 13 / 11 frames, looping back to 8 / 6.
+		EXPECT(tokyo.grades[0].animFrames == 13 && tokyo.grades[0].animParam == 8);
+		EXPECT(tokyo.grades[3].animFrames == 11 && tokyo.grades[3].animParam == 6);
 	}
 	EXPECT(tokyo.discarded10.size() == 10u && tokyo.discarded10[0] == 200);
 	EXPECT(tokyo.cashAmounts.size() == 8u && tokyo.cashAmounts[7] == 200000);

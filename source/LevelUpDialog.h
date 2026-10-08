@@ -4,6 +4,8 @@
 #include <TGUI/Widgets/ChildWindow.hpp>
 #include <TGUI/Widgets/Label.hpp>
 #include <TGUI/Widgets/Button.hpp>
+#include <TGUI/Widgets/Picture.hpp>
+#include <vector>
 
 namespace OT
 {
@@ -37,11 +39,24 @@ namespace OT
 		/// Closes any prior popup first.
 		void showForRating(int newRating);
 
+		/// Per frame: steps the YootTower grade-up animation.
+		void advance(double dt);
+
 	private:
 		tgui::ChildWindow::Ptr window;
 		tgui::Label::Ptr       heading;
 		tgui::Label::Ptr       unlocks;
 		tgui::Button::Ptr      okButton;
+
+		/// YootTower: the world's grade-up animation (T2.exe FUN_0041ca80,
+		/// dialog 9101 item 0x68: T2WorldDef::SetupGradeUpAnimation
+		/// 0x10072e70 -> T2DlgItemAnimation): the bitmap of the WORLDDEF
+		/// grade row, 144x96 frames stacked vertically, one every 100 ms,
+		/// looping back to the row's frame (OnT2Timer 0x10022470).
+		tgui::Picture::Ptr      anim;
+		std::vector<tgui::Texture> animFrames;
+		int animFrame = 0, animLoop = 0;
+		double animClock = 0;
 
 		/// Build the list of prototype names that require exactly the
 		/// given rating (i.e. freshly unlocked by this promotion).

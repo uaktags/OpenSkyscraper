@@ -1120,6 +1120,7 @@ void Game::advance(double dt)
 
 	timeWindow.updateTime();
 	timeWindow.advance(dt);
+	levelUpDialog.advance(dt);
 	sky.advance(dt);
 	lighting.advance(dt);
 	if (yootArt) {
