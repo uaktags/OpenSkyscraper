@@ -37,6 +37,7 @@
 #include "../source/PluginT2pExport.h"
 #include "../source/PluginResourceJson.h"
 #include "../source/TdtLoader.h"
+#include "../source/BldLoader.h"
 
 #include "../source/BuildRules.h"
 #include "../source/Skin.h"
@@ -3922,8 +3923,262 @@ static void testYootStress()
 	EXPECT(Y::moverRouteScore(50, 1) == 50);
 }
 
+// ---- YootTower .bld import -------------------------------------------------
+// The shipped sample saves are game data and are not vendored: they are read
+// from $OPENSKY_YOOT_DIR (default ~/Downloads/Yoot-Tower_Win_EN/YOOT) and the
+// sample checks are skipped when absent. The synthetic fixture always runs.
+
+static std::string yootSamplePath(const char * name)
+{
+	std::string dir;
+	if (const char * env = std::getenv("OPENSKY_YOOT_DIR")) dir = env;
+	else if (const char * home = std::getenv("HOME")) dir = std::string(home) + "/Downloads/Yoot-Tower_Win_EN/YOOT";
+	return dir + "/" + name;
+}
+
+static bool readAllBytes(const std::string & path, std::vector<uint8_t> & out)
+{
+	std::ifstream in(path.c_str(), std::ios::binary);
+	if (!in) return false;
+	out.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+	return true;
+}
+
+/// Footprints of the OpenSky prototypes (Item/*.h makePrototype).
+static bool bldTestPrototypes(const std::string & id, int & w, int & h)
+{
+	static const std::map<std::string, std::pair<int, int> > sizes = {
+		{"lobby", {4, 1}}, {"floor", {1, 1}}, {"stairs", {8, 2}}, {"escalator", {8, 2}},
+		{"elevator-express", {6, 1}}, {"elevator-service", {4, 1}}, {"elevator-standard", {4, 1}},
+		{"fastfood", {16, 1}}, {"restaurant", {24, 1}}, {"shop", {12, 1}}, {"office", {9, 1}},
+		{"condo", {16, 1}}, {"yoot_condo", {16, 1}}, {"hotel_single", {4, 1}},
+	};
+	std::map<std::string, std::pair<int, int> >::const_iterator i = sizes.find(id);
+	if (i == sizes.end()) return false;
+	w = i->second.first;
+	h = i->second.second;
+	return true;
+}
+
+static int countOf(const std::string & hay, const std::string & needle)
+{
+	int n = 0;
+	for (size_t p = hay.find(needle); p != std::string::npos; p = hay.find(needle, p + 1)) n++;
+	return n;
+}
+
+static int pluginCount(const OT::Bld::BldData & d, const char * macId)
+{
+	int n = 0;
+	for (const OT::Bld::Tenant & t : d.tenants)
+	{
+		const OT::Bld::PluginInfo * p = t.hdr.used ? d.pluginForItemType(t.equipType) : nullptr;
+		if (p && OT::Bld::macOrder(p->id) == macId) n++;
+	}
+	return n;
+}
+
+/// A tiny structurally complete save built through the writer: proves the
+/// writer and reader agree and that the parse is strict.
+static void testBldSyntheticRoundTrip()
+{
+	using namespace OT::Bld;
+	BldData d;
+	d.world = "KJNS";
+	d.level = 3;
+	d.speed = -2;
+	d.year = 2; d.month0 = 5; d.minutes = 600;
+	PluginInfo office;
+	office.type = "lPnT"; office.id = "CFFO"; office.itemType = 1200; office.name = "Office";
+	office.fileName = "C:\\YOOT\\PLUGINS\\OFFICE.T2P";
+	d.plugins.push_back(office);
+	d.people.resize(256);
+	d.vRange = 2; d.hRange = 3;
+	d.unitMap.assign(2 * 3 * 4, 0);
+	d.tenants.resize(128);
+	Tenant & t = d.tenants[1];
+	t.hdr.used = 1; t.hdr.status = 13;
+	t.equipID = 1001; t.equipType = 1200; t.area = {150, 108, 159, 109};
+	t.ce.tag = "AECT"; t.ce.ids.items = {1000}; t.ce.ids.h2 = t.ce.ids.h3 = t.ce.ids.dataBytes = 2;
+	t.estimate = 150; t.inMoneyIndex = 2; t.f8c = 300;
+	t.hasBelongList = 1; t.belongList = {1, 2, 3};
+	d.tenants[5].hdr.status = 1; // unused slot that still carries a status
+	d.movers.resize(32);
+	d.requests.resize(64);
+	d.outObjs.resize(64);
+	d.outside.assign(6, 0);
+	d.pool.population = 3;
+	d.trafficMap.assign(8066 * 4, 0); // Tokyo's cell count
+	d.settlement.funds = 12345; d.settlement.previousFunds = 12000;
+	d.unusedRect = Rect();
+	for (uint8_t & f : d.uiFlags) f = 1;
+	d.hasWorldStats = true;
+	d.wsA = 4; d.wsB = 8; d.wsF49 = 2;
+
+	std::vector<uint8_t> bytes;
+	std::string error;
+	EXPECT(writeBytes(d, bytes, error));
+	BldData back;
+	EXPECT(parseBytes(bytes, back, error));
+	EXPECT(error.empty());
+	EXPECT(back.usedTenants() == 1 && back.tenants.size() == 128);
+	EXPECT(back.tenants[1].belongList.size() == 3 && back.tenants[1].estimate == 150);
+	EXPECT(back.tenants[5].hdr.status == 1 && !back.tenants[5].hdr.used);
+	EXPECT(back.tenants[1].area.left == 150 && back.tenants[1].area.bottom == 109);
+	EXPECT(back.trafficMap.size() == 8066 * 4 && back.hasWorldStats && back.wsB == 8);
+	std::vector<uint8_t> again;
+	EXPECT(writeBytes(back, again, error));
+	EXPECT(again == bytes);
+
+	// Strict: a truncated file and a damaged marker fail with a location.
+	BldData broken;
+	std::vector<uint8_t> cut(bytes.begin(), bytes.begin() + bytes.size() / 2);
+	EXPECT(!parseBytes(cut, broken, error) && !error.empty());
+	std::vector<uint8_t> bad = bytes;
+	bad[0] = 'X';
+	EXPECT(!parseBytes(bad, broken, error) && error.find("expected") != std::string::npos);
+	error.clear();
+
+	// Import: x = unit - 184 (Tokyo width / 2), y = 110 - bottom row.
+	std::string xml;
+	ImportReport report;
+	EXPECT(toTowerXml(back, bldTestPrototypes, xml, report, error));
+	EXPECT(report.worldId == "tokyo");
+	EXPECT(xml.find("type=\"office\" x=\"-34\" y=\"1\" evaluation=\"50.000\" yootEstimate=\"150\" occupied=\"1\" population=\"3\"") != std::string::npos);
+	EXPECT(xml.find("funds=\"1234500\" rating=\"2\" time=\"17.416667\"") != std::string::npos);
+	EXPECT(xml.find("lastQuarterBalance=\"1200000\" quarterIncome=\"34500\"") != std::string::npos);
+}
+
+static void testBldShippedSaves()
+{
+	using namespace OT::Bld;
+	const std::string tokyoPath = yootSamplePath("Sample Tokyo Map.bld");
+	const std::string hawaiiPath = yootSamplePath("Yooooot.bld");
+	std::vector<uint8_t> tokyoBytes, hawaiiBytes;
+	if (!readAllBytes(tokyoPath, tokyoBytes) || !readAllBytes(hawaiiPath, hawaiiBytes))
+	{
+		std::cout << "SKIP: YootTower sample saves not found (set OPENSKY_YOOT_DIR)\n";
+		return;
+	}
+	EXPECT(looksLikeBld(tokyoPath));
+	std::string error;
+
+	// --- Sample Tokyo Map.bld --------------------------------------------
+	BldData tokyo;
+	EXPECT(parseBytes(tokyoBytes, tokyo, error));
+	if (!error.empty()) std::cerr << "bld: " << error << "\n";
+	EXPECT(macOrder(tokyo.world) == "SNJK");
+	EXPECT(tokyo.level == 1 && tokyo.speed == -2);
+	EXPECT(tokyo.year == 1 && tokyo.month0 == 0 && tokyo.minutes == 574 && tokyo.seconds == 2);
+	EXPECT(tokyo.settlement.funds == 78770 && tokyo.fundsDollars() == 7877000);
+	EXPECT(tokyo.settlement.previousFunds == 100000 && tokyo.settlement.totals[1] == 21230);
+	EXPECT(tokyo.pool.population == 2 && tokyo.usedPeople() == 2);
+	EXPECT(tokyo.vRange == 122 && tokyo.hRange == 368);
+	EXPECT(tokyo.plugins.size() == 69);
+	EXPECT(tokyo.usedTenants() == 26);
+	EXPECT(pluginCount(tokyo, "FLOR") == 8);
+	EXPECT(pluginCount(tokyo, "OFFC") == 9);
+	EXPECT(pluginCount(tokyo, "TOIL") == 7);
+	EXPECT(pluginCount(tokyo, "ICES") == 1);
+	EXPECT(pluginCount(tokyo, "HREN") == 1);
+	EXPECT(tokyo.trafficMap.size() == 8066 * 4);
+	EXPECT(tokyo.events.size() == 24 && tokyo.hasWorldStats);
+	EXPECT(tokyo.usedMovers() == 1);
+	const Mover * elev = nullptr;
+	for (const Mover & m : tokyo.movers) if (m.hdr.used) elev = &m;
+	EXPECT(elev && elev->equipType == 1810 && macOrder(tokyo.pluginForItemType(1810)->id) == "StdE");
+	if (elev)
+	{
+		EXPECT(elev->length == 10 && elev->area.left == 184 && elev->area.top == 99 && elev->area.bottom == 111);
+		EXPECT(elev->modules.kind == "LMlE" && elev->modules.modules.size() == 6);
+		int cars = 0;
+		for (const MoverModule & c : elev->modules.modules) cars += c.hdr.used ? 1 : 0;
+		EXPECT(cars == 2);
+		EXPECT(elev->modules.modules[1].position == 9 && elev->modules.modules[1].stops.items.size() == 20);
+		EXPECT(elev->reqIDs.items.size() == 20 && elev->reqIDs.items[2] == 0 && elev->reqIDs.items[6] == 1002);
+	}
+	std::vector<uint8_t> rebuilt;
+	EXPECT(writeBytes(tokyo, rebuilt, error));
+	EXPECT(rebuilt == tokyoBytes); // byte-identical round trip
+
+	std::string xml;
+	ImportReport report;
+	EXPECT(toTowerXml(tokyo, bldTestPrototypes, xml, report, error));
+	EXPECT(xml.find("<tower funds=\"7877000\" rating=\"0\" time=\"0.398611\"") != std::string::npos);
+	EXPECT(xml.find("ruleset=\"yoottower\" world=\"tokyo\"") != std::string::npos);
+	EXPECT(xml.find("lastQuarterBalance=\"10000000\" quarterIncome=\"0\" quarterExpenses=\"2123000\"") != std::string::npos);
+	// 3-storey atrium lobby (Floor.t2p variation 1) on 1F; unit 147 -> x -37.
+	EXPECT(xml.find("type=\"lobby\" x=\"-37\" y=\"0\" evaluation=\"50.0\" width=\"46\" height=\"3\"") != std::string::npos);
+	EXPECT(xml.find("type=\"floor\" x=\"-37\" y=\"3\" evaluation=\"50.0\" width=\"46\"") != std::string::npos);
+	EXPECT(xml.find("type=\"floor\" x=\"-31\" y=\"9\" evaluation=\"50.0\" width=\"40\"") != std::string::npos);
+	EXPECT(countOf(xml, "type=\"floor\"") == 7);
+	EXPECT(countOf(xml, "type=\"office\"") == 9);
+	EXPECT(xml.find("type=\"office\" x=\"-13\" y=\"4\" evaluation=\"100.000\" yootEstimate=\"300\" occupied=\"1\"") != std::string::npos);
+	EXPECT(xml.find("type=\"office\" x=\"-31\" y=\"4\" evaluation=\"50.0\" occupied=\"0\"") != std::string::npos);
+	EXPECT(xml.find("type=\"shop\" x=\"-37\" y=\"3\" evaluation=\"50.0\" let=\"1\"") != std::string::npos);
+	// Simple Elevator: shaft x 0, 1F..10F, no stops on the atrium's 2F/3F, two cars.
+	EXPECT(xml.find("type=\"elevator-standard\" x=\"0\" y=\"0\" evaluation=\"50.0\" height=\"10\" showShaft=\"1\"><unserviced floor=\"1\"/><unserviced floor=\"2\"/><car altitude=\"0.0\" homeFloor=\"0\"/><car altitude=\"9.0\" homeFloor=\"9\"/></item>") != std::string::npos);
+	EXPECT(report.imported["lobby"] == 1 && report.imported["floor"] == 7 && report.imported["office"] == 9);
+	EXPECT(report.imported["shop"] == 1 && report.imported["elevator-standard"] == 1);
+	EXPECT(report.dropped["TOIL Restroom (no OpenSky counterpart)"] == 7);
+	EXPECT(report.dropped["HREN Apartment (no OpenSky counterpart)"] == 1);
+	if (report.dropped.size() != 2)
+		for (const auto & d : report.dropped) std::cerr << "dropped: " << d.first << " x" << d.second << "\n";
+
+	// --- Yooooot.bld: the empty Hawaii lot -------------------------------
+	BldData hawaii;
+	EXPECT(parseBytes(hawaiiBytes, hawaii, error));
+	EXPECT(macOrder(hawaii.world) == "HWAI");
+	EXPECT(hawaii.level == 2 && hawaii.pool.gameLevel == 2);
+	EXPECT(hawaii.year == 1 && hawaii.month0 == 1 && hawaii.minutes == 647);
+	EXPECT(hawaii.fundsDollars() == 5000000 && hawaii.pool.population == 0);
+	EXPECT(hawaii.vRange == 62 && hawaii.hRange == 400);
+	EXPECT(hawaii.usedTenants() == 0 && hawaii.usedMovers() == 0 && hawaii.usedPeople() == 0);
+	EXPECT(hawaii.nextTenantNumber == 12);
+	EXPECT(hawaii.plugins.size() == 73 && hawaii.events.size() == 11);
+	EXPECT(hawaii.trafficMap.size() == 4284 * 4);
+	EXPECT(writeBytes(hawaii, rebuilt, error));
+	EXPECT(rebuilt == hawaiiBytes);
+	report = ImportReport();
+	EXPECT(toTowerXml(hawaii, bldTestPrototypes, xml, report, error));
+	EXPECT(xml.find("<tower funds=\"5000000\" rating=\"1\" time=\"1.449306\"") != std::string::npos);
+	EXPECT(xml.find("world=\"hawaii\"") != std::string::npos);
+	EXPECT(xml.find("<item") == std::string::npos);
+
+	// --- A game-written save with live state, when present ---------------
+	std::vector<uint8_t> runBytes;
+	const char * home = std::getenv("HOME");
+	if (home && readAllBytes(std::string(home) + "/yoottower-decomp/save-agent/saves/tokyo_run1.bld", runBytes))
+	{
+		BldData run;
+		EXPECT(parseBytes(runBytes, run, error));
+		EXPECT(run.settlement.funds == 79047 && run.pool.population == 96 && run.usedPeople() == 63);
+		EXPECT(writeBytes(run, rebuilt, error) && rebuilt == runBytes);
+		report = ImportReport();
+		EXPECT(toTowerXml(run, bldTestPrototypes, xml, report, error));
+		// Working offices carry their 6 staff as population.
+		EXPECT(xml.find("type=\"office\" x=\"-13\" y=\"4\" evaluation=\"100.000\" yootEstimate=\"300\" occupied=\"1\" population=\"6\"") != std::string::npos);
+	}
+	// Every other oracle-written save round-trips byte-identical.
+	static const char * oracleSaves[] = {
+		"save-agent/saves/tokyo_run2.bld", "econ-agent/s1_paused_load.bld", "econ-agent/s2_run.bld",
+		"econ-agent/s3_m2_late.bld", "econ-agent/s4_m3_0010.bld", "econ-agent/s5_m3_0524.bld",
+		"events-agent/blackout.bld", "events-agent/after_1602.bld",
+	};
+	for (const char * rel : oracleSaves)
+	{
+		if (!home || !readAllBytes(std::string(home) + "/yoottower-decomp/" + rel, runBytes)) continue;
+		BldData run;
+		const bool ok = parseBytes(runBytes, run, error) && writeBytes(run, rebuilt, error) && rebuilt == runBytes;
+		EXPECT(ok);
+		if (!ok) std::cerr << rel << ": " << error << "\n";
+	}
+}
+
 int main()
 {
+	testBldSyntheticRoundTrip();
+	testBldShippedSaves();
 	testTdtLoader();
 	testTdtLoaderTruncated();
 	testSmoke();
