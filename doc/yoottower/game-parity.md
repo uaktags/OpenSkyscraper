@@ -480,36 +480,60 @@ the Billboard (filtered by `Yoot::advertiseFits`).
 
 Tower: `tests/sim/yoot_people.tower` (Tokyo, grade 1: a 3-row lobby, 9 offices, one Simple
 Elevator, Barber, 1-800 FLOWERS, Juice and Cigarette vending, Book Store, Burger land,
-coffee.com, Ramen, Ice Cream), exported with `BldTool export` against Sample Tokyo Map. The
-exporter copies the template's T2Pool, whose zone clock is about 9 hours ahead of the
-save's 00:30, so two starts were compared: the export as is ("template pool") and the same
-save with the pool's zone clock put on 00:30 and every search window opened
-(`~/yoottower-decomp/people-agent/scripts/align_pool.py`, "aligned pool"). OpenSky loads
+coffee.com, Ramen, Ice Cream), exported with `BldTool export` against Sample Tokyo Map.
+The exporter used to copy the template's T2Pool, whose zone clock is about 9 hours ahead
+of the save's 00:30 ("template pool"); it now writes the tower's own pool, or the
+template's put on the save's clock with fresh search windows (T2PeopleDemandList::Init,
+InitSearchLimit 1.0). Its export of this tower has the same pool, byte for byte, as the
+hand-aligned save (`people-agent/scripts/align_pool.py`, "aligned pool"), and the original
+replays it identically (`~/yoottower-decomp/walk-agent/oracle/`: days 1 and 2 matched `oracle2` customer for customer). OpenSky loads
 each .bld's pool through `BldTool import` (`yootPool`). The original ran in the lab
 (`tools/yoottower/remote/lab.sh`, `people-agent/lab/oracle_loop.py`, one save per game
-hour, read with `bld.py`); OpenSky ran `--sim`. Customers per day = TotalCustomer (+0xa8)
-before the close; artifacts in `~/yoottower-decomp/people-agent/` (`oracle/`, `oracle2/`).
+hour, read with `bld.py`); OpenSky ran `--sim` (`walk-agent/in/calib.sh`). Customers per
+day = TotalCustomer (+0xa8) before the close. "Before" is the branch before the walking
+work, "after" the walking work.
 
 Aligned pool, customers per day (days 1-4):
 
-| Tenant | Original | OpenSky |
-|---|---|---|
-| coffee.com | 82, 132, 139, 102 | 111, 111, 115, 102 |
-| Burger land | 110, 117, 119, 105 | 81, 75, 63, 82 |
-| Book Store | 86, 107, 111, 87 | 64, 58, 62, 60 |
-| Ice Cream Stand | 52, 55, 67, 57 | 37, 30, 45, 38 |
-| 1-800 FLOWERS | 21, 18, 38, 22 | 26, 15, 25, 25 |
-| Barber Shop | 14, 16, 16, 15 | 8, 14, 15, 13 |
-| Ramen Noodle House | 0, 6, 0, 3 | 1, 41, 4, 5 |
-| Cigarette / Juice vending | 0 (never opened, status 10) | 62, 76, 66, 49 / 34, 36, 30 |
-| Population (daily min..max) | 0..434, 69..509, 69..559, 69..439 | 0..292, 68..288, 55..312, 46..303 |
+| Tenant | Original | OpenSky before | OpenSky after |
+|---|---|---|---|
+| coffee.com | 82, 132, 139, 102 | 119, 120, 125, 119 | 128, 78, 157, 130 |
+| Burger land | 110, 117, 119, 105 | 75, 76, 85, 72 | 101, 144, 177, 136 |
+| Book Store | 86, 107, 111, 87 | 61, 65, 70, 61 | 109, 96, 130, 139 |
+| Ice Cream Stand | 52, 55, 67, 57 | 35, 32, 39, 39 | 46, 66, 97, 72 |
+| 1-800 FLOWERS | 21, 18, 38, 22 | 21, 26, 26, 24 | 31, 38, 46, 38 |
+| Barber Shop | 14, 16, 16, 15 | 15, 15, 14, 16 | 22, 15, 25, 22 |
+| Ramen Noodle House | 0, 6, 0, 3 | 9, 4, 17, 26 | 0, 1, 2, 5 |
+| Cigarette / Juice vending | 0 (never opened, status 10) | 65, 79, 64, 77 / 35, 39, 35 | 6, 5, 20, 19 / 25, 15, 21 |
+| Population (daily min..max) | 0..434, 69..509, 69..559, 69..439 | 0..280, 47..289, 54..338, 59..311 | 0..478, 69..460, 69..663, 69..567 |
+| Pool calls a day | 365, 440, 490, 370 | 247, 242, 284, 252 | 409, 391, 594, 498 |
 
-Template pool: the original had 16-27 coffee.com and 0-20 Burger customers a day and
-almost none elsewhere (population 39..55 up to 69..89 when five offices let on day 4);
-OpenSky had 8-51 coffee.com, 0-25 Burger, 5-18 Book Store (population 39..49 up to
-36..76). Before step 15 the same tower gave 29 (Barber) to 891 (coffee.com) a day.
+Template pool (the old export): the original had 16-27 coffee.com and 0-20 Burger
+customers a day and almost none elsewhere (population 39..55 up to 69..89 when five offices
+let on day 4). OpenSky before: coffee.com 1-42, Burger 11-24, Book Store 5-14 (population
+0..60 up to 36..76); after: coffee.com 0-30, Burger 0-20, the others 0-2 (population 0..74
+up to 45..87).
 
-Open points: OpenSky's daily peak population is about 60% of the original's with the
-aligned pool (the customer counts match better than the population, so the original
-calls more pool people than come in); exported vending machines stay in status 10 in the
-original (Drink.t2p has no case for it), so their counts are not compared.
+Why the peak population was about 60% of the original's (each fixed, with evidence):
+- **Elevator cars ran about 30 times too slowly in game time** (M7). T2.exe idles every
+  mover 4 times a game minute; OpenSky's car advanced 192 frames a game day, one per 7.5
+  YootTower minutes, so a 9-floor trip took about 200 minutes instead of 6.5. Hourly status
+  counts showed 60-118 people waiting at the elevator (the original 20-72), and almost every
+  visitor gave up waiting (stress 300, people-estimate 1): all returns had estimates of
+  71..200, so T2Pool::Enter never duplicated them and the pool was called about 250 times a
+  day instead of 370-490. With the cars on the sub-tick, most returns are above 200 again.
+- **The floor and tenant sources over-fired.** They took people queued at a mover and any
+  tenant with visitors; about 190 customers a day came without a pool call (the original:
+  0-65, all of it office workers on working days). With positions, only people walking on
+  the floor turn in, and SelectNearTenant searches one floor near one mover.
+- **A full car could stall forever** (moving to the floor it stood on), keeping 17 leaving
+  visitors overnight.
+- **Six imported offices never hired.** A .bld office of status 11 with a kind but no
+  belong people imported as let with population 0; the night population was 33, not 69
+  (54 office workers + 15 shop staff). They now hire at the next Office.t2p window.
+
+Open points: OpenSky's holiday (day 3) is busier than the original's (peak 663 vs 559;
+Burger 177 vs 119); exported vending machines stay in status 10 in the original (Drink.t2p
+has no case for it), so their counts are not compared. Venues, hotel guests, riders and
+students are not part of this tower; `tests/sim/yoot_visitors.tower` (golden
+`sim_visitors_yoottower`) covers them in OpenSky only.
