@@ -58,6 +58,15 @@ void YootFacility::updateSprite()
 	sf::IntRect band({0, 0}, {static_cast<int>(view->getSize().x), static_cast<int>(view->getSize().y)});
 	if (bands && !bands->empty())
 		band = (*bands)[std::max(0, std::min((int)bands->size() - 1, pattern))];
+	if (game->skin == Skin::Yoot) {
+		// T2TenantDef::DrawProc: UnitToQD(rect, 0) is the interior (row top
+		// + 8 .. bottom - 4) and T2ImageObj::DrawObject copies the part to
+		// its top-left corner, clipped (EventCenter's 64 px, Stadium's 180).
+		band.size.x = std::min(band.size.x, size.x * 8);
+		band.size.y = std::min(band.size.y, size.y * 36 - 12);
+		sprite.setPosition({static_cast<float>(getPosition().x * 8),
+		                    static_cast<float>(-(getPosition().y + size.y) * 36 + 8 + band.size.y)});
+	}
 	sprite.setTextureRect(band);
 	sprite.setOrigin({0.f, static_cast<float>(band.size.y)});
 }
