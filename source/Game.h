@@ -37,6 +37,8 @@
 #include "BuildRules.h"
 #include "Skin.h"
 #include "YootCatalog.h"
+#include "YootWorldArt.h"
+#include <memory>
 
 
 namespace OT {
@@ -157,6 +159,11 @@ namespace OT {
 		Skin skin = Skin::OpenSky;
 		void setSkin(Skin newSkin);
 		void cycleSkin();
+		/// YootTower plugin art for the active world, or null when the skin
+		/// is not Yoot or the world plugin is missing (OpenSky art is used).
+		const YootWorldArt * yootSkinArt() const;
+		/// (Re)loads the YootTower art for the active skin and world.
+		void refreshYootArt();
 
 		/// Open the quarterly financial report dialog (Wave U row 49).
 		/// Called automatically once a 4:59AM quarterly settlement
@@ -256,6 +263,8 @@ namespace OT {
 		std::vector<Item::Item *> routeBuildQueue;
 		void pumpRouteBuilds();
 		Decorations decorations;
+		std::unique_ptr<YootWorldArt> yootArt;
+		double yootClock = 0; ///< real seconds, drives the SE (sign light) cycle
 
 		/// Daily tenant & hotel evaluation engine. Updated once per day from
 		/// settleDailyAccounting(); scores are cached on each Item::evaluation.

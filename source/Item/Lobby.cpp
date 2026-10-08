@@ -100,6 +100,28 @@ void Lobby::updateSprite()
 
 void Lobby::render(sf::RenderTarget &target) const
 {
+	// YootTower skin: the Floor.t2p lobby view for this height (its left
+	// part carries the entrance), the world slab on top and, on the ground
+	// lobby, the 1003 awnings either side. Heights the plugin lacks
+	// (KFloor.t2p only has 1-row lobbies) keep the OpenSky art.
+	const YootWorldArt * yoot = game->yootSkinArt();
+	if (yoot && !underConstruction && yoot->hasLobbyView(size.y) && yoot->hasSlab())
+	{
+		sf::Color tint = game->lighting.compose(sf::Color::White);
+		if (game->statusMode == Game::kHotel)
+			tint = sf::Color(tint.r * 110 / 255, tint.g * 110 / 255, tint.b * 110 / 255, 160);
+		const recti r = getRect();
+		const float top = -(position.y + size.y) * 36.0f;
+		// Roof (8 px), the lobby view (36*h - 12 px), the floor strip (4 px).
+		yoot->drawRoof(target, r.minX() * 8.0f, r.maxX() * 8.0f, top, tint);
+		yoot->drawLobbyView(target, size.y, r.minX() * 8.0f, r.maxX() * 8.0f, top + 8.0f, tint);
+		yoot->drawFloorStrip(target, r.minX() * 8.0f, r.maxX() * 8.0f, top + size.y * 36.0f - 4.0f, tint);
+		if (position.y == 0)
+			yoot->drawTents(target, r.minX() * 8.0f, r.maxX() * 8.0f, 0.0f, tint);
+		game->drawnSprites += 3;
+		return;
+	}
+
 	Item::render(target);
 
 	const sf::View &view = target.getView();

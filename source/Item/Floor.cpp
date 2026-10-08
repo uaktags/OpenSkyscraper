@@ -120,6 +120,34 @@ void Floor::render(sf::RenderTarget &target) const
 
 	const int floorLeft = getRect().minX();
 	const int floorRight = getRect().maxX();
+	// YootTower skin: the world 1004 roof strip along the whole floor, and
+	// on the spans no tenant covers the Floor.t2p empty-floor view plus the
+	// floor strip (8 + 24 + 4 px, the original's row layout). Above OpenSky
+	// tenants, whose 24 px interior starts 12 px down, the floor strip
+	// fills the remaining 4 px under the roof.
+	const YootWorldArt * yoot = game->yootSkinArt();
+	if (yoot && yoot->hasSlab() && yoot->hasFloorView())
+	{
+		const sf::Color yootTint = tinted ? game->lighting.compose(sf::Color::White) : sf::Color::White;
+		const float top = -(getPosition().y + 1) * 36.0f;
+		yoot->drawRoof(target, floorLeft * 8.0f, floorRight * 8.0f, top, yootTint);
+		auto emptySpan = [&](int left, int right) {
+			if (left >= right) return;
+			yoot->drawFloorView(target, left * 8.0f, right * 8.0f, top + 8.0f, yootTint);
+			yoot->drawFloorStrip(target, left * 8.0f, right * 8.0f, top + 32.0f, yootTint);
+		};
+		int from = floorLeft;
+		for (std::vector<Span>::const_iterator it = merged.begin(); it != merged.end(); ++it)
+		{
+			emptySpan(from, it->left);
+			yoot->drawFloorStrip(target, std::max(from, it->left) * 8.0f, it->right * 8.0f, top + 8.0f, yootTint);
+			from = std::max(from, it->right);
+		}
+		emptySpan(from, floorRight);
+		game->drawnSprites += 2 + static_cast<int>(merged.size());
+		return;
+	}
+
 	int cursor = floorLeft;
 	for (std::vector<Span>::const_iterator it = merged.begin(); it != merged.end(); ++it)
 	{

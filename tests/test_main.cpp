@@ -2737,6 +2737,8 @@ static void testYootSkyPalette()
 	// Oracle: Hawaii's first sky colour under the 7:00 filter (the Wine
 	// screenshot oracle-shots/stage_c_yooooot.png shows exactly this pink).
 	EXPECT(yootSkyColor(yootDayLightFilter(23), YootRgb(242, 250, 250)) == YootRgb(249, 195, 175));
+	// ...and at 13:34 (oracle_hawaii.png, clock running) the same entry is near white.
+	EXPECT(yootSkyColor(yootDayLightFilter(yootDayLightAngleForMinute(13 * 60 + 30)), YootRgb(242, 250, 250)) == YootRgb(249, 251, 251));
 	EXPECT(yootSkyColor(YootRgb(255, 255, 255), YootRgb(255, 255, 255)) == YootRgb(255, 255, 255));
 	EXPECT(yootRefractionColor(YootRgb(255, 128, 0), YootRgb(200, 200, 200)) == YootRgb(200, 100, 0));
 

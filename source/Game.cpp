@@ -1039,6 +1039,17 @@ void Game::advance(double dt)
 	timeWindow.advance(dt);
 	sky.advance(dt);
 	lighting.advance(dt);
+	if (yootArt) {
+		yootClock += dt;
+		YootSkyInputs sky_in;
+		sky_in.month = time.dayOfYear();
+		sky_in.minuteOfDay = (int)floor(time.hour * 60);
+		sky_in.rainy = sky.rainyDay;
+		// T2PaletteAnime::ChangeSE: one SE step every 5 of the 30 Hz
+		// IsSETime ticks, i.e. 6 steps a second.
+		sky_in.seKind = (int)(yootClock * 6);
+		yootArt->update(sky_in);
+	}
 	toolboxWindow.update();
 
 	// Refresh the minimap every ~1 second of game time (cheaper than every
@@ -1106,8 +1117,12 @@ void Game::advance(double dt)
 	}
 	if (previousPrototype != toolPrototype) timeWindow.updateTooltip();
 
-	//Draw the sky and decorations.
-	win.draw(sky);
+	//Draw the sky and decorations. The YootTower skin replaces the sky,
+	//skyline and ground with the world plugin's backdrop.
+	if (const YootWorldArt * art = yootSkinArt())
+		art->drawBackdrop(win);
+	else
+		win.draw(sky);
 	win.draw(decorations);
 
 	//Draw the items that are in view.
@@ -1641,6 +1656,7 @@ void Game::setRules(const BuildRules & rules)
 	time.calendar = profile.calendar == RulesProfile::Calendar::YootTower
 		? Time::Calendar::YootTower : Time::Calendar::SimTower;
 	applyItemCatalog();
+	refreshYootArt();
 }
 
 void Game::applyItemCatalog()
@@ -1703,6 +1719,29 @@ void Game::yootBook(int amount, const char * category, const char * message)
 {
 	if (amount != 0)
 		transferFunds(amount, category, message);
+}
+
+const YootWorldArt * Game::yootSkinArt() const
+{
+	return (skin == Skin::Yoot && yootArt && yootArt->loaded()) ? yootArt.get() : NULL;
+}
+
+void Game::refreshYootArt()
+{
+	if (skin != Skin::Yoot) {
+		yootArt.reset();
+		return;
+	}
+	// The YootTower ruleset names its world; other rulesets borrow the
+	// world picked in the menu (Tokyo by default).
+	YootWorld::Id world = app.selectedWorld();
+	const std::string & worldId = activeRules.profile().worldId;
+	if (!worldId.empty())
+		parseYootWorldIdentifier(worldId, world);
+	if (yootArt && yootArt->worldId() == world)
+		return;
+	yootArt.reset(new YootWorldArt);
+	yootArt->load(app.pluginManager, world);
 }
 
 int Game::lobbyToolHeight() const
@@ -2158,6 +2197,7 @@ void Game::setSkin(Skin newSkin)
 		}
 	}
 	skin = newSkin;
+	refreshYootArt();
 
 	// Rebuild items in place: serialize the world, clear it, reload. The
 	// item decode path re-runs init() with the same state, so sprites are

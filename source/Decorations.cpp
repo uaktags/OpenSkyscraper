@@ -156,15 +156,40 @@ void Decorations::render(sf::RenderTarget & target) const
 	sf::Vector2f dmax = center + size/2.f;
 	sf::Vector2f dmin = center - size/2.f;
 
+	// YootTower skin: the world's SideL/SideR fire escapes and OutCrane
+	// replace the OpenSky sprites at the same anchors.
+	const OT::YootWorldArt * yoot = game->yootSkinArt();
+	const bool yootSides = yoot && yoot->hasSides();
+	const bool yootCrane = yoot && yoot->hasCrane();
+
 	sf::FloatRect rect = target.getView().getViewport();
 	for (int y = (int)floor(dmin.y / 36); y <= ceil(dmax.y / 36); y++) {
 		FireStairs::const_iterator fsi = fireStairs.find(-y);
 		if (fsi == fireStairs.end()) continue;
+		if (yootSides) {
+			const sf::Color tint = game->lighting.compose(sf::Color::White);
+			for (int side = 0; side < 2; side++) {
+				const sf::IntRect r = yoot->sideRect(side == 1);
+				sf::Sprite s(yoot->sidesTexture(), r);
+				s.setOrigin({side == 0 ? (float)r.size.x : 0.f, (float)r.size.y});
+				s.setPosition(side == 0 ? fsi->second.minX.getPosition() : fsi->second.maxX.getPosition());
+				s.setColor(tint);
+				target.draw(s);
+			}
+			continue;
+		}
 		target.draw(fsi->second.minX);
 		target.draw(fsi->second.maxX);
 	}
 
-	if (craneVisible) target.draw(crane);
+	if (craneVisible && yootCrane) {
+		const sf::IntRect r = yoot->craneRect();
+		sf::Sprite s(yoot->craneTexture(), r);
+		s.setOrigin({0.f, (float)r.size.y});
+		s.setPosition(crane.getPosition());
+		s.setColor(game->lighting.compose(sf::Color::White));
+		target.draw(s);
+	} else if (craneVisible) target.draw(crane);
 
 	if (tracksVisible) {
 		// sf::FloatRect view = target.getView().getViewport();
