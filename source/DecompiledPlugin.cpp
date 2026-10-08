@@ -1,5 +1,7 @@
 /* Copyright (c) 2026 OpenSkyscraper contributors */
 #include "DecompiledPlugin.h"
+#include "OspPlugin.h"
+#include "PluginResources.h"
 
 #include <SFML/Graphics/Color.hpp>
 
@@ -97,50 +99,16 @@ namespace OT
 {
 namespace
 {
-	/// Builds a synthetic ATTR binary blob from manifest fields. Layout
-	/// matches doc/yoottower/resource-formats.md §3.1 so parsePluginAttr
-	/// decodes it as if it came from a PE.
+	/// Builds a synthetic ATTR binary blob from the manifest's "attr" object
+	/// (v1 or v2 keys, see readOspAttr) so getAttr() decodes it exactly as
+	/// if it came from a PE plugin.
 	std::string buildAttrBlob(const std::string & manifest)
 	{
-		size_t attrScope = findObject(manifest, "attr", 0);
-		if (attrScope == std::string::npos) return {};
-
-		std::string itemType("    ");
-		std::string name;
-		std::string marker("****");
-		long long attrib = 0, gameLevel = 1, id = 0, mustItem = 0;
-		std::string tmp;
-		if (readString(manifest, "itemType", attrScope, tmp) && tmp.size() >= 4)
-			itemType = tmp.substr(0, 4);
-		if (readString(manifest, "name", attrScope, tmp))
-			name = tmp;
-		if (readString(manifest, "marker", attrScope, tmp) && tmp.size() >= 4)
-			marker = tmp.substr(0, 4);
-		readScalarInt(manifest, "attrib",    attrScope, attrib);
-		readScalarInt(manifest, "gameLevel", attrScope, gameLevel);
-		readScalarInt(manifest, "id",        attrScope, id);
-		readScalarInt(manifest, "mustItem",  attrScope, mustItem);
-
-		if (name.size() > 255) name.resize(255);
-
+		PluginAttr attr;
+		if (!readOspAttr(manifest, attr)) return {};
+		if (attr.name.size() > 255) attr.name.resize(255);
 		std::string blob;
-		blob.reserve(30 + name.size());
-		blob.push_back(char(1));                                  // version
-		blob += itemType;                                         // mItemType
-		auto put32 = [&](uint32_t v) {
-			blob.push_back(char(v & 0xFF));
-			blob.push_back(char((v >> 8) & 0xFF));
-			blob.push_back(char((v >> 16) & 0xFF));
-			blob.push_back(char((v >> 24) & 0xFF));
-		};
-		put32(uint32_t(attrib));                                  // mAttrib
-		blob += marker;                                           // marker
-		put32(uint32_t(gameLevel));                               // mGameLevel
-		put32(uint32_t(mustItem));                                // mMustItem
-		put32(uint32_t(id));                                      // mID
-		put32(0);                                                 // pad
-		blob.push_back(char(name.size()));                        // pstr len
-		blob += name;                                             // pstr
+		if (!encodePluginAttr(attr, blob)) return {};
 		return blob;
 	}
 

@@ -20,6 +20,7 @@
 /// the flat schema — no external JSON dependency. See
 /// doc/openskyscraper/plugin-format.md for the full spec.
 #pragma once
+#include "PluginDefs.h"
 #include "PluginObjmap.h"
 #include "PluginResources.h"
 
@@ -35,10 +36,17 @@ namespace OT
 {
 	class Plugin;  // forward decl — defined in PluginManager.h
 
-	/// The current OSP on-disk schema version. The editor only reads/writes
-	/// this version; a higher version on load is a hard error (not silent
-	/// corruption). Bump when the schema gains a non-back-compatible field.
-	constexpr int kOspFormatVersion = 1;
+	/// The current OSP on-disk schema version. A higher version on load is a
+	/// hard error (not silent corruption). Bump when the schema gains a
+	/// non-back-compatible field.
+	///
+	/// v2 renamed the ATTR keys to the proven T2DLL semantics (pluginId 4cc,
+	/// numeric itemType, dependPluginId) and replaced the mislabeled
+	/// "placement"/"price" objects with "dayParam" (DPDF) and "placeParam"
+	/// (PLDF). v1 manifests are still read; see readOspAttr.
+	constexpr int kOspFormatVersion = 2;
+	/// Oldest manifest version loadOspPlugin still accepts.
+	constexpr int kOspMinFormatVersion = 1;
 
 	/// How the transparent (color-key) mask for a sprite sheet was chosen.
 	/// Recorded in the manifest so a future reload can re-derive or flag it.
@@ -62,6 +70,16 @@ namespace OT
 		std::vector<ObjmapBlock> blocks;  // OBJMAP rects (may be empty)
 	};
 
+	/// The human-readable price/name strings of a mover's first MVDF
+	/// variation (the rest of the MVDF is not yet part of the OSP manifest).
+	struct OspTransport
+	{
+		bool valid = false;
+		std::string priceString;      // mPriceString, e.g. "$150000:$50000/car"
+		std::string outMoneyString;   // mOutMoneyString, e.g. "$12000/Q" (v1 key "quarterlyString")
+		std::string name;             // mName
+	};
+
 	/// The in-memory editable plugin. Built by loadOspPlugin (from an OSP
 	/// directory) or convertT2pToOsp (from a .t2p); mutated by the editor
 	/// UI; serialized by saveOspPlugin.
@@ -74,9 +92,9 @@ namespace OT
 		PluginDesc::Kind pluginClass = PluginDesc::TenantPlugin;
 
 		PluginAttr attr;                                 // identity (always present)
-		PluginDpdf placement;                            // optional (placement-driven items)
-		PluginPldf price;                                // optional (shops, PLDF)
-		PluginMvdf transport;                            // optional (movers, MVDF)
+		std::optional<DayParamDef> dayParam;             // DPDF 128 (customer day/weather %)
+		std::optional<PlaceParamDef> placeParam;         // PLDF 128 (customer place %/score)
+		OspTransport transport;                          // optional (movers, from MVDF)
 		OspSpriteSheet toolbox;                          // RT_BITMAP 100  + OBJMAP 100
 		OspSpriteSheet ingame;                           // RT_BITMAP 1000 + OBJMAP 1000
 		OspSpriteSheet occupants;                        // RT_BITMAP 1100 (resident/shop SHIL)
@@ -110,6 +128,15 @@ namespace OT
 	/// supported by the editor UI; other classes still convert but the
 	/// manifest records their real class.)
 	OspResult convertT2pToOsp(Plugin & plugin, OspPlugin & out);
+
+	/// Reads the "attr" object of an OSP manifest (v1 or v2) into `out`.
+	/// v2 keys: pluginId (Mac-order 4cc, "BURG"), itemType (number), name,
+	/// gameLevel, attrib, dependPluginId (Mac-order 4cc, "****" = none),
+	/// secretItem, mustItem. v1 keys are mapped for compatibility: a string
+	/// "itemType" is the file-order plugin id ("GRUB"), "id" is the numeric
+	/// item type and "marker" the file-order dependency ("NORF").
+	/// Returns false if the manifest has no "attr" object.
+	bool readOspAttr(const std::string & manifest, PluginAttr & out);
 
 	/// True if `dir` looks like an OSP plugin root (contains plugin.json).
 	bool isOspPluginDir(const std::string & dir);

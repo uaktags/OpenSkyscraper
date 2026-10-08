@@ -35,6 +35,13 @@ namespace OT
 		return &iit->second;
 	}
 
+	ResourceContainer Plugin::container() const
+	{
+		if (ensureLoaded() && exe_->format == WindowsPEExecutable::Format::SP)
+			return ResourceContainer::SP;
+		return ResourceContainer::PE;
+	}
+
 	std::vector<AbstractPlugin::ResourceKey> Plugin::enumerateResources() const
 	{
 		std::vector<ResourceKey> out;

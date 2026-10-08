@@ -510,50 +510,45 @@ namespace editors
 		};
 
 		section("Identity");
-		itemTypeEdit  = makeField(panel, "Type code", x, y, 120, "NERH",
-			"4-character YootTower item-type code (mItemType).\n"
-			"Opaque identifier carried over from the .t2p source;\n"
-			"e.g. NERH=Apartment, GRUB=Burger, RATS=Stairs.\n"
-			"Editing it only re-tags the saved plugin."); y += 48;
+		itemTypeEdit  = makeField(panel, "Plugin ID (mID)", x, y, 120, "BURG",
+			"Unique 4-character plugin id (ATTR mID), Mac order.\n"
+			"Save files reference the plugin by it;\n"
+			"e.g. BURG=Burger, APRT=Condo, STAR=Stairs."); y += 48;
 		nameEdit      = makeField(panel, "Display name", x, y, w, "",
 			"The in-game name shown in the toolbox and inspector."); y += 48;
 		gameLevelEdit = makeField(panel, "Stars required", x, y, 80, "1",
 			"Minimum tower star rating at which this item unlocks\n"
 			"(1 = Star 1 ... 5 = Star 5)."); y += 48;
-		idEdit        = makeField(panel, "Internal ID (mID)", x, y, w, "0",
-			"Numeric cross-reference key into the YootTower category\n"
-			"(TNDF/MVDF) tables. Opaque; usually preserved from source."); y += 48;
-		markerEdit    = makeField(panel, "Category marker", x, y, 120, "****",
-			"4-character grouping code. \"****\" = default;\n"
-			"\"NORF\" marks the hotel-room family.\n"
-			"Opaque; preserve from source unless you know the group."); y += 48;
+		idEdit        = makeField(panel, "Item type (mItemType)", x, y, w, "0",
+			"Numeric item type (ATTR mItemType), equal to the\n"
+			"TNDF/MVDF mToolType (Floor 1000, Office 1200, Burger 1301)."); y += 48;
+		markerEdit    = makeField(panel, "Requires plugin (mDependID)", x, y, 120, "****",
+			"4-character id of a plugin this item needs.\n"
+			"\"****\" = none; \"FRON\" = needs a hotel Front desk."); y += 48;
 
-		section("Placement (footprint)");
-		placeWEdit    = makeField(panel, "Footprint width", x, y, 80, "0",
-			"DPDF cell width (e.g. 70 = 1 floor tile).\n"
-			"How wide the item is when placed."); y += 48;
-		placeHEdit    = makeField(panel, "Footprint height", x, y, 80, "0",
-			"DPDF cell height (e.g. 50 = 1 story).\n"
-			"How tall the item is when placed."); y += 48;
-		placeBaseXEdit = makeField(panel, "Base offset X", x, y, 80, "0",
-			"DPDF baseX anchor (opaque placement param)."); y += 48;
-		placeBaseYEdit = makeField(panel, "Base offset Y", x, y, 80, "0",
-			"DPDF baseY anchor (opaque placement param)."); y += 48;
+		section("Customers by day (DPDF %)");
+		placeWEdit    = makeField(panel, "Weekday, fine", x, y, 80, "0",
+			"DPDF mPercent[day 0][weather 0]: customer rate in percent."); y += 48;
+		placeHEdit    = makeField(panel, "Weekday, rain", x, y, 80, "0",
+			"DPDF mPercent[day 0][weather 1]."); y += 48;
+		placeBaseXEdit = makeField(panel, "Holiday, fine", x, y, 80, "0",
+			"DPDF mPercent[day 1][weather 0]."); y += 48;
+		placeBaseYEdit = makeField(panel, "Holiday, rain", x, y, 80, "0",
+			"DPDF mPercent[day 1][weather 1]."); y += 48;
 
-		section("Price (shops only)");
-		priceBaseEdit = makeField(panel, "Construction cost", x, y, w, "0",
-			"PLDF basePrice: the one-time cost to build this item."); y += 48;
-		priceF1Edit   = makeField(panel, "Price factor 1", x, y, 80, "0",
-			"PLDF f1. Semantic meaning not yet decoded from T2DLL.dll\n"
-			"(likely an income/expense multiplier)."); y += 48;
-		priceF2Edit   = makeField(panel, "Price factor 2", x, y, 80, "0",
-			"PLDF f2. Meaning not yet decoded (income/expense)."); y += 48;
-		priceF3Edit   = makeField(panel, "Price factor 3", x, y, 80, "0",
-			"PLDF f3. Meaning not yet decoded (income/expense)."); y += 48;
-		priceF4Edit   = makeField(panel, "Price factor 4", x, y, 80, "0",
-			"PLDF f4. Meaning not yet decoded (income/expense)."); y += 48;
-		priceF5Edit   = makeField(panel, "Price factor 5", x, y, 80, "0",
-			"PLDF f5. Meaning not yet decoded (income/expense)."); y += 48;
+		section("Customers by place (PLDF)");
+		priceF1Edit   = makeField(panel, "Floor: percent", x, y, 80, "0",
+			"PLDF EPlace 0 (floor) mPercent."); y += 48;
+		priceBaseEdit = makeField(panel, "Floor: score", x, y, w, "0",
+			"PLDF EPlace 0 (floor) mScore."); y += 48;
+		priceF2Edit   = makeField(panel, "Tenant: percent", x, y, 80, "0",
+			"PLDF EPlace 1 (tenant) mPercent."); y += 48;
+		priceF3Edit   = makeField(panel, "Tenant: score", x, y, 80, "0",
+			"PLDF EPlace 1 (tenant) mScore."); y += 48;
+		priceF4Edit   = makeField(panel, "Pool: percent", x, y, 80, "0",
+			"PLDF EPlace 2 (pool) mPercent."); y += 48;
+		priceF5Edit   = makeField(panel, "Pool: score", x, y, 80, "0",
+			"PLDF EPlace 2 (pool) mScore."); y += 48;
 
 		// Transport (MVDF) — Mover plugins only. Hidden until a Mover loads.
 		transportHeader = tgui::Label::create("Transport pricing (movers only)");
@@ -706,10 +701,10 @@ namespace editors
 		// dirty flag out of it so opening a document doesn't count as editing.
 		refreshingFields = true;
 		const OT::OspPlugin & p = *doc;
-		itemTypeEdit->setText(p.attr.itemType.str());
-		// Annotate the Type code with the catalog lookup so an author sees the
-		// shipped name (e.g. "Apartment") for known codes.
-		if (const OT::ItemTypeEntry * e = OT::lookupItemType(p.attr.itemType.str()))
+		itemTypeEdit->setText(p.attr.id.macStr());
+		// Annotate the plugin id with the catalog lookup so an author sees the
+		// shipped name (e.g. "Condo") for known ids.
+		if (const OT::ItemTypeEntry * e = OT::lookupPluginId(p.attr.id))
 		{
 			std::string tip = std::string("Known YootTower item: ") + e->name + " (" + e->cls + ")";
 			auto t = tgui::Label::create(tip);
@@ -725,24 +720,26 @@ namespace editors
 		}
 		nameEdit->setText(p.attr.name);
 		gameLevelEdit->setText(std::to_string(p.attr.gameLevel));
-		idEdit->setText(std::to_string(p.attr.id));
-		markerEdit->setText(p.attr.marker.str());
-		placeWEdit->setText(std::to_string(p.placement.w));
-		placeHEdit->setText(std::to_string(p.placement.h));
-		placeBaseXEdit->setText(std::to_string(p.placement.baseX));
-		placeBaseYEdit->setText(std::to_string(p.placement.baseY));
-		priceBaseEdit->setText(std::to_string(p.price.basePrice));
-		priceF1Edit->setText(std::to_string(p.price.f1));
-		priceF2Edit->setText(std::to_string(p.price.f2));
-		priceF3Edit->setText(std::to_string(p.price.f3));
-		priceF4Edit->setText(std::to_string(p.price.f4));
-		priceF5Edit->setText(std::to_string(p.price.f5));
+		idEdit->setText(std::to_string(p.attr.itemType));
+		markerEdit->setText(p.attr.dependID.macStr());
+		const OT::DayParamDef day = p.dayParam.value_or(OT::DayParamDef{});
+		placeWEdit->setText(std::to_string(day.percent[0][0]));
+		placeHEdit->setText(std::to_string(day.percent[0][1]));
+		placeBaseXEdit->setText(std::to_string(day.percent[1][0]));
+		placeBaseYEdit->setText(std::to_string(day.percent[1][1]));
+		const OT::PlaceParamDef place = p.placeParam.value_or(OT::PlaceParamDef{});
+		priceF1Edit->setText(std::to_string(place.places[0].percent));
+		priceBaseEdit->setText(std::to_string(place.places[0].scoreSlot));
+		priceF2Edit->setText(std::to_string(place.places[1].percent));
+		priceF3Edit->setText(std::to_string(place.places[1].scoreSlot));
+		priceF4Edit->setText(std::to_string(place.places[2].percent));
+		priceF5Edit->setText(std::to_string(place.places[2].scoreSlot));
 
 		// Transport (MVDF) — show only for Mover plugins.
 		const bool isMover = (p.pluginClass == OT::PluginDesc::MoverPlugin);
 		if (transportHeader)    transportHeader->setVisible(isMover);
 		if (transportPriceEdit)    { transportPriceEdit->setVisible(isMover);    transportPriceEdit->setText(p.transport.priceString); }
-		if (transportQuarterlyEdit){ transportQuarterlyEdit->setVisible(isMover); transportQuarterlyEdit->setText(p.transport.quarterlyString); }
+		if (transportQuarterlyEdit){ transportQuarterlyEdit->setVisible(isMover); transportQuarterlyEdit->setText(p.transport.outMoneyString); }
 		refreshingFields = false;
 	}
 
@@ -750,36 +747,45 @@ namespace editors
 	{
 		if (!doc) return;
 		OT::OspPlugin & p = *doc;
+		// 4cc fields are shown and typed in Mac order ("BURG"), padded with spaces.
 		auto get4 = [](tgui::EditBox::Ptr e, OT::FourCC & out) {
 			std::string s = e->getText().toStdString();
-			for (int i = 0; i < 4; ++i) out.c[i] = (i < int(s.size()) ? s[i] : ' ');
+			s.resize(4, ' ');
+			out = OT::FourCC::fromMacOrder(s);
+		};
+		auto getI = [](tgui::EditBox::Ptr e) -> int32_t {
+			return int32_t(std::strtol(e->getText().toStdString().c_str(), nullptr, 10));
 		};
 		auto getU = [](tgui::EditBox::Ptr e) -> uint32_t {
 			return uint32_t(std::strtoul(e->getText().toStdString().c_str(), nullptr, 10));
 		};
-		get4(itemTypeEdit, p.attr.itemType);
+		get4(itemTypeEdit, p.attr.id);
 		p.attr.name = nameEdit->getText().toStdString();
-		p.attr.gameLevel = getU(gameLevelEdit);
-		p.attr.id = getU(idEdit);
-		get4(markerEdit, p.attr.marker);
-		p.placement.w     = getU(placeWEdit);
-		p.placement.h     = getU(placeHEdit);
-		p.placement.baseX = getU(placeBaseXEdit);
-		p.placement.baseY = getU(placeBaseYEdit);
-		if (p.placement.w > 0 || p.placement.h > 0) p.placement.valid = true;
-		p.price.basePrice = getU(priceBaseEdit);
-		p.price.f1 = getU(priceF1Edit);
-		p.price.f2 = getU(priceF2Edit);
-		p.price.f3 = getU(priceF3Edit);
-		p.price.f4 = getU(priceF4Edit);
-		p.price.f5 = getU(priceF5Edit);
-		if (p.price.valid || p.price.basePrice > 0) p.price.valid = true;
+		p.attr.gameLevel = getI(gameLevelEdit);
+		p.attr.itemType = getI(idEdit);
+		get4(markerEdit, p.attr.dependID);
+		OT::DayParamDef day = p.dayParam.value_or(OT::DayParamDef{});
+		day.percent[0][0] = getU(placeWEdit);
+		day.percent[0][1] = getU(placeHEdit);
+		day.percent[1][0] = getU(placeBaseXEdit);
+		day.percent[1][1] = getU(placeBaseYEdit);
+		if (p.dayParam || day.percent[0][0] || day.percent[0][1] || day.percent[1][0] || day.percent[1][1])
+			p.dayParam = day;
+		OT::PlaceParamDef place = p.placeParam.value_or(OT::PlaceParamDef{});
+		place.places[0].percent = getU(priceF1Edit);
+		place.places[0].scoreSlot = getI(priceBaseEdit);
+		place.places[1].percent = getU(priceF2Edit);
+		place.places[1].scoreSlot = getI(priceF3Edit);
+		place.places[2].percent = getU(priceF4Edit);
+		place.places[2].scoreSlot = getI(priceF5Edit);
+		if (p.placeParam || place.places[0].scoreSlot || place.places[0].percent)
+			p.placeParam = place;
 		// Transport (MVDF) — read back only the editable price strings.
 		if (p.pluginClass == OT::PluginDesc::MoverPlugin)
 		{
 			p.transport.priceString    = transportPriceEdit->getText().toStdString();
-			p.transport.quarterlyString = transportQuarterlyEdit->getText().toStdString();
-			if (!p.transport.priceString.empty() || !p.transport.quarterlyString.empty())
+			p.transport.outMoneyString = transportQuarterlyEdit->getText().toStdString();
+			if (!p.transport.priceString.empty() || !p.transport.outMoneyString.empty())
 				p.transport.valid = true;
 		}
 		p.attr.valid = true;
@@ -953,8 +959,8 @@ namespace editors
 		p.sourceFormat = "scratch";
 		p.pluginClass = OT::PluginDesc::TenantPlugin;
 		p.attr.valid = true;
-		p.attr.itemType.c[0]='N'; p.attr.itemType.c[1]='E'; p.attr.itemType.c[2]='R'; p.attr.itemType.c[3]='H';
-		p.attr.marker.c[0]='*'; p.attr.marker.c[1]='*'; p.attr.marker.c[2]='*'; p.attr.marker.c[3]='*';
+		p.attr.id = OT::FourCC::fromFileOrder("NERH");
+		p.attr.dependID = OT::FourCC::fromFileOrder("****");
 		p.attr.name = "New Tenant";
 		p.attr.gameLevel = 1;
 		doc = std::move(p);

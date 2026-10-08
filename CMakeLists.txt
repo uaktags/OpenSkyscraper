@@ -202,6 +202,9 @@ add_executable(OpenSkyTests
   source/LevelUp.cpp
   source/PluginManager.cpp
   source/PluginResources.cpp
+  source/PluginDefs.cpp
+  source/SubPluginDefs.cpp
+  source/PluginResourceCodec.cpp
   source/PluginObjmap.cpp
   source/PluginBitmapLoader.cpp
   source/OspPlugin.cpp
@@ -230,6 +233,9 @@ add_executable(PluginEditor
   source/WindowsPEExecutable.cpp
   source/PluginManager.cpp
   source/PluginResources.cpp
+  source/PluginDefs.cpp
+  source/SubPluginDefs.cpp
+  source/PluginResourceCodec.cpp
   source/PluginObjmap.cpp
   source/PluginBitmapLoader.cpp
   source/OspPlugin.cpp

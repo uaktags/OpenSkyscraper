@@ -1,6 +1,8 @@
 /* Copyright (c) 2026 OpenSkyscraper contributors */
 #include "PluginResources.h"
 
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 namespace OT
@@ -18,25 +20,29 @@ namespace OT
 	bool FourCC::operator==(const char * s) const
 	{
 		if (!s) return false;
-		// Compare only the bytes that `s` actually has; a real 4cc is exactly
-		// 4 chars with no NUL, but be tolerant of callers passing "GRU"/etc.
+		// A real 4cc is exactly 4 chars; "GRU" and "GRUBX" must not match.
 		for (int i = 0; i < 4; ++i)
 		{
-			char sc = s[i];
-			if (sc == '\0') return false;          // `s` is shorter than 4
-			if (c[i] != sc) return false;
+			if (s[i] == '\0') return false;
+			if (c[i] != s[i]) return false;
 		}
-		// Require `s` to be exactly 4 chars (5th must be NUL) so "GRUBX" does
-		// not silently match "GRUB".
 		return s[4] == '\0';
 	}
 
 	std::string FourCC::str() const
 	{
-		// Drop embedded NULs (none expected on real tags).
 		std::string s;
 		s.reserve(4);
 		for (int i = 0; i < 4; ++i)
+			if (c[i] != '\0') s.push_back(c[i]);
+		return s;
+	}
+
+	std::string FourCC::macStr() const
+	{
+		std::string s;
+		s.reserve(4);
+		for (int i = 3; i >= 0; --i)
 			if (c[i] != '\0') s.push_back(c[i]);
 		return s;
 	}
@@ -49,135 +55,192 @@ namespace OT
 		     | (uint32_t(uint8_t(c[3])) << 24);
 	}
 
-	// ---------------------------------------------------------------------------
-	// Little-endian readers (bounds-checked; never read past `end`)
-	// ---------------------------------------------------------------------------
-
-	static uint32_t readU32LE(const char * p, const char * end, bool & ok)
+	FourCC FourCC::fromUint32LE(uint32_t v)
 	{
-		if (!ok || end - p < 4) { ok = false; return 0; }
-		return uint32_t(uint8_t(p[0]))
-		     | (uint32_t(uint8_t(p[1])) << 8)
-		     | (uint32_t(uint8_t(p[2])) << 16)
-		     | (uint32_t(uint8_t(p[3])) << 24);
+		FourCC f;
+		for (int i = 0; i < 4; ++i) f.c[i] = char((v >> (8 * i)) & 0xFF);
+		return f;
 	}
 
-	/// Reads a Pascal string (1-byte length prefix + N bytes, no NUL) into
-	/// `out`. Advances `p` past it. Sets `ok=false` if truncated.
-	static void readPStr(const char *& p, const char * end, bool & ok, std::string & out)
+	FourCC FourCC::fromFileOrder(std::string_view s)
 	{
-		if (!ok || end - p < 1) { ok = false; return; }
-		const uint8_t n = uint8_t(p[0]);
-		p += 1;
-		if (!ok || end - p < int(n)) { ok = false; return; }
-		out.assign(p, n);
-		p += n;
+		FourCC f;
+		for (size_t i = 0; i < 4 && i < s.size(); ++i) f.c[i] = s[i];
+		return f;
+	}
+
+	FourCC FourCC::fromMacOrder(std::string_view s)
+	{
+		FourCC f;
+		for (size_t i = 0; i < 4 && i < s.size(); ++i) f.c[3 - i] = s[i];
+		return f;
 	}
 
 	// ---------------------------------------------------------------------------
-	// ATTR — binary form
-	//   0  u8    version
-	//   1  char4 mItemType
-	//   5  u32   field5     (binary form only; not exposed as a named field)
-	//   9  char4 "****"     (marker)
-	//  13  u32   mGameLevel
-	//  17  u32   mMustItem
-	//  21  u32   mID
-	//  25  u32   (pad)
-	//  29  pstr  mPluginName
+	// CResReader / CResWriter (binary form)
 	// ---------------------------------------------------------------------------
-	static bool parseAttrBinary(const char * data, int length, PluginAttr & out)
+
+	CResReader::CResReader(const char * data, size_t length)
 	{
-		const char * p = data;
-		const char * end = data + length;
-		bool ok = true;
+		if (!data || length < 1 || uint8_t(data[0]) != 0x01) return;
+		p_ = reinterpret_cast<const unsigned char *>(data) + 1;
+		end_ = reinterpret_cast<const unsigned char *>(data) + length;
+		ok_ = true;
+	}
 
-		out.version = uint8_t(p[0]); p += 1;
-		std::memcpy(out.itemType.c, p, 4); p += 4;
-		/*uint32_t field5 =*/ (void)readU32LE(p, end, ok); p += 4;  // variant; meaning TBD
-		std::memcpy(out.marker.c, p, 4); p += 4;                    // "****"/"NORF"/...
-		out.gameLevel = readU32LE(p, end, ok); p += 4;
-		out.mustItem  = readU32LE(p, end, ok); p += 4;
-		out.id        = readU32LE(p, end, ok); p += 4;
-		/*uint32_t pad =*/ (void)readU32LE(p, end, ok); p += 4;
-		readPStr(p, end, ok, out.name);
+	uint32_t CResReader::u32()
+	{
+		if (!ok_ || end_ - p_ < 4) { ok_ = false; return 0; }
+		const uint32_t v = uint32_t(p_[0]) | (uint32_t(p_[1]) << 8)
+		                 | (uint32_t(p_[2]) << 16) | (uint32_t(p_[3]) << 24);
+		p_ += 4;
+		return v;
+	}
 
-		if (!ok) return false;
-		out.valid = true;
+	int32_t CResReader::i32()
+	{
+		return int32_t(u32());
+	}
+
+	FourCC CResReader::fourcc()
+	{
+		return FourCC::fromUint32LE(u32());
+	}
+
+	std::string CResReader::str()
+	{
+		// length byte n, n bytes, terminator byte (CResFile>>char* 0x10011830).
+		if (!ok_ || end_ - p_ < 1) { ok_ = false; return {}; }
+		const size_t n = p_[0];
+		if (size_t(end_ - p_) < n + 2) { ok_ = false; return {}; }
+		if (p_[1 + n] != 0) { ok_ = false; return {}; }  // non-zero terminator: not representable
+		std::string s(reinterpret_cast<const char *>(p_ + 1), n);
+		p_ += n + 2;
+		return s;
+	}
+
+	PluginRect CResReader::rect()
+	{
+		PluginRect r;
+		r.top = i32();
+		r.left = i32();
+		r.bottom = i32();
+		r.right = i32();
+		return r;
+	}
+
+	int32_t CResReader::count(int32_t maxCount)
+	{
+		const int32_t n = i32();
+		// Every record is at least one byte, so a count larger than the rest
+		// of the stream is corruption (and must not trigger a huge resize).
+		if (!ok_ || n < 0 || n > maxCount || size_t(n) > remaining()) { ok_ = false; return 0; }
+		return n;
+	}
+
+	void CResWriter::u32(uint32_t v)
+	{
+		buf_.push_back(char(v & 0xFF));
+		buf_.push_back(char((v >> 8) & 0xFF));
+		buf_.push_back(char((v >> 16) & 0xFF));
+		buf_.push_back(char((v >> 24) & 0xFF));
+	}
+
+	void CResWriter::str(const std::string & s)
+	{
+		if (s.size() > 255) { ok_ = false; return; }
+		buf_.push_back(char(uint8_t(s.size())));
+		buf_ += s;
+		buf_.push_back('\0');
+	}
+
+	bool CResWriter::finish(std::string & out)
+	{
+		if (!ok_) return false;
+		out = std::move(buf_);
+		buf_.assign(1, char(1));
 		return true;
 	}
 
 	// ---------------------------------------------------------------------------
-	// ATTR — text form (DefaultToolPalette only)
-	//   (mID)\t\t1000\r\n(mAttrib)\t16777215\r\n...
-	// Tab-separated key/value, CRLF lines. Names the binary-form fields.
+	// CResTextReader (text form)
 	// ---------------------------------------------------------------------------
+
+	static bool isTextSeparator(char c)
+	{
+		return c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == ',';
+	}
+
+	void CResTextReader::skip()
+	{
+		while (p_ < s_.size() && (isTextSeparator(s_[p_]) || s_[p_] == '('))
+		{
+			if (s_[p_] == '(')
+			{
+				while (p_ < s_.size() && s_[p_] != ')') ++p_;
+			}
+			++p_;
+		}
+	}
+
+	std::string CResTextReader::token()
+	{
+		skip();
+		const size_t start = p_;
+		while (p_ < s_.size() && !isTextSeparator(s_[p_]) && s_[p_] != '(') ++p_;
+		return s_.substr(start, p_ - start);
+	}
+
+	long long CResTextReader::integer()
+	{
+		const std::string t = token();
+		if (t.empty()) return 0;
+		return std::strtoll(t.c_str(), nullptr, 10);
+	}
+
+	std::string CResTextReader::line()
+	{
+		skip();
+		const size_t start = p_;
+		while (p_ < s_.size() && s_[p_] != '\r' && s_[p_] != '\n') ++p_;
+		return s_.substr(start, p_ - start);
+	}
+
+	// ---------------------------------------------------------------------------
+	// ATTR
+	// ---------------------------------------------------------------------------
+
+	static bool parseAttrBinary(const char * data, int length, PluginAttr & out)
+	{
+		CResReader r(data, size_t(length));
+		out.version = 1;
+		out.id = r.fourcc();
+		out.attrib = r.u32();
+		out.dependID = r.fourcc();
+		out.gameLevel = r.i32();
+		out.secretItem = r.i32();
+		out.itemType = r.i32();
+		out.mustItem = r.i32();
+		out.name = r.str();
+		if (!r.ok() || !r.atEnd()) return false;
+		out.isTextForm = false;
+		out.valid = true;
+		return true;
+	}
+
 	static bool parseAttrText(const char * data, int length, PluginAttr & out)
 	{
-		// Operate on a NUL-terminated copy for easy tokenizing. The resource
-		// is small (<1 KB) so this is cheap.
-		std::string s(data, length);
-		const char * src = s.c_str();
-
-		auto matchKey = [&](const char * key) -> bool
-		{
-			size_t kl = std::strlen(key);
-			return std::strncmp(src, key, kl) == 0;
-		};
-		auto readUint = [&](const char * key) -> uint32_t
-		{
-			size_t kl = std::strlen(key);
-			src += kl;
-			// skip tabs/spaces
-			while (*src == '\t' || *src == ' ') ++src;
-			unsigned long long v = 0;
-			while (*src >= '0' && *src <= '9') { v = v * 10 + (*src - '0'); ++src; }
-			return uint32_t(v);
-		};
-
-		// Iterate CRLF-delimited lines.
-		while (*src)
-		{
-			const char * line = src;
-			const char * nl = std::strchr(line, '\n');
-			const char * lineEnd = nl ? nl : line + std::strlen(line);
-
-			bool consumed = false;
-			if (matchKey("(mID)"))        { out.id = readUint("(mID)"); consumed = true; }
-			else if (matchKey("(mAttrib)"))    { out.attrib = readUint("(mAttrib)"); consumed = true; }
-			else if (matchKey("(mDependID)"))  { out.dependID = readUint("(mDependID)"); consumed = true; }
-			else if (matchKey("(mGameLevel)")) { out.gameLevel = readUint("(mGameLevel)"); consumed = true; }
-			else if (matchKey("(mSecretItem)")){ out.secretItem = readUint("(mSecretItem)"); consumed = true; }
-			else if (matchKey("(mMustItem)"))  { out.mustItem = readUint("(mMustItem)"); consumed = true; }
-			else if (matchKey("(mItemType)"))
-			{
-				src += std::strlen("(mItemType)");
-				while (*src == '\t' || *src == ' ') ++src;
-				uint32_t v = 0;
-				while (*src >= '0' && *src <= '9') { v = v * 10 + (*src - '0'); ++src; }
-				out.itemType.c[0] = char(v & 0xFF);
-				out.itemType.c[1] = char((v >> 8) & 0xFF);
-				out.itemType.c[2] = char((v >> 16) & 0xFF);
-				out.itemType.c[3] = char((v >> 24) & 0xFF);
-				consumed = true;
-			}
-			else if (matchKey("(mPluginName)"))
-			{
-				src += std::strlen("(mPluginName)");
-				while (*src == '\t' || *src == ' ') ++src;
-				const char * nameStart = src;
-				out.name.assign(nameStart, size_t(lineEnd - nameStart));
-				// strip trailing \r
-				if (!out.name.empty() && out.name.back() == '\r') out.name.pop_back();
-				consumed = true;
-			}
-
-			(void)consumed;
-			src = nl ? nl + 1 : lineEnd;
-		}
-
-		// Must have at least read an mID to consider this a real ATTR.
-		if (out.id == 0 && out.name.empty()) return false;
+		CResTextReader t(data, size_t(length));
+		out.id = FourCC::fromUint32LE(uint32_t(t.integer()));
+		out.attrib = uint32_t(t.integer());
+		out.dependID = FourCC::fromUint32LE(uint32_t(t.integer()));
+		out.gameLevel = int32_t(t.integer());
+		out.secretItem = int32_t(t.integer());
+		out.itemType = int32_t(t.integer());
+		out.mustItem = int32_t(t.integer());
+		out.name = t.line();
+		if (out.id.isZero() && out.name.empty()) return false;
+		out.text.assign(data, size_t(length));
 		out.version = 1;
 		out.isTextForm = true;
 		out.valid = true;
@@ -187,172 +250,110 @@ namespace OT
 	bool parsePluginAttr(const char * data, int length, PluginAttr & out)
 	{
 		if (!data || length < 1) return false;
-		// The text form begins with "(mID)"; the binary form begins with 0x01.
-		if (length >= 5 && data[0] == '(' && data[1] == 'm')
-		{
-			PluginAttr tmp;
-			if (!parseAttrText(data, length, tmp)) return false;
-			out = std::move(tmp);
-			return true;
-		}
 		PluginAttr tmp;
-		if (!parseAttrBinary(data, length, tmp)) return false;
+		const bool ok = uint8_t(data[0]) == 0x01 ? parseAttrBinary(data, length, tmp)
+		                                         : parseAttrText(data, length, tmp);
+		if (!ok) return false;
 		out = std::move(tmp);
 		return true;
 	}
 
+	static bool sameAttrValues(const PluginAttr & a, const PluginAttr & b)
+	{
+		return a.id == b.id && a.attrib == b.attrib && a.dependID == b.dependID
+		    && a.gameLevel == b.gameLevel && a.secretItem == b.secretItem
+		    && a.itemType == b.itemType && a.mustItem == b.mustItem && a.name == b.name;
+	}
+
+	bool encodePluginAttr(const PluginAttr & a, std::string & out)
+	{
+		if (a.isTextForm)
+		{
+			// Reuse the original text when it still says the same thing, so the
+			// shipped DefaultToolPalette ATTR round-trips byte for byte.
+			PluginAttr reparsed;
+			if (!a.text.empty() && parsePluginAttr(a.text.data(), int(a.text.size()), reparsed)
+			    && reparsed.isTextForm && sameAttrValues(reparsed, a))
+			{
+				out = a.text;
+				return true;
+			}
+			char buf[256];
+			std::snprintf(buf, sizeof(buf),
+			              "(mID)\t\t%u\r\n(mAttrib)\t%u\r\n(mDependID)\t%u\r\n(mGameLevel)\t%d\r\n"
+			              "(mSecretItem)\t%d\r\n(mItemType)\t%d\r\n(mMustItem)\t%d\r\n(mPluginName)\t",
+			              a.id.toUint32LE(), a.attrib, a.dependID.toUint32LE(), a.gameLevel,
+			              a.secretItem, a.itemType, a.mustItem);
+			out = buf;
+			out += a.name;
+			out += "\r\n";
+			return true;
+		}
+		CResWriter w;
+		w.fourcc(a.id);
+		w.u32(a.attrib);
+		w.fourcc(a.dependID);
+		w.i32(a.gameLevel);
+		w.i32(a.secretItem);
+		w.i32(a.itemType);
+		w.i32(a.mustItem);
+		w.str(a.name);
+		return w.finish(out);
+	}
+
 	// ---------------------------------------------------------------------------
-	// DESC — 9-byte header
-	//   0  u8    version
-	//   1  char4 classTag  (lPnT / lPvM / LPOT)
-	//   5  u32    value    (3)
+	// DESC
 	// ---------------------------------------------------------------------------
+
+	namespace
+	{
+		struct KindTag { PluginDesc::Kind kind; const char * fileOrder; };
+		const KindTag kKindTags[] = {
+			{PluginDesc::TenantPlugin,    "lPnT"},
+			{PluginDesc::MoverPlugin,     "lPvM"},
+			{PluginDesc::ToolPalette,     "LPOT"},
+			{PluginDesc::WorldPlugin,     "lPdW"},
+			{PluginDesc::OuterObjPlugin,  "lPoO"},
+			{PluginDesc::MoviePlugin,     "lPoM"},
+			{PluginDesc::HallEventPlugin, "lPeH"},
+			{PluginDesc::AdvertisePlugin, "lPdA"},
+		};
+	}
+
+	PluginDesc::Kind pluginKindFromTag(const FourCC & tag)
+	{
+		for (const KindTag & k : kKindTags)
+			if (tag == k.fileOrder) return k.kind;
+		return PluginDesc::Unknown;
+	}
+
+	FourCC pluginTagFromKind(PluginDesc::Kind kind)
+	{
+		for (const KindTag & k : kKindTags)
+			if (k.kind == kind) return FourCC::fromFileOrder(k.fileOrder);
+		return FourCC();
+	}
+
 	bool parsePluginDesc(const char * data, int length, PluginDesc & out)
 	{
 		if (!data || length < 9) return false;
-		out.version = uint8_t(data[0]);
-		std::memcpy(out.classTag.c, data + 1, 4);
-		bool ok = true;
-		out.value = readU32LE(data + 5, data + length, ok);
-		if (!ok) return false;
-
-		// Map known classTags to a plugin kind. The u32 is the literal the
-		// plugin's ConstructProgramPlugin passes to its constructor.
-		const uint32_t k = out.classTag.toUint32LE();
-		switch (k)
-		{
-			case 0x546E506Cu: out.kind = PluginDesc::TenantPlugin; break; // "lPnT"
-			case 0x4D76506Cu: out.kind = PluginDesc::MoverPlugin;  break; // "lPvM"
-			case 0x544F504Cu: out.kind = PluginDesc::ToolPalette;  break; // "LPOT"
-			case 0x5764506Cu: out.kind = PluginDesc::WorldPlugin;  break; // "lPdW"
-			case 0x4F6F506Cu: out.kind = PluginDesc::OuterObjPlugin; break; // "lPoO"
-			default:          out.kind = PluginDesc::Unknown;      break;
-		}
-		out.valid = true;
+		CResReader r(data, size_t(length));
+		PluginDesc d;
+		d.version = 1;
+		d.classTag = r.fourcc();
+		d.value = r.u32();
+		if (!r.ok() || !r.atEnd()) return false;
+		d.kind = pluginKindFromTag(d.classTag);
+		d.valid = true;
+		out = d;
 		return true;
 	}
 
-	// ---------------------------------------------------------------------------
-	// DPDF — 17-byte placement header
-	//   0  u8  version
-	//   1  u32 w
-	//   5  u32 h
-	//   9  u32 baseX
-	//  13  u32 baseY
-	// ---------------------------------------------------------------------------
-	bool parsePluginDpdf(const char * data, int length, PluginDpdf & out)
+	bool encodePluginDesc(const PluginDesc & d, std::string & out)
 	{
-		if (!data || length < 17) return false;
-		out.version = uint8_t(data[0]);
-		bool ok = true;
-		out.w     = readU32LE(data + 1,  data + length, ok);
-		out.h     = readU32LE(data + 5,  data + length, ok);
-		out.baseX = readU32LE(data + 9,  data + length, ok);
-		out.baseY = readU32LE(data + 13, data + length, ok);
-		if (!ok) return false;
-		out.valid = true;
-		return true;
-	}
-
-	// ---------------------------------------------------------------------------
-	// PLDF — 21-byte price list
-	//   0  u8   version  (always 1)
-	//   1  u32  f1         40   (0x28)
-	//   5  u32  basePrice  1000 (0x3E8) — construction cost
-	//   9  u32  f2         10
-	//  13  u32  f3         300  (0x12C)
-	//  17  u32  f4         50
-	//  (followed by f5=100 in observed samples; the doc's fixed layout lists
-	//  five u32 factors — we read all five when present, tolerating the 21-byte
-	//  minimum which covers version + f1..f4.)
-	// ---------------------------------------------------------------------------
-	bool parsePluginPldf(const char * data, int length, PluginPldf & out)
-	{
-		// Minimum is version + 5 u32 = 21 bytes. Some samples carry an extra
-		// factor (f5) for 25 bytes; read it opportunistically.
-		if (!data || length < 21) return false;
-		out.version   = uint8_t(data[0]);
-		bool ok = true;
-		out.f1        = readU32LE(data + 1,  data + length, ok);
-		out.basePrice = readU32LE(data + 5,  data + length, ok);
-		out.f2        = readU32LE(data + 9,  data + length, ok);
-		out.f3        = readU32LE(data + 13, data + length, ok);
-		out.f4        = readU32LE(data + 17, data + length, ok);
-		// f5 is optional (25-byte form). Only trust it if the buffer is long
-		// enough; otherwise leave it at 0.
-		if (length >= 25) out.f5 = readU32LE(data + 21, data + length, ok);
-		if (!ok) return false;
-		out.valid = true;
-		return true;
-	}
-
-	// ---------------------------------------------------------------------------
-	// MVDF — mover (transport) definition
-	//   0  u8    version        (1)
-	//   1  u32   itemID         == mID (Stair=1800, StdElev=1810, …). Matches
-	//                           the ATTR mID cross-reference key.
-	//   5  u32   field5         (8 for stairs/escalator; varies — inferred)
-	//   9  u32   field9         (2 stairs/esc, 1 elevators; inferred)
-	//  13  u32   field13        (1/2/3 — inferred capacity/variant)
-	//  17  ...   irregular tagged-pstr array (description, category, prices, name)
-	//
-	// Per resource-formats.md §3.9. The string array's framing is irregular
-	// (mix of 0x00-tagged and raw pascal strings) and its exact structure is
-	// confirmed by disassembly of T2DLL.dll's T2MoverPlugin constructor (a
-	// Ghidra task). To stay robust and never silently drop data, the body is
-	// scanned for printable-ASCII runs (>= 3 chars), which reliably yields the
-	// description, category, price strings ("$150000:$50000/car"), and the
-	// item name. The two most useful strings are also classified by their
-	// leading '$' / trailing '/Q'.
-	// ---------------------------------------------------------------------------
-	bool parsePluginMvdf(const char * data, int length, PluginMvdf & out)
-	{
-		if (!data || length < 18) return false;
-		out.version = uint8_t(data[0]);
-		bool ok = true;
-		out.itemID  = readU32LE(data + 1,  data + length, ok);
-		out.field5  = readU32LE(data + 5,  data + length, ok);
-		out.field9  = readU32LE(data + 9,  data + length, ok);
-		out.field13 = readU32LE(data + 13, data + length, ok);
-		if (!ok) return false;
-
-		// Extract printable-ASCII runs (>= 3 chars) from the body (offset 18+).
-		// Each run is one logical string; leading framing chars are stripped
-		// from the first run so the description reads cleanly.
-		const int bodyStart = 18;
-		int i = bodyStart;
-		while (i < length)
-		{
-			if (uint8_t(data[i]) >= 0x20 && uint8_t(data[i]) < 0x7f)
-			{
-				int j = i;
-				while (j < length && uint8_t(data[j]) >= 0x20 && uint8_t(data[j]) < 0x7f) ++j;
-				if (j - i >= 3) out.strings.emplace_back(data + i, data + j);
-				i = j;
-			}
-			else ++i;
-		}
-
-		// Classify the useful strings. Prices start with '$'; the recurring
-		// (quarterly) variant ends with '/Q'. The name is the last string
-		// (movers carry it twice). Skip the category line, which is always
-		// "Transit Systems" — but keep it in `strings` for completeness.
-		bool foundPrice = false;
-		for (const std::string & s : out.strings)
-		{
-			if (!s.empty() && s[0] == '$')
-			{
-				// A "$a:$b/car" or "$a,$b/car" string is the primary price;
-				// a "$n/Q" string is the quarterly maintenance cost.
-				bool isQuarterly = s.size() >= 2 && s[s.size() - 1] == 'Q' &&
-				                   s[s.size() - 2] == '/';
-				if (isQuarterly) out.quarterlyString = s;
-				else if (!foundPrice) { out.priceString = s; foundPrice = true; }
-			}
-		}
-		if (!out.strings.empty()) out.name = out.strings.back();
-
-		out.valid = true;
-		return true;
+		CResWriter w;
+		w.fourcc(d.classTag);
+		w.u32(d.value);
+		return w.finish(out);
 	}
 }

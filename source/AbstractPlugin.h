@@ -1,5 +1,6 @@
 /* Copyright (c) 2026 OpenSkyscraper contributors */
 #pragma once
+#include "PluginResourceCodec.h"
 #include "PluginResources.h"
 #include "WindowsPEExecutable.h"
 
@@ -58,15 +59,48 @@ namespace OT
 		/// each value is the sorted list of ids under that type.
 		virtual std::map<std::string, std::vector<int>> resourcesByType() const = 0;
 
+		/// Which container the resources came from (SP sub-plugins reuse the
+		/// PPDF tag with a different layout). Folder plugins report PE.
+		virtual ResourceContainer container() const { return ResourceContainer::PE; }
+
 		// ---- typed accessors (shared logic; subclasses just provide
-		// getResource). Each fetches the corresponding resource at id 128
-		// (the conventional id for an item's metadata) and runs it through
-		// the parsers in PluginResources. ----
+		// getResource). Each fetches one resource and runs it through the
+		// codecs in PluginResources / PluginDefs / SubPluginDefs. They return
+		// false if the resource is absent or does not decode. ----
 		bool getAttr(PluginAttr & out) const;  /// ATTR id=128
 		bool getDesc(PluginDesc & out) const;  /// DESC id=128
-		bool getDpdf(PluginDpdf & out) const;  /// DPDF id=128
-		bool getPldf(PluginPldf & out) const;  /// PLDF id=128
-		bool getMvdf(PluginMvdf & out) const;  /// MVDF id=1 (Mover plugins only)
+
+		/// The main template definition: TNDF (tenant), MVDF (mover) or OODF
+		/// (outer object), id 1 - whichever the plugin carries.
+		bool getTemplateDef(TemplateDef & out) const;
+		/// TMDF member table by id (1 = employees, 2 = customers; SP plugins
+		/// use 128 for the audience table).
+		bool getMemberTable(MemberTableDef & out, int id) const;
+		/// Every TMDF the plugin carries, keyed by resource id.
+		std::map<int, MemberTableDef> getMemberTables() const;
+		/// DPDF / PLDF by id. The ids come from TMDF dayParamID/placeParamID
+		/// (128 in the shipped plugins).
+		bool getDayParamDef(DayParamDef & out, int id = 128) const;
+		bool getPlaceParamDef(PlaceParamDef & out, int id = 128) const;
+		bool getPeopleAnimeDef(PeopleAnimeDef & out, int id = 1) const;  /// PADF
+		bool getSilhouettes(SilhouetteList & out, int id = 1) const;     /// SLDF
+		bool getPeopleDefs(PeopleList & out, int id = 1) const;          /// PPDF (PE world plugins)
+		bool getWords(WordList & out, int id = 1) const;                 /// WODF
+		/// STRTABLE (or STRTBL) by id.
+		bool getStringTable(StringTableDef & out, int id) const;
+		/// RT_STRING block by id (block n holds string ids 16(n-1)..16n-1).
+		bool getStringBlock(StringBlock & out, int id) const;
+		/// RT_VERSION (the first one).
+		bool getVersionInfo(VersionInfo & out) const;
+
+		// SP sub-plugins (id 128).
+		bool getMovieDef(MovieDef & out) const;          /// MODF
+		bool getHallEventDef(HallEventDef & out) const;  /// HEDF
+		bool getAdvertiseDef(AdvertiseDef & out) const;  /// ADDF
+		bool getSubPluginPeopleParamDef(SubPluginPeopleParamDef & out, int id = 128) const;  /// SP PPDF
+
+		/// Generic access: decodes any resource with the per-type dispatcher.
+		bool decodeResource(const std::string & type, int id, DecodedResource & out) const;
 
 		/// Downscale factor applied when this plugin's RT_BITMAP art is
 		/// rasterized. 1 = use the source pixels as-is (PE plugins, art

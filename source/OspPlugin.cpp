@@ -203,6 +203,30 @@ namespace
 		return true;
 	}
 
+	/// Reads every number of the (possibly nested) array following `"key":`,
+	/// flattened in document order: [[70, 50], [100, 80]] -> 70 50 100 80.
+	bool readIntArray(const std::string & s, const std::string & key, size_t scope, std::vector<long long> & out)
+	{
+		size_t i = findKeyValue(s, key, scope);
+		if (i == std::string::npos || i >= s.size() || s[i] != '[') return false;
+		out.clear();
+		int depth = 0;
+		while (i < s.size())
+		{
+			const char c = s[i];
+			if (c == '[') { ++depth; ++i; }
+			else if (c == ']') { ++i; if (--depth == 0) return true; }
+			else if (c == '-' || (c >= '0' && c <= '9'))
+			{
+				long long v = 0;
+				if (!readNumber(s, i, v)) return false;
+				out.push_back(v);
+			}
+			else ++i;
+		}
+		return false;
+	}
+
 	/// Finds the opening brace of the object named `key` (e.g. "attr"), returns
 	/// the index of '{' (the scope to search within), or npos.
 	size_t findObject(const std::string & s, const std::string & key, size_t from)
@@ -246,6 +270,41 @@ namespace OT
 		return dirExists(dir) && fileExists(join(dir, "plugin.json"));
 	}
 
+	bool readOspAttr(const std::string & json, PluginAttr & out)
+	{
+		const size_t scope = findObject(json, "attr", 0);
+		if (scope == std::string::npos) return false;
+
+		PluginAttr a;
+		a.dependID = FourCC::fromFileOrder("****");
+		long long v = 0;
+		std::string s;
+
+		// Plugin id (ATTR mID). v2: Mac order. v1 called it "itemType" and
+		// stored the file-order bytes.
+		if (readString(json, "pluginId", scope, s))      a.id = FourCC::fromMacOrder(s);
+		else if (readString(json, "itemType", scope, s)) a.id = FourCC::fromFileOrder(s);
+
+		// Numeric item type (ATTR mItemType). v1 called it "id".
+		if (readScalarInt(json, "itemType", scope, v))   a.itemType = int32_t(v);
+		else if (readScalarInt(json, "id", scope, v))    a.itemType = int32_t(v);
+
+		// Dependency (ATTR mDependID). v1: "marker" (file order) with a
+		// numeric "dependID" that was never populated from binary plugins.
+		if (readString(json, "dependPluginId", scope, s)) a.dependID = FourCC::fromMacOrder(s);
+		else if (readString(json, "marker", scope, s) && s.size() >= 4) a.dependID = FourCC::fromFileOrder(s);
+		else if (readScalarInt(json, "dependID", scope, v) && v != 0) a.dependID = FourCC::fromUint32LE(uint32_t(v));
+
+		if (readString(json, "name", scope, s))             a.name = s;
+		if (readScalarInt(json, "gameLevel", scope, v))     a.gameLevel = int32_t(v);
+		if (readScalarInt(json, "attrib", scope, v))        a.attrib = uint32_t(v);
+		if (readScalarInt(json, "secretItem", scope, v))    a.secretItem = int32_t(v);
+		if (readScalarInt(json, "mustItem", scope, v))      a.mustItem = int32_t(v);
+		a.valid = true;
+		out = std::move(a);
+		return true;
+	}
+
 	// -------------------------------------------------------------------------
 	// loadOspPlugin
 	// -------------------------------------------------------------------------
@@ -266,8 +325,9 @@ namespace OT
 		long long ver = 0;
 		if (!readScalarInt(json, "formatVersion", 0, ver))
 			return {false, "Missing formatVersion"};
-		if (ver != kOspFormatVersion)
-			return {false, "Unsupported OSP version " + std::to_string(ver) + " (expected " + std::to_string(kOspFormatVersion) + ")"};
+		if (ver < kOspMinFormatVersion || ver > kOspFormatVersion)
+			return {false, "Unsupported OSP version " + std::to_string(ver) + " (expected "
+			               + std::to_string(kOspMinFormatVersion) + ".." + std::to_string(kOspFormatVersion) + ")"};
 
 		OspPlugin p;  // build into a temp; only commit on full success.
 		p.sourceFormat = "openskyscraper-plugin";
@@ -281,51 +341,72 @@ namespace OT
 		}
 
 		// ATTR (required).
-		size_t attrScope = findObject(json, "attr", 0);
-		if (attrScope == std::string::npos)
+		if (!readOspAttr(json, p.attr))
 			return {false, "Missing 'attr' object"};
+
+		// DPDF day/weather table (optional). v2: "dayParam": {"percent":
+		// [[d0w0, d0w1], [d1w0, d1w1]]}. v1 mislabeled the same four slots as
+		// "placement": {w, h, baseX, baseY}.
+		const size_t dayScope = findObject(json, "dayParam", 0);
+		if (dayScope != std::string::npos)
 		{
-			long long v;
-			std::string s4;
-			if (readString(json, "itemType", attrScope, s4))
+			std::vector<long long> v;
+			if (readIntArray(json, "percent", dayScope, v) && v.size() == 4)
 			{
-				for (int i = 0; i < 4 && i < int(s4.size()); ++i) p.attr.itemType.c[i] = s4[i];
+				DayParamDef d;
+				for (int i = 0; i < 4; ++i) d.percent[i / 2][i % 2] = uint32_t(v[size_t(i)]);
+				p.dayParam = d;
 			}
-			if (readString(json, "name", attrScope, s4)) p.attr.name = s4;
-			if (readString(json, "marker", attrScope, s4) && s4.size() >= 4)
-				for (int i = 0; i < 4; ++i) p.attr.marker.c[i] = s4[i];
-			if (readScalarInt(json, "gameLevel", attrScope, v))  p.attr.gameLevel = uint32_t(v);
-			if (readScalarInt(json, "id", attrScope, v))         p.attr.id = uint32_t(v);
-			if (readScalarInt(json, "mustItem", attrScope, v))   p.attr.mustItem = uint32_t(v);
-			if (readScalarInt(json, "dependID", attrScope, v))   p.attr.dependID = uint32_t(v);
-			if (readScalarInt(json, "secretItem", attrScope, v)) p.attr.secretItem = uint32_t(v);
-			p.attr.valid = true;
+		}
+		else
+		{
+			const size_t placScope = findObject(json, "placement", 0);
+			if (placScope != std::string::npos)
+			{
+				DayParamDef d;
+				long long v;
+				if (readScalarInt(json, "w", placScope, v))     d.percent[0][0] = uint32_t(v);
+				if (readScalarInt(json, "h", placScope, v))     d.percent[0][1] = uint32_t(v);
+				if (readScalarInt(json, "baseX", placScope, v)) d.percent[1][0] = uint32_t(v);
+				if (readScalarInt(json, "baseY", placScope, v)) d.percent[1][1] = uint32_t(v);
+				p.dayParam = d;
+			}
 		}
 
-		// PLDF (optional).
-		size_t priceScope = findObject(json, "price", 0);
-		if (priceScope != std::string::npos)
+		// PLDF place table (optional). v2: "placeParam": {"places":
+		// [[percent, score] x 3]}. v1 mislabeled the six slots as "price":
+		// {f1, basePrice, f2, f3, f4, f5}.
+		const size_t placeScope = findObject(json, "placeParam", 0);
+		if (placeScope != std::string::npos)
 		{
-			long long v;
-			if (readScalarInt(json, "basePrice", priceScope, v)) p.price.basePrice = uint32_t(v);
-			if (readScalarInt(json, "f1", priceScope, v)) p.price.f1 = uint32_t(v);
-			if (readScalarInt(json, "f2", priceScope, v)) p.price.f2 = uint32_t(v);
-			if (readScalarInt(json, "f3", priceScope, v)) p.price.f3 = uint32_t(v);
-			if (readScalarInt(json, "f4", priceScope, v)) p.price.f4 = uint32_t(v);
-			if (readScalarInt(json, "f5", priceScope, v)) p.price.f5 = uint32_t(v);
-			p.price.valid = true;
+			std::vector<long long> v;
+			if (readIntArray(json, "places", placeScope, v) && v.size() == 6)
+			{
+				PlaceParamDef d;
+				for (int i = 0; i < 3; ++i)
+				{
+					d.places[i].percent = uint32_t(v[size_t(2 * i)]);
+					d.places[i].scoreSlot = int32_t(v[size_t(2 * i + 1)]);
+				}
+				p.placeParam = d;
+			}
 		}
-
-		// DPDF (optional).
-		size_t placScope = findObject(json, "placement", 0);
-		if (placScope != std::string::npos)
+		else
 		{
-			long long v;
-			if (readScalarInt(json, "w", placScope, v))     p.placement.w = uint32_t(v);
-			if (readScalarInt(json, "h", placScope, v))     p.placement.h = uint32_t(v);
-			if (readScalarInt(json, "baseX", placScope, v)) p.placement.baseX = uint32_t(v);
-			if (readScalarInt(json, "baseY", placScope, v)) p.placement.baseY = uint32_t(v);
-			p.placement.valid = true;
+			const size_t priceScope = findObject(json, "price", 0);
+			if (priceScope != std::string::npos)
+			{
+				static const char * const kV1Keys[6] = {"f1", "basePrice", "f2", "f3", "f4", "f5"};
+				PlaceParamDef d;
+				for (int i = 0; i < 6; ++i)
+				{
+					long long v = 0;
+					if (!readScalarInt(json, kV1Keys[i], priceScope, v)) continue;
+					if (i % 2 == 0) d.places[i / 2].percent = uint32_t(v);
+					else            d.places[i / 2].scoreSlot = int32_t(v);
+				}
+				p.placeParam = d;
+			}
 		}
 
 		// Sprite sheets. Each entry under "bitmaps" may carry a
@@ -383,7 +464,9 @@ namespace OT
 		{
 			std::string ps, qs, nm;
 			if (readString(json, "priceString", mvdfScope, ps)) p.transport.priceString = ps;
-			if (readString(json, "quarterlyString", mvdfScope, qs)) p.transport.quarterlyString = qs;
+			if (readString(json, "outMoneyString", mvdfScope, qs)
+			    || readString(json, "quarterlyString", mvdfScope, qs))  // v1 key
+				p.transport.outMoneyString = qs;
 			if (readString(json, "name", mvdfScope, nm)) p.transport.name = nm;
 			p.transport.valid = true;
 		}
@@ -424,49 +507,50 @@ namespace OT
 		emitStr(s, "class", classToString(p.pluginClass), "  "); s += ",\n";
 
 		// attr
+		// attr (ATTR id 128). 4ccs are written in Mac order ("BURG").
 		s += "  \"attr\": {\n";
-		emitStr(s, "itemType", p.attr.itemType.str(), "    "); s += ",\n";
+		emitStr(s, "pluginId", p.attr.id.macStr(), "    "); s += ",\n";
+		emitInt(s, "itemType", p.attr.itemType, "    "); s += ",\n";
 		emitStr(s, "name", p.attr.name, "    "); s += ",\n";
 		emitInt(s, "gameLevel", p.attr.gameLevel, "    "); s += ",\n";
-		emitInt(s, "id", p.attr.id, "    "); s += ",\n";
-		emitStr(s, "marker", p.attr.marker.str(), "    "); s += ",\n";
-		emitInt(s, "mustItem", p.attr.mustItem, "    "); s += ",\n";
-		emitInt(s, "dependID", p.attr.dependID, "    "); s += ",\n";
-		emitInt(s, "secretItem", p.attr.secretItem, "    "); s += "\n";
+		emitInt(s, "attrib", p.attr.attrib, "    "); s += ",\n";
+		emitStr(s, "dependPluginId", p.attr.dependID.macStr(), "    "); s += ",\n";
+		emitInt(s, "secretItem", p.attr.secretItem, "    "); s += ",\n";
+		emitInt(s, "mustItem", p.attr.mustItem, "    "); s += "\n";
 		s += "  },\n";
 
-		// placement (optional)
-		if (p.placement.valid)
+		// dayParam (optional; DPDF 128): percent[EDay][EWhether]
+		if (p.dayParam)
 		{
-			s += "  \"placement\": {\n";
-			emitInt(s, "w", p.placement.w, "    "); s += ",\n";
-			emitInt(s, "h", p.placement.h, "    "); s += ",\n";
-			emitInt(s, "baseX", p.placement.baseX, "    "); s += ",\n";
-			emitInt(s, "baseY", p.placement.baseY, "    "); s += "\n";
+			const DayParamDef & d = *p.dayParam;
+			s += "  \"dayParam\": {\n";
+			s += "    \"percent\": [[" + std::to_string(d.percent[0][0]) + ", " + std::to_string(d.percent[0][1])
+			   + "], [" + std::to_string(d.percent[1][0]) + ", " + std::to_string(d.percent[1][1]) + "]]\n";
 			s += "  },\n";
 		}
 
-		// price (optional; PLDF — shops)
-		if (p.price.valid)
+		// placeParam (optional; PLDF 128): [percent, score] per EPlace
+		if (p.placeParam)
 		{
-			s += "  \"price\": {\n";
-			emitInt(s, "basePrice", p.price.basePrice, "    "); s += ",\n";
-			emitInt(s, "f1", p.price.f1, "    "); s += ",\n";
-			emitInt(s, "f2", p.price.f2, "    "); s += ",\n";
-			emitInt(s, "f3", p.price.f3, "    "); s += ",\n";
-			emitInt(s, "f4", p.price.f4, "    "); s += ",\n";
-			emitInt(s, "f5", p.price.f5, "    "); s += "\n";
+			const PlaceParamDef & d = *p.placeParam;
+			s += "  \"placeParam\": {\n";
+			s += "    \"places\": [";
+			for (int i = 0; i < 3; ++i)
+			{
+				if (i) s += ", ";
+				s += "[" + std::to_string(d.places[i].percent) + ", " + std::to_string(d.places[i].scoreSlot) + "]";
+			}
+			s += "]\n";
 			s += "  },\n";
 		}
 
-		// transport (optional; MVDF — movers). Only the human-readable price
-		// strings + name round-trip today; the binary header fields stay
-		// Ghidra-pending and are not (yet) editable in the inspector.
+		// transport (optional; MVDF — movers). Only the human-readable strings
+		// of the first variation are part of the manifest so far.
 		if (p.transport.valid)
 		{
 			s += "  \"transport\": {\n";
 			emitStr(s, "priceString",    p.transport.priceString,    "    "); s += ",\n";
-			emitStr(s, "quarterlyString", p.transport.quarterlyString, "    "); s += ",\n";
+			emitStr(s, "outMoneyString", p.transport.outMoneyString, "    "); s += ",\n";
 			emitStr(s, "name",           p.transport.name,           "    "); s += "\n";
 			s += "  },\n";
 		}
@@ -615,9 +699,20 @@ namespace OT
 		PluginDesc desc;
 		if (plugin.getDesc(desc)) p.pluginClass = desc.kind;
 		plugin.getAttr(p.attr);
-		plugin.getDpdf(p.placement);
-		plugin.getPldf(p.price);
-		plugin.getMvdf(p.transport);   // Mover plugins only; no-op for tenants
+		DayParamDef day;
+		if (plugin.getDayParamDef(day, 128)) p.dayParam = day;
+		PlaceParamDef place;
+		if (plugin.getPlaceParamDef(place, 128)) p.placeParam = place;
+		// Mover plugins: surface the first MVDF variation's strings.
+		TemplateDef def;
+		if (plugin.getTemplateDef(def) && def.kind == TemplateDef::Mover && !def.tool.variations.empty())
+		{
+			const ToolVariation & v = def.tool.variations.front();
+			p.transport.valid = true;
+			p.transport.priceString = v.priceString;
+			p.transport.outMoneyString = v.outMoneyString;
+			p.transport.name = v.name;
+		}
 
 		// Fresh plugins follow the shipped numeric RT_BITMAP convention
 		// (same default the editor's Import uses; the game reads these).
