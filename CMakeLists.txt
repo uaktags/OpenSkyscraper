@@ -205,6 +205,7 @@ add_executable(OpenSkyTests
   source/Skin.cpp
   source/Time.cpp
   source/Route.cpp
+  source/SimFlag.cpp
   source/SaveHash.cpp
   source/WindowsPEExecutable.cpp
   source/Path.cpp
@@ -291,6 +292,25 @@ foreach(sim_ruleset simtower opensky)
     set_tests_properties(${sim_name} PROPERTIES
       SKIP_REGULAR_EXPRESSION "SKIP_NO_DISPLAY" TIMEOUT 600)
   endforeach()
+endforeach()
+
+# Hotel coverage golden: a tower with hotel rooms (single/double/suite)
+# plus office/condo/shop/restaurant/fastfood, an elevator and stairs, so
+# the hotel save path (no yoot* attributes under these rulesets) and the
+# touched item types are exercised on every ruleset save.
+foreach(sim_ruleset simtower opensky)
+  set(sim_name sim_hotel_${sim_ruleset})
+  add_test(NAME ${sim_name}
+    COMMAND ${CMAKE_COMMAND}
+      -DEXE=$<TARGET_FILE:${EXECUTABLE_NAME}>
+      -DTOWER=${PROJECT_SOURCE_DIR}/tests/sim/hotel_tower.tower
+      -DRULESET=${sim_ruleset}
+      -DTICKS=2000
+      -DGOLDEN=${PROJECT_SOURCE_DIR}/tests/sim/${sim_name}.json
+      -DOUT_DIR=${CMAKE_BINARY_DIR}/sim-golden
+      -P ${PROJECT_SOURCE_DIR}/tests/sim/run_sim_golden.cmake)
+  set_tests_properties(${sim_name} PROPERTIES
+    SKIP_REGULAR_EXPRESSION "SKIP_NO_DISPLAY" TIMEOUT 600)
 endforeach()
 
 # YootTower people (plan step 15): the visitor pool and walking customers

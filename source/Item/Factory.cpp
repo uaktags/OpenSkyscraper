@@ -137,6 +137,7 @@ OT::Item::Item * Factory::make(AbstractPrototype * prototype, int2 position)
 OT::Item::Item * Factory::make(std::string prototypeID, int2 position)
 {
 	AbstractPrototype * prototype = prototypesById[prototypeID];
+	if (!prototype) LOG(ERROR, "Factory::make: no prototype registered for id '%s'", prototypeID.c_str());
 	return make(prototype, position);
 }
 

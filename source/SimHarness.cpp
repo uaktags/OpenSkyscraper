@@ -12,17 +12,7 @@
 
 using namespace OT;
 
-static bool s_deterministic = false;
-
-bool Sim::deterministic()
-{
-	return s_deterministic;
-}
-
-void Sim::setDeterministic(bool on)
-{
-	s_deterministic = on;
-}
+// The flag itself lives in SimFlag.cpp (linked into the unit tests too).
 
 bool Sim::parseArg(int argc, char * argv[], int & i, Options & options)
 {

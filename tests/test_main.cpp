@@ -42,6 +42,7 @@
 #include "../source/YootMisc.h"
 #include "../source/BldLoader.h"
 #include "../source/BldExport.h"
+#include "../source/SimHarness.h"
 
 #include "../source/BuildRules.h"
 #include "../source/Skin.h"
@@ -5757,6 +5758,85 @@ static void testYootGapClosers()
 	EXPECT(Y::floorCharge(500, 12) == 6000 && Y::floorCharge(500, 0) == 0);
 }
 
+// SimLess orders by creation serial in deterministic --sim runs and by plain
+// pointer otherwise; erasing a tracked key (destruction deregistration) must
+// leave a clean container (leak-review finding: dangling keys were compared
+// against after the object was freed).
+static void testSimLessContainers()
+{
+    struct Probe { unsigned long long simSerial; };
+    Probe a, b, c;
+    a.simSerial = 30; b.simSerial = 10; c.simSerial = 20;
+
+    OT::Sim::setDeterministic(true);
+    {
+        std::set<Probe *, OT::SimLess> s;
+        s.insert(&a); s.insert(&b); s.insert(&c);
+        std::vector<Probe *> order(s.begin(), s.end());
+        EXPECT(order.size() == 3 && order[0] == &b && order[1] == &c && order[2] == &a);
+        // A destroyed tracked key deregisters: no stale entry remains.
+        s.erase(&c);
+        EXPECT(s.size() == 2 && s.find(&c) == s.end());
+        EXPECT(s.insert(&c).second); // re-insertion of a live key works
+    }
+    OT::Sim::setDeterministic(false);
+    {
+        std::set<Probe *, OT::SimLess> s;
+        s.insert(&a); s.insert(&b); s.insert(&c);
+        std::set<Probe *, std::less<Probe *>> plain;
+        plain.insert(&a); plain.insert(&b); plain.insert(&c);
+        EXPECT(std::equal(s.begin(), s.end(), plain.begin())); // pointer order unchanged
+    }
+}
+
+// The YootTower-only prototype gate that Factory::make(XML) enforces when a
+// save from another ruleset contains YootTower items.
+static void testYootOnlyPrototypeGate()
+{
+    EXPECT(OT::BuildRules::isYootOnlyPrototype("powerroom"));
+    EXPECT(OT::BuildRules::isYootOnlyPrototype("stadium"));
+    EXPECT(OT::BuildRules::isYootOnlyPrototype("billboard"));
+    EXPECT(OT::BuildRules::isYootOnlyPrototype("hotel_single") == false);
+    EXPECT(OT::BuildRules::isYootOnlyPrototype("office") == false);
+    EXPECT(OT::BuildRules::isYootOnlyPrototype("floor") == false);
+    EXPECT(OT::BuildRules::isYootOnlyPrototype("shop") == false);
+    EXPECT(OT::BuildRules::isYootOnlyPrototype("elevator-standard") == false);
+}
+
+// DIB validation: a height of INT32_MIN must be rejected before rows()
+// negates it (signed overflow UB otherwise).
+static void testOspDibValidation()
+{
+    auto put32 = [](std::string & d, size_t p, uint32_t v)
+    {
+        for (int i = 0; i < 4; ++i) d[p + i] = char(uint8_t(v >> (8 * i)));
+    };
+    auto put16 = [](std::string & d, size_t p, uint16_t v)
+    {
+        d[p] = char(uint8_t(v)); d[p + 1] = char(uint8_t(v >> 8));
+    };
+    auto header = [&](int height)
+    {
+        std::string d(40, '\0');
+        put32(d, 0, 40);          // BITMAPINFOHEADER
+        put32(d, 4, 16);          // width
+        put32(d, 8, uint32_t(height));
+        put16(d, 12, 1);          // planes
+        put16(d, 14, 8);          // 8 bpp
+        put32(d, 16, 0);          // BI_RGB
+        put32(d, 32, 0);          // default palette (256)
+        return d;
+    };
+    OT::DibLayout L;
+    EXPECT(OT::parseDib(header(INT32_MIN), L) == false); // UB before the fix
+    EXPECT(OT::parseDib(header(0), L) == false);         // zero height
+    // Valid top-down 16x4 bitmap with its 256-entry palette + pixel data.
+    std::string ok = header(-4);
+    ok.resize(40 + 4 * 256 + 16 * 4);
+    EXPECT(OT::parseDib(ok, L));
+    EXPECT(L.rows() == 4 && L.width == 16 && L.bpp == 8 && L.colors == 256);
+}
+
 int main()
 {
 	testBldSyntheticRoundTrip();
@@ -5830,6 +5910,9 @@ int main()
 	testYootWorldEncoders();
 	testOspV3Sweep();
 	testT2pExportEdited();
+	testSimLessContainers();
+	testYootOnlyPrototypeGate();
+	testOspDibValidation();
     if (g_failures > 0)
     {
         std::cerr << g_failures << " test(s) failed\n";
