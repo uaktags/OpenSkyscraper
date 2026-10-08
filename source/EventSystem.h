@@ -112,6 +112,9 @@ namespace OT
 		void destroyFireCell(int floor, int x);
 		void endFire();
 		bool fireBurning() const;
+		/// True while a floor's two fronts are still within one 12-cell
+		/// strip of each other (just ignited): drawn as small flames.
+		bool fireFloorIgniting(int floor) const;
 
 		// --- bomb (EventT seg_10c8) ---
 		void offerBomb();
@@ -195,6 +198,7 @@ namespace OT
 
 		// --- sprites ---
 		Sprite fireSprite;
+		Sprite smallFireSprite;
 		Sprite chopperSprite;
 		Sprite alertSprite;
 		Sprite rubbleSprite;

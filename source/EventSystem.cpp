@@ -83,6 +83,10 @@ EventSystem::EventSystem(Game * game)
 	fireSprite.setTextureRect(sf::IntRect({0, 0}, {96, 36}));
 	fireSprite.setOrigin({48.f, 36.f});
 
+	smallFireSprite.SetImage(App->bitmaps["simtower/fire/small"]);
+	smallFireSprite.setTextureRect(sf::IntRect({0, 0}, {96, 36}));
+	smallFireSprite.setOrigin({48.f, 36.f});
+
 	chopperSprite.SetImage(App->bitmaps["simtower/fire/chopper"]);
 	chopperSprite.setTextureRect(sf::IntRect({0, 0}, {96, 36})); // 4 x 96px rotor frames
 	chopperSprite.setOrigin({48.f, 36.f});
@@ -209,6 +213,13 @@ void EventSystem::addRubble(int floor, int x)
 bool EventSystem::fireBurning() const
 {
 	return !fireLeft.empty() || !fireRight.empty();
+}
+
+bool EventSystem::fireFloorIgniting(int floor) const
+{
+	std::map<int, int>::const_iterator l = fireLeft.find(floor);
+	std::map<int, int>::const_iterator r = fireRight.find(floor);
+	return l != fireLeft.end() && r != fireRight.end() && r->second - l->second < kFireCells;
 }
 
 void EventSystem::startFire()
@@ -853,19 +864,19 @@ void EventSystem::draw(sf::RenderTarget & target, sf::RenderStates /*states*/) c
 		int frame = (fireFrame / 3) % 4;
 		sf::IntRect fireRect({frame * 96, 0}, {96, 36});
 
-		for (std::map<int, int>::const_iterator it = fireLeft.begin(); it != fireLeft.end(); ++it) {
-			Sprite f = fireSprite;
-			f.setTextureRect(fireRect);
-			f.setPosition(tileToPixel(it->second, it->first));
-			target.draw(f);
-			game->drawnSprites++;
-		}
-		for (std::map<int, int>::const_iterator it = fireRight.begin(); it != fireRight.end(); ++it) {
-			Sprite f = fireSprite;
-			f.setTextureRect(fireRect);
-			f.setPosition(tileToPixel(it->second, it->first));
-			target.draw(f);
-			game->drawnSprites++;
+		// A freshly ignited floor (its two fronts still within one 12-cell
+		// strip of each other) burns with small flames; once the fronts
+		// have separated the floor is a full blaze (large flames).
+		for (int side = 0; side < 2; side++) {
+			const std::map<int, int> & fronts = side ? fireRight : fireLeft;
+			for (std::map<int, int>::const_iterator it = fronts.begin(); it != fronts.end(); ++it) {
+				const bool small = fireFloorIgniting(it->first);
+				Sprite f = small ? smallFireSprite : fireSprite;
+				if (!small) f.setTextureRect(fireRect);
+				f.setPosition(tileToPixel(it->second, it->first));
+				target.draw(f);
+				game->drawnSprites++;
+			}
 		}
 
 		if (chopperX > 0) {
