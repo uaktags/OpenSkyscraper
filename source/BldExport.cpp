@@ -166,12 +166,20 @@ namespace Bld {
 			error = "template is a " + macOrder(templ.world) + " save, the tower is " + tower.world;
 			return false;
 		}
+		const YootWorld world = builtinYootWorld(worldId);
+		// Kegon's unit map carries the FINF mask: T2UnitInfo::InitMask sets
+		// 0x8000 in the first u16 of every unbuildable cell (the cliff), and
+		// the game saves it with the map (oracle Kegon saves).
+		YootWorld finf;
 		if (worldId == YootWorld::Id::Kegon)
 		{
-			error = "Kegon export is not supported (its unit map carries FINF flags)";
-			return false;
+			if (plugins) finf = loadYootWorld(*plugins, worldId);
+			if (finf.unbuildable.empty())
+			{
+				error = "Kegon export needs Kegon.t2p for the world's FINF mask";
+				return false;
+			}
 		}
-		const YootWorld world = builtinYootWorld(worldId);
 		if (templ.hRange != world.width || templ.vRange != world.height)
 		{
 			error = "template grid does not match the world";
@@ -189,12 +197,13 @@ namespace Bld {
 				if (macOrder(p.id) == mac) return &p;
 			return nullptr;
 		};
-		const PluginInfo * floorPlugin = plugin("FLOR");
+		// Kegon has its own Floor and Simple Elevator (KFloor, KElev).
+		const PluginInfo * floorPlugin = plugin("FLOR") ? plugin("FLOR") : plugin("KFLO");
 		const PluginInfo * officePlugin = plugin("OFFC");
 		const PluginInfo * shopPlugin = plugin("ICES");
 		const PluginInfo * restroomPlugin = plugin("TOIL");
 		const PluginInfo * apartmentPlugin = plugin("HREN");
-		const PluginInfo * elevPlugin = plugin("StdE");
+		const PluginInfo * elevPlugin = plugin("StdE") ? plugin("StdE") : plugin("KELV");
 		if (!floorPlugin)
 		{
 			error = "template has no Floor plugin";
@@ -433,6 +442,7 @@ namespace Bld {
 		};
 		if (!officePlugin) officePlugin = pluginForStem("Office.t2p");
 		if (!restroomPlugin) restroomPlugin = pluginForStem("Restroom.t2p");
+		if (!restroomPlugin) restroomPlugin = pluginForStem("KRestroom.t2p");
 		if (!apartmentPlugin) apartmentPlugin = pluginForStem("Apartment.t2p");
 		// Other native YootTower tenants (hotel rooms, facilities, venues):
 		// the first linked plugin in the template, its TNDF footprint and
@@ -731,11 +741,14 @@ namespace Bld {
 			// StdElev.t2p overrides LoadExtraData (FUN_1000f4e0): s32 n, then
 			// always 2 x 10 four-byte records (a day-type x period table,
 			// most likely the car schedule) whatever n says. Written with the
-			// values the game saves for a fresh shaft.
+			// values the game saves for a fresh shaft. KElev.t2p (0x1000fbd0)
+			// has 2 x 10 three-s16 records, fresh (0, 0, 6) (FUN_100116f0).
+			const bool kElev = macOrder(elevPlugin->id) == "KELV";
 			for (int k = 0; k < 2 * 10; k++)
 			{
-				const uint8_t e[4] = {0, 0, 6, 0};
-				m.extra.insert(m.extra.end(), e, e + 4);
+				const uint8_t e[6] = {0, 0, 0, 0, 6, 0};
+				if (kElev) m.extra.insert(m.extra.end(), e, e + 6);
+				else m.extra.insert(m.extra.end(), e + 2, e + 6);
 			}
 			// Shaft cells, machine row to pit row.
 			for (int row = area.top; row < area.bottom; row++)
@@ -774,6 +787,10 @@ namespace Bld {
 				for (int row = a.top; row < a.bottom; row++)
 					for (int u = a.left; u < a.right; u++) setU16(cell(row, u) + 2, (uint16_t)(1000 + i));
 			}
+		if (!finf.unbuildable.empty())
+			for (int row = 0; row < H && row < finf.finfHeight; row++)
+				for (int u = 0; u < W && u < finf.finfWidth; u++)
+					if (!finf.isUnitBuildable(u, row)) cell(row, u)[1] |= 0x80;
 		// Open the main view on the tower (scroll px: 8 per unit, 36 per row;
 		// roughly a 740 x 500 view, the game's default window).
 		if (!tenants.empty())

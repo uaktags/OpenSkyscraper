@@ -451,5 +451,14 @@ loads in T2.exe with the GAMEWORKS board on the facade (`save2-agent/shots/g0.pn
 The world-wide sections (plugin table, pool, movies, events, palettes, world statistics)
 are copied from a template save of the same world. Both an export of the imported
 Sample Tokyo Map and an OpenSky-authored Hawaii tower load and run in T2.exe under the
-oracle (screenshots in `~/yoottower-decomp/bld-agent/`). Kegon is refused (its unit map
-carries FINF flags).
+oracle (screenshots in `~/yoottower-decomp/bld-agent/`).
+
+**Kegon.** Its unit map carries the world's FINF mask: `T2UnitInfo::InitMask` sets **0x8000
+in the first u16** of every unbuildable cell (5849 of 8448 cells: the cliff left of the
+shaft, the right edge and the two bottom rows), and the game saves the map with the bit.
+The exporter ORs it back from Kegon.t2p's FINF resource (`YootWorld::unbuildable`), which
+matches the oracle saves cell for cell, and writes Kegon's own KFloor (1010) and KElev
+(1818) records; KElev's extra data is 2 x 10 records of three s16, fresh `(0, 0, 6)`
+(FUN_100116f0), where StdElev has two. Restrooms fall back to KRestroom. An import of a
+game-written Kegon save exports back with the same flags and items, the original loads
+the export, and its own re-save round-trips (`save2-agent/saves-raw/kegon_resaved.bld`).

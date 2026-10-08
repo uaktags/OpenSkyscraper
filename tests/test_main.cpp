@@ -4164,6 +4164,33 @@ static void testBldPluginSaveData()
 				if (t.hdr.used && t.equipType == 2001 && t.extraCount == 0x405 && t.extra.size() >= 264 && t.extra.size() < 0x405) stadiums++;
 			EXPECT(stadiums == 1);
 		}
+		if (std::string(name) == "kegon.bld" && ok)
+		{
+			// Kegon round trip: import, export on the save as template. The
+			// unit map's 0x8000 FINF flags come back from Kegon.t2p's mask.
+			std::string xml;
+			ImportReport report;
+			EXPECT(toTowerXml(g, bldTestPrototypes, xml, report, error));
+			EXPECT(report.worldId == "kegon" && xml.find("world=\"kegon\"") != std::string::npos);
+			TowerState state;
+			BldData exported;
+			ImportReport exportReport;
+			EXPECT(parseTowerXml(xml, state, error));
+			EXPECT(exportTower(state, g, exported, exportReport, error, &yootTestPlugins()));
+			if (!error.empty()) std::cerr << "kegon export: " << error << "\n";
+			int flagsWant = 0, flagsGot = 0, flagsSame = 0;
+			for (size_t c = 0; c * 4 < g.unitMap.size() && c * 4 < exported.unitMap.size(); c++)
+			{
+				const bool a = (g.unitMap[c * 4 + 1] & 0x80) != 0, b = (exported.unitMap[c * 4 + 1] & 0x80) != 0;
+				flagsWant += a; flagsGot += b; flagsSame += a == b;
+			}
+			EXPECT(flagsWant > 5000 && flagsGot == flagsWant && flagsSame * 4 == (int)g.unitMap.size());
+			EXPECT(exported.usedTenants() > 0 && exported.level == g.level);
+			std::string again;
+			ImportReport againReport;
+			EXPECT(toTowerXml(exported, bldTestPrototypes, again, againReport, error));
+			EXPECT(againReport.imported == report.imported);
+		}
 		if (std::string(name) == "billboard.bld" && ok)
 		{
 			// Sample Tokyo Map + a Billboard on 7F-8F with the GAMEWORKS ad
