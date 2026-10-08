@@ -168,6 +168,9 @@ namespace Bld {
 		Rect area;
 		uint32_t valiation = 0;
 		int16_t outObjType = 0;
+		/// Def LoadExtraData: s32 n + n bytes (Billboard.t2p: u32 ad
+		/// sub-plugin mID + s16, n = 6; n = 0 without an ad record).
+		std::vector<uint8_t> extra;
 	};
 
 	/// T2PeopleType::Read 0x1004e6c0.
@@ -258,7 +261,9 @@ namespace Bld {
 		std::string type;
 		int16_t id = 0;
 		uint8_t standby = 0;
-		std::vector<uint8_t> data;
+		std::vector<uint8_t> data;   ///< u32 length-prefixed payload
+		/// 'vERM' metro / 'vErC' cruise (T2Transport): people on board.
+		uint32_t firstPeople = 0, lastPeople = 0;
 	};
 
 	struct Name

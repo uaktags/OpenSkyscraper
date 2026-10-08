@@ -4078,6 +4078,95 @@ static void testBldSyntheticRoundTrip()
 	EXPECT(xml.find("lastQuarterBalance=\"1200000\" quarterIncome=\"34500\"") != std::string::npos);
 }
 
+/// Plugin-specific save data: Stadium.t2p's extra record (n = 0x405 over a
+/// shorter record), Billboard.t2p's out-object record, and the tower events
+/// without a length prefix (HotSpring: nothing; metro/cruise: people ids).
+static void testBldPluginSaveData()
+{
+	using namespace OT::Bld;
+	BldData d;
+	d.world = "KJNS";
+	d.level = 4;
+	PluginInfo stadium, billboard;
+	stadium.type = "lPnT"; stadium.id = "MUDS"; stadium.itemType = 2001; stadium.name = "Final";
+	billboard.type = "lPoO"; billboard.id = "LLIB"; billboard.itemType = 2100; billboard.name = "Billboard";
+	d.plugins = {stadium, billboard};
+	d.people.resize(256);
+	d.vRange = 2; d.hRange = 3;
+	d.unitMap.assign(2 * 3 * 4, 0);
+	d.tenants.resize(128);
+	Tenant & s = d.tenants[0];
+	s.hdr.used = 1; s.hdr.status = 30; s.equipID = 1000; s.equipType = 2001;
+	s.ce.tag = "AECx";
+	// pstr "Towers", u8, u16, two teams (pstr "Tigers" / "", u8, 126 bytes), u8, u8, u16.
+	const char * stadiumName = "Towers";
+	s.extra.push_back(6);
+	s.extra.insert(s.extra.end(), stadiumName, stadiumName + 6);
+	s.extra.insert(s.extra.end(), 3, 0);
+	s.extra.push_back(6);
+	s.extra.insert(s.extra.end(), stadiumName, stadiumName + 6);
+	s.extra.insert(s.extra.end(), 127, 7);
+	s.extra.push_back(0);
+	s.extra.insert(s.extra.end(), 127, 0);
+	s.extra.insert(s.extra.end(), 4, 1);
+	s.extraCount = 0x405;
+	d.tenants[1] = s;
+	d.tenants[1].equipID = 1001;
+	d.tenants[1].extra.clear();
+	d.tenants[1].extraCount = 0; // a Stadium record without its game record
+	d.movers.resize(32);
+	d.requests.resize(64);
+	d.outObjs.resize(64);
+	OutObj & b = d.outObjs[0];
+	b.hdr.used = 1; b.outObjID = 1000; b.outObjType = 2100; b.area = {10, 0, 14, 2};
+	b.extra = {'D', 'A', 'W', 'G', 1, 0}; // ad sub-plugin mID + s16
+	d.outside.assign(6, 0);
+	d.trafficMap.assign(4284 * 4, 0);
+	TowerEventRec hot, metroFull, metroEmpty, vip;
+	hot.type = "vESH"; hot.id = 128; hot.standby = 1;
+	metroFull.type = "vERM"; metroFull.id = 129; metroFull.firstPeople = 1000; metroFull.lastPeople = 77;
+	metroEmpty.type = "vERM"; metroEmpty.id = 130;
+	vip.type = "vEiV"; vip.id = 128; vip.data.assign(14, 0);
+	d.events = {hot, metroFull, metroEmpty, vip};
+	for (uint8_t & f : d.uiFlags) f = 1;
+	d.hasWorldStats = true;
+
+	std::vector<uint8_t> bytes, again;
+	std::string error;
+	EXPECT(writeBytes(d, bytes, error));
+	BldData back;
+	EXPECT(parseBytes(bytes, back, error));
+	if (!error.empty()) std::cerr << "bld plugin data: " << error << "\n";
+	EXPECT(back.tenants[0].extraCount == 0x405 && back.tenants[0].extra.size() == s.extra.size());
+	EXPECT(back.tenants[1].hdr.used && back.tenants[1].extra.empty());
+	EXPECT(back.outObjs[0].extra.size() == 6 && back.outObjs[0].outObjType == 2100);
+	EXPECT(back.events.size() == 4 && back.events[1].firstPeople == 1000 && back.events[1].lastPeople == 77);
+	EXPECT(back.events[2].firstPeople == 0 && back.events[3].data.size() == 14);
+	EXPECT(back.trafficMap.size() == 4284 * 4);
+	EXPECT(writeBytes(back, again, error) && again == bytes);
+
+	// Game-written saves (oracle, ~/yoottower-decomp/save2-agent/saves):
+	// Stadium, Kegon (HotSpring event) and Billboard towers.
+	const char * home = std::getenv("HOME");
+	static const char * saves[] = {"stadium.bld", "kegon.bld", "billboard.bld"};
+	for (const char * name : saves)
+	{
+		std::vector<uint8_t> in, out;
+		if (!home || !readAllBytes(std::string(home) + "/yoottower-decomp/save2-agent/saves/" + name, in)) continue;
+		BldData g;
+		const bool ok = parseBytes(in, g, error) && writeBytes(g, out, error) && out == in;
+		EXPECT(ok);
+		if (!ok) std::cerr << name << ": " << error << "\n";
+		if (std::string(name) == "stadium.bld")
+		{
+			int stadiums = 0;
+			for (const Tenant & t : g.tenants)
+				if (t.hdr.used && t.equipType == 2001 && t.extraCount == 0x405 && t.extra.size() >= 264 && t.extra.size() < 0x405) stadiums++;
+			EXPECT(stadiums == 1);
+		}
+	}
+}
+
 static void testBldShippedSaves()
 {
 	using namespace OT::Bld;
@@ -5524,6 +5613,7 @@ static void testYootGapClosers()
 int main()
 {
 	testBldSyntheticRoundTrip();
+	testBldPluginSaveData();
 	testBldShippedSaves();
 	testTdtLoader();
 	testTdtLoaderTruncated();

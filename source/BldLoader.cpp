@@ -10,6 +10,7 @@
 #include <climits>
 #include <cstdio>
 #include <cstring>
+#include <map>
 #include <stdexcept>
 
 namespace OT {
@@ -37,6 +38,14 @@ namespace Bld {
 
 		const bool writing;
 		std::vector<uint8_t> out;
+		/// Numeric item type -> plugin mID (file order), from the plugin table.
+		std::map<int, std::string> pluginIds;
+
+		std::string pluginId(int itemType) const
+		{
+			std::map<int, std::string>::const_iterator i = pluginIds.find(itemType);
+			return i == pluginIds.end() ? std::string() : i->second;
+		}
 
 		size_t offset() const { return writing ? out.size() : pos; }
 		size_t remaining() const { return writing ? 0 : in->size() - pos; }
@@ -300,7 +309,26 @@ namespace Bld {
 		return true;
 	}
 
-	/// T2EquipDef::LoadExtraData 0x1002f8c0: s32 n + n bytes.
+	/// Bytes Stadium.t2p's extra record really takes (bld.py
+	/// stadium_extra_size): pstr, u8, u16, two teams (pstr, u8, 60 x u16,
+	/// 3 x u16), u8, u8, u16. Its writer announces n = 0x405 regardless.
+	static size_t stadiumExtraSize(const std::vector<uint8_t> & buf, size_t pos)
+	{
+		size_t p = pos;
+		if (p < buf.size()) p += 1 + buf[p];
+		p += 3;
+		for (int team = 0; team < 2; team++)
+		{
+			if (p < buf.size()) p += 1 + buf[p];
+			p += 1 + 120 + 6;
+		}
+		p += 4;
+		return p - pos;
+	}
+
+	/// T2EquipDef::LoadExtraData 0x1002f8c0: s32 n + n bytes, or a def's
+	/// override. Every override in the shipped plugins writes n equal to its
+	/// record size except Stadium's (doc/yoottower/bld-format.md 4.2).
 	static void xferExtra(Archive & a, Equip & d)
 	{
 		if (a.writing && d.extraCount >= 0)
@@ -311,6 +339,19 @@ namespace Bld {
 			return;
 		}
 		int32_t n = 0;
+		if (!a.writing && a.pluginId(d.equipType) == "MUDS")
+		{
+			a.s32(n);
+			if (n > 0)
+			{
+				d.extraCount = n;
+				a.blob(d.extra, stadiumExtraSize(a.input(), a.offset()));
+				return;
+			}
+			if (n < 0) a.fail("extra data: negative count");
+			d.extra.clear();
+			return;
+		}
 		const size_t c = a.count(n, d.extra.size(), 1, "extra data");
 		a.blob(d.extra, c);
 	}
@@ -437,6 +478,11 @@ namespace Bld {
 		a.srect(d.area);
 		a.u32(d.valiation);
 		a.s16(d.outObjType);
+		// The def's LoadExtraData; Billboard.t2p (the only out-object plugin)
+		// writes s32 n + n bytes like a missing def is skipped.
+		int32_t n = 0;
+		const size_t c = a.count(n, d.extra.size(), 1, "out-object extra data");
+		a.blob(d.extra, c);
 	}
 
 	static void xfer(Archive & a, PeopleType & t)
@@ -618,6 +664,15 @@ namespace Bld {
 				a.tag(e.type);
 				a.s16(e.id);
 				a.u8(e.standby);
+				// T2HotSpring writes nothing; the T2Transport events (metro,
+				// cruise) a people id pair; the rest a length-prefixed payload.
+				if (e.type == "vESH") continue;
+				if (e.type == "vERM" || e.type == "vErC")
+				{
+					a.u32(e.firstPeople);
+					if (e.firstPeople) a.u32(e.lastPeople);
+					continue;
+				}
 				int32_t len = 0;
 				const size_t l = a.count(len, e.data.size(), 1, "event payload");
 				a.blob(e.data, l);
@@ -727,6 +782,8 @@ namespace Bld {
 				a.pstr(p.fileName);
 				a.u8(p.used);
 			}
+			for (size_t i = d.plugins.size(); i-- > 0;)
+				a.pluginIds[d.plugins[i].itemType] = d.plugins[i].id;
 		});
 		blockList<int32_t>(a, d.people, 256, "people");
 		scoped(a, "floor", [&] { xferFloor(a, d); });

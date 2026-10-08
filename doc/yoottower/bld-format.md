@@ -187,6 +187,30 @@ period table, most likely the car schedule), and its reader reads those 20 recor
 load and crashes T2.exe (verified under the oracle). A fresh shaft stores
 `00 00 06 00` in every record.
 
+**Every plugin that overrides the extra data** (audit:
+`plugin_code_audit.py`, plus the two defs with a statically linked base class,
+ClassicTheater and BigElev, whose slots +0x50/+0x54 were read from the vtable):
+
+| Plugin | n written | Record (reader) |
+|---|---|---|
+| StdElev | 80 | 20 x (s16, s16), read whatever n says |
+| KElev, KServ, ServElev, BigElev | 120 | 2 x 10 x 3 s16, read whatever n says |
+| Theater, ClassicTheater | 20 | u32 movie sub-plugin mID + 4 x s32 |
+| EventCenter | 64 + 9k | u32 sub-plugin, 4 x s16, s16 k + k x (u32, s16, s16, s8), s16 12 + 12 x u32 |
+| Front, RFront | 20 | u16 3 + 3 x (u16, s32) |
+| PowerRoom | 9 | u16 5 + 5 x u8 + u16 |
+| Subway | 2 | s16 |
+| Attraction | 2 or 0 | s16 (renovated flag) |
+| Boatdeck | 0 | nothing (the reader makes the CrEv cruise event) |
+| **Stadium** | **0x405** | pstr team name, u8, u16, two team records (pstr, u8, 3 x 20 x u16, 3 x u16), u8, u8, u16: 264 bytes with empty names |
+
+All of them read their record when n > 0 and skip n bytes when the tenant has
+no object, so `s32 n + n bytes` is exact for every one **except Stadium**
+(SaveExtraData 0x1000bee0 writes n = 0x405 from FUN_1000f7e0, then the record
+FUN_1000f6a0; LoadExtraData 0x1000be40 reads the record whatever n is). bld.py
+(`EXTRA_SIZE`) and BldLoader (`stadiumExtraSize`) size a Stadium record from
+its strings and keep the announced n (`extraCount`) for the writer.
+
 ### 4.3 Mover (`T2Mover::LoadSelf` 0x1003f400 / `SaveSelf` 0x1003f530)
 
 Marker `>VM<`, then T2Equip, then if used:
@@ -221,8 +245,11 @@ Requests are the waiting areas beside each elevator stop.
 ### 4.5 Out-object (`T2OutObj::LoadSelf` 0x100462e0)
 
 There is **no marker**. T2Object, then if used: `u16 outObjID, SRect area, u32 valiation,
-s16 outObjType (plugin itemType, e.g. Billboard 2100)`. The OuterObjDef extra data is
-empty (`T2ToolDef::LoadExtraData` reads nothing).
+s16 outObjType (plugin itemType, e.g. Billboard 2100)`, then the OuterObjDef's
+`LoadExtraData` (vtbl+0x50), or `s32 n + n` bytes when the def is missing. The base
+`T2ToolDef::LoadExtraData` reads nothing, but the only shipped out-object plugin,
+**Billboard.t2p, overrides it** (0x1000c470 / 0x1000c550): `s32 n` (6) + `u32` ad
+sub-plugin mID (0 = no ad) + `s16`, or n = 0 without a record. So `s32 n + n` is exact.
 
 ## 5. People (`T2PeopleArrayList::Read` 0x1004b900, `T2People::LoadSelf` 0x1004a810)
 
@@ -286,6 +313,15 @@ with a **u32 payload length** (`T2EventItem::Read`/`Write` 0x10030650/0x10030640
 load, the game matches each record by (type, id) against the world's event lists. If
 nothing matches, it skips `len` bytes. bld.py keeps the payload as hex.
 
+**Exceptions** (no length prefix): `vESH` T2HotSpring (Kegon.t2p and Hawai.t2p
+0x10012cd0) writes **nothing**; the T2Transport events, `vERM` metro trains (T2DLL vtbl
+0x10085f80) and `vErC` cruise (Hawai.t2p, made by Boatdeck), write `u32 firstPeople` and,
+when it is not 0, `u32 lastPeople` (T2Transport::Write 0x1006c020). An empty train looks
+like a zero length; a train with people does not. X events that do not override
+Read/Write would write nothing too (T2WorldPlugin::XEventWrite is empty), but every
+shipped one seen either overrides them (Baseball 8, Wedding 13) or derives from T2EventItem
+(T2Tonbi: u32 0, written with type 0; that is the `0x00000000` record).
+
 Type codes found (from the class `GetType`): `vEOB` BlackOut, `vEBF` FireBurning,
 `vEaS` SantaClaus, `vErT` Terrorist, `vEiV` VisitVIP (14-byte payload), `vEaM`
 Maru_Reggae (14), `vEVT` TowerVision. `vEBB`, `vERM`, `vEdO` and a `0x00000000` type
@@ -342,9 +378,9 @@ population 57). Both round-trip byte-identical, and the on-screen values match
   Their layout is certain; only their meaning is not.
 * The traffic-map dimensions depend on the world plugin. A new world falls back to
   the validated search, which is O(cells) but fast.
-* A plugin def that overrides `LoadExtraData`/`SaveExtraData`, or a world-specific
-  `T2XEvent` without a length prefix, would break the generic parse. None occur in the
-  saves seen so far. bld.py would fail loudly at the next marker (`>NT<`, `>VM<`, …).
+* Plugin defs that override `LoadExtraData`/`SaveExtraData` and events without a length
+  prefix are handled as listed in §4.2, §4.5 and §9. A third-party plugin with its own
+  layout would fail loudly at the next marker (`>NT<`, `>VM<`, …).
 * The samples contain no out-objects, names, or non-empty event payloads other than
   VisitVIP, Maru_Reggae and BlackOut. Those paths follow the decompiled code but have
   not been exercised against real data.
