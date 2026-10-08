@@ -1,0 +1,430 @@
+/* Copyright (c) 2026 OpenSkyscraper Project */
+#include "BldExport.h"
+
+#include "YootWorld.h"
+#include "tinyxml2.h"
+
+#include <algorithm>
+#include <climits>
+#include <cmath>
+#include <cstdio>
+#include <map>
+#include <set>
+
+namespace OT {
+namespace Bld {
+
+	// ---- Native XML -> TowerState ----------------------------------------------
+
+	bool parseTowerXml(const std::string & text, TowerState & out, std::string & error)
+	{
+		tinyxml2::XMLDocument xml;
+		if (xml.Parse(text.c_str(), text.size()) != tinyxml2::XML_SUCCESS || !xml.RootElement())
+		{
+			error = "not a tower XML document";
+			return false;
+		}
+		const tinyxml2::XMLElement * root = xml.RootElement();
+		out = TowerState();
+		out.ruleset = root->Attribute("ruleset") ? root->Attribute("ruleset") : "";
+		out.world = root->Attribute("world") ? root->Attribute("world") : "tokyo";
+		out.funds = root->Int64Attribute("funds");
+		out.rating = root->IntAttribute("rating");
+		out.time = root->DoubleAttribute("time");
+		out.vipFlags = root->UnsignedAttribute("yootVipFlags", 0);
+		out.lastQuarterBalance = out.funds;
+		if (const tinyxml2::XMLElement * money = root->FirstChildElement("money"))
+			out.lastQuarterBalance = money->Int64Attribute("lastQuarterBalance", out.funds);
+		for (const tinyxml2::XMLElement * e = root->FirstChildElement("item"); e; e = e->NextSiblingElement("item"))
+		{
+			TowerItem it;
+			it.type = e->Attribute("type") ? e->Attribute("type") : "";
+			it.x = e->IntAttribute("x");
+			it.y = e->IntAttribute("y");
+			it.width = e->IntAttribute("width", 0);
+			it.height = e->IntAttribute("height", 0);
+			it.occupied = e->BoolAttribute("occupied", false) || e->BoolAttribute("let", false);
+			it.yootEstimate = e->IntAttribute("yootEstimate", 0);
+			it.rentClass = e->IntAttribute("rentClass", 1);
+			for (const tinyxml2::XMLElement * u = e->FirstChildElement("unserviced"); u; u = u->NextSiblingElement("unserviced"))
+				it.unserviced.push_back(u->IntAttribute("floor"));
+			for (const tinyxml2::XMLElement * c = e->FirstChildElement("car"); c; c = c->NextSiblingElement("car"))
+			{
+				TowerCar car;
+				car.altitude = c->DoubleAttribute("altitude");
+				car.homeFloor = c->IntAttribute("homeFloor", (int)std::floor(car.altitude));
+				it.cars.push_back(car);
+			}
+			out.items.push_back(it);
+		}
+		return true;
+	}
+
+	// ---- TowerState -> BldData ---------------------------------------------------
+
+	static const char * worldMac(YootWorld::Id id)
+	{
+		switch (id)
+		{
+		case YootWorld::Id::Tokyo:  return "SNJK";
+		case YootWorld::Id::Hawaii: return "HWAI";
+		case YootWorld::Id::Kegon:  return "KGON";
+		}
+		return "";
+	}
+
+	static LArrayWord wordArray(const std::vector<uint16_t> & items)
+	{
+		LArrayWord a;
+		a.itemSize = 2;
+		a.items = items;
+		a.h2 = a.h3 = a.dataBytes = (int32_t)(items.size() * 2);
+		return a;
+	}
+
+	static LArrayChar charArray(size_t n)
+	{
+		LArrayChar a;
+		a.itemSize = 1;
+		a.items.assign(n, 0);
+		a.h2 = a.h3 = a.total = (int32_t)n;
+		return a;
+	}
+
+	/// Slot vectors hold whole blocks; ids are base + index.
+	template <class T> static void sizeBlocks(std::vector<T> & slots, size_t used, size_t per)
+	{
+		const size_t blocks = std::max<size_t>(1, (used + per - 1) / per);
+		slots.assign(blocks * per, T());
+	}
+
+	bool exportTower(const TowerState & tower, const BldData & templ, BldData & out,
+		ImportReport & report, std::string & error)
+	{
+		YootWorld::Id worldId;
+		if (!parseYootWorldIdentifier(tower.world, worldId))
+		{
+			error = "unknown world '" + tower.world + "'";
+			return false;
+		}
+		if (macOrder(templ.world) != worldMac(worldId))
+		{
+			error = "template is a " + macOrder(templ.world) + " save, the tower is " + tower.world;
+			return false;
+		}
+		if (worldId == YootWorld::Id::Kegon)
+		{
+			error = "Kegon export is not supported (its unit map carries FINF flags)";
+			return false;
+		}
+		const YootWorld world = builtinYootWorld(worldId);
+		if (templ.hRange != world.width || templ.vRange != world.height)
+		{
+			error = "template grid does not match the world";
+			return false;
+		}
+		report = ImportReport();
+		report.worldId = tower.world;
+		const int origin = world.width / 2;
+		const int ground = world.groundLine;
+		const int W = templ.hRange, H = templ.vRange;
+
+		auto plugin = [&](const char * mac) -> const PluginInfo *
+		{
+			for (const PluginInfo & p : templ.plugins)
+				if (macOrder(p.id) == mac) return &p;
+			return nullptr;
+		};
+		const PluginInfo * floorPlugin = plugin("FLOR");
+		const PluginInfo * officePlugin = plugin("OFFC");
+		const PluginInfo * shopPlugin = plugin("ICES");
+		const PluginInfo * elevPlugin = plugin("StdE");
+		if (!floorPlugin)
+		{
+			error = "template has no Floor plugin";
+			return false;
+		}
+		auto drop = [&](const std::string & type, const char * reason) { report.dropped[type + " (" + reason + ")"]++; };
+
+		// -- World-wide sections from the template; tower state reset ----------
+		out = templ;
+		out.level = (int16_t)std::max(1, std::min(6, tower.rating + 1));
+		out.fa0 = tower.vipFlags;
+		const double t = std::max(0.0, tower.time);
+		const long long day = (long long)std::floor(t);
+		out.year = (uint16_t)(day / 12 + 1);
+		out.month0 = (uint16_t)(day % 12);
+		out.minutes = (uint16_t)std::min(1439L, std::lround((t - (double)day) * 1440.0));
+		out.seconds = 0;
+		for (People & p : out.people) p = People();
+		out.pool.population = 0;
+		out.pool.gameLevel = out.level;
+		std::fill(out.trafficMap.begin(), out.trafficMap.end(), 0);
+		out.settlement.funds = (int32_t)std::max<long long>(INT_MIN, std::min<long long>(INT_MAX, tower.funds / 100));
+		out.settlement.previousFunds = (int32_t)std::max<long long>(INT_MIN, std::min<long long>(INT_MAX, tower.lastQuarterBalance / 100));
+		for (int32_t & v : out.settlement.totals) v = 0;
+		for (std::vector<DefCost> * costs : {&out.settlement.tenantCosts, &out.settlement.moverCosts, &out.settlement.outObjCosts})
+			for (DefCost & c : *costs) c.amount = 0;
+		out.names.clear();
+		out.searchedTenant = 0;
+		out.queue.clear();
+		for (OutObj & o : out.outObjs) o = OutObj();
+		std::fill(out.outside.begin(), out.outside.end(), 0);
+		out.unitMap.assign((size_t)W * H * 4, 0);
+
+		auto cell = [&](int row, int unit) -> uint8_t * { return &out.unitMap[((size_t)row * W + unit) * 4]; };
+		auto setU16 = [](uint8_t * p, uint16_t v) { p[0] = (uint8_t)v; p[1] = (uint8_t)(v >> 8); };
+		auto inGrid = [&](const Rect & r) { return r.left >= 0 && r.top >= 0 && r.right <= W && r.bottom <= H && r.left < r.right && r.top < r.bottom; };
+
+		// -- Tenants: floor slabs and lobbies first, then rooms -------------
+		struct Pending { Tenant rec; bool slab; };
+		std::vector<Pending> tenants;
+		auto newTenant = [&](const PluginInfo & p, const Rect & area, bool slab) -> Tenant &
+		{
+			Pending pd;
+			pd.slab = slab;
+			Tenant & t = pd.rec;
+			t.hdr.used = 1;
+			t.hdr.status = 10;
+			t.area = area;
+			t.equipType = p.itemType;
+			t.f8c = 300;
+			t.bind = 1;
+			t.ce.tag = slab ? "AECF" : "AECT";
+			t.ce.ids = wordArray({});
+			tenants.push_back(pd);
+			return tenants.back().rec;
+		};
+		for (const TowerItem & it : tower.items)
+		{
+			if (it.type != "floor" && it.type != "lobby") continue;
+			const int h = it.type == "lobby" ? std::max(1, it.height) : 1;
+			Rect area;
+			area.left = it.x + origin;
+			area.right = area.left + std::max(1, it.width);
+			area.bottom = ground - it.y;
+			area.top = area.bottom - h;
+			if (!inGrid(area)) { drop(it.type, "outside the world grid"); continue; }
+			Tenant & t = newTenant(*floorPlugin, area, true);
+			t.valiation = it.type == "lobby" ? 1 : 0; // Floor.t2p variation 1 = lobby
+			report.imported[it.type]++;
+		}
+		const size_t slabCount = tenants.size();
+		auto slabAt = [&](int row, int unit) -> int
+		{
+			for (size_t i = 0; i < slabCount; i++)
+			{
+				const Rect & a = tenants[i].rec.area;
+				if (row >= a.top && row < a.bottom && unit >= a.left && unit < a.right) return (int)i;
+			}
+			return -1;
+		};
+		for (const TowerItem & it : tower.items)
+		{
+			const PluginInfo * p = nullptr;
+			int w = 0;
+			if (it.type == "office") { p = officePlugin; w = 9; }
+			else if (it.type == "shop") { p = shopPlugin; w = 12; }
+			else continue;
+			if (!p) { drop(it.type, "plugin missing from the template"); continue; }
+			Rect area;
+			area.left = it.x + origin;
+			area.right = area.left + w;
+			area.bottom = ground - it.y;
+			area.top = area.bottom - 1;
+			if (!inGrid(area)) { drop(it.type, "outside the world grid"); continue; }
+			const int under = slabAt(area.top, area.left);
+			if (under < 0 || slabAt(area.top, area.right - 1) != under) { drop(it.type, "not on one floor slab"); continue; }
+			Tenant & t = newTenant(*p, area, false);
+			t.ce.ids = wordArray({(uint16_t)(1000 + under)});
+			if (it.type == "office")
+			{
+				t.hdr.status = it.occupied ? 10 : 8;    // contracted / for rent
+				t.estimate = (int16_t)(it.occupied ? (it.yootEstimate > 0 ? it.yootEstimate : 300) : 0);
+				t.inMoneyIndex = 2;                     // default price selection
+				t.hasBelongList = 1;                    // six empty staff places
+				t.belongList.assign(6, 0);
+			}
+			else
+			{
+				t.hdr.status = it.occupied ? 12 : 8;
+				t.estimate = (int16_t)std::max(0, it.yootEstimate);
+				t.inMoneyIndex = 0;                     // Ice Cream has a single price
+				t.hasBelongList = 1;                    // two empty staff places
+				t.belongList.assign(2, 0);
+			}
+			report.imported[it.type]++;
+		}
+		for (const TowerItem & it : tower.items)
+		{
+			if (it.type == "floor" || it.type == "lobby" || it.type == "office" || it.type == "shop") continue;
+			if (it.type == "elevator-standard" && elevPlugin) continue;
+			drop(it.type, "no YootTower counterpart in the exporter");
+		}
+		// Room numbers: per floor, counted from the right.
+		{
+			std::map<int, std::vector<size_t> > byRow;
+			for (size_t i = slabCount; i < tenants.size(); i++) byRow[tenants[i].rec.area.top].push_back(i);
+			for (auto & r : byRow)
+			{
+				std::sort(r.second.begin(), r.second.end(), [&](size_t a, size_t b) { return tenants[a].rec.area.left > tenants[b].rec.area.left; });
+				for (size_t k = 0; k < r.second.size(); k++) tenants[r.second[k]].rec.tenantNumber = (uint16_t)(k + 1);
+			}
+		}
+
+		// -- Simple Elevators, their stops and waiting areas -----------------
+		struct PendingMover { Mover rec; std::vector<int> servedSlabs; };
+		std::vector<PendingMover> movers;
+		std::vector<Request> requests;
+		int clampedCars = 0;
+		for (const TowerItem & it : tower.items)
+		{
+			if (it.type != "elevator-standard" || !elevPlugin) continue;
+			const int length = it.height;
+			const int sl = it.x + origin, sr = sl + 4;
+			Rect area;
+			area.left = sl; area.right = sr;
+			area.bottom = ground - it.y + 1;          // pit row below the bottom floor
+			area.top = area.bottom - length - 2;      // machine row above the top floor
+			if (length < 2 || !inGrid(area)) { drop(it.type, "shaft outside the world grid"); continue; }
+			PendingMover pm;
+			Mover & m = pm.rec;
+			const uint16_t moverId = (uint16_t)(movers.size() + 1);
+			m.hdr.used = 1;
+			m.equipID = moverId;
+			m.area = area;
+			m.equipType = elevPlugin->itemType;
+			m.showShaft = 1;
+			m.length = (int16_t)length;
+			m.reqIDTag = "ADIR";
+			m.waitCount = 3;
+			m.f6c = 6;
+			const std::set<int> unserviced(it.unserviced.begin(), it.unserviced.end());
+			std::vector<uint16_t> reqIds;
+			for (int f = 0; f < length; f++)
+			{
+				const int floor = it.y + f;
+				const int row = ground - 1 - floor;
+				const int slab = slabAt(row, sl);
+				const bool stops = slab >= 0 && slabAt(row, sr - 1) == slab &&
+					(f == 0 || f == length - 1 || !unserviced.count(floor));
+				if (!stops) { reqIds.push_back(0); reqIds.push_back(0); continue; }
+				if (std::find(pm.servedSlabs.begin(), pm.servedSlabs.end(), slab) == pm.servedSlabs.end())
+					pm.servedSlabs.push_back(slab);
+				const Rect & sa = tenants[slab].rec.area;
+				for (int side = 0; side < 2; side++)
+				{
+					Request q;
+					q.hdr.used = 1;
+					q.requestID = (uint16_t)(1000 + requests.size());
+					q.moverID = moverId;
+					q.upDown = (uint8_t)side;
+					q.f18 = (int16_t)(side == 0 ? sl : sr);
+					q.f1c = (int16_t)row;
+					q.moduleIndex = -1;
+					const int cells = side == 0 ? sl - sa.left : sa.right - sr;
+					q.drawWidth = (int16_t)std::max(0, cells - 2);
+					reqIds.push_back(q.requestID);
+					// Waiting area: the slab's cells on that side of the shaft.
+					const int from = side == 0 ? sa.left : sr, to = side == 0 ? sl : sa.right;
+					for (int u = from; u < to; u++) setU16(cell(row, u), q.requestID);
+					requests.push_back(q);
+				}
+			}
+			m.reqIDs = wordArray(reqIds);
+			// Cars (6 slots, the Simple Elevator's maximum).
+			m.modules.kind = "LMlE";
+			m.modules.f20 = 6;
+			m.modules.rect.left = sl; m.modules.rect.right = sr;
+			m.modules.rect.top = ground - 1 - it.y; m.modules.rect.bottom = m.modules.rect.top + 1;
+			m.modules.rect2.left = 2; m.modules.rect2.top = 2; m.modules.rect2.right = -2; m.modules.rect2.bottom = -2;
+			m.modules.modules.resize(6);
+			std::vector<TowerCar> cars = it.cars;
+			if (cars.empty()) cars.push_back(TowerCar());
+			if (cars.size() > 6) { clampedCars += (int)cars.size() - 6; cars.resize(6); }
+			for (size_t k = 0; k < cars.size(); k++)
+			{
+				MoverModule & c = m.modules.modules[k];
+				c.hdr.used = 1;
+				const int pos = std::max(0, std::min(length - 1, (int)std::lround(cars[k].altitude) - it.y));
+				const int home = std::max(0, std::min(length - 1, cars[k].homeFloor - it.y));
+				c.position = c.nextStop = c.topTurn = c.bottomTurn = (int16_t)pos;
+				c.index = (int16_t)k;
+				c.homePosition = (int16_t)home;
+				c.stopTag = "AfIS";
+				c.stops = charArray((size_t)length * 2);
+			}
+			// StdElev.t2p overrides LoadExtraData (FUN_1000f4e0): s32 n, then
+			// always 2 x 10 four-byte records (a day-type x period table,
+			// most likely the car schedule) whatever n says. Written with the
+			// values the game saves for a fresh shaft.
+			for (int k = 0; k < 2 * 10; k++)
+			{
+				const uint8_t e[4] = {0, 0, 6, 0};
+				m.extra.insert(m.extra.end(), e, e + 4);
+			}
+			// Shaft cells, machine row to pit row.
+			for (int row = area.top; row < area.bottom; row++)
+				for (int u = sl; u < sr; u++) setU16(cell(row, u), moverId);
+			movers.push_back(pm);
+			report.imported[it.type]++;
+		}
+		if (clampedCars)
+		{
+			char buf[96];
+			snprintf(buf, sizeof(buf), "%d elevator car(s) beyond the Simple Elevator's 6 were not written.", clampedCars);
+			report.notes.push_back(buf);
+		}
+
+		// -- Cross-equip links -----------------------------------------------
+		for (PendingMover & pm : movers)
+		{
+			// Mover: the floor tenants it serves, top to bottom.
+			std::vector<int> slabs = pm.servedSlabs;
+			std::sort(slabs.begin(), slabs.end(), [&](int a, int b) { return tenants[a].rec.area.top < tenants[b].rec.area.top; });
+			std::vector<uint16_t> ids;
+			for (int s : slabs) ids.push_back((uint16_t)(1000 + s));
+			pm.rec.ce.tag = "AECM";
+			pm.rec.ce.ids = wordArray(ids);
+			// Floors: the movers stopping on them.
+			for (int s : slabs) tenants[s].rec.ce.ids.items.push_back(pm.rec.equipID);
+		}
+		for (size_t i = 0; i < slabCount; i++) tenants[i].rec.ce.ids = wordArray(tenants[i].rec.ce.ids.items);
+
+		// -- Unit map tenant ids (rooms over slabs) and the slot arrays ------
+		for (int pass = 0; pass < 2; pass++)
+			for (size_t i = 0; i < tenants.size(); i++)
+			{
+				if (tenants[i].slab != (pass == 0)) continue;
+				const Rect & a = tenants[i].rec.area;
+				for (int row = a.top; row < a.bottom; row++)
+					for (int u = a.left; u < a.right; u++) setU16(cell(row, u) + 2, (uint16_t)(1000 + i));
+			}
+		// Open the main view on the tower (scroll px: 8 per unit, 36 per row;
+		// roughly a 740 x 500 view, the game's default window).
+		if (!tenants.empty())
+		{
+			int l = INT_MAX, r = INT_MIN, t0 = INT_MAX, b = INT_MIN;
+			for (const Pending & p : tenants)
+			{
+				l = std::min(l, p.rec.area.left); r = std::max(r, p.rec.area.right);
+				t0 = std::min(t0, p.rec.area.top); b = std::max(b, p.rec.area.bottom);
+			}
+			out.scrollLeft = std::max(0, (l + r) / 2 * 8 - 370);
+			out.scrollTop = std::max(0, std::min(H * 36 - 500, (t0 + b) / 2 * 36 - 250));
+		}
+		sizeBlocks(out.tenants, tenants.size(), 128);
+		for (size_t i = 0; i < tenants.size(); i++)
+		{
+			out.tenants[i] = tenants[i].rec;
+			out.tenants[i].equipID = (uint16_t)(1000 + i);
+		}
+		sizeBlocks(out.movers, movers.size(), 32);
+		for (size_t i = 0; i < movers.size(); i++) out.movers[i] = movers[i].rec;
+		sizeBlocks(out.requests, requests.size(), 64);
+		for (size_t i = 0; i < requests.size(); i++) out.requests[i] = requests[i];
+		return true;
+	}
+
+}
+}

@@ -38,6 +38,7 @@
 #include "../source/PluginResourceJson.h"
 #include "../source/TdtLoader.h"
 #include "../source/BldLoader.h"
+#include "../source/BldExport.h"
 
 #include "../source/BuildRules.h"
 #include "../source/Skin.h"
@@ -4159,6 +4160,65 @@ static void testBldShippedSaves()
 		// Working offices carry their 6 staff as population.
 		EXPECT(xml.find("type=\"office\" x=\"-13\" y=\"4\" evaluation=\"100.000\" yootEstimate=\"300\" occupied=\"1\" population=\"6\"") != std::string::npos);
 	}
+	// --- Exporter: import -> export -> import is a fixed point -----------
+	{
+		report = ImportReport();
+		EXPECT(toTowerXml(tokyo, bldTestPrototypes, xml, report, error));
+		TowerState state;
+		EXPECT(parseTowerXml(xml, state, error));
+		EXPECT(state.world == "tokyo" && state.funds == 7877000 && state.items.size() == 19);
+		BldData exported;
+		ImportReport exportReport;
+		EXPECT(exportTower(state, tokyo, exported, exportReport, error));
+		EXPECT(exportReport.dropped.empty());
+		EXPECT(writeBytes(exported, rebuilt, error));
+		BldData reread;
+		EXPECT(parseBytes(rebuilt, reread, error));
+		EXPECT(reread.usedTenants() == 18 && reread.usedMovers() == 1 && reread.usedPeople() == 0);
+		EXPECT(reread.settlement.funds == 78770 && reread.minutes == 574 && reread.level == 1);
+		// The game's own layout: 16 waiting areas identical to the sample's,
+		// and StdElev's fixed 2 x 10 extra-data table.
+		int requests = 0;
+		bool sameRequests = true;
+		for (size_t i = 0; i < reread.requests.size() && i < tokyo.requests.size(); i++)
+		{
+			const Request & a = reread.requests[i], & b = tokyo.requests[i];
+			requests += a.hdr.used ? 1 : 0;
+			sameRequests = sameRequests && a.hdr.used == b.hdr.used && a.requestID == b.requestID && a.upDown == b.upDown &&
+				a.f18 == b.f18 && a.f1c == b.f1c && a.drawWidth == b.drawWidth;
+		}
+		EXPECT(requests == 16 && sameRequests);
+		const Mover * m = nullptr;
+		for (const Mover & mv : reread.movers) if (mv.hdr.used) m = &mv;
+		EXPECT(m && m->extra.size() == 80 && m->reqIDs.items == elev->reqIDs.items && m->area.top == 99);
+		std::string again;
+		ImportReport againReport;
+		EXPECT(toTowerXml(reread, bldTestPrototypes, again, againReport, error));
+		EXPECT(again == xml);
+		if (again != xml) std::cerr << "re-import differs:\n" << again << "\nvs\n" << xml << "\n";
+
+		// An OpenSky-authored Hawaii tower against the empty-lot template.
+		const std::string authored =
+			"<tower funds=\"4321000\" rating=\"1\" time=\"13.5\" ruleset=\"yoottower\" world=\"hawaii\">"
+			"<item type=\"lobby\" x=\"-20\" y=\"0\" width=\"40\" height=\"1\"/>"
+			"<item type=\"floor\" x=\"-20\" y=\"1\" width=\"40\"/><item type=\"floor\" x=\"-20\" y=\"2\" width=\"40\"/>"
+			"<item type=\"shop\" x=\"-20\" y=\"1\" let=\"1\"/>"
+			"<item type=\"elevator-standard\" x=\"10\" y=\"0\" height=\"3\"><car altitude=\"2.0\" homeFloor=\"0\"/></item>"
+			"<item type=\"cinema\" x=\"-20\" y=\"3\"/></tower>";
+		EXPECT(parseTowerXml(authored, state, error));
+		EXPECT(exportTower(state, hawaii, exported, exportReport, error));
+		EXPECT(exportReport.dropped["cinema (no YootTower counterpart in the exporter)"] == 1);
+		EXPECT(exportReport.imported["lobby"] == 1 && exportReport.imported["elevator-standard"] == 1);
+		EXPECT(exported.year == 2 && exported.month0 == 1 && exported.minutes == 720 && exported.level == 2);
+		EXPECT(writeBytes(exported, rebuilt, error) && parseBytes(rebuilt, reread, error));
+		EXPECT(toTowerXml(reread, bldTestPrototypes, again, againReport, error));
+		EXPECT(again.find("type=\"elevator-standard\" x=\"10\" y=\"0\" evaluation=\"50.0\" height=\"3\" showShaft=\"1\"><car altitude=\"2.0\" homeFloor=\"0\"/></item>") != std::string::npos);
+		EXPECT(again.find("type=\"shop\" x=\"-20\" y=\"1\"") != std::string::npos);
+		// Unit map: the shaft column carries mover 1 from machine row to pit.
+		const size_t pitCell = ((size_t)(55 + 1 - 1) * 400 + 210) * 4;
+		EXPECT(reread.unitMap[pitCell] == 1 && reread.unitMap[pitCell + 1] == 0);
+	}
+
 	// Every other oracle-written save round-trips byte-identical.
 	static const char * oracleSaves[] = {
 		"save-agent/saves/tokyo_run2.bld", "econ-agent/s1_paused_load.bld", "econ-agent/s2_run.bld",

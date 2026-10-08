@@ -204,6 +204,7 @@ add_executable(OpenSkyTests
   source/NameManager.cpp
   source/TdtLoader.cpp
   source/BldLoader.cpp
+  source/BldExport.cpp
   source/LevelUp.cpp
   source/PluginManager.cpp
   source/PluginResources.cpp
@@ -225,8 +226,32 @@ target_compile_definitions(OpenSkyTests PRIVATE OPEN_SKY_ROUTE_SEAM_ONLY)
 # need the headers (sf::Color is a POD struct defined inline), but linking
 # against SFML::Graphics is the simplest way to make the include paths
 # available to the test target without pulling in the rest of the engine.
-target_link_libraries(OpenSkyTests PRIVATE SFML::Graphics)
+target_link_libraries(OpenSkyTests PRIVATE SFML::Graphics tinyxml2::tinyxml2)
 add_test(NAME OpenSkyTests COMMAND OpenSkyTests)
+
+# BldTool: command-line YootTower .bld summary / round trip / import /
+# export over the same pure seam (tools/yoottower/bldtool.cpp).
+add_executable(BldTool
+  tools/yoottower/bldtool.cpp
+  source/BldLoader.cpp
+  source/BldExport.cpp
+  source/YootWorld.cpp
+  source/Path.cpp
+  source/Logger.cpp
+  source/WindowsPEExecutable.cpp
+  source/PluginManager.cpp
+  source/PluginResources.cpp
+  source/PluginDefs.cpp
+  source/SubPluginDefs.cpp
+  source/PluginResourceCodec.cpp
+  source/PluginObjmap.cpp
+  source/PluginBitmapLoader.cpp
+  source/OspPlugin.cpp
+  source/AbstractPlugin.cpp
+  source/DecompiledPlugin.cpp
+)
+target_include_directories(BldTool PRIVATE source)
+target_link_libraries(BldTool PRIVATE SFML::Graphics tinyxml2::tinyxml2)
 
 # ---------------------------------------------------------------------------
 # PluginEditor — standalone editor for YootTower plugins and the OSP format.
