@@ -1,6 +1,7 @@
 /* Copyright (c) 2026 OpenSkyscraper Project */
 #include "BldExport.h"
 
+#include "YootTenants.h"
 #include "YootWorld.h"
 #include "tinyxml2.h"
 
@@ -46,6 +47,7 @@ namespace Bld {
 			it.occupied = e->BoolAttribute("occupied", false) || e->BoolAttribute("let", false);
 			it.yootEstimate = e->IntAttribute("yootEstimate", 0);
 			it.rentClass = e->IntAttribute("rentClass", 1);
+			it.tenantStatus = e->IntAttribute("tenantStatus", -1);
 			for (const tinyxml2::XMLElement * u = e->FirstChildElement("unserviced"); u; u = u->NextSiblingElement("unserviced"))
 				it.unserviced.push_back(u->IntAttribute("floor"));
 			for (const tinyxml2::XMLElement * c = e->FirstChildElement("car"); c; c = c->NextSiblingElement("car"))
@@ -99,7 +101,7 @@ namespace Bld {
 	}
 
 	bool exportTower(const TowerState & tower, const BldData & templ, BldData & out,
-		ImportReport & report, std::string & error)
+		ImportReport & report, std::string & error, const PrototypeLookup & prototypes)
 	{
 		YootWorld::Id worldId;
 		if (!parseYootWorldIdentifier(tower.world, worldId))
@@ -220,23 +222,49 @@ namespace Bld {
 			}
 			return -1;
 		};
+		// Plugin-backed tenants name their plugin; find it in the template.
+		auto pluginForStem = [&](const char * file) -> const PluginInfo *
+		{
+			std::string want = file;
+			const size_t dot = want.rfind('.');
+			if (dot != std::string::npos) want = want.substr(0, dot);
+			for (char & c : want) c = (char)tolower((unsigned char)c);
+			for (const PluginInfo & p : templ.plugins)
+			{
+				std::string stem = pluginStem(p);
+				for (char & c : stem) c = (char)tolower((unsigned char)c);
+				if (stem == want) return &p;
+			}
+			return nullptr;
+		};
 		for (const TowerItem & it : tower.items)
 		{
 			const PluginInfo * p = nullptr;
-			int w = 0;
+			int w = 0, h = 1;
+			const YootTenantPlugin * tenant = isYootTenantPrototypeId(it.type) ? findYootTenantPlugin(it.type) : nullptr;
 			if (it.type == "office") { p = officePlugin; w = 9; }
 			else if (it.type == "shop") { p = shopPlugin; w = 12; }
 			else if (it.type == "restroom") { p = restroomPlugin; w = 9; }
+			else if (tenant)
+			{
+				p = pluginForStem(tenant->plugin);
+				if (p && (!prototypes || !prototypes(it.type, w, h) || w <= 0 || h <= 0))
+				{
+					drop(it.type, "footprint unknown");
+					continue;
+				}
+			}
 			else continue;
 			if (!p) { drop(it.type, "plugin missing from the template"); continue; }
 			Rect area;
 			area.left = it.x + origin;
 			area.right = area.left + w;
 			area.bottom = ground - it.y;
-			area.top = area.bottom - 1;
+			area.top = area.bottom - h;
 			if (!inGrid(area)) { drop(it.type, "outside the world grid"); continue; }
-			const int under = slabAt(area.top, area.left);
-			if (under < 0 || slabAt(area.top, area.right - 1) != under) { drop(it.type, "not on one floor slab"); continue; }
+			const int row = area.bottom - 1;   // the slab under the bottom floor
+			const int under = slabAt(row, area.left);
+			if (under < 0 || slabAt(row, area.right - 1) != under) { drop(it.type, "not on one floor slab"); continue; }
 			Tenant & t = newTenant(*p, area, false);
 			t.ce.ids = wordArray({(uint16_t)(1000 + under)});
 			if (it.type == "office")
@@ -254,6 +282,16 @@ namespace Bld {
 				t.inMoneyIndex = 0;
 				t.hasBelongList = 0;                    // no staff
 			}
+			else if (tenant)
+			{
+				// The family machine restarts from its saved status; a
+				// fresh one starts as built (9).
+				t.hdr.status = (int16_t)(it.tenantStatus >= 9 ? it.tenantStatus : 9);
+				t.estimate = (int16_t)std::max(0, it.yootEstimate);
+				t.inMoneyIndex = 0;                     // single price
+				t.hasBelongList = 1;                    // empty staff places
+				t.belongList.assign(2, 0);
+			}
 			else
 			{
 				t.hdr.status = it.occupied ? 12 : 8;
@@ -267,6 +305,7 @@ namespace Bld {
 		for (const TowerItem & it : tower.items)
 		{
 			if (it.type == "floor" || it.type == "lobby" || it.type == "office" || it.type == "shop" || it.type == "restroom") continue;
+			if (isYootTenantPrototypeId(it.type)) continue;
 			if (it.type == "elevator-standard" && elevPlugin) continue;
 			drop(it.type, "no YootTower counterpart in the exporter");
 		}

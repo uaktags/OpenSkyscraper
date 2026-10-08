@@ -2,6 +2,7 @@
 #include "BldLoader.h"
 
 #include "ItemTypeCatalog.h"
+#include "YootTenants.h"
 #include "YootWorld.h"
 
 #include <algorithm>
@@ -1033,6 +1034,13 @@ namespace Bld {
 				// Price selection s <-> rentClass 3 - s (Yoot::selectionFromRentClass).
 				const int rentClass = std::max(0, std::min(3, 3 - (int)t.inMoneyIndex));
 				snprintf(buf, sizeof(buf), " let=\"%d\" rentClass=\"%d\"", occupied ? 1 : 0, rentClass);
+				attrs += buf;
+			}
+			else if (isYootTenantPrototypeId(proto))
+			{
+				// Plugin-backed tenant: the T2Tenant status (+0x08) is the
+				// family state machine's own (YootTenants.h).
+				snprintf(buf, sizeof(buf), " tenantStatus=\"%d\"", (int)t.hdr.status);
 				attrs += buf;
 			}
 			else if (t.inMoneyIndex != 0 && t.inMoneyIndex != 2)

@@ -44,6 +44,8 @@ namespace OT
 		int variation = 0;             ///< ToolDef variation used for price/outMoney
 		uint32_t attribute = 0;        ///< ToolDef mAttribute (ToolAttribute bits)
 		int category = 0;              ///< ToolDef +0x64 (50 restaurants, 100 final items)
+		std::string categoryName;      ///< ToolDef +0x68 (toolbox group title)
+		int toolNo = 0;                ///< ToolDef +0x70 (order inside the group)
 
 		int price = 0;                 ///< dollars, construction cost of `variation`
 		int outMoney = 0;              ///< dollars, maintenance of `variation`

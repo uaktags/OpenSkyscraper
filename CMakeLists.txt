@@ -192,6 +192,7 @@ add_executable(OpenSkyTests
   source/YootWorld.cpp
   source/YootEvents.cpp
   source/YootCatalog.cpp
+  source/YootTenants.cpp
   source/YootRules.cpp
   source/YootBackdrop.cpp
   source/YootFacilities.cpp
@@ -240,6 +241,7 @@ add_executable(BldTool
   source/BldLoader.cpp
   source/BldExport.cpp
   source/YootWorld.cpp
+  source/YootTenants.cpp
   source/Path.cpp
   source/Logger.cpp
   source/WindowsPEExecutable.cpp

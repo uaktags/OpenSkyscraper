@@ -10,6 +10,7 @@
 #include <fstream>
 #include <sstream>
 #include <map>
+#include <set>
 #include <vector>
 
 #include <climits>
@@ -51,6 +52,7 @@
 #include "../source/YootPlacement.h"
 #include "../source/YootVenues.h"
 #include "../source/YootMovie.h"
+#include "../source/YootTenants.h"
 
 static int g_failures = 0;
 
@@ -3443,7 +3445,8 @@ static void testYootUnlocks()
 
 	// VIEV destinations map to OpenSky prototypes by plugin id.
 	EXPECT(yootPrototypesForPluginId(pm, 1213420873u) == std::vector<std::string>({"hotel_suite"}));
-	EXPECT(yootPrototypesForPluginId(pm, 1380142916u) == std::vector<std::string>({"shop"}));
+	// Record store: its own plugin-backed prototype first, then the generic shop.
+	EXPECT(yootPrototypesForPluginId(pm, 1380142916u) == std::vector<std::string>({"yt_record", "shop"}));
 	EXPECT(yootPrototypesForPluginId(pm, 0x12345678u).empty());
 }
 
@@ -3957,7 +3960,7 @@ static bool bldTestPrototypes(const std::string & id, int & w, int & h)
 		{"elevator-express", {6, 1}}, {"elevator-service", {4, 1}}, {"elevator-standard", {4, 1}},
 		{"fastfood", {16, 1}}, {"restaurant", {24, 1}}, {"shop", {12, 1}}, {"office", {9, 1}},
 		{"condo", {16, 1}}, {"yoot_condo", {16, 1}}, {"hotel_single", {4, 1}},
-		{"restroom", {9, 1}},
+		{"restroom", {9, 1}}, {"yt_icecream", {12, 1}},
 	};
 	std::map<std::string, std::pair<int, int> >::const_iterator i = sizes.find(id);
 	if (i == sizes.end()) return false;
@@ -4121,11 +4124,13 @@ static void testBldShippedSaves()
 	EXPECT(countOf(xml, "type=\"office\"") == 9);
 	EXPECT(xml.find("type=\"office\" x=\"-13\" y=\"4\" evaluation=\"100.000\" yootEstimate=\"300\" occupied=\"1\"") != std::string::npos);
 	EXPECT(xml.find("type=\"office\" x=\"-31\" y=\"4\" evaluation=\"50.0\" occupied=\"0\"") != std::string::npos);
-	EXPECT(xml.find("type=\"shop\" x=\"-37\" y=\"3\" evaluation=\"50.0\" let=\"1\"") != std::string::npos);
+	// Ice Cream (ICES) is its own plugin-backed shop, carrying the T2Tenant status.
+	EXPECT(xml.find("type=\"yt_icecream\" x=\"-37\" y=\"3\" evaluation=\"50.0\" tenantStatus=\"12\"") != std::string::npos);
 	// Simple Elevator: shaft x 0, 1F..10F, no stops on the atrium's 2F/3F, two cars.
 	EXPECT(xml.find("type=\"elevator-standard\" x=\"0\" y=\"0\" evaluation=\"50.0\" height=\"10\" showShaft=\"1\"><unserviced floor=\"1\"/><unserviced floor=\"2\"/><car altitude=\"0.0\" homeFloor=\"0\"/><car altitude=\"9.0\" homeFloor=\"9\"/></item>") != std::string::npos);
 	EXPECT(report.imported["lobby"] == 1 && report.imported["floor"] == 7 && report.imported["office"] == 9);
-	EXPECT(report.imported["shop"] == 1 && report.imported["elevator-standard"] == 1);
+	EXPECT(report.imported["yt_icecream"] == 1 && report.imported["elevator-standard"] == 1);
+	EXPECT(report.imported.count("shop") == 0);
 	// Restroom.t2p (TOIL) maps to the native YootTower restroom (step 12).
 	EXPECT(report.imported["restroom"] == 7 && countOf(xml, "type=\"restroom\"") == 7);
 	EXPECT(report.dropped.count("TOIL Restroom (no OpenSky counterpart)") == 0);
@@ -4176,7 +4181,7 @@ static void testBldShippedSaves()
 		EXPECT(state.world == "tokyo" && state.funds == 7877000 && state.items.size() == 26);
 		BldData exported;
 		ImportReport exportReport;
-		EXPECT(exportTower(state, tokyo, exported, exportReport, error));
+		EXPECT(exportTower(state, tokyo, exported, exportReport, error, bldTestPrototypes));
 		EXPECT(exportReport.dropped.empty());
 		EXPECT(writeBytes(exported, rebuilt, error));
 		BldData reread;
@@ -4213,14 +4218,15 @@ static void testBldShippedSaves()
 			"<item type=\"elevator-standard\" x=\"10\" y=\"0\" height=\"3\"><car altitude=\"2.0\" homeFloor=\"0\"/></item>"
 			"<item type=\"cinema\" x=\"-20\" y=\"3\"/></tower>";
 		EXPECT(parseTowerXml(authored, state, error));
-		EXPECT(exportTower(state, hawaii, exported, exportReport, error));
+		EXPECT(exportTower(state, hawaii, exported, exportReport, error, bldTestPrototypes));
 		EXPECT(exportReport.dropped["cinema (no YootTower counterpart in the exporter)"] == 1);
 		EXPECT(exportReport.imported["lobby"] == 1 && exportReport.imported["elevator-standard"] == 1);
 		EXPECT(exported.year == 2 && exported.month0 == 1 && exported.minutes == 720 && exported.level == 2);
 		EXPECT(writeBytes(exported, rebuilt, error) && parseBytes(rebuilt, reread, error));
 		EXPECT(toTowerXml(reread, bldTestPrototypes, again, againReport, error));
 		EXPECT(again.find("type=\"elevator-standard\" x=\"10\" y=\"0\" evaluation=\"50.0\" height=\"3\" showShaft=\"1\"><car altitude=\"2.0\" homeFloor=\"0\"/></item>") != std::string::npos);
-		EXPECT(again.find("type=\"shop\" x=\"-20\" y=\"1\"") != std::string::npos);
+		// The generic shop exports as Ice Cream and comes back as yt_icecream.
+		EXPECT(again.find("type=\"yt_icecream\" x=\"-20\" y=\"1\" evaluation=\"50.0\" tenantStatus=\"12\"") != std::string::npos);
 		// Unit map: the shaft column carries mover 1 from machine row to pit.
 		const size_t pitCell = ((size_t)(55 + 1 - 1) * 400 + 210) * 4;
 		EXPECT(reread.unitMap[pitCell] == 1 && reread.unitMap[pitCell + 1] == 0);
@@ -4243,6 +4249,175 @@ static void testBldShippedSaves()
 }
 
 // Step 12: trash, restrooms, colds and doctors (I2, I3, P5, P6, R6).
+// Plugin-backed tenants (shops, restaurants, vending, service): catalog,
+// plugin data, the family state machines and the toolbox grouping.
+static void testYootTenants()
+{
+	using namespace OT;
+	const PluginManager & pm = yootTestPlugins();
+
+	// 57 covered plugins, unique prototype ids, all present and decodable.
+	const std::vector<YootTenantPlugin> & covered = yootTenantPlugins();
+	EXPECT(covered.size() == 57);
+	std::set<std::string> ids;
+	for (const YootTenantPlugin & t : covered) ids.insert(t.prototypeId);
+	EXPECT(ids.size() == covered.size());
+	const std::vector<YootTenantDef> defs = loadYootTenantDefs(pm);
+	EXPECT(defs.size() == covered.size());
+	int families[5] = {0, 0, 0, 0, 0};
+	for (const YootTenantDef & d : defs) families[(int)d.family]++;
+	EXPECT(families[(int)YootTenantFamily::Shop] == 29 && families[(int)YootTenantFamily::Restaurant] == 22);
+	EXPECT(families[(int)YootTenantFamily::Vending] == 5 && families[(int)YootTenantFamily::Service] == 1);
+	EXPECT(isYootTenantPrototypeId("yt_icecream") && !isYootTenantPrototypeId("shop") && !isYootTenantPrototypeId("yt_nothing"));
+
+	// Prototypes offered per world (ATTR world mask through the unlock table).
+	auto offered = [&](YootWorld::Id id) {
+		const YootWorld w = loadYootWorld(pm, id);
+		const std::map<std::string, YootUnlock> unlocks = resolveYootUnlocks(pm, w.worldMask);
+		int n = 0;
+		for (const auto & u : unlocks) if (isYootTenantPrototypeId(u.first) && u.second.available) ++n;
+		return n;
+	};
+	EXPECT(offered(YootWorld::Id::Tokyo) == 35);
+	EXPECT(offered(YootWorld::Id::Hawaii) == 27);
+	EXPECT(offered(YootWorld::Id::Kegon) == 12);
+
+	// A sample shop straight from Icecream.t2p.
+	const YootTenantDef * ice = nullptr;
+	const YootTenantDef * drink = nullptr;
+	const YootTenantDef * burger = nullptr;
+	const YootTenantDef * gathering = nullptr;
+	for (const YootTenantDef & d : defs)
+	{
+		if (d.prototypeId == "yt_icecream") ice = &d;
+		if (d.prototypeId == "yt_drink") drink = &d;
+		if (d.prototypeId == "yt_burger") burger = &d;
+		if (d.prototypeId == "yt_gatheringarea") gathering = &d;
+	}
+	EXPECT(ice && drink && burger && gathering);
+	if (!ice || !drink || !burger || !gathering) return;
+	EXPECT(ice->name == "Ice Cream Stand" && ice->family == YootTenantFamily::Shop);
+	EXPECT(ice->price == 100000 && ice->outMoney == 300 && ice->width == 12 && ice->height == 1);
+	EXPECT(ice->openMinute == 720 && ice->closeMinute == 1200 && ice->bindMinutes == 20);
+	EXPECT(ice->capacity == 15 && ice->inMoney == std::vector<int>({1000}) && ice->belongCapacity == 2);
+	EXPECT(ice->gameLevel == 1 && ice->worldMask == 1 && ice->category == 80 && ice->toolNo == 10);
+	EXPECT(ice->hasCustomers && ice->hasDayParam && ice->hasPlaceParam);
+	// CalcInMoney: $1,000 x customers / 100 - $300 maintenance.
+	Yoot::TenantModel probe;
+	probe.customers = 50;
+	EXPECT(Yoot::tenantIncome(probe, *ice) == 200);
+	EXPECT(Yoot::tenantEstimate(probe, *ice) == 116); // 70 x (2 + 3) / 3
+
+	// Engine helpers.
+	EXPECT(Yoot::withinMinutes(720, 720, 1200) && !Yoot::withinMinutes(1200, 720, 1200));
+	EXPECT(Yoot::withinMinutes(1300, 1080, 0) && !Yoot::withinMinutes(600, 1080, 0)); // Cocktail 18:00-24:00
+	EXPECT(Yoot::withinMinutes(5, 300, 300) && Yoot::withinMinutes(1439, 300, 300));  // open == close: all day
+	EXPECT(Yoot::withinMinutes(1436, 1435, 3) && Yoot::withinMinutes(2, -5, 3));       // wraps both ways
+	EXPECT(Yoot::float2Int(0.89f, 7) == 1 && Yoot::float2Int(0.89f, 8) == 0 && Yoot::float2Int(2.0f, 0) == 2);
+	EXPECT(std::fabs(Yoot::customerUnits(15, 20) - 6.0f) < 1e-4f && Yoot::customerUnits(5, 8) == 5.0f);
+	EXPECT(Yoot::commercialPattern(Yoot::kStatusOpen, 0, 15) == 1 && Yoot::commercialPattern(Yoot::kStatusOpen, 1, 15) == 2);
+	EXPECT(Yoot::commercialPattern(Yoot::kStatusOpen, 7, 15) == 3 && Yoot::commercialPattern(Yoot::kStatusClosed2, 0, 15) == 0);
+
+	// Two simulated days: staff are hired, the shop opens at 12:00, fills,
+	// pays CalcInMoney at 20:00 and closes; the vending machine runs round
+	// the clock; the gathering area earns nothing; the restaurant passes
+	// through status 15 after closing.
+	struct Run { int opened = -1, closed = -1, paid = 0, income = 0, maxInside = 0, maxPattern = 0, statusAfterClose = 0; };
+	auto simulate = [](const YootTenantDef & def, int days) {
+		Run r;
+		Yoot::TenantModel m;
+		unsigned seed = 12345;
+		auto rng = [&seed]() { seed = seed * 1103515245u + 12345u; return (int)((seed >> 16) & 0x7fff); };
+		for (long long t = 0; t < days * 1440LL; ++t)
+		{
+			Yoot::TenantEvents ev;
+			Yoot::tenantMinute(m, def, t, ev);
+			if (t % Yoot::kTenantIdleMinutes == 0)
+			{
+				Yoot::TenantInputs in;
+				in.minute = (int)(t % 1440);
+				in.absMinute = t;
+				in.peopleAround = true;
+				const int before = m.status;
+				Yoot::tenantIdle(m, def, in, rng, ev);
+				if (before < Yoot::kStatusOpen && m.status >= Yoot::kStatusOpen && r.opened < 0) r.opened = in.minute;
+				if (before >= Yoot::kStatusOpen && m.status < Yoot::kStatusOpen && r.closed < 0)
+				{
+					r.closed = in.minute;
+					r.statusAfterClose = m.status;
+				}
+			}
+			if (ev.paid) { r.paid++; r.income += ev.income; }
+			r.maxInside = std::max(r.maxInside, m.insideCount());
+			r.maxPattern = std::max(r.maxPattern, m.pattern);
+		}
+		return r;
+	};
+	const Run shop = simulate(*ice, 2);
+	EXPECT(shop.opened == 720 && shop.closed == 1200 && shop.paid == 2);
+	EXPECT(shop.maxInside > 0 && shop.maxInside <= ice->capacity && shop.maxPattern >= 2);
+	EXPECT(shop.statusAfterClose == Yoot::kStatusClosed2);
+	if (shop.opened != 720 || shop.closed != 1200 || shop.paid != 2)
+		std::cerr << "shop run: opened " << shop.opened << " closed " << shop.closed << " paid " << shop.paid << "\n";
+	const Run vend = simulate(*drink, 2);
+	EXPECT(vend.opened == 0 && vend.closed < 0 && vend.paid == 2); // Juice: 05:00-05:00
+	const Run hall = simulate(*gathering, 2);
+	EXPECT(hall.opened == 600 && hall.closed == 1320 && hall.paid == 0);
+	const Run food = simulate(*burger, 2);
+	EXPECT(food.opened == 480 && food.closed == 1320 && food.statusAfterClose == Yoot::kStatusAfterClose);
+
+	// YootTower-only, and they replace the generic shop / restaurant / fast food.
+	EXPECT(BuildRules(BuildRules::Ruleset::OpenSky).minRatingToBuild("yt_icecream") == BuildRules::kUnavailable);
+	EXPECT(BuildRules(BuildRules::Ruleset::SimTower).minRatingToBuild("yt_burger") == BuildRules::kUnavailable);
+	auto yootRules = [&](YootWorld::Id id) {
+		RulesProfile profile = RulesProfile::yootTower(loadYootWorld(pm, id));
+		for (const auto & u : resolveYootUnlocks(pm, profile.worldMask))
+		{
+			RulesProfile::Unlock unlock;
+			unlock.available = u.second.available;
+			unlock.minRating = u.second.minGrade - 1;
+			profile.unlocks[u.first] = unlock;
+		}
+		return BuildRules(BuildRules::Ruleset::YootTower, profile);
+	};
+	const BuildRules tokyo = yootRules(YootWorld::Id::Tokyo);
+	EXPECT(tokyo.minRatingToBuild("yt_icecream") == 0 && tokyo.minRatingToBuild("shop") == BuildRules::kUnavailable);
+	EXPECT(tokyo.minRatingToBuild("restaurant") == BuildRules::kUnavailable && tokyo.minRatingToBuild("fastfood") == BuildRules::kUnavailable);
+	EXPECT(tokyo.minRatingToBuild("yt_kicecream") == BuildRules::kUnavailable);
+	const BuildRules kegon = yootRules(YootWorld::Id::Kegon);
+	EXPECT(kegon.minRatingToBuild("yt_icecream") == BuildRules::kUnavailable && kegon.minRatingToBuild("yt_kicecream") != BuildRules::kUnavailable);
+
+	// Toolbox: groups by category, items by tool number (GetSortKey).
+	std::vector<YootToolboxEntry> entries;
+	for (const YootTenantDef & d : defs)
+	{
+		YootToolboxEntry e;
+		e.prototypeId = d.prototypeId;
+		e.category = d.category;
+		e.categoryName = d.categoryName;
+		e.toolNo = d.toolNo;
+		entries.push_back(e);
+	}
+	YootToolboxEntry lobby;
+	lobby.prototypeId = "lobby"; lobby.category = 10; lobby.categoryName = "Basic"; lobby.toolNo = 20;
+	entries.push_back(lobby);
+	const std::vector<YootToolboxGroup> groups = yootToolboxGroups(entries);
+	EXPECT(groups.size() >= 4 && groups[0].category == 10 && groups[0].prototypeIds == std::vector<std::string>({"lobby"}));
+	bool sorted = true;
+	for (size_t g = 1; g < groups.size(); ++g) sorted = sorted && groups[g - 1].category < groups[g].category;
+	EXPECT(sorted);
+	const YootToolboxGroup * shops = nullptr;
+	const YootToolboxGroup * restaurants = nullptr;
+	for (const YootToolboxGroup & g : groups)
+	{
+		if (g.category == 80) shops = &g;
+		if (g.category == 50) restaurants = &g;
+	}
+	EXPECT(shops && shops->name == "Shops" && restaurants && restaurants->name == "Restaurants");
+	EXPECT(shops && shops->prototypeIds.size() == 33); // 28 shops + 5 vending machines
+	EXPECT(restaurants && restaurants->prototypeIds.size() == 22 && restaurants->prototypeIds.front() == "yt_coffee");
+}
+
 static void testYootFacilities()
 {
 	using namespace OT;
@@ -4737,6 +4912,7 @@ int main()
 	testYootEvaluation();
 	testYootStress();
 	testYootFacilities();
+	testYootTenants();
 	testYootPlacementRules();
 	testYootVenues();
 	testOspAttrCompat();

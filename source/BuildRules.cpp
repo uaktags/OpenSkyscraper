@@ -2,6 +2,7 @@
 #include "BuildRules.h"
 
 #include "LevelUp.h"
+#include "YootTenants.h"
 #include "YootWorld.h"
 
 #include <climits>
@@ -255,17 +256,21 @@ bool BuildRules::isYootOnlyPrototype(const std::string & prototypeId)
 {
 	for (const YootOnly & y : kYootOnly)
 		if (prototypeId == y.id) return true;
-	return false;
+	// Plugin-backed tenants (YootTenants.h): one prototype per plugin.
+	return isYootTenantPrototypeId(prototypeId);
 }
 
 bool BuildRules::isReplacedInYoot(const std::string & prototypeId)
 {
 	// The YootTower plugins behind them are the Trash Facility and the
 	// Doctor's Office, the Theater, Event Center, Subway and Cathedral,
-	// which are native items there.
+	// which are native items there. The generic shop, restaurant and fast
+	// food give way to one plugin-backed prototype per shop / restaurant
+	// plugin (YootTenants.h).
 	return prototypeId == "recycling" || prototypeId == "medicalcenter" ||
 	       prototypeId == "cinema" || prototypeId == "partyhall" ||
-	       prototypeId == "metro" || prototypeId == "cathedral";
+	       prototypeId == "metro" || prototypeId == "cathedral" ||
+	       prototypeId == "shop" || prototypeId == "restaurant" || prototypeId == "fastfood";
 }
 
 bool BuildRules::allowsFootprint(int x, int floor, int width, int height) const
@@ -289,6 +294,12 @@ int BuildRules::minRatingToBuild(const std::string & prototypeId) const
 		if (prototypeId != y.id) continue;
 		if (m_ruleset != Ruleset::YootTower) return kUnavailable;
 		if (m_profile.unlocks.find(prototypeId) == m_profile.unlocks.end()) return y.defaultRating;
+	}
+	if (isYootTenantPrototypeId(prototypeId))
+	{
+		if (m_ruleset != Ruleset::YootTower) return kUnavailable;
+		// Without world unlock data the plugin's ATTR level is unknown here.
+		if (m_profile.unlocks.find(prototypeId) == m_profile.unlocks.end()) return 0;
 	}
 	if (m_ruleset == Ruleset::YootTower && isReplacedInYoot(prototypeId))
 		return kUnavailable;

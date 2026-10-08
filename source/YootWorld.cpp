@@ -1,5 +1,6 @@
 /* Copyright (c) 2026 OpenSkyscraper Project */
 #include "YootWorld.h"
+#include "YootTenants.h"
 
 #include "AbstractPlugin.h"
 #include "PluginManager.h"
@@ -613,7 +614,7 @@ namespace OT
 		// is offered when ANY linked plugin is available in the world; its
 		// unlock grade is the lowest mGameLevel among those. Prototypes with no
 		// row here (secom) keep the SimTower lock table (LevelUp::minRatingToBuild).
-		static const std::vector<YootPrototypeLink> links = {
+		static const YootPrototypeLink fixed[] = {
 			{"lobby",             {"Floor.t2p", "KFloor.t2p", nullptr}},
 			{"floor",             {"Floor.t2p", "KFloor.t2p", nullptr}},
 			{"stairs",            {"Stair.t2p", nullptr}},
@@ -654,6 +655,16 @@ namespace OT
 			{"boatdeck",          {"Boatdeck.t2p", nullptr}},
 			{"subway",            {"Subway.t2p", nullptr}},
 		};
+		// Plugin-backed tenants (YootTenants.h) come first so that a covered
+		// plugin resolves to its own prototype (BLD import, VIP targets)
+		// before the generic OpenSky shop / restaurant / fast food rows.
+		static const std::vector<YootPrototypeLink> links = [&] {
+			std::vector<YootPrototypeLink> v;
+			for (const YootTenantPlugin & t : yootTenantPlugins())
+				v.push_back({t.prototypeId, {t.plugin, nullptr}});
+			v.insert(v.end(), std::begin(fixed), std::end(fixed));
+			return v;
+		}();
 		return links;
 	}
 

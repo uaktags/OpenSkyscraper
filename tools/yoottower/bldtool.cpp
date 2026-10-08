@@ -9,10 +9,14 @@
 //
 // TEMPLATE.bld is any save of the tower's world; it supplies the sections
 // OpenSky does not model (plugin table, visitor pool, events, ...).
+#include "AbstractPlugin.h"
 #include "BldExport.h"
 #include "BldLoader.h"
+#include "PluginManager.h"
+#include "YootTenants.h"
 
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <map>
 #include <sstream>
@@ -49,7 +53,27 @@ static bool prototypeSize(const std::string & id, int & w, int & h)
 		{"cathedral", {48, 4}}, {"powerroom", {23, 2}},
 	};
 	auto i = sizes.find(id);
-	if (i == sizes.end()) return false;
+	if (i == sizes.end())
+	{
+		// Plugin-backed tenants ("yt_*"): the TNDF footprint, read from
+		// $OPENSKY_PLUGINS or ./data/Plugins.
+		const OT::YootTenantPlugin * t = OT::isYootTenantPrototypeId(id) ? OT::findYootTenantPlugin(id) : nullptr;
+		if (!t) return false;
+		static OT::PluginManager plugins;
+		static bool scanned = false;
+		if (!scanned)
+		{
+			const char * dir = std::getenv("OPENSKY_PLUGINS");
+			plugins.addPluginDirectory(OT::Path(dir ? dir : "data/Plugins"));
+			scanned = true;
+		}
+		OT::AbstractPlugin * p = plugins.get(t->plugin);
+		OT::TemplateDef def;
+		if (!p || !p->ensureLoaded() || !p->getTemplateDef(def)) return false;
+		w = def.tool.width;
+		h = def.tool.height;
+		return true;
+	}
 	w = i->second.first;
 	h = i->second.second;
 	return true;
@@ -126,7 +150,7 @@ int main(int argc, char ** argv)
 		BldData templ, out;
 		if (!loadFile(argv[3], templ, error)) { fprintf(stderr, "template: %s\n", error.c_str()); return 1; }
 		ImportReport report;
-		if (!exportTower(tower, templ, out, report, error)) { fprintf(stderr, "%s\n", error.c_str()); return 1; }
+		if (!exportTower(tower, templ, out, report, error, prototypeSize)) { fprintf(stderr, "%s\n", error.c_str()); return 1; }
 		printReport(report);
 		std::vector<uint8_t> bytes;
 		if (!writeBytes(out, bytes, error)) { fprintf(stderr, "%s\n", error.c_str()); return 1; }

@@ -40,6 +40,7 @@ namespace Bld {
 		bool occupied = false;     ///< office/condo occupied, shop let
 		int yootEstimate = 0;
 		int rentClass = 1;         ///< shops
+		int tenantStatus = -1;     ///< plugin-backed tenants: T2Tenant status (-1 = unknown)
 		std::vector<int> unserviced;
 		std::vector<TowerCar> cars;
 	};
@@ -61,9 +62,12 @@ namespace Bld {
 
 	/// Builds a .bld from the tower using `templ` (same world) for the
 	/// world-wide sections. Items without a YootTower counterpart are
-	/// counted in report.dropped.
+	/// counted in report.dropped. `prototypes` gives the footprint of the
+	/// plugin-backed tenants ("yt_*", YootTenants.h); without it they are
+	/// dropped.
 	bool exportTower(const TowerState & tower, const BldData & templ, BldData & out,
-		ImportReport & report, std::string & error);
+		ImportReport & report, std::string & error,
+		const PrototypeLookup & prototypes = PrototypeLookup());
 
 }
 }

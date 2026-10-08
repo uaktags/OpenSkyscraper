@@ -29,6 +29,8 @@ namespace OT
 		s.name = v.name;
 		s.attribute = def.tool.attribute;
 		s.category = def.tool.category;
+		s.categoryName = def.tool.categoryName;
+		s.toolNo = def.tool.toolNo;
 		s.price = v.price * kYootMoneyUnit;
 		s.outMoney = v.outMoney * kYootMoneyUnit;
 		s.power = v.consumptionPower;
