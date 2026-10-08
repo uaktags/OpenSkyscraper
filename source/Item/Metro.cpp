@@ -3,6 +3,7 @@
 #include "../NameManager.h"
 #include "../Time.h"
 #include "Metro.h"
+#include "../XmlUtil.h"
 
 #include <vector>
 #include <algorithm>
@@ -101,9 +102,9 @@ void Metro::decodeXML(tinyxml2::XMLElement &xml)
 		v->state = (Person::State)e->IntAttribute("state", Person::kWandering);
 		v->stress = e->DoubleAttribute("stress", 0.0);
 		v->eval = e->DoubleAttribute("eval", 0.0);
-		v->name = e->Attribute("name", "");
-		v->from = e->Attribute("from", "");
-		v->goingTo = e->Attribute("goingTo", "");
+		v->name = xmlAttributeOr(*e, "name", "");
+		v->from = xmlAttributeOr(*e, "from", "");
+		v->goingTo = xmlAttributeOr(*e, "goingTo", "");
 		visitors.insert(v);
 	}
 	updateSprite();

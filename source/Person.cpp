@@ -9,6 +9,7 @@
 #include "NameManager.h"
 #include "Person.h"
 #include "YootRules.h"
+#include "XmlUtil.h"
 
 using namespace OT;
 const double Person::kMaxStress = 300.0;
@@ -201,9 +202,9 @@ void Person::decodeXML(tinyxml2::XMLElement &xml)
 	stress  = std::max(0.0, std::min(kMaxStress, stress));
 	eval    = xml.DoubleAttribute("eval", 0.0);
 	pendingJourneyStress = 0.0;
-	name    = xml.Attribute("name", "");
-	from    = xml.Attribute("from", "");
-	goingTo = xml.Attribute("goingTo", "");
+	name    = xmlAttributeOr(xml, "name", "");
+	from    = xmlAttributeOr(xml, "from", "");
+	goingTo = xmlAttributeOr(xml, "goingTo", "");
 	yootEstimate = Yoot::clampEstimate(xml.IntAttribute("yootEstimate", Yoot::kPeopleEstimateStart));
 	yootTrips = std::max(0, std::min(Yoot::kMaxTrips, xml.IntAttribute("yootTrips", 0)));
 	yootFlags = xml.IntAttribute("yootFlags", 0);

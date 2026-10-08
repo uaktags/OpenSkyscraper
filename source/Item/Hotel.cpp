@@ -6,6 +6,7 @@
 #include "Factory.h"
 #include "Hotel.h"
 #include "Parking.h"
+#include "../XmlUtil.h"
 #include <cmath>
 #include <string>
 
@@ -525,9 +526,9 @@ void Hotel::decodeXML(tinyxml2::XMLElement &xml)
 		g->state = (Person::State)e->IntAttribute("state", Person::kWandering);
 		g->stress = e->DoubleAttribute("stress", 0.0);
 		g->eval = e->DoubleAttribute("eval", 0.0);
-		g->name = e->Attribute("name", "");
-		g->from = e->Attribute("from", "");
-		g->goingTo = e->Attribute("goingTo", "");
+		g->name = xmlAttributeOr(*e, "name", "");
+		g->from = xmlAttributeOr(*e, "from", "");
+		g->goingTo = xmlAttributeOr(*e, "goingTo", "");
 		guests.insert(g);
 		if (g->atHotel)
 		{
@@ -555,9 +556,9 @@ void Hotel::decodeXML(tinyxml2::XMLElement &xml)
 		h->state = (Person::State)e->IntAttribute("state", Person::kWandering);
 		h->stress = e->DoubleAttribute("stress", 0.0);
 		h->eval = e->DoubleAttribute("eval", 0.0);
-		h->name = e->Attribute("name", "");
-		h->from = e->Attribute("from", "");
-		h->goingTo = e->Attribute("goingTo", "");
+		h->name = xmlAttributeOr(*e, "name", "");
+		h->from = xmlAttributeOr(*e, "from", "");
+		h->goingTo = xmlAttributeOr(*e, "goingTo", "");
 		housekeeper = h;
 		if (e->BoolAttribute("atHotel", false))
 		{

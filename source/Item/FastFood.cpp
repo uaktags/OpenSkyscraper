@@ -4,6 +4,7 @@
 #include "../Math/Rand.h"
 #include "FastFood.h"
 #include "Office.h"
+#include "../XmlUtil.h"
 #include <string>
 #include <algorithm>
 #include <cmath>
@@ -119,11 +120,11 @@ void FastFood::decodeXML(tinyxml2::XMLElement &xml)
 		c->state = (Person::State)e->IntAttribute("state", Person::kWandering);
 		c->stress = e->DoubleAttribute("stress", 0.0);
 		c->eval = e->DoubleAttribute("eval", 0.0);
-		c->name = e->Attribute("name", "");
-		c->from = e->Attribute("from", "");
-		c->goingTo = e->Attribute("goingTo", "");
+		c->name = xmlAttributeOr(*e, "name", "");
+		c->from = xmlAttributeOr(*e, "from", "");
+		c->goingTo = xmlAttributeOr(*e, "goingTo", "");
 		customers.insert(c);
-		if (std::string(e->Attribute("phase", "arriving")) == "eating") {
+		if (std::string(xmlAttributeOr(*e, "phase", "arriving")) == "eating") {
 			addPerson(c);
 			customerMetadata[c].arrivalTime = e->DoubleAttribute("itemArrival");
 		} else arrivingCustomers.push(c);
