@@ -1015,11 +1015,13 @@ namespace Bld {
 			attrs += buf;
 
 			// T2Tenant status: 8 = for rent, 10 = contracted, 12+ = open/working.
-			const bool occupied = t.hdr.status >= 10;
-			// The belong list has one slot per staff/resident place; filled
-			// slots hold people ids.
+			// Offices are let once SetKind picked a look (kind 1..6); status
+			// 10/11 offices of kind 0 stand empty (oracle: day/night patterns 0/1).
 			int residents = 0;
 			for (uint32_t id : t.belongList) residents += id != 0 ? 1 : 0;
+			const bool occupied = proto == "office" ? (t.kindIndex > 0 || residents > 0) : t.hdr.status >= 10;
+			// The belong list has one slot per staff/resident place; filled
+			// slots hold people ids (counted above).
 			if (proto == "lobby")
 			{
 				snprintf(buf, sizeof(buf), " width=\"%d\" height=\"%d\"", w, h);
@@ -1029,6 +1031,11 @@ namespace Bld {
 			{
 				snprintf(buf, sizeof(buf), " occupied=\"%d\" population=\"%d\"", occupied ? 1 : 0, occupied ? residents : 0);
 				attrs += buf;
+				if (proto == "office" && t.kindIndex > 0)
+				{
+					snprintf(buf, sizeof(buf), " variant=\"%d\"", (t.kindIndex - 1) % 6);
+					attrs += buf;
+				}
 				if (t.inMoneyIndex != 2) nonDefaultRent++;
 			}
 			else if (proto == "shop")

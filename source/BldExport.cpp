@@ -50,6 +50,7 @@ namespace Bld {
 			it.yootEstimate = e->IntAttribute("yootEstimate", 0);
 			it.rentClass = e->IntAttribute("rentClass", 1);
 			it.tenantStatus = e->IntAttribute("tenantStatus", -1);
+			it.variant = e->IntAttribute("variant", 0);
 			for (const tinyxml2::XMLElement * u = e->FirstChildElement("unserviced"); u; u = u->NextSiblingElement("unserviced"))
 				it.unserviced.push_back(u->IntAttribute("floor"));
 			for (const tinyxml2::XMLElement * c = e->FirstChildElement("car"); c; c = c->NextSiblingElement("car"))
@@ -279,10 +280,12 @@ namespace Bld {
 			if (it.type == "office" || it.type == "apartment")
 			{
 				t.hdr.status = it.occupied ? 10 : 8;    // contracted / for rent
-				t.estimate = (int16_t)(it.occupied ? (it.yootEstimate > 0 ? it.yootEstimate : 300) : 0);
+				t.estimate = (int16_t)(it.yootEstimate > 0 ? it.yootEstimate : (it.occupied ? 300 : 0));
 				t.inMoneyIndex = 2;                     // default price selection
 				t.hasBelongList = 1;                    // six empty staff places
 				t.belongList.assign(it.type == "office" ? 6 : 1, 0); // Apartment.t2p: one resident
+				// Office.t2p SetKind: a let office has kind 1..6, kind 0 is unlet.
+				if (it.type == "office" && it.occupied) t.kindIndex = (uint8_t)(1 + ((it.variant % 6) + 6) % 6);
 			}
 			else if (it.type == "restroom")
 			{

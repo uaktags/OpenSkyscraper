@@ -42,6 +42,7 @@ namespace Bld {
 		int yootEstimate = 0;
 		int rentClass = 1;         ///< shops
 		int tenantStatus = -1;     ///< plugin-backed tenants: T2Tenant status (-1 = unknown)
+		int variant = 0;           ///< office look (0..5 = Office.t2p kind 1..6)
 		std::vector<int> unserviced;
 		std::vector<TowerCar> cars;
 	};
