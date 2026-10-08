@@ -138,6 +138,7 @@ namespace Bld {
 		const PluginInfo * floorPlugin = plugin("FLOR");
 		const PluginInfo * officePlugin = plugin("OFFC");
 		const PluginInfo * shopPlugin = plugin("ICES");
+		const PluginInfo * restroomPlugin = plugin("TOIL");
 		const PluginInfo * elevPlugin = plugin("StdE");
 		if (!floorPlugin)
 		{
@@ -225,6 +226,7 @@ namespace Bld {
 			int w = 0;
 			if (it.type == "office") { p = officePlugin; w = 9; }
 			else if (it.type == "shop") { p = shopPlugin; w = 12; }
+			else if (it.type == "restroom") { p = restroomPlugin; w = 9; }
 			else continue;
 			if (!p) { drop(it.type, "plugin missing from the template"); continue; }
 			Rect area;
@@ -245,6 +247,13 @@ namespace Bld {
 				t.hasBelongList = 1;                    // six empty staff places
 				t.belongList.assign(6, 0);
 			}
+			else if (it.type == "restroom")
+			{
+				t.hdr.status = 30;                      // open, empty (Restroom.t2p FUN_1000cd00)
+				t.estimate = 0;
+				t.inMoneyIndex = 0;
+				t.hasBelongList = 0;                    // no staff
+			}
 			else
 			{
 				t.hdr.status = it.occupied ? 12 : 8;
@@ -257,7 +266,7 @@ namespace Bld {
 		}
 		for (const TowerItem & it : tower.items)
 		{
-			if (it.type == "floor" || it.type == "lobby" || it.type == "office" || it.type == "shop") continue;
+			if (it.type == "floor" || it.type == "lobby" || it.type == "office" || it.type == "shop" || it.type == "restroom") continue;
 			if (it.type == "elevator-standard" && elevPlugin) continue;
 			drop(it.type, "no YootTower counterpart in the exporter");
 		}

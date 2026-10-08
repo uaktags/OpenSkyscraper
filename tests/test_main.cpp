@@ -3955,6 +3955,7 @@ static bool bldTestPrototypes(const std::string & id, int & w, int & h)
 		{"elevator-express", {6, 1}}, {"elevator-service", {4, 1}}, {"elevator-standard", {4, 1}},
 		{"fastfood", {16, 1}}, {"restaurant", {24, 1}}, {"shop", {12, 1}}, {"office", {9, 1}},
 		{"condo", {16, 1}}, {"yoot_condo", {16, 1}}, {"hotel_single", {4, 1}},
+		{"restroom", {9, 1}},
 	};
 	std::map<std::string, std::pair<int, int> >::const_iterator i = sizes.find(id);
 	if (i == sizes.end()) return false;
@@ -4123,9 +4124,11 @@ static void testBldShippedSaves()
 	EXPECT(xml.find("type=\"elevator-standard\" x=\"0\" y=\"0\" evaluation=\"50.0\" height=\"10\" showShaft=\"1\"><unserviced floor=\"1\"/><unserviced floor=\"2\"/><car altitude=\"0.0\" homeFloor=\"0\"/><car altitude=\"9.0\" homeFloor=\"9\"/></item>") != std::string::npos);
 	EXPECT(report.imported["lobby"] == 1 && report.imported["floor"] == 7 && report.imported["office"] == 9);
 	EXPECT(report.imported["shop"] == 1 && report.imported["elevator-standard"] == 1);
-	EXPECT(report.dropped["TOIL Restroom (no OpenSky counterpart)"] == 7);
+	// Restroom.t2p (TOIL) maps to the native YootTower restroom (step 12).
+	EXPECT(report.imported["restroom"] == 7 && countOf(xml, "type=\"restroom\"") == 7);
+	EXPECT(report.dropped.count("TOIL Restroom (no OpenSky counterpart)") == 0);
 	EXPECT(report.dropped["HREN Apartment (no OpenSky counterpart)"] == 1);
-	if (report.dropped.size() != 2)
+	if (report.dropped.size() != 1)
 		for (const auto & d : report.dropped) std::cerr << "dropped: " << d.first << " x" << d.second << "\n";
 
 	// --- Yooooot.bld: the empty Hawaii lot -------------------------------
@@ -4168,7 +4171,7 @@ static void testBldShippedSaves()
 		EXPECT(toTowerXml(tokyo, bldTestPrototypes, xml, report, error));
 		TowerState state;
 		EXPECT(parseTowerXml(xml, state, error));
-		EXPECT(state.world == "tokyo" && state.funds == 7877000 && state.items.size() == 19);
+		EXPECT(state.world == "tokyo" && state.funds == 7877000 && state.items.size() == 26);
 		BldData exported;
 		ImportReport exportReport;
 		EXPECT(exportTower(state, tokyo, exported, exportReport, error));
@@ -4176,7 +4179,7 @@ static void testBldShippedSaves()
 		EXPECT(writeBytes(exported, rebuilt, error));
 		BldData reread;
 		EXPECT(parseBytes(rebuilt, reread, error));
-		EXPECT(reread.usedTenants() == 18 && reread.usedMovers() == 1 && reread.usedPeople() == 0);
+		EXPECT(reread.usedTenants() == 25 && reread.usedMovers() == 1 && reread.usedPeople() == 0);
 		EXPECT(reread.settlement.funds == 78770 && reread.minutes == 574 && reread.level == 1);
 		// The game's own layout: 16 waiting areas identical to the sample's,
 		// and StdElev's fixed 2 x 10 extra-data table.
@@ -4235,6 +4238,8 @@ static void testBldShippedSaves()
 		EXPECT(ok);
 		if (!ok) std::cerr << rel << ": " << error << "\n";
 	}
+}
+
 // Step 12: trash, restrooms, colds and doctors (I2, I3, P5, P6, R6).
 static void testYootFacilities()
 {
