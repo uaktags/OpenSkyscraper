@@ -1163,7 +1163,12 @@ void Game::advance(double dt)
 
 	//Constrain the POI.
 	double2 halfsize((win.getView().getSize().x)*0.5*zoom, (win.getView().getSize().y)*0.5*zoom);
-	poi.y = std::max<double>(std::min<double>(poi.y, 360*12 - halfsize.y), -360 + halfsize.y);
+	// The YootTower skin scrolls down to the world's bottom row (Kegon's
+	// Observatory stands on B32, Tokyo's rock reaches B12).
+	double bottom = -360;
+	if (const YootWorldArt * art = yootSkinArt())
+		bottom = std::min(bottom, -36.0 * (art->geometry().height - art->geometry().groundLine));
+	poi.y = std::max<double>(std::min<double>(poi.y, 360*12 - halfsize.y), bottom + halfsize.y);
 	poi.x = std::max<double>(std::min<double>(poi.x, horizontalScrollLimit()), -horizontalScrollLimit());
 
 	//Adust the camera.
