@@ -322,7 +322,9 @@ void VenueSystem::theaterTick(Item::Theater * t, int minute, int day)
 		t->showBest = std::max(t->showBest, t->users());
 		t->leaveAt.clear();
 	}
-	if (sh.status != Yoot::TheaterShow::Closed && reachable(t))
+	// Customers are only collected until close - bindTime - 60 (Theater
+	// 21:00, Classic 19:00: its last show draws nobody; oracle-confirmed).
+	if (sh.status != Yoot::TheaterShow::Closed && reachable(t) && Yoot::theaterCollects(minute, open, close, stayOf(t, 0)))
 	{
 		// CollectCustomer(target - inside), spread over the door window.
 		const int want = std::min(cap, std::max(0, t->audienceTarget)) - t->users();

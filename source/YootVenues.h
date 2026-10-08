@@ -86,6 +86,10 @@ namespace OT
 		/// days keep `retentionPct`% (unk104 = 95) of yesterday's best show.
 		int theaterAudienceTarget(int target, int yesterdayBest, int persons,
 		                          int initialAudience, int capacity, int retentionPct);
+		/// Theater.t2p collects customers only until close - bindTime - 60
+		/// (Theater 21:00; Classic 19:00, so its 20:00 show draws nobody:
+		/// the oracle's Classic Movie Theatre earned 3 x 40 tickets a day).
+		bool theaterCollects(int minute, int open, int close, int bindTime);
 
 		// ================================================= hall events (S1)
 

@@ -133,6 +133,11 @@ namespace OT
 			return (int)(yesterdayBest * retentionPct * 0.01);
 		}
 
+		bool theaterCollects(int minute, int open, int close, int bindTime)
+		{
+			return minute >= open && minute <= close - bindTime - 60;
+		}
+
 		// ------------------------------------------------------- hall events
 
 		bool hallEventInMonth(const HallEventDef & def, int dayOfYear)

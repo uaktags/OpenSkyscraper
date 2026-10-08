@@ -4522,6 +4522,11 @@ static void testYootVenues()
 	EXPECT(Y::theaterAudienceTarget(-1, 0, 250, 140, 500, 95) == 250);
 	EXPECT(Y::theaterAudienceTarget(-1, 0, -1, 0, 500, 95) == 500);
 	EXPECT(Y::theaterAudienceTarget(140, 200, 250, 140, 500, 95) == 190);
+	// Oracle (Classic, 12:00-22:00, bind 120): the 17:30 doors collect, the
+	// 20:00 show does not; 3 full houses of 40 paid $1,400 at 22:00.
+	EXPECT(Y::theaterCollects(1140, 720, 1320, 120) && !Y::theaterCollects(1141, 720, 1320, 120));
+	EXPECT(Y::theaterCollects(1230, 600, 1320, 0) && !Y::theaterCollects(1261, 600, 1320, 0));
+	EXPECT(Y::calcInMoneyUnits(120, 20, 10) * kYootMoneyUnit == 1400);
 	// CalcInMoney: Theater inMoney 30 ($3,000), outMoney 20: 500 tickets = $13,000.
 	const std::map<std::string, YootItemStats> tc = resolveYootCatalog(pm, 0x7);
 	EXPECT(tc.count("theater") && tc.at("theater").capacity == 500);
