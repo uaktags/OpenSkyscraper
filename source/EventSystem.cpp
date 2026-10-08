@@ -77,6 +77,7 @@ namespace
 EventSystem::EventSystem(Game * game)
 : GameObject(game)
 , power(game)
+, facilities(game)
 , yoot(false)
 {
 	reset();
@@ -115,6 +116,7 @@ void EventSystem::reset()
 	santaMinutes = 0;
 	reggae = Reggae();
 	power.configure(nullptr);
+	facilities.reset();
 	prevHour = game ? game->time.hour : 0.0;
 	lastDispatchDay = -1;
 	santaActive = false;

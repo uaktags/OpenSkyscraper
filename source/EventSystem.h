@@ -1,6 +1,7 @@
 #pragma once
 
 #include "GameObject.h"
+#include "FacilitySystem.h"
 #include "PowerSystem.h"
 #include "Sprite.h"
 #include "YootEvents.h"
@@ -101,6 +102,8 @@ namespace OT
 
 		/// YootTower power and blackout (BOEV). Inert in other rulesets.
 		PowerSystem power;
+		/// YootTower trash, restrooms and doctors (plan step 12). Inert elsewhere.
+		FacilitySystem facilities;
 		/// True while the YootTower T2EV scheduler drives the calendar.
 		bool yootMode() const { return yoot; }
 		const YootEventScheduler & yootScheduler() const { return scheduler; }

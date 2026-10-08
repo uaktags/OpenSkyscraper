@@ -164,6 +164,11 @@ void Person::yootFinishTrip()
 	pendingJourneyStress = 0.0;
 }
 
+void Person::yootArrived(Item::Item * destination)
+{
+	if (game) game->eventSystem.facilities.onArrive(this, destination);
+}
+
 void Person::advance(double dt)
 {
 	if (state == kHome || state == kResting)
@@ -184,6 +189,7 @@ void Person::encodeXML(tinyxml2::XMLPrinter &xml)
 		xml.PushAttribute("yootEstimate", yootEstimate);
 		xml.PushAttribute("yootTrips", yootTrips);
 	}
+	if (yootFlags != 0) xml.PushAttribute("yootFlags", yootFlags);
 }
 
 void Person::decodeXML(tinyxml2::XMLElement &xml)
@@ -200,6 +206,7 @@ void Person::decodeXML(tinyxml2::XMLElement &xml)
 	goingTo = xml.Attribute("goingTo", "");
 	yootEstimate = Yoot::clampEstimate(xml.IntAttribute("yootEstimate", Yoot::kPeopleEstimateStart));
 	yootTrips = std::max(0, std::min(Yoot::kMaxTrips, xml.IntAttribute("yootTrips", 0)));
+	yootFlags = xml.IntAttribute("yootFlags", 0);
 }
 
 Person::Journey::Journey(Person * p)
@@ -227,6 +234,8 @@ void Person::Journey::set(const Route & r)
 	// YootTower stress comes from waiting and failed routes only (P1).
 	if (!person->yootRules())
 		person->addJourneyStress(routeStress(r));
+	else if (r.nodes.front().item && r.nodes.front().item->isLobby() && person->game)
+		person->game->eventSystem.facilities.onEnterTower(person); // leaves the pool
 	toFloor = nodes.front().toFloor;
 	next();
 }
@@ -258,6 +267,9 @@ void Person::Journey::next()
 	item    = nodes.front().item;
 	toFloor = nodes.front().toFloor;
 	assert(item);
+	// The last node is the destination tenant, which takes the person in
+	// addPerson (and may hand it straight on), so arrive first.
+	if (nodes.size() == 1 && person->yootRules()) person->yootArrived(item);
 	item->addPerson(person);
 }
 

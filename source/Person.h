@@ -107,6 +107,11 @@ namespace OT {
 		int yootCurrentEstimate() const;
 		/// T2People::UpdateEstimation at the end of a trip.
 		void yootFinishTrip();
+		/// T2People special flags (+0x78): Yoot::kPeopleNeedsToilet,
+		/// Yoot::kPeopleSick (plan step 12, P5/P6).
+		int yootFlags = 0;
+		/// Arrival at the end of a trip (T2Tenant::EnterTenant hooks).
+		void yootArrived(Item::Item * destination);
 		double pendingJourneyStress;
 		Type type;
 		State state;

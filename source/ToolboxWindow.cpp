@@ -419,12 +419,17 @@ tgui::Button::Ptr ToolboxWindow::makeItemButton(Item::AbstractPrototype* proto, 
         app->bitmaps.loadFromPlugin("Condo.t2p", 100, yootIconTexture, sf::Color(255, 255, 255));
         return makeButton(kCellW, kCellH, yootIconTexture, 0, state);
     }
-    if (proto->id == "powerroom")
+    if (BuildRules::isYootOnlyPrototype(proto->id))
     {
-        // PowerRoom.t2p RT_BITMAP 100 is a vertical 26x130 icon strip;
-        // OBJMAP 100 names "Power Room" pattern 0 at Rect 0,78,26,104.
+        // PowerRoom/TrashFacility/Restroom/Doctor's.t2p RT_BITMAP 100 is a
+        // vertical 26x130 icon strip; OBJMAP 100 names the item's pattern 0
+        // at Rect 0,78,26,104 in all four.
+        const std::string plugin = proto->yoot ? proto->yoot->plugin
+            : proto->id == "trashfacility" ? "TrashFacility.t2p"
+            : proto->id == "restroom" ? "Restroom.t2p"
+            : proto->id == "doctor" ? "Doctor's.t2p" : "PowerRoom.t2p";
         sf::Texture sheet;
-        if (app->bitmaps.loadFromPlugin("PowerRoom.t2p", 100, sheet)) {
+        if (app->bitmaps.loadFromPlugin(plugin, 100, sheet)) {
             sf::Image full = sheet.copyToImage();
             sf::Image cell({26, 26});
             if (full.getSize().y >= 104 && cell.copy(full, {0, 0}, sf::IntRect({0, 78}, {26, 26}))) {

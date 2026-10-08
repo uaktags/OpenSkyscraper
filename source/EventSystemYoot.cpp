@@ -110,6 +110,7 @@ void EventSystem::yootDispatch()
 		yootBegin(begins[i]);
 
 	power.advance();
+	facilities.advance();
 	if (reggae.active) stepReggae(minute);
 	yootSyncRunning();
 }

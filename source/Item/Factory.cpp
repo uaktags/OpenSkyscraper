@@ -26,6 +26,7 @@
 #include "Recycling.h"
 #include "Cathedral.h"
 #include "PowerRoom.h"
+#include "YootFacilityItems.h"
 
 using namespace OT;
 using namespace Item;
@@ -70,6 +71,9 @@ void Factory::loadPrototypes()
 	register_item(Recycling);
 	register_item(Cathedral);
 	register_item(PowerRoom); // YootTower-only (BuildRules hides it elsewhere)
+	register_item(TrashFacility); // YootTower-only facilities (plan step 12)
+	register_item(Restroom);
+	register_item(DoctorsOffice);
 	#undef register_item
 	
 	for (int i = 0; i < prototypes.size(); i++) {

@@ -224,6 +224,8 @@ std::string InspectorDialog::describeItem(Item::Item * item)
 		if (power.isBlackOut()) s << "BLACKOUT\n";
 	}
 
+	s << game->eventSystem.facilities.describe(item);
+
 	if (!item->people.empty())
 	{
 		s << "\nOccupants\n";
