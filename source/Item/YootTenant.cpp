@@ -265,6 +265,12 @@ int YootTenant::fromFloor(const YootTenantDef & d, int free, const Yoot::TenantI
 	return game->eventSystem.people.callFromFloor(this, d, free, in.absMinute);
 }
 
+bool YootTenant::hire(const YootTenantDef & d)
+{
+	(void)d;
+	return game->eventSystem.people.hireBelong(this);
+}
+
 const char * YootShop::incomeMessage() const
 {
 	// Spa.t2p pays through DoPay without the shop message.

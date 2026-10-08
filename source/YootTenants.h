@@ -151,6 +151,9 @@ namespace OT
 			virtual int fromPool(const YootTenantDef & def, int free, const TenantInputs & in) { (void)def; (void)free; (void)in; return 0; }
 			virtual int fromTenant(const YootTenantDef & def, int free, const TenantInputs & in) { (void)def; (void)free; (void)in; return 0; }
 			virtual int fromFloor(const YootTenantDef & def, int free, const TenantInputs & in) { (void)def; (void)free; (void)in; return 0; }
+			/// T2Tenant::CollectEmployee 0x1005f5a0 (TMDF 1): true when the
+			/// staff came out of the pool.
+			virtual bool hire(const YootTenantDef & def) { (void)def; return true; }
 		};
 
 		/// What the tower offers the tenant at an idle (CollectCustomer and

@@ -8,8 +8,10 @@
 #include "Game.h"
 #include "Item/Item.h"
 #include "Item/Office.h"
+#include "Item/YootMiscItems.h"
 #include "Item/YootFacilityItems.h"
 #include "Logger.h"
+#include "PeopleSystem.h"
 #include "Person.h"
 #include "YootCatalog.h"
 #include "YootRules.h"
@@ -230,6 +232,19 @@ void FacilitySystem::dailyColds()
 				w->yootFlags |= Yoot::kPeopleSick;
 		}
 	}
+	// School.t2p 0x1000b8b0 / 0x1000b850 (status > 10): the same for its
+	// students, whose flags stay with the school while they are home (the
+	// still-sick lose 50 estimate in the original; OpenSky keeps no
+	// estimate for a student out of the tower).
+	const Game::ItemSet & schools = itemsOf(game, "school");
+	for (Game::ItemSet::const_iterator i = schools.begin(); i != schools.end(); ++i) {
+		Item::School * school = dynamic_cast<Item::School *>(*i);
+		if (!school || !built(school) || school->model.status <= Yoot::SchoolModel::Hiring) continue;
+		for (int & f : game->eventSystem.people.belongFlags(school)) {
+			f &= ~Yoot::kPeopleSick;
+			if (!holiday && Yoot::rollDenomi(denomi, std::rand())) f |= Yoot::kPeopleSick;
+		}
+	}
 }
 
 void FacilitySystem::callDoctors(long long absMinute)
@@ -238,6 +253,37 @@ void FacilitySystem::callDoctors(long long absMinute)
 	const Game::ItemSet & offices = itemsOf(game, "office");
 	const Game::ItemSet & docs = itemsOf(game, "doctor");
 	const int minute = lastMinute;
+	// School.t2p 0x1000b900 (status > 11): up to 5 sick students inside go
+	// to a reachable, open doctor with room (0x1000ba80) and are treated.
+	const Game::ItemSet & schools = itemsOf(game, "school");
+	for (Game::ItemSet::const_iterator i = schools.begin(); i != schools.end(); ++i) {
+		Item::School * school = dynamic_cast<Item::School *>(*i);
+		if (!school || !built(school) || school->model.status <= Yoot::SchoolModel::Closed) continue;
+		std::vector<int> & flags = game->eventSystem.people.belongFlags(school);
+		int sent = 0;
+		for (YootVisitor * v : game->eventSystem.people.visitorsIn(school)) {
+			if (sent >= 5) break;
+			if (v->belongIndex < 0 || v->belongIndex >= (int)flags.size() || !(flags[v->belongIndex] & Yoot::kPeopleSick)) continue;
+			std::vector<Item::DoctorsOffice *> list;
+			std::vector<Yoot::DoctorCandidate> candidates;
+			for (Game::ItemSet::const_iterator d = docs.begin(); d != docs.end(); ++d) {
+				Item::DoctorsOffice * doc = dynamic_cast<Item::DoctorsOffice *>(*d);
+				if (!doc || !built(doc)) continue;
+				Yoot::DoctorCandidate c;
+				c.reachable = reachable(school, doc);
+				c.open = doc->isOpen(minute);
+				c.patients = doc->users();
+				c.capacity = doc->capacity();
+				list.push_back(doc);
+				candidates.push_back(c);
+			}
+			const int found = Yoot::searchDoctor(candidates);
+			if (found < 0) { needsDoctor[school] = true; break; }
+			enter(list[found], absMinute);
+			flags[v->belongIndex] &= ~Yoot::kPeopleSick;
+			++sent;
+		}
+	}
 	for (Game::ItemSet::const_iterator i = offices.begin(); i != offices.end(); ++i) {
 		Item::Office * office = dynamic_cast<Item::Office *>(*i);
 		if (!office || !built(office)) continue;

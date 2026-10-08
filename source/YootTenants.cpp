@@ -362,7 +362,7 @@ namespace OT
 					else if (s == kStatusHiring)
 					{
 						// CollectEmployee from the pool at the top of an hour.
-						if (now % 60 < 8 && in.reachable)
+						if (now % 60 < 8 && in.reachable && (!in.sources || in.sources->hire(def)))
 						{
 							m.staff = def.belongCapacity;
 							m.status = now < open - 60 ? kStatusClosed : kStatusNight;

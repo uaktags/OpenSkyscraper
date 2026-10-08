@@ -8,6 +8,7 @@
 #include "Application.h"
 #include "Game.h"
 #include "Item/Item.h"
+#include "Item/YootMiscItems.h"
 #include "Item/YootVenueItems.h"
 #include "Logger.h"
 #include "PeopleSystem.h"
@@ -303,6 +304,15 @@ void VenueSystem::enter(Item::YootVenue * v, YootVisitor * p)
 	if (id == "boatdeck")
 	{
 		game->eventSystem.people.stationEnter(v, p);
+		return;
+	}
+	if (Item::School * school = dynamic_cast<Item::School *>(v))
+	{
+		// School.t2p EnterTenant 0x1000c1a0: its students stay the day.
+		admitted = p->home == school && school->model.inside < school->model.capacity;
+		if (admitted) school->model.enter();
+		game->eventSystem.people.arrived(p, v, admitted, now + 100000000LL);
+		p->stayEnd = -1;
 		return;
 	}
 	if (id == "ticketbooth")

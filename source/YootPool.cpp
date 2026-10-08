@@ -393,6 +393,26 @@ namespace OT
 			return true;
 		}
 
+		bool Pool::callBelong(const MemberTableDef & table, int econo, unsigned routeMask, bool onlyFirst,
+			std::vector<PeopleType> & out, const PoolRng & rng)
+		{
+			out.clear();
+			if (!find(table, econo, routeMask, onlyFirst)) return false;
+			for (size_t i = 0; i < table.members.size(); ++i)
+				for (int n = 0; n < std::max(1, (int)table.members[i].numOfPeople); ++n)
+				{
+					PeopleType t;
+					if (callType(table.members[i], onlyFirst && i > 0 ? -1 : econo, routeMask, t, rng)) out.push_back(t);
+				}
+			return !out.empty();
+		}
+
+		void Pool::releaseBelong(const std::vector<PeopleType> & types)
+		{
+			for (const PeopleType & t : types)
+				if (t.immortal()) dispatchRestore(t);
+		}
+
 		PeopleType Pool::bornVIP(int silhouette, int transport)
 		{
 			PeopleType t;

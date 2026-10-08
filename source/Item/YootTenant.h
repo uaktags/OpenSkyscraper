@@ -57,6 +57,7 @@ namespace OT {
 			int fromPool(const YootTenantDef & def, int free, const Yoot::TenantInputs & in);
 			int fromTenant(const YootTenantDef & def, int free, const Yoot::TenantInputs & in);
 			int fromFloor(const YootTenantDef & def, int free, const Yoot::TenantInputs & in);
+			bool hire(const YootTenantDef & def);
 			bool isOpen() const { return model.status >= Yoot::kStatusOpen && model.status < 10000; }
 
 			Yoot::TenantModel model;

@@ -89,6 +89,8 @@ void PeopleSystem::reset()
 	tables.clear();
 	stays.clear();
 	roomOuting.clear();
+	belong.clear();
+	belongFlagMap.clear();
 	calledToday = enteredToday = ridersToday = 0;
 	returnedToday[0] = returnedToday[1] = returnedToday[2] = 0;
 }
@@ -519,6 +521,72 @@ int PeopleSystem::callFromFloor(Item::Item * tenant, const YootTenantDef & def, 
 	});
 }
 
+// --------------------------------------------------------- belong people
+
+bool PeopleSystem::hireBelong(Item::Item * tenant)
+{
+	if (!enabled() || pool.empty() || !tenant->prototype->yoot) return true;
+	const std::string & plugin = tenant->prototype->yoot->plugin;
+	std::map<std::string, Table>::iterator ti = tables.find(plugin + "|1");
+	if (ti == tables.end())
+	{
+		Table t;
+		AbstractPlugin * p = game->app.pluginManager.get(plugin);
+		t.valid = p && p->ensureLoaded() && p->getMemberTable(t.table, 1) && !t.table.members.empty();
+		ti = tables.insert(std::make_pair(plugin + "|1", t)).first;
+	}
+	const Table & t = ti->second;
+	if (!t.valid) return true;
+	const unsigned mask = routeMask(tenant, 1000);
+	if (mask == 0) return false;
+	const bool onlyFirst = t.table.econoType != 0xFFFFFFFFu && (t.table.econoType & 0x10u);
+	const int econo = t.table.econoType == 0xFFFFFFFFu ? -1 : int(t.table.econoType & ~0x10u);
+	releaseBelong(tenant);
+	std::vector<Yoot::PeopleType> types;
+	if (!pool.callBelong(t.table, econo, mask, onlyFirst, types, rngInt)) return false;
+	belong[tenant] = types;
+	belongFlagMap[tenant].assign(types.size(), 0);
+	return true;
+}
+
+void PeopleSystem::schoolTick(Item::Item * school, std::vector<long long> & arrivals, int inside, long long now)
+{
+	if (!arrivals.empty())
+	{
+		if (belong[school].empty()) hireBelong(school);  // a reloaded tower
+		const std::vector<Yoot::PeopleType> & types = belong[school];
+		std::vector<int> & flags = belongFlagMap[school];
+		flags.resize(types.size(), 0);
+		std::vector<bool> out(types.size(), false);
+		for (const YootVisitor * v : visitorList)
+			if (v->home == school && v->belongIndex >= 0 && v->belongIndex < (int)out.size()) out[v->belongIndex] = true;
+		size_t next = 0;
+		for (long long t : arrivals)
+		{
+			// CallEmployee skips the sick (special flag 4 here: kPeopleSick).
+			while (next < types.size() && (out[next] || (flags[next] & Yoot::kPeopleSick))) ++next;
+			if (next >= types.size() || visitorList.size() >= kMaxVisitors) break;
+			YootVisitor * v = spawn(types[next], school, t, 0);
+			v->home = school;
+			v->belongIndex = (int)next;
+			v->state = Person::kCommuting;
+			out[next++] = true;
+		}
+		arrivals.clear();
+	}
+	std::vector<YootVisitor *> in = visitorsInside(school);
+	for (size_t k = 0; in.size() - k > (size_t)std::max(0, inside); ++k) pushOut(in[k]);
+}
+
+void PeopleSystem::releaseBelong(Item::Item * tenant)
+{
+	std::map<Item::Item *, std::vector<Yoot::PeopleType> >::iterator b = belong.find(tenant);
+	if (b == belong.end()) return;
+	pool.releaseBelong(b->second);
+	belong.erase(b);
+	belongFlagMap.erase(tenant);
+}
+
 // ------------------------------------------------------------------ venues
 
 const YootTenantDef * PeopleSystem::venueDef(Item::Item * venue, const std::string & subPlugin, int tableId)
@@ -879,6 +947,13 @@ void PeopleSystem::goOutTower(YootVisitor * v)
 		if (lot) lot->leave(v);
 	}
 	if (v->yootFlags & Yoot::kPeopleNeedsToilet) v->yootEstimate = Yoot::incEstimate(v->yootEstimate, -30);
+	if (v->home)
+	{
+		// Belong people go home and stay their tenant's (not general: no
+		// T2Pool::Enter).
+		destroy(v);
+		return;
+	}
 	v->yootFinishTrip();
 	++returnedToday[v->yootEstimate > 200 ? 2 : v->yootEstimate > 70 ? 1 : 0];
 	pool.enter(v->peopleType, v->yootEstimate, rngInt);
@@ -897,6 +972,7 @@ void PeopleSystem::itemRemoved(Item::Item * item)
 {
 	stays.erase(item);
 	roomOuting.erase(item);
+	releaseBelong(item);
 	for (std::map<Item::Item *, HotelStay>::iterator s = stays.begin(); s != stays.end(); ++s)
 		if (s->second.desk == item) s->second.desk = nullptr;
 	// T2People::TenantRemoved: people bound for or inside the item, and

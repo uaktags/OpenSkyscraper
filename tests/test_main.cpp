@@ -4484,6 +4484,30 @@ static void testYootPool()
 	EXPECT(e.population == pop - 7);
 	EXPECT(e.shrinkCount == 0);
 
+	// CollectEmployeeFromPool: the whole table must be in the pool; each
+	// member is called numOfPeople times (the fixed demand 4 keeps its
+	// types); the population is the tenant's, and immortals go back.
+	{
+		Yoot::Pool s = g1;
+		MemberTableDef staff;
+		MemberDef cook = any; cook.demandType = 4; cook.startSilhouetteType = 18; cook.endSilhouetteType = 18; cook.numOfPeople = 1;
+		MemberDef waiter = cook; waiter.startSilhouetteType = waiter.endSilhouetteType = 19; waiter.numOfPeople = 2;
+		staff.members = {cook, waiter};
+		std::vector<Yoot::PeopleType> hired;
+		const int pop0 = s.population;
+		EXPECT(s.callBelong(staff, -1, Yoot::kRouteLobby, false, hired, rng) && hired.size() == 3);
+		EXPECT(s.population == pop0 && s.available(4) == 4 && hired[1].silhouette == 19);
+		MemberDef workers = any; workers.startSilhouetteType = 8; workers.endSilhouetteType = 9; workers.numOfPeople = 2;
+		MemberDef nobody = any; nobody.startSilhouetteType = 60; nobody.endSilhouetteType = 61;
+		MemberTableDef office; office.members = {workers, nobody};
+		const int left = s.demands[0].zones[1].count();
+		EXPECT(!s.callBelong(office, -1, Yoot::kRouteLobby, false, hired, rng) && hired.empty() && s.demands[0].zones[1].count() == left);
+		office.members = {workers};
+		EXPECT(s.callBelong(office, -1, Yoot::kRouteLobby, false, hired, rng) && hired.size() == 2 && s.demands[0].zones[1].count() == left - 2);
+		s.releaseBelong(hired);
+		EXPECT(s.demands[0].zones[1].count() == left && s.shrinkCount == 0);
+	}
+
 	// Save / load.
 	std::string a, b;
 	g3.encode(a);

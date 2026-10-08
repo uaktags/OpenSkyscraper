@@ -61,6 +61,10 @@ namespace OT
 		/// T2Transport rider: aboard the train / ship of this station
 		/// (status 0x10, not in the tower).
 		Item::Item * aboard = nullptr;
+		/// A belong person's tenant (T2People +0x28 work / +0x2c home; null =
+		/// a general visitor) and its index in the tenant's belong list.
+		Item::Item * home = nullptr;
+		int belongIndex = -1;
 
 		/// T2People::CalcFreeTime 0x100495b0 at `now`.
 		long long freeTime(long long now) const;
@@ -138,6 +142,22 @@ namespace OT
 		/// Room art: the guests in the room, asleep (33) or up (34).
 		void roomLook(const Item::Hotel * room, int & in, int & asleep, int & up) const;
 
+		// --- belong people (staff, office workers, students: TMDF 1) ---
+		/// T2Tenant::CollectEmployee 0x1005f5a0 for `tenant` from its plugin's
+		/// TMDF 1 (route score 1000); the types are kept for the tenant. True
+		/// when hired (or when there is no pool or table to draw from).
+		bool hireBelong(Item::Item * tenant);
+		/// ClearBelongPeople: the tenant's belong people go back.
+		void releaseBelong(Item::Item * tenant);
+		const std::vector<Yoot::PeopleType> & belongOf(Item::Item * tenant) { return belong[tenant]; }
+		/// Per belong person: T2People +0x78 flags kept while they are out
+		/// of the tower (the School's colds).
+		std::vector<int> & belongFlags(Item::Item * tenant) { return belongFlagMap[tenant]; }
+		/// School.t2p's CallEmployee 0x100612a0: the called students walk in
+		/// at their minutes (the sick stay home); students beyond `inside`
+		/// (PushOutPeople / PushOutAll) walk home.
+		void schoolTick(Item::Item * school, std::vector<long long> & arrivals, int inside, long long now);
+
 		// --- subway riders and cruise passengers (T2Transport) ---
 		/// A rider back at the station (Subway / Boat Deck): waits inside
 		/// for the next stopped train or ship.
@@ -185,6 +205,8 @@ namespace OT
 		};
 		std::map<Item::Item *, HotelStay> stays;
 		std::map<Item::Item *, bool> roomOuting;  ///< +0x88 (kept across stays)
+		std::map<Item::Item *, std::vector<Yoot::PeopleType> > belong;
+		std::map<Item::Item *, std::vector<int> > belongFlagMap;
 		void hotelTick(long long now);
 		void transportTick(long long now);
 		void roomIdle(Item::Hotel * room, int minute, long long now);

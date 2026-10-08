@@ -193,6 +193,17 @@ namespace OT
 			bool callType(const MemberDef & m, int econo, unsigned routeMask, PeopleType & out, const PoolRng & rng);
 			/// T2Pool::Call = callType + RecoverPeople (population + 1).
 			bool call(const MemberDef & m, int econo, unsigned routeMask, PeopleType & out, const PoolRng & rng);
+			/// T2Tenant::CollectEmployeeFromPool 0x10060a50: the whole table
+			/// must be found (Find), then each member is called numOfPeople
+			/// times (`onlyFirst`: the econo applies to the first member).
+			/// OpenSky counts belong people in their tenant's population, so
+			/// RecoverPeople is not applied. False (nothing taken) when the
+			/// table is not in the pool.
+			bool callBelong(const MemberTableDef & table, int econo, unsigned routeMask, bool onlyFirst,
+				std::vector<PeopleType> & out, const PoolRng & rng);
+			/// T2Tenant::ClearBelongPeople -> RemovePeople for belong people:
+			/// immortal types go back (not counted in the population here).
+			void releaseBelong(const std::vector<PeopleType> & types);
 			/// T2Pool::BornVIP: a VIP (life 0x7f) is recovered (population + 1).
 			PeopleType bornVIP(int silhouette, int transport = -1);
 			/// T2Pool::DeadVIP / RemovePeople (shrink; immortals go back).

@@ -8,6 +8,7 @@
 #include "Item/Item.h"
 #include "Item/YootMiscItems.h"
 #include "Logger.h"
+#include "PeopleSystem.h"
 #include "PluginManager.h"
 #include "SimHarness.h"
 #include "YootEvents.h"
@@ -75,13 +76,16 @@ void YootExtrasSystem::advance()
 	const long long now = Yoot::absoluteMinute(game->time.absolute);
 	if (now == lastMinute) return;
 	const bool first = lastMinute < 0;
+	const long long prev = lastMinute;
 	lastMinute = now;
 	const int minute = nowMinuteOfDay(game);
 	const long long hour = now / 60;
 	if (!first && hour != lastHour) traffic.hourChanged(); // HourChanged 0x1006b640
 	lastHour = hour;
 
-	schoolMinute(now, minute);
+	// The School's idles fall on every 8th minute: none is skipped.
+	for (long long m = first || now - prev > 1440 || now < prev ? now : prev + 1; m <= now; ++m)
+		schoolMinute(m, (int)(((m % 1440) + 1440) % 1440));
 	for (Flight & f : flights)
 		if (f.active) flightMinute(f, minute);
 	if (maru.active) maruMinute(now, minute);
@@ -264,10 +268,23 @@ void YootExtrasSystem::schoolMinute(long long now, int minute)
 		Item::School * school = dynamic_cast<Item::School *>(item);
 		if (!school || school->underConstruction) continue;
 		const bool reachable = school->position.y == 0 || !school->lobbyRoute.empty();
-		school->model.arrive(now);
+		// With the visitor pool the 60 students are pool people (TMDF 1,
+		// CollectEmployee) who walk in and out.
+		PeopleSystem & people = game->eventSystem.people;
+		const bool walk = people.enabled() && !people.pool.empty();
+		if (!walk) school->model.arrive(now);
 		if (minute % Yoot::kTenantIdleMinutes == 0)
+		{
+			const bool hiring = school->model.status == Yoot::SchoolModel::Hiring;
 			school->model.idle(now, minute, school->openMinute(), school->closeMinute(),
-			                   game->time.isHoliday(), reachable, []() { return rand(); });
+			                   game->time.isHoliday(), reachable && (!walk || !hiring || people.hireBelong(school)), []() { return rand(); });
+		}
+		if (walk)
+		{
+			people.schoolTick(school, school->model.arrivals, school->model.inside, now);
+			const int students = (int)people.belongOf(school).size();
+			if (school->population != students) { school->population = students; game->populationNeedsUpdate = true; }
+		}
 		school->status = school->model.status;
 		school->setPattern(school->model.pattern);
 		if (school->model.inside > school->visitorsToday) school->visitorsToday = school->model.inside;

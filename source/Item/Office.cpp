@@ -1,6 +1,7 @@
 /* Copyright © 2013 Fabian Schuiki */
 #include "Office.h"
 #include "../Game.h"
+#include "../PeopleSystem.h"
 #include "../YootRules.h"
 #include "../Math/Rand.h"
 #include "../Time.h"
@@ -143,7 +144,10 @@ void Office::advance(double dt)
 	{
 		// The item has a 10% chance of being occupied every 1/500th of a day. This means
 		// that on average, an item is occupied after 1/250th of a day.
-		if (game->time.checkTick(0.002) && (rand() % 10) == 0)
+		// YootTower: the workers come out of the pool (Office.t2p TMDF 1,
+		// CollectEmployee 0x1005f5a0); no workers, no tenant.
+		if (game->time.checkTick(0.002) && (rand() % 10) == 0 &&
+		    (!prototype->yoot || game->eventSystem.people.hireBelong(this)))
 		{
 			occupied = true;
 			variant = rand() % 6;
@@ -183,6 +187,7 @@ void Office::advance(double dt)
 		spriteNeedsUpdate = true;
 		population = 0;
 		game->populationNeedsUpdate = true;
+		game->eventSystem.people.releaseBelong(this);
 	}
 
 	// Reset worker schedules at 5:00 if the office is occupied.
