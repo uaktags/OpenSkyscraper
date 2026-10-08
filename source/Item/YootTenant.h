@@ -84,12 +84,5 @@ namespace OT {
 		public:
 			YootVending(Game * game, AbstractPrototype * prototype) : YootTenant(game, prototype) {}
 		};
-
-		/// Staff-less, income-less service tenant (GatheringArea.t2p).
-		class YootService : public YootTenant
-		{
-		public:
-			YootService(Game * game, AbstractPrototype * prototype) : YootTenant(game, prototype) {}
-		};
 	}
 }

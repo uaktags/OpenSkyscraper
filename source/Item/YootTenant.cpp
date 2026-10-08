@@ -53,7 +53,6 @@ OT::Item::Item * YootTenantPrototype::make(Game * game)
 	switch (def.family) {
 		case YootTenantFamily::Restaurant: return new YootRestaurant(game, this);
 		case YootTenantFamily::Vending: return new YootVending(game, this);
-		case YootTenantFamily::Service: return new YootService(game, this);
 		default: return new YootShop(game, this);
 	}
 }

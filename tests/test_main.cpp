@@ -4265,16 +4265,16 @@ static void testYootTenants()
 
 	// 57 covered plugins, unique prototype ids, all present and decodable.
 	const std::vector<YootTenantPlugin> & covered = yootTenantPlugins();
-	EXPECT(covered.size() == 57);
+	EXPECT(covered.size() == 56);
 	std::set<std::string> ids;
 	for (const YootTenantPlugin & t : covered) ids.insert(t.prototypeId);
 	EXPECT(ids.size() == covered.size());
 	const std::vector<YootTenantDef> defs = loadYootTenantDefs(pm);
 	EXPECT(defs.size() == covered.size());
-	int families[5] = {0, 0, 0, 0, 0};
+	int families[4] = {0, 0, 0, 0};
 	for (const YootTenantDef & d : defs) families[(int)d.family]++;
 	EXPECT(families[(int)YootTenantFamily::Shop] == 29 && families[(int)YootTenantFamily::Restaurant] == 22);
-	EXPECT(families[(int)YootTenantFamily::Vending] == 5 && families[(int)YootTenantFamily::Service] == 1);
+	EXPECT(families[(int)YootTenantFamily::Vending] == 5 && families[(int)YootTenantFamily::None] == 0);
 	EXPECT(isYootTenantPrototypeId("yt_icecream") && !isYootTenantPrototypeId("shop") && !isYootTenantPrototypeId("yt_nothing"));
 
 	// Prototypes offered per world (ATTR world mask through the unlock table).
@@ -4285,24 +4285,22 @@ static void testYootTenants()
 		for (const auto & u : unlocks) if (isYootTenantPrototypeId(u.first) && u.second.available) ++n;
 		return n;
 	};
-	EXPECT(offered(YootWorld::Id::Tokyo) == 35);
-	EXPECT(offered(YootWorld::Id::Hawaii) == 27);
+	EXPECT(offered(YootWorld::Id::Tokyo) == 34);
+	EXPECT(offered(YootWorld::Id::Hawaii) == 26);
 	EXPECT(offered(YootWorld::Id::Kegon) == 12);
 
 	// A sample shop straight from Icecream.t2p.
 	const YootTenantDef * ice = nullptr;
 	const YootTenantDef * drink = nullptr;
 	const YootTenantDef * burger = nullptr;
-	const YootTenantDef * gathering = nullptr;
 	for (const YootTenantDef & d : defs)
 	{
 		if (d.prototypeId == "yt_icecream") ice = &d;
 		if (d.prototypeId == "yt_drink") drink = &d;
 		if (d.prototypeId == "yt_burger") burger = &d;
-		if (d.prototypeId == "yt_gatheringarea") gathering = &d;
 	}
-	EXPECT(ice && drink && burger && gathering);
-	if (!ice || !drink || !burger || !gathering) return;
+	EXPECT(ice && drink && burger);
+	if (!ice || !drink || !burger) return;
 	EXPECT(ice->name == "Ice Cream Stand" && ice->family == YootTenantFamily::Shop);
 	EXPECT(ice->price == 100000 && ice->outMoney == 300 && ice->width == 12 && ice->height == 1);
 	EXPECT(ice->openMinute == 720 && ice->closeMinute == 1200 && ice->bindMinutes == 20);
@@ -4327,7 +4325,7 @@ static void testYootTenants()
 
 	// Two simulated days: staff are hired, the shop opens at 12:00, fills,
 	// pays CalcInMoney at 20:00 and closes; the vending machine runs round
-	// the clock; the gathering area earns nothing; the restaurant passes
+	// the clock; the restaurant passes
 	// through status 15 after closing.
 	struct Run { int opened = -1, closed = -1, paid = 0, income = 0, maxInside = 0, maxPattern = 0, statusAfterClose = 0; };
 	auto simulate = [](const YootTenantDef & def, int days) {
@@ -4368,8 +4366,6 @@ static void testYootTenants()
 		std::cerr << "shop run: opened " << shop.opened << " closed " << shop.closed << " paid " << shop.paid << "\n";
 	const Run vend = simulate(*drink, 2);
 	EXPECT(vend.opened == 0 && vend.closed < 0 && vend.paid == 2); // Juice: 05:00-05:00
-	const Run hall = simulate(*gathering, 2);
-	EXPECT(hall.opened == 600 && hall.closed == 1320 && hall.paid == 0);
 	const Run food = simulate(*burger, 2);
 	EXPECT(food.opened == 480 && food.closed == 1320 && food.statusAfterClose == Yoot::kStatusAfterClose);
 

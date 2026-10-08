@@ -1,7 +1,7 @@
 /* Copyright (c) 2026 OpenSkyscraper contributors */
 ///
 /// YootTower plugin-backed tenants: shops, restaurants (incl. fast food and
-/// the food court), vending machines and simple service tenants.
+/// the food court), vending machines and the Spa.
 ///
 /// Every tenant plugin of a covered behaviour family becomes one OpenSky
 /// prototype ("yt_<stem>") whose identity, size, price, unlock and art come
@@ -20,7 +20,7 @@
 ///               garbage out before going home)
 ///   Vending     Drink.t2p FUN_1000b930 (Drink, KDrink, Cigar, kCigar, Coin
 ///               byte-identical): no staff, pattern 1 while open
-///   Service     Spa.t2p / GatheringArea.t2p ChangeStatusOnIdle
+///   (Spa.t2p runs the shop machine and pays without the message.)
 /// T2DLL helpers: T2Tenant::CollectCustomer 0x1005f440 (+FromPool/Tenant/
 /// Floor), T2CustomerTableIterator 0x1001c790.., T2TenantMemberDef::Initialize
 /// 0x10063000 (rate = percent x customerUnits x 0.01),
@@ -44,7 +44,7 @@ namespace OT
 	class AbstractPlugin;
 	class PluginManager;
 
-	enum class YootTenantFamily { None, Shop, Restaurant, Vending, Service };
+	enum class YootTenantFamily { None, Shop, Restaurant, Vending };
 
 	/// One covered tenant plugin and the OpenSky prototype id it becomes.
 	struct YootTenantPlugin
@@ -54,7 +54,8 @@ namespace OT
 		YootTenantFamily family;
 	};
 
-	/// Every tenant plugin this module covers (57 of the 93 TnPl plugins).
+	/// Every tenant plugin this module covers (56 of the 93 TnPl plugins;
+	/// GatheringArea.t2p is a venue item, Item/YootVenueItems.h).
 	const std::vector<YootTenantPlugin> & yootTenantPlugins();
 	/// Covered entry for a plugin file or prototype id; null when not covered.
 	const YootTenantPlugin * findYootTenantPlugin(const std::string & pluginOrPrototypeId);

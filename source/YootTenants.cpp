@@ -16,8 +16,7 @@ namespace OT
 		typedef YootTenantFamily F;
 		// Families from plugin_code_audit.py (plugin-schema.md §3) and the
 		// decompiled overrides (YootTenants.h). Spa runs the shop machine
-		// (it pays without the message); GatheringArea is the staff-less,
-		// income-less service tenant.
+		// (it pays without the message).
 		static const std::vector<YootTenantPlugin> plugins = {
 			// Shops (category 80)
 			{"Aloha.t2p", "yt_aloha", F::Shop},
@@ -78,8 +77,6 @@ namespace OT
 			{"Cigar.t2p", "yt_cigar", F::Vending},
 			{"kCigar.t2p", "yt_kcigar", F::Vending},
 			{"Coin.t2p", "yt_coin", F::Vending},
-			// Service
-			{"GatheringArea.t2p", "yt_gatheringarea", F::Service},
 		};
 		return plugins;
 	}
@@ -113,7 +110,6 @@ namespace OT
 		case YootTenantFamily::Shop: return "shop";
 		case YootTenantFamily::Restaurant: return "restaurant";
 		case YootTenantFamily::Vending: return "vending";
-		case YootTenantFamily::Service: return "service";
 		default: return "none";
 		}
 	}
@@ -260,7 +256,6 @@ namespace OT
 
 			void updateEstimate(TenantModel & m, const YootTenantDef & def, TenantEvents & ev)
 			{
-				if (def.family == YootTenantFamily::Service) return; // no CalcInMoney
 				const int e = tenantEstimate(m, def);
 				if (e != m.estimate) { m.estimate = e; ev.estimateChanged = true; }
 			}
@@ -272,7 +267,6 @@ namespace OT
 
 			void pay(TenantModel & m, const YootTenantDef & def, TenantEvents & ev)
 			{
-				if (def.family == YootTenantFamily::Service) return;
 				ev.paid = true;
 				ev.income += tenantIncome(m, def);
 			}
@@ -478,38 +472,6 @@ namespace OT
 				m.status = kStatusClosed2;
 				setPattern(m, 0, ev);
 			}
-
-			/// GatheringArea.t2p FUN_1000bba0: no staff, no income.
-			void serviceIdle(TenantModel & m, const YootTenantDef & def, const TenantInputs & in, const RngFn & rng, TenantEvents & ev)
-			{
-				const int open = def.openMinute, close = def.closeMinute;
-				const int now = in.minute;
-				const int s = m.status;
-				int next = s;
-				if (s < 10000)
-				{
-					if (s == kStatusBuilt)
-					{
-						if (open < close) next = (now < open || close <= now) ? kStatusClosed2 : kStatusOpen;
-						else if (now < close) next = kStatusOpen;
-						else next = now < open ? kStatusClosed2 : kStatusOpen;
-					}
-					else if (open <= now && now < open + 8)
-						next = kStatusOpen;
-					else if (close <= now && now < close + 8)
-					{
-						pushOutAll(m);
-						next = kStatusClosed2;
-					}
-				}
-				if (isOpen(s) && !withinMinutes(now, close, close + 8))
-					collectCustomers(m, def, in, rng);
-				if (next != s)
-				{
-					if (next == kStatusOpen) { m.status = kStatusOpen; setPattern(m, 1, ev); }
-					else { m.status = next; if (next == kStatusClosed2) setPattern(m, 0, ev); }
-				}
-			}
 		}
 
 		void tenantIdleImpl(TenantModel & m, const YootTenantDef & def, const TenantInputs & in, const RngFn & rng, TenantEvents & ev)
@@ -519,7 +481,6 @@ namespace OT
 			case YootTenantFamily::Shop:
 			case YootTenantFamily::Restaurant: commercialIdle(m, def, in, rng, ev); break;
 			case YootTenantFamily::Vending: vendingIdle(m, def, in, rng, ev); break;
-			case YootTenantFamily::Service: serviceIdle(m, def, in, rng, ev); break;
 			default: break;
 			}
 		}
