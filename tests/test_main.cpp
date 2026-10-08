@@ -4987,6 +4987,11 @@ static void testYootVenues()
 	EXPECT(Y::subwayStoppedTrain(all, 409) == -1 && Y::subwayStoppedTrain(all, 410) == 0);
 	EXPECT(Y::subwayStoppedTrain(all, 417) == 0 && Y::subwayStoppedTrain(all, 418) == -1);
 	EXPECT(Y::subwayStoppedTrain(all, 1425) == 11);
+	// The stopped train's type picks MET1..MET4: 490 is a type-0 train.
+	EXPECT(Y::subwayStoppedTrainType(metro.trains, 1, 495) == 0);
+	EXPECT(Y::subwayStoppedTrainType(metro.trains, 1, 410) == -1);  // type >= 1 not enabled
+	EXPECT(Y::subwayStoppedTrainType(metro.trains, 4, 410) >= 1);
+	EXPECT(Y::subwayStoppedTrainType(metro.trains, 4, 409) == -1);
 	EXPECT(Y::subwayOpen(390, 390, 1439) && !Y::subwayOpen(389, 390, 1439) && !Y::subwayOpen(1439, 390, 1439));
 	EXPECT(Y::subwayPattern(false, 5, 100) == 0 && Y::subwayPattern(true, 0, 100) == 1);
 	EXPECT(Y::subwayPattern(true, 49, 100) == 2 && Y::subwayPattern(true, 50, 100) == 3);

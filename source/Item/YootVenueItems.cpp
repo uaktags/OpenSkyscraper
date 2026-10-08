@@ -4,6 +4,7 @@
 #include "../YootCatalog.h"
 #include "../YootItemArt.h"
 #include "../YootMovie.h"
+#include "../YootWorldArt.h"
 #include "YootVenueItems.h"
 
 #include <algorithm>
@@ -311,6 +312,7 @@ void Subway::advance(double dt)
 void Subway::trainArrives(int riders)
 {
 	trainPresent = true;
+	showTrain(true);
 	// CheckRouteFromPool 0x10060bf0: subway riders are pool visitors bound
 	// for any tenant reachable from the station (not only underground ones,
 	// as for the SimTower metro).
@@ -341,9 +343,28 @@ void Subway::trainArrives(int riders)
 	LOG(DEBUG, "subway train: %d riders, %zu in the tower", riders, visitors.size());
 }
 
+void Subway::showTrain(bool shown)
+{
+	removeSprite(&trainSprite);
+	if (!shown || game->skin != Skin::Yoot) return;
+	// The world's 8000 MET1..MET4 (320x32, Transparent): the train stands at
+	// the platform, on the station's bottom interior edge.
+	static const char * kParts[] = {"MET1", "MET2", "MET3", "MET4"};
+	const YootWorldArt * art = game->yootSkinArt();
+	const YootPluginView * v = art ? yootPluginView(game->app, yootWorldPluginFile(art->worldId()),
+		sf::Color::Transparent, 8000, 8000, kParts[std::max(0, std::min(3, trainType))]) : nullptr;
+	if (!v || v->bands.empty()) return;
+	trainSprite.SetImage(v->texture);
+	trainSprite.setTextureRect(v->band(0));
+	trainSprite.setOrigin({0.f, static_cast<float>(v->band(0).size.y)});
+	trainSprite.setPosition({static_cast<float>(getPosition().x * 8), static_cast<float>(-getPosition().y * 36 - kYootInteriorLift)});
+	addSprite(&trainSprite);
+}
+
 void Subway::trainLeaves()
 {
 	trainPresent = false;
+	showTrain(false);
 	boardReturnedVisitors();
 }
 

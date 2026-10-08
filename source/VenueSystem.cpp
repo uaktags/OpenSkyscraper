@@ -551,6 +551,7 @@ void VenueSystem::subwayTick(int minute)
 	{
 		// Riders get off and head into the tower (they return by a later train).
 		const int riders = std::min(20, capacityOf(s, 100) / 5);
+		s->trainType = Yoot::subwayStoppedTrainType(metro.trains, s->level, minute);
 		s->trainArrives(riders);
 	}
 	else if (stopped < 0 && s->trainPresent)

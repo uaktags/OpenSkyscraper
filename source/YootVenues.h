@@ -180,6 +180,9 @@ namespace OT
 		std::vector<int> subwayArrivals(const std::vector<std::pair<int, int> > & trains, int level);
 		/// Index of the train stopped at `minute` in `arrivals`, or -1.
 		int subwayStoppedTrain(const std::vector<int> & arrivals, int minute);
+		/// Type (MREV track 0..3) of the enabled train stopped at `minute`,
+		/// or -1; the world's 8000 `MET1`..`MET4` sprite is drawn for it.
+		int subwayStoppedTrainType(const std::vector<std::pair<int, int> > & trains, int level, int minute);
 		/// Subway.t2p FUN_1000d1e0/d280: pattern 0 closed, 1 empty,
 		/// 2 occupied, 3 at half capacity or more.
 		int subwayPattern(bool open, int inside, int capacity);

@@ -323,6 +323,7 @@ namespace OT {
 
 			int level = 1;            ///< T2Transport UpGrade level 1..4 (trains enabled)
 			int pattern = 0;
+			int trainType = 0;        ///< MREV track of the stopped train (MET1..MET4)
 			/// A train from the timetable stops: riders get off into the tower.
 			void trainArrives(int riders);
 			void trainLeaves();
@@ -330,6 +331,8 @@ namespace OT {
 		private:
 			Sprite viewSprite;
 			const sf::Texture * view = nullptr;
+			Sprite trainSprite;       ///< Skin::Yoot: the stopped train
+			void showTrain(bool shown);
 		};
 	}
 }

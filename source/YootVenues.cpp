@@ -279,6 +279,18 @@ namespace OT
 			return -1;
 		}
 
+		int subwayStoppedTrainType(const std::vector<std::pair<int, int> > & trains, int level, int minute)
+		{
+			int best = -1, bestMinute = -1;
+			for (const auto & t : trains)
+				if (t.second < level && minute >= t.first && minute < t.first + kSubwayStopMinutes && t.first > bestMinute)
+				{
+					best = t.second;
+					bestMinute = t.first;
+				}
+			return best;
+		}
+
 		int subwayPattern(bool open, int inside, int capacity)
 		{
 			if (!open) return 0;
