@@ -211,6 +211,19 @@ FUN_1000f6a0; LoadExtraData 0x1000be40 reads the record whatever n is). bld.py
 (`EXTRA_SIZE`) and BldLoader (`stadiumExtraSize`) size a Stadium record from
 its strings and keep the announced n (`extraCount`) for the writer.
 
+**Audit status (2026-10-08).** Every save-override plugin in the table above is read
+and written as `s32 n + n bytes`, so the import keeps each record opaque and the export
+writes it back. The 446 game-written and oracle saves in the working corpus round-trip
+byte-identical through both `bld.py roundtrip` and `BldTool roundtrip`, and
+`testBldExtraRecordSizes` (tests/test_main.cpp) pins each record size. Exporter-written
+records are fresh-game values only for StdElev, KElev, Stadium and the Billboard
+(`BldExport.cpp`); for Theater, Front, EventCenter, Subway, PowerRoom and Attraction the
+export writes n = 0, so the game's constructor defaults stand. That is unverified for
+the game's later use of those records. A Gathering Area export (`GatheringArea.t2p`,
+plugin 1741) makes the original show **Plugin Check Error** when loaded; a game-written
+Gathering Area save loads cleanly, and changing the tenant's floor-id list did not clear
+the dialog. Still open.
+
 ### 4.3 Mover (`T2Mover::LoadSelf` 0x1003f400 / `SaveSelf` 0x1003f530)
 
 Marker `>VM<`, then T2Equip, then if used:

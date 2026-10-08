@@ -110,6 +110,7 @@ cmake -DEXE=build/OpenSkyscraper -DTOWER=$PWD/data/default.tower \
 Build the harness on both commits (back-port the `--sim` patch to older
 ones), run the same tower x ruleset x length on each, and `cmp` the saves
 and summaries. A difference that only adds YootTower attributes
-(`world=`, `yootVipFlags=`) cannot appear for SimTower/OpenSky runs, so
+(`world=`, `yootVipFlags=`, the `yootVip*` pending reservation) cannot appear
+for SimTower/OpenSky runs, so
 any diff there is a behaviour change. Bisect by rebuilding intermediate
 commits with the patch applied.
