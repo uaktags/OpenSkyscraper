@@ -115,15 +115,13 @@ void Metro::decodeXML(tinyxml2::XMLElement &xml)
 void Metro::updateSprite()
 {
 	spriteNeedsUpdate = false;
-	int stationIndex = 2, platformIndex = 2;
-	if (open)
-	{
-		stationIndex = 1;
-		platformIndex = trainPresent ? 0 : 2;
-	}
+	// SIMTOWER.EXE draws all three station floors from one frame index, the
+	// cell state: 0 open / no train, 1 closed, 2 train in (crowd on the
+	// concourse, train on the platform). Sheet columns: 0 train, 1 open, 2 closed.
+	const int frame = !open ? 2 : (trainPresent ? 0 : 1);
 
-	station.setTextureRect(sf::IntRect({stationIndex * 240, 0}, {240, 66}));
-	platform.setTextureRect(sf::IntRect({platformIndex * 240, 66}, {240, 30}));
+	station.setTextureRect(sf::IntRect({frame * 240, 0}, {240, 66}));
+	platform.setTextureRect(sf::IntRect({frame * 240, 66}, {240, 30}));
 	station.setPosition({static_cast<float>(getPositionPixels().x), static_cast<float>(-getPositionPixels().y)});
 	platform.setPosition({static_cast<float>(getPositionPixels().x), static_cast<float>(-getPositionPixels().y)});
 }
@@ -200,9 +198,12 @@ void Metro::advance(double dt)
 		lastVisitorDay = day;
 		visitorsToday = 0;
 	}
+	// SimTower opens the station at frame 0 (07:00) and closes it at frame 1600
+	// (17:00); trains only run from 10:00 until closing.
 	if (game->time.checkHour(7)) { open = true; spriteNeedsUpdate = true; }
-	if (game->time.checkHour(23) && open) {
+	if (game->time.checkHour(17) && open) {
 		open = false;
+		spriteNeedsUpdate = true;
 		if (trainPresent) {
 			trainPresent = false;
 			nextTrainTime = game->time.absolute + kTrainGapAbs;
@@ -210,7 +211,7 @@ void Metro::advance(double dt)
 		}
 	}
 	if (open) {
-		if (game->time.absolute >= nextTrainTime) {
+		if (game->time.hour >= 10.0 && game->time.absolute >= nextTrainTime) {
 			if (!trainPresent) { trainPresent = true; spriteNeedsUpdate = true; }
 			else { trainPresent = false; spriteNeedsUpdate = true; boardReturnedVisitors(); }
 			scheduleNextTrain();
