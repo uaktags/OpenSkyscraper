@@ -301,11 +301,18 @@ namespace Bld {
 	}
 
 	/// T2EquipDef::LoadExtraData 0x1002f8c0: s32 n + n bytes.
-	static void xferExtra(Archive & a, std::vector<uint8_t> & extra)
+	static void xferExtra(Archive & a, Equip & d)
 	{
+		if (a.writing && d.extraCount >= 0)
+		{
+			int32_t n = d.extraCount;
+			a.s32(n);
+			a.blob(d.extra, d.extra.size());
+			return;
+		}
 		int32_t n = 0;
-		const size_t c = a.count(n, extra.size(), 1, "extra data");
-		a.blob(extra, c);
+		const size_t c = a.count(n, d.extra.size(), 1, "extra data");
+		a.blob(d.extra, c);
 	}
 
 	static void xfer(Archive & a, Tenant & d)
@@ -348,7 +355,7 @@ namespace Bld {
 			if (!a.writing) d.belongList.resize(c);
 			for (uint32_t & p : d.belongList) a.u32(p);
 		}
-		xferExtra(a, d.extra);
+		xferExtra(a, d);
 	}
 
 	static void xfer(Archive & a, MoverModule & d, const std::string & kind)
@@ -406,7 +413,7 @@ namespace Bld {
 		a.s16(d.f6c);
 		xfer(a, d.modules);
 		a.s32(d.refCon);
-		xferExtra(a, d.extra);
+		xferExtra(a, d);
 	}
 
 	static void xfer(Archive & a, Request & d)

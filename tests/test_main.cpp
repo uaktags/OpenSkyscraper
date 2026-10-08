@@ -4261,6 +4261,29 @@ static void testBldShippedSaves()
 			EXPECT(exportTower(graded, hawaii, clamped, clampReport, error, &yootTestPlugins()));
 			EXPECT(clamped.level == 2 && clamped.pool.gameLevel == 2);
 		}
+		{
+			// The plugin table is per save: plugins the template lacks are
+			// added (in id order) when the world can install them; Kegon's
+			// Attraction is refused by Hawaii and dropped.
+			const std::string venues =
+				"<tower funds=\"4321000\" rating=\"3\" time=\"13.5\" ruleset=\"yoottower\" world=\"hawaii\">"
+				"<item type=\"lobby\" x=\"-40\" y=\"0\" width=\"80\" height=\"1\"/>"
+				"<item type=\"floor\" x=\"-40\" y=\"1\" width=\"80\"/>"
+				"<item type=\"yootcathedral\" x=\"-40\" y=\"1\"/><item type=\"attraction\" x=\"0\" y=\"1\"/></tower>";
+			TowerState venueState;
+			BldData withVenues;
+			ImportReport venueReport;
+			EXPECT(parseTowerXml(venues, venueState, error));
+			EXPECT(exportTower(venueState, hawaii, withVenues, venueReport, error, &yootTestPlugins()));
+			EXPECT(venueReport.imported["yootcathedral"] == 1 && venueReport.imported.count("attraction") == 0);
+			int cathedral = 0;
+			for (const PluginInfo & p : withVenues.plugins)
+				if (p.id == "HTAC") cathedral++;
+			EXPECT(cathedral == 1 && withVenues.pluginForItemType(2000) && !withVenues.pluginForItemType(1702));
+			EXPECT(std::is_sorted(withVenues.plugins.begin(), withVenues.plugins.end(), [](const PluginInfo & a, const PluginInfo & b) {
+				return macOrder(a.id) < macOrder(b.id);
+			}));
+		}
 		EXPECT(writeBytes(exported, rebuilt, error) && parseBytes(rebuilt, reread, error));
 		EXPECT(toTowerXml(reread, bldTestPrototypes, again, againReport, error));
 		EXPECT(again.find("type=\"elevator-standard\" x=\"10\" y=\"0\" evaluation=\"50.0\" height=\"3\" showShaft=\"1\"><car altitude=\"2.0\" homeFloor=\"0\"/></item>") != std::string::npos);

@@ -2,6 +2,7 @@
 #include "BldExport.h"
 
 #include "AbstractPlugin.h"
+#include "ItemTypeCatalog.h"
 #include "PluginManager.h"
 #include "YootCatalog.h"
 #include "YootTenants.h"
@@ -12,6 +13,7 @@
 #include <climits>
 #include <cmath>
 #include <cstdio>
+#include <deque>
 #include <map>
 #include <set>
 
@@ -297,6 +299,13 @@ namespace Bld {
 			return -1;
 		};
 		// Plugin-backed tenants name their plugin; find it in the template.
+		std::deque<PluginInfo> added;
+		auto pluginStemLower = [](const PluginInfo & p)
+		{
+			std::string stem = pluginStem(p);
+			for (char & c : stem) c = (char)tolower((unsigned char)c);
+			return stem;
+		};
 		auto pluginForStem = [&](const char * file) -> const PluginInfo *
 		{
 			std::string want = file;
@@ -309,8 +318,40 @@ namespace Bld {
 				for (char & c : stem) c = (char)tolower((unsigned char)c);
 				if (stem == want) return &p;
 			}
+			for (const PluginInfo & p : added)
+				if (pluginStemLower(p) == want) return &p;
+			// Not in the template: the plugin table is per save, so list the
+			// shipped plugin (CPluginInfo of an installed .t2p) in the export.
+			for (const ItemTypeEntry & e : kItemTypeCatalog)
+			{
+				std::string stem = e.file;
+				for (char & c : stem) c = (char)tolower((unsigned char)c);
+				if (stem != want) continue;
+				const std::string cls = e.cls;
+				const char * type = cls == "Tenant" ? "lPnT" : cls == "Mover" ? "lPvM" : cls == "OuterObj" ? "lPoO" : nullptr;
+				if (!type) return nullptr;
+				// T2.exe refuses plugins outside the world's mask ("Plugin
+				// Check Error") and drops their tenants.
+				YootPluginIdentity ident;
+				AbstractPlugin * source = plugins ? plugins->get(std::string(e.file) + ".t2p") : nullptr;
+				if (!source || !source->ensureLoaded() || !readYootPluginIdentity(*source, ident) || !(ident.attrib & world.worldMask)) return nullptr;
+				PluginInfo info;
+				info.type = type;
+				info.id = e.id().str();                 // file order
+				info.itemType = (int16_t)e.itemType;
+				info.mustItem = (int16_t)ident.mustItem;
+				info.name = e.name;
+				std::string upper = e.file;
+				for (char & c : upper) c = (char)toupper((unsigned char)c);
+				info.fileName = "C:\\YOOT\\PLUGINS\\" + upper + ".T2P";
+				added.push_back(info);
+				return &added.back();
+			}
 			return nullptr;
 		};
+		if (!officePlugin) officePlugin = pluginForStem("Office.t2p");
+		if (!restroomPlugin) restroomPlugin = pluginForStem("Restroom.t2p");
+		if (!apartmentPlugin) apartmentPlugin = pluginForStem("Apartment.t2p");
 		// Other native YootTower tenants (hotel rooms, facilities, venues):
 		// the first linked plugin in the template, its TNDF footprint and
 		// variation. Movers and outer objects have no tenant record.
@@ -323,11 +364,12 @@ namespace Bld {
 				if (type != link.prototypeId) continue;
 				for (int k = 0; k < 5 && link.plugins[k]; ++k)
 				{
-					const PluginInfo * info = pluginForStem(link.plugins[k]);
 					AbstractPlugin * source = plugins->get(link.plugins[k]);
 					YootItemStats s;
-					if (!info || !source || !source->ensureLoaded() ||
+					if (!source || !source->ensureLoaded() ||
 						!loadYootItemStats(*source, yootPrototypeVariation(type), s) || s.mover || s.width <= 0) continue;
+					const PluginInfo * info = pluginForStem(link.plugins[k]);
+					if (!info) continue;
 					w = type == "parkinggate" ? 16 : s.width;  // the gate is 16x2 (Csr2)
 					h = type == "parkinggate" ? 2 : std::max(1, s.height);
 					staff = std::max(0, s.belongCapacity);
@@ -411,6 +453,15 @@ namespace Bld {
 				t.inMoneyIndex = 0;                     // single price
 				t.hasBelongList = staff > 0 ? 1 : 0;    // one empty place per staff member
 				t.belongList.assign(staff, 0);
+				// Stadium.t2p LoadExtraData 0x1000be40 leaves the game record
+				// unset for n = 0 and the idle then writes through it; save a
+				// fresh one as SaveExtraData 0x1000f6a0 does (n = 0x405, two
+				// empty team records, 264 bytes).
+				if (it.type == "stadium")
+				{
+					t.extraCount = 0x405;
+					t.extra.assign(264, 0);
+				}
 			}
 			else
 			{
@@ -430,6 +481,12 @@ namespace Bld {
 			if (isYootTenantPrototypeId(it.type) || nativeExported.count(&it)) continue;
 			if (it.type == "elevator-standard" && elevPlugin) continue;
 			drop(it.type, "no YootTower counterpart in the exporter");
+		}
+		// The game writes the table sorted by plugin id (byte order).
+		for (const PluginInfo & p : added)
+		{
+			auto at = std::find_if(out.plugins.begin(), out.plugins.end(), [&](const PluginInfo & q) { return macOrder(q.id) > macOrder(p.id); });
+			out.plugins.insert(at, p);
 		}
 		// Room numbers: per floor, counted from the right.
 		{

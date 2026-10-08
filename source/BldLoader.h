@@ -89,6 +89,9 @@ namespace Bld {
 		CEArray ce;
 		uint32_t valiation = 0;
 		std::vector<uint8_t> extra; ///< def LoadExtraData (s32 n + n bytes)
+		/// Written instead of extra.size() when >= 0: Stadium.t2p's
+		/// SaveExtraData writes n = 0x405 before a shorter record.
+		int32_t extraCount = -1;
 	};
 
 	struct Tenant : Equip
