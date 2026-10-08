@@ -514,6 +514,10 @@ namespace Bld {
 				// people would wait for them forever (oracle: an exported
 				// status-12 Ice Cream never opened).
 				t.hdr.status = 9;
+				// Subway.t2p ChangeStatusOnIdle 0x1000d330 opens only from
+				// status 9, but the idle first bumps a saved 9 to 10, which
+				// the station never leaves (closed, the dark band 300).
+				if (it.type == "subway") t.hdr.status = 8;
 				t.estimate = (int16_t)std::max(0, it.yootEstimate);
 				t.inMoneyIndex = 0;                     // single price
 				t.hasBelongList = staff > 0 ? 1 : 0;    // one empty place per staff member
