@@ -176,7 +176,7 @@ Related documents. This audit cites them and does not repeat them:
 | S1 | **Movie theaters:** Theater ($500k, 500 seats, power 200) and Classic Theater show MV_* movie plugins (SP format). The **Event Center** hosts Pl* hall events and settles `funds += value − cost` at close. | Theater/EventCenter overrides; `world-and-sp-formats.md` §SP | SimTower Cinema / Party Hall. **Implemented (step 14 B):** native Theater (31x3, 500 seats, 10:00-22:00) and Classic Theater (24x2, 40 seats, 12:00-22:00). The player picks the film in the inspector: the Theater offers roadshow films in phase 1 of their cycle (GetMovieLifePhase 0x10043320, cumulative p1/p2/p3 from the tower's first theater day), the Classic offers famous films; the change costs MODF +0xfc (`unkFC`, $20k-$50k). Four shows a day (runningTime + 30), the first door opening sets the target (record, then MODF +0x11c, then capacity; afterwards 95% of yesterday's best, `unk104`), customers are collected until close - bindTime - 60, income `CalcInMoney` at close, and the day's best house becomes the pending R/F that ChkReMake judges at midnight (famous / sequel "PART II" / retired). The clip's PCM sound track plays during shows when Movie/*.MOV is installed (no Cinepak; the still is not shown). Event Center (31x2, capacity 80): one Pl* booking for bookingDays from today (before its doors) or tomorrow within its day mask; visitors are collected 09:00-17:00 only (so the evening Rock Live / Fashion Show draw nobody, as in FUN_1000bec0), funds += cost - outMoney at close (an idle hall pays its outMoney), attendance < unkE0 is a flop with a 36-day cooldown, else the next target is 2 x attendance. Billboard (OODF 20x2): a sponsor ad (the 7 lPdA plugins incl. Aquazone and GAMEWORKSAD) shows for 12 days and pays $50,000 up front. **Oracle:** a Classic Movie Theatre built in T2.exe listed the seven filmKind-2 films, charged $20,000 for Bodyguard Chops, scheduled 12:30/15:00/17:30/20:00 and paid $1,400 at 22:00 from 3 full houses of 40 (`~/yoottower-decomp/venues-agent/`). Visitors are counted, not walked. | MATCH (abstracted visitors) | M |
 | S2 | **Observatory** (Kegon, $1M, open 08:00–18:00), **Boat Deck** (Hawaii, B2 left edge), **Spa / Gathering Area / School / Ticket booth**. | TNDF + overrides | none **Implemented (step 14 B):** native Observatory (Kegon, 17x2, 08:00-18:00, only at unit 81 / row 40 = B32 left edge, error 75; visitors only through a Ticket Booth, "A Ticket Booth is required ..." otherwise), Ticket Booth (12x1, 09:00-16:00, earns `CalcInMoney` of the tickets it sells), Gathering Area (35x2, 10:00-22:00, no income) and Boat Deck (Hawaii, 20x2, 06:00-20:00, only at unit 56 / row 55 = B2 left edge, error 74; visitors come by the cruise). Visitors use `Yoot::venueArrivals` (capacity x DPDF percent[holiday][rain] per stay period) instead of the pool. Spa and School are not implemented. | PARTIAL | M |
 | S3 | **AquaZone** (Aquazone.t2p, about 10 KB) is not a PE item plugin. Its format belongs to the SP agent. | — | none **Resolved (step 14 B):** Aquazone.t2p and GAMEWORKSAD.t2p are lPdA advertise SP plugins (Billboard sponsors, see S1). Gameworks.t2p is an ordinary shop tenant. | MATCH | L |
-| S4 | **Toolbox:** categories and order come from data (`GetSortKey` = category×65536 + toolNo, 0x10065a50). The palette chrome is `DefaultToolPalette.t2p`; icons are each plugin's bitmap 100. | `T2ToolDef::GetSortKey` 0x10065a50, `T2ToolWindow` | Hardcoded toolbox tree (`ToolboxWindow.cpp:34`). | DIVERGENT | H |
+| S4 | **Toolbox:** categories and order come from data (`GetSortKey` = category×65536 + toolNo, 0x10065a50). The palette chrome is `DefaultToolPalette.t2p`; icons are each plugin's bitmap 100. | `T2ToolDef::GetSortKey` 0x10065a50, `T2ToolWindow` | Hardcoded toolbox tree (`ToolboxWindow.cpp:34`). **Implemented:** YootTower mode shows category buttons (OBJMAP 100 `Category` icons) over the selected category's items in GetSortKey order, with each plugin's own item icon (`ToolboxWindowYoot.cpp`). The DefaultToolPalette scroll buttons are not used (the window grows instead). | PARTIAL | H |
 | S5 | **Messages:** an info bar (timed), balloons over people and equipment, alert dialogs, and per-category pay-message rate limiting. | `T2TowerMessage::*`, `T2Settlement::EmitPayToolMessage` 0x10059600 | Single 3 s toast plus modals (`TimeWindow.cpp:298-304`). | PARTIAL | H |
 | S6 | **Open/close hours are data** (TNDF +0x174 / +0x178 minutes, e.g. Burger 08:00–22:00, Office 08:00–17:00, hotel check-in 17:00 / out 11:00). | `item_rules.py` (f174/f178) cross-checked with KTrash 0x1000bba0 | Hours are hardcoded per class. **Implemented:** Plan step 4: open/close/stay minutes are in the catalog (`prototype->yoot->openMinute/closeMinute/bindMinutes`) but the item schedules still use their OpenSky hours. | PARTIAL | M |
 
@@ -303,3 +303,162 @@ V. **Oracle validation** (cross-cutting): for each step, script `tools/yoottower
 **Ambiguities to settle with the oracle:** the W3 world-mask consumer, the W5 must/secret flags, Y-axis
 build-area enforcement, the meaning of the TNDF f170 field, the exact sub-tick rate per speed setting, and
 hotel income timing.
+
+---
+
+## 5. Plugin coverage (2026-10-08)
+
+Every one of the 105 PE plugins and what YootTower mode builds from it. Status:
+**native** = a YootTower-only OpenSky item written for the plugin; **plugin-backed
+family** = one prototype per plugin (`yt_<stem>`, `source/YootTenants.*`,
+`source/Item/YootTenant.*`) whose name, footprint, price, unlock (ATTR mGameLevel and
+world mask) and art come from the plugin and whose behaviour is the family's ported
+ChangeStatusOnIdle / EnterTenant / LeaveTenant; **mapped OpenSky** = an OpenSky prototype
+overlaid with the plugin's catalog data (`yootPrototypeLinks()`); **missing** = no item yet.
+
+| Status | Plugins |
+|---|---|
+| plugin-backed family | 56 (shop 29 incl. Spa, restaurant 22, vending 5) |
+| native | 22 (18 items, 3 worlds, the tool palette) |
+| mapped OpenSky | 19 |
+| missing | 8 |
+
+Plugin-backed families (decompiled with Ghidra, `~/yoottower-decomp/{plugins,tenants}-agent/pout/`):
+
+* **Shop** (Barber.t2p FUN_1000bc20 / 1000bfa0 / 1000c0a0; the Aloha and Orange Julius
+  variants only drop the sound): built (9) -> hiring (10, CollectEmployee at the top of an
+  hour) -> closed (11/12/13) -> staff called at open-60 (14) -> open (30) once all staff are
+  in; customers from the TMDF 2 table every 8-minute idle until close - bindTime - 60;
+  patterns 0 closed, 1 open, 2 from one customer, 3 from half the capacity; at close
+  CalcInMoney is paid ("Income from shop just came in.") and everyone leaves. Spa runs the
+  same machine and pays silently.
+* **Restaurant** (Burger.t2p; French drops the sound): the shop machine, but only the
+  customers leave at close and the staff carry the garbage out (status 15) before going
+  home. Garbage itself is FacilitySystem's hourly delivery (I2), not the plugin's counter.
+* **Vending** (Drink.t2p, byte-identical in Drink, KDrink, Cigar, kCigar, Coin): no staff,
+  open/close by hours (pattern 1 while open; round-the-clock machines keep pattern 0),
+  pays CalcInMoney silently at close.
+
+Deviations: customers are counts, not walking people. CollectCustomer is ported down to
+the member rates (percent x customerUnits x 0.01, Float2Int) and the source gates
+(PLDF place 0 = pool, 1 = tenant, 2 = floor; DPDF day rate), but the visitor pool, routes
+and people on the floor are not: a called customer arrives with the probability of its
+source (pool: DPDF[day][weather] x PLDF place 0 percent; tenant/floor: their PLDF percent
+while the tower has people) after 4 minutes. A 2-day `--sim` of the test tower gave
+29 (Barber) to 891 (coffee.com) customers a day, probably more than the original's pool
+allows. The PADF people animation is not drawn; the shop sheets already show staff.
+
+Oracle check (`~/yoottower-decomp/tenants-agent/`): a Tokyo tower exported by BldTool with
+Barber, Flower, Juice, Book Store, Burger, coffee.com, Ramen, Cigarette and Ice Cream
+loaded in T2.exe; all opened on day 1 and showed the same View patterns OpenSky draws
+(`sbs_shops.png`). It also showed that a tenant exported past hiring without staff people
+never opens, so the exporter now writes plugin tenants just built (status 9) with one empty
+staff place per TNDF staff member.
+
+| Plugin | Code family | Status | OpenSky prototype / owner |
+|---|---|---|---|
+| Aloha | Shop | plugin-backed family (shop) | yt_aloha |
+| Apartment | Residential | missing | hotel/residential agent |
+| Attraction | Venue | native | attraction |
+| Barber | Shop | plugin-backed family (shop) | yt_barber |
+| BCDMart | Shop | plugin-backed family (shop) | yt_bcdmart |
+| BigElev | Mover | mapped OpenSky | elevator-express |
+| Billboard | OuterObj | native | billboard |
+| Boatdeck | Facility/structure | native | boatdeck |
+| Bookstore | Shop | plugin-backed family (shop) | yt_bookstore |
+| Boutique | Shop | plugin-backed family (shop) | yt_boutique |
+| Burger | Restaurant | plugin-backed family (restaurant) | yt_burger |
+| Cathedral | Facility/structure | native | yootcathedral |
+| Chinese | Restaurant | plugin-backed family (restaurant) | yt_chinese |
+| Cigar | Facility/structure | plugin-backed family (vending) | yt_cigar |
+| ClassicTheater | Facility/structure | native | classictheater |
+| Cocktail | Restaurant | plugin-backed family (restaurant) | yt_cocktail |
+| Coffee | Restaurant | plugin-backed family (restaurant) | yt_coffee |
+| Coin | Facility/structure | plugin-backed family (vending) | yt_coin |
+| Condo | Residential | mapped OpenSky | condo / yoot_condo |
+| Convenience | Shop | plugin-backed family (shop) | yt_convenience |
+| DefaultToolPalette | ToolPalette | native | toolbox (ToolboxWindowYoot) |
+| Doctor's | Office | native | doctor |
+| Drink | Facility/structure | plugin-backed family (vending) | yt_drink |
+| Drug | Shop | plugin-backed family (shop) | yt_drug |
+| DutyFree | Shop | plugin-backed family (shop) | yt_dutyfree |
+| Electric | Shop | plugin-backed family (shop) | yt_electric |
+| Escalator | Mover | mapped OpenSky | escalator |
+| EventCenter | Facility/structure | native | eventcenter |
+| FireDepartment | Facility/structure | missing | hotel/residential/parking/fire agent |
+| Floor | Facility/structure | mapped OpenSky | floor / lobby |
+| Flower | Shop | plugin-backed family (shop) | yt_flower |
+| FoodCoat | Restaurant | plugin-backed family (restaurant) | yt_foodcoat |
+| French | Restaurant | plugin-backed family (restaurant) | yt_french |
+| Front | Hotel | missing | hotel/residential agent |
+| Fruits | Shop | plugin-backed family (shop) | yt_fruits |
+| Gameworks | Shop | plugin-backed family (shop) | yt_gameworks |
+| GatheringArea | Facility/structure | native | gatheringarea |
+| Hawai | World | native | world (YootWorld, YootWorldArt) |
+| HawaianCondo | Venue | mapped OpenSky | condo / yoot_condo |
+| Icecream | Shop | plugin-backed family (shop) | yt_icecream |
+| Indian | Restaurant | plugin-backed family (restaurant) | yt_indian |
+| Itarian | Restaurant | plugin-backed family (restaurant) | yt_itarian |
+| J-Pub | Restaurant | plugin-backed family (restaurant) | yt_jpub |
+| J-Snack | Restaurant | plugin-backed family (restaurant) | yt_jsnack |
+| Japanese | Restaurant | plugin-backed family (restaurant) | yt_japanese |
+| Jenny's | Restaurant | plugin-backed family (restaurant) | yt_jennys |
+| Juicebar | Shop | plugin-backed family (shop) | yt_juicebar |
+| kCigar | Facility/structure | plugin-backed family (vending) | yt_kcigar |
+| KDrink | Facility/structure | plugin-backed family (vending) | yt_kdrink |
+| Kegon | World | native | world (YootWorld, YootWorldArt) |
+| KElev | Mover | mapped OpenSky | elevator-standard |
+| KFloor | Facility/structure | mapped OpenSky | floor / lobby |
+| KIcecream | Shop | plugin-backed family (shop) | yt_kicecream |
+| Kids | Shop | plugin-backed family (shop) | yt_kids |
+| KoreanBBQ | Restaurant | plugin-backed family (restaurant) | yt_koreanbbq |
+| KRestroom | Facility/structure | native | restroom |
+| KServ | Mover | mapped OpenSky | elevator-service |
+| KTrashFacility | Facility/structure | native | trashfacility |
+| Largeroom | Facility/structure | mapped OpenSky | hotel_suite |
+| LocalPickle | Shop | plugin-backed family (shop) | yt_localpickle |
+| Maintenance | Facility/structure | missing | hotel/residential agent (Housekeeping) |
+| Men'sClothing | Shop | plugin-backed family (shop) | yt_mensclothing |
+| Mexcan | Restaurant | plugin-backed family (restaurant) | yt_mexcan |
+| Observatory | Facility/structure | native | observatory |
+| Office | Office | mapped OpenSky | office |
+| OldTimeCafe | Restaurant | plugin-backed family (restaurant) | yt_oldtimecafe |
+| OrangeJulius | Shop | plugin-backed family (shop) | yt_orangejulius |
+| Parking | Facility/structure | mapped OpenSky | parking |
+| Petshop | Shop | plugin-backed family (shop) | yt_petshop |
+| Photo | Shop | plugin-backed family (shop) | yt_photo |
+| PowerRoom | Facility/structure | native | powerroom |
+| Ramen | Restaurant | plugin-backed family (restaurant) | yt_ramen |
+| Record | Shop | plugin-backed family (shop) | yt_record |
+| Restroom | Facility/structure | native | restroom |
+| RFront | Hotel | missing | hotel/residential agent |
+| RMaintenance | Facility/structure | missing | hotel/residential agent (Housekeeping) |
+| School | Facility/structure | missing | unassigned (registry 6, 60 students) |
+| SeaFood | Restaurant | plugin-backed family (restaurant) | yt_seafood |
+| Securityroom | Facility/structure | mapped OpenSky | security |
+| ServElev | Mover | mapped OpenSky | elevator-service |
+| Singleroom | Facility/structure | mapped OpenSky | hotel_single |
+| SkyBrdge | Facility/structure | missing | venues agent (Sky Bridge) |
+| Smallroom | Facility/structure | mapped OpenSky | hotel_single / hotel_double |
+| SobaNoodle | Restaurant | plugin-backed family (restaurant) | yt_sobanoodle |
+| Souvenirs | Shop | plugin-backed family (shop) | yt_souvenirs |
+| Spa | Facility/structure | plugin-backed family (shop) | yt_spa |
+| Sportsshop | Shop | plugin-backed family (shop) | yt_sportsshop |
+| Stadium | Venue | native | stadium |
+| Stair | Mover | mapped OpenSky | stairs |
+| StdElev | Mover | mapped OpenSky | elevator-standard |
+| Steak | Restaurant | plugin-backed family (restaurant) | yt_steak |
+| Subway | Facility/structure | native | subway |
+| Suiteroom | Facility/structure | mapped OpenSky | hotel_suite |
+| SuperMarket | Shop | plugin-backed family (shop) | yt_supermarket |
+| SurfShop | Shop | plugin-backed family (shop) | yt_surfshop |
+| Sushibar | Restaurant | plugin-backed family (restaurant) | yt_sushibar |
+| Theater | Facility/structure | native | theater |
+| Ticket | Venue | native | ticketbooth |
+| Tokyo | World | native | world (YootWorld, YootWorldArt) |
+| Toyworld | Shop | plugin-backed family (shop) | yt_toyworld |
+| Trad-Japanese | Restaurant | plugin-backed family (restaurant) | yt_tradjapanese |
+| TrashFacility | Facility/structure | native | trashfacility |
+| Twinroom | Facility/structure | mapped OpenSky | hotel_double |
+| Video&DVD | Shop | plugin-backed family (shop) | yt_videodvd |
+| Weinstein'sToffee | Restaurant | plugin-backed family (restaurant) | yt_weinsteinstoffee |
