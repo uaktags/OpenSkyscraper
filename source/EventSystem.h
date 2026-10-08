@@ -1,7 +1,9 @@
 #pragma once
 
 #include "GameObject.h"
+#include "PowerSystem.h"
 #include "Sprite.h"
+#include "YootEvents.h"
 #include "Math/Vector2D.h"
 
 #include <map>
@@ -45,6 +47,13 @@ namespace OT
 	 * a wider floor's front can no longer slip past the sweep alive.
 	 *
 	 * The burglar event was retired (row 13): it does not exist in the EXE.
+	 *
+	 * YootTower (--ruleset yoottower) replaces the calendar with the world's
+	 * T2EV list (YootEventScheduler; EventSystemYoot.cpp): fire, terrorist,
+	 * Santa and the daily blackout check reuse the paths below with the
+	 * FBEV/TREV/SAEV/BOEV parameters; Uncle Reggae and the rooftop
+	 * decorations are native; the world X-events are hooks (game-parity.md
+	 * V1-V7). Buried treasure is SimTower-only.
 	 */
 	class EventSystem : public GameObject, public sf::Drawable
 	{
@@ -90,6 +99,12 @@ namespace OT
 		void debugTriggerTerror();
 		void debugTriggerTreasure();
 
+		/// YootTower power and blackout (BOEV). Inert in other rulesets.
+		PowerSystem power;
+		/// True while the YootTower T2EV scheduler drives the calendar.
+		bool yootMode() const { return yoot; }
+		const YootEventScheduler & yootScheduler() const { return scheduler; }
+
 	protected:
 		void draw(sf::RenderTarget & target, sf::RenderStates states) const;
 
@@ -100,6 +115,18 @@ namespace OT
 		// --- calendar ---
 		void dailyDispatch();
 		void launchSanta();
+
+		// --- YootTower T2EV scheduler (EventSystemYoot.cpp) ---
+		void syncRuleset();
+		void yootDispatch();
+		void yootBegin(int index);
+		void yootSyncRunning();
+		void yootAdvanceSanta(double frames);
+		void startReggae(int index);
+		void stepReggae(int minute);
+		void endReggae(bool caught);
+		void drawOutDecorations(sf::RenderTarget & target) const;
+		sf::Texture * outDecorationTexture(int imageId) const;
 
 		// --- fire (FireT seg_10e8) ---
 		void startFire();
@@ -141,6 +168,29 @@ namespace OT
 		int  nextGuardFloor(GuardOffice & office, const Guard & g) const;
 
 		Type   type;
+
+		// --- ruleset parameters (SimTower defaults; YootTower from T2EV) ---
+		bool   yoot;
+		std::string yootKey;     ///< world id the scheduler was built for
+		YootEventScheduler scheduler;
+		int    chopperCost;      ///< dollars
+		int    fireEndFrame;     ///< unfought fires stop here
+		int    bombDetonateFrame;
+		int    yootFireIdx, yootTerrorIdx, yootBlackoutIdx, yootSantaIdx;
+		int    santaStartMinute; ///< YootTower: minutes flown since launch
+		double santaMinutes;
+
+		// --- Uncle Reggae (T2Maru_Reggae) ---
+		struct Reggae {
+			bool active = false;
+			int  index = -1;
+			Item::Item * target = nullptr;
+			int  counter = 0;      ///< +0x54: one tick per 3 minutes
+			int  nextMinute = 0;   ///< +0x50
+			int  guardMinute = -1; ///< security arrival (approximation)
+			YootReggaeDef def;
+		} reggae;
+		mutable std::map<int, sf::Texture> outDecoTextures;
 
 		// --- calendar state ---
 		double prevHour;        ///< displayed hour of the previous advance

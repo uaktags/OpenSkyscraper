@@ -7,6 +7,7 @@
 #include "Item/Office.h"
 #include "Item/Condo.h"
 #include "Item/Shop.h"
+#include "Item/PowerRoom.h"
 #include "Person.h"
 
 #include <cstdio>
@@ -22,6 +23,7 @@ InspectorDialog::InspectorDialog(Game * game)
 	window = NULL;
 	content = NULL;
 	floorsButton = NULL;
+	transformerButton = NULL;
 	currentItem = NULL;
 }
 
@@ -33,6 +35,7 @@ void InspectorDialog::close()
 		window.reset();
 		content.reset();
 		floorsButton.reset();
+		transformerButton.reset();
 	}
 	currentItem = NULL;
 	// Clear the debug route overlay so the green line doesn't linger
@@ -80,6 +83,23 @@ void InspectorDialog::buildWindow()
 		if (e) game->elevatorDialog.showForElevator(e);
 	});
 	window->add(floorsButton);
+
+	// "Transformer" button - YootTower Power Room only (PowerRoom.t2p
+	// dialog 0x1bbf "add transformer", FUN_1000c2f0).
+	transformerButton = tgui::Button::create("+ Transformer");
+	transformerButton->setSize(70 * app->uiScale, 18 * app->uiScale);
+	transformerButton->setPosition({144 * app->uiScale, 232 * app->uiScale});
+	transformerButton->setTextSize(11 * app->uiScale);
+	transformerButton->setVisible(false);
+	transformerButton->onPress([this] {
+		Item::PowerRoom * room = dynamic_cast<Item::PowerRoom *>(currentItem);
+		if (!room) return;
+		std::string reason;
+		if (!game->eventSystem.power.addTransformer(room, &reason))
+			game->timeWindow.showMessage(reason);
+		refresh();
+	});
+	window->add(transformerButton);
 
 	// Close button at the bottom.
 	auto closeBtn = tgui::Button::create("Close");
@@ -194,6 +214,16 @@ std::string InspectorDialog::describeItem(Item::Item * item)
 		s << "Waiting:     " << waiting << "\n";
 	}
 
+	if (dynamic_cast<Item::PowerRoom *>(item) && game->eventSystem.power.enabled())
+	{
+		const PowerSystem & power = game->eventSystem.power;
+		s << "\nTransformers: " << power.transformers() << "/" << Item::PowerRoom::kMaxTransformers << "\n";
+		s << "Supply:      " << power.supply() << "\n";
+		s << "Demand:      " << power.demand() << "\n";
+		s << "Transformer: $" << power.transformerPriceDollars() << "\n";
+		if (power.isBlackOut()) s << "BLACKOUT\n";
+	}
+
 	if (!item->people.empty())
 	{
 		s << "\nOccupants\n";
@@ -229,4 +259,7 @@ void InspectorDialog::refresh()
 	// Show the "Floors..." button only when inspecting an elevator.
 	if (floorsButton)
 		floorsButton->setVisible(currentItem->isElevator());
+	if (transformerButton)
+		transformerButton->setVisible(dynamic_cast<Item::PowerRoom *>(currentItem) != NULL &&
+		                              game->eventSystem.power.enabled());
 }

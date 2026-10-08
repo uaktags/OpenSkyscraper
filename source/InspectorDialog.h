@@ -42,6 +42,7 @@ namespace OT
 		tgui::ChildWindow::Ptr window;
 		tgui::Label::Ptr       content;
 		tgui::Button::Ptr      floorsButton;  ///< Shown only for elevators.
+		tgui::Button::Ptr      transformerButton; ///< YootTower Power Room only.
 		Item::Item *           currentItem;
 
 		void buildWindow();
