@@ -4811,6 +4811,14 @@ static void testYootItemArt()
 	EXPECT(rgba[4] == 10 && rgba[5] == 20 && rgba[6] == 30 && rgba[7] == 255);
 	EXPECT(rgba[8] == 40 && rgba[12] == 7);
 	EXPECT(yootPaintAnimatedIndices(idx, pal, 93, 96, rgba) == 1); // Kegon: 93..188
+
+	// Floor.t2p DrawProc: the 14-unit fixed part ends on a unit u % 8 == 7
+	// (oracle: Tokyo lobby at unit 36 shows 11 units, the loop from 47).
+	EXPECT(yootFloorFixedUnits(14, 36) == 11);
+	EXPECT(yootFloorFixedUnits(14, 33) == 14);
+	EXPECT(yootFloorFixedUnits(14, 32) == 7);
+	for (int u = 0; u < 16; ++u)
+		EXPECT((u + yootFloorFixedUnits(14, u)) % 8 == 7);
 }
 
 // Step 14 part A: hotel back office, parking, fire department, Kegon sizes.

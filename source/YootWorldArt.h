@@ -67,11 +67,14 @@ namespace OT
 
 		bool hasFloorView() const { return m_floorViewReady; }
 		/// Empty-floor interior (24 px) between x0 and x1 starting at y `top`.
-		void drawFloorView(sf::RenderTarget & target, float x0, float x1, float top, sf::Color tint) const;
+		/// `floorStart`: the span begins at the floor's left edge, where the
+		/// fixed `View` 100 part goes (Floor.t2p DrawProc 0x1000bc60).
+		void drawFloorView(sf::RenderTarget & target, float x0, float x1, float top, sf::Color tint, bool floorStart = false) const;
 
 		/// True when Floor.t2p has the lobby view for `height` rows (1..3).
 		bool hasLobbyView(int height) const;
-		/// Lobby interior: a fixed 112 px left part then the 256 px loop.
+		/// Lobby interior: the fixed left part (cut so the loop starts on a
+		/// unit u % 8 == 7) then the 256 px loop, phase-locked to unit 0.
 		void drawLobbyView(sf::RenderTarget & target, int height, float x0, float x1, float top, sf::Color tint) const;
 
 		bool hasSides() const { return m_sidesReady; }
@@ -100,6 +103,8 @@ namespace OT
 		const YootBackdropGeometry & geometry() const { return m_geom; }
 
 	private:
+		void drawViewRun(sf::RenderTarget & target, const sf::IntRect * fixed, const sf::IntRect & loop,
+		                 float x0, float x1, float top, sf::Color tint) const;
 		bool loadBackdropPicture(int bitmapId);
 		bool loadDaylightPalette(int paletteId);
 		void recolour();

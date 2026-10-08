@@ -446,6 +446,12 @@ namespace OT
 		return 150 + yootKegonSeasonIndex(month1);
 	}
 
+	int yootFloorFixedUnits(int fixedUnits, int leftUnit)
+	{
+		const int r = (fixedUnits - 7 + leftUnit) % 8;
+		return fixedUnits - (r < 0 ? r + 8 : r);
+	}
+
 	int yootPaintAnimatedIndices(const std::vector<uint8_t> & indices, const std::vector<YootRgb> & palette,
 	                             int start, int count, std::vector<uint8_t> & rgba)
 	{

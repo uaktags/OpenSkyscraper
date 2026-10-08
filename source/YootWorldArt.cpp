@@ -349,15 +349,41 @@ void YootWorldArt::drawFloorStrip(sf::RenderTarget & target, float x0, float x1,
 	target.draw(va, states);
 }
 
-void YootWorldArt::drawFloorView(sf::RenderTarget & target, float x0, float x1, float top, sf::Color tint) const
+void YootWorldArt::drawViewRun(sf::RenderTarget & target, const sf::IntRect * fixed, const sf::IntRect & loop,
+                               float x0, float x1, float top, sf::Color tint) const
 {
-	sf::IntRect loop;
-	if (!m_floorViewReady || !findRect(m_floorMap, "View", 100100, loop)) return;
 	sf::VertexArray va(sf::PrimitiveType::Triangles);
-	pushLoop(va, loop, x0, x1, top, tint);
+	float x = x0;
+	if (fixed)
+	{
+		const int leftUnit = (int)std::lround(x0 / 8.0f) + m_geom.unitOrigin;
+		const float w = std::min(float(yootFloorFixedUnits(fixed->size.x / 8, leftUnit) * 8), x1 - x0);
+		pushQuad(va, x0, top, w, float(fixed->size.y),
+		         float(fixed->position.x), float(fixed->position.y), w, float(fixed->size.y), tint);
+		x += w;
+	}
+	// The loop is phase-locked to world unit 0 (its source column is
+	// unit % loop width), so it lines up across floors and runs.
+	const float shift = float(m_geom.unitOrigin * 8);
+	sf::VertexArray shifted(sf::PrimitiveType::Triangles);
+	pushLoop(shifted, loop, x + shift, x1 + shift, top, tint);
+	for (std::size_t i = 0; i < shifted.getVertexCount(); ++i)
+	{
+		sf::Vertex v = shifted[i];
+		v.position.x -= shift;
+		va.append(v);
+	}
 	sf::RenderStates states;
 	states.texture = &m_floorTex;
 	target.draw(va, states);
+}
+
+void YootWorldArt::drawFloorView(sf::RenderTarget & target, float x0, float x1, float top, sf::Color tint, bool floorStart) const
+{
+	sf::IntRect left, loop;
+	if (!m_floorViewReady || !findRect(m_floorMap, "View", 100100, loop)) return;
+	const bool fixed = floorStart && findRect(m_floorMap, "View", 100, left);
+	drawViewRun(target, fixed ? &left : nullptr, loop, x0, x1, top, tint);
 }
 
 bool YootWorldArt::hasLobbyView(int height) const
@@ -374,22 +400,7 @@ void YootWorldArt::drawLobbyView(sf::RenderTarget & target, int height, float x0
 	if (!m_floorViewReady || !findRect(m_floorMap, "View", 1000 + height * 100, left) ||
 	    !findRect(m_floorMap, "View", 101000 + height * 100, loop))
 		return;
-	sf::VertexArray va(sf::PrimitiveType::Triangles);
-	const float leftW = std::min(float(left.size.x), x1 - x0);
-	pushQuad(va, x0, top, leftW, float(left.size.y),
-	         float(left.position.x), float(left.position.y), leftW, float(left.size.y), tint);
-	// The loop continues from the end of the fixed part.
-	float x = x0 + leftW;
-	while (x < x1)
-	{
-		const float run = std::min(float(loop.size.x), x1 - x);
-		pushQuad(va, x, top, run, float(loop.size.y),
-		         float(loop.position.x), float(loop.position.y), run, float(loop.size.y), tint);
-		x += run;
-	}
-	sf::RenderStates states;
-	states.texture = &m_floorTex;
-	target.draw(va, states);
+	drawViewRun(target, &left, loop, x0, x1, top, tint);
 }
 
 void YootWorldArt::drawTents(sf::RenderTarget & target, float left, float right, float bottom, sf::Color tint) const

@@ -221,7 +221,7 @@ void Floor::render(sf::RenderTarget &target) const
 		bare(floorLeft, floorRight, [&](float l, float r) { yoot->drawRoof(target, l, r, top, yootTint); });
 		auto emptySpan = [&](int left, int right) {
 			if (left >= right) return;
-			yoot->drawFloorView(target, left * 8.0f, right * 8.0f, top + 8.0f, yootTint);
+			yoot->drawFloorView(target, left * 8.0f, right * 8.0f, top + 8.0f, yootTint, left == floorLeft);
 			yoot->drawFloorStrip(target, left * 8.0f, right * 8.0f, top + 32.0f, yootTint);
 		};
 		int from = floorLeft;

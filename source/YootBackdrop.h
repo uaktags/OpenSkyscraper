@@ -168,6 +168,11 @@ namespace OT
 	int yootPaintAnimatedIndices(const std::vector<uint8_t> & indices, const std::vector<YootRgb> & palette,
 	                             int start, int count, std::vector<uint8_t> & rgba);
 
+	/// Units of a floor or lobby view's fixed left part (`fixedUnits` wide)
+	/// drawn at world unit `leftUnit` (Floor.t2p DrawProc 0x1000bc60): it is
+	/// cut so the loop starts on a unit u with u % 8 == 7.
+	int yootFloorFixedUnits(int fixedUnits, int leftUnit);
+
 	/// Kegon.t2p WorldDef::CalcSeasonIndex 0x10014dc0 (1-based month):
 	/// 0 spring (3-5), 1 summer (6-8), 2 autumn (9-10), 3 November, 4 winter.
 	int yootKegonSeasonIndex(int month1);
