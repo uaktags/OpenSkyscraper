@@ -113,6 +113,13 @@ void YootTenant::advance(double dt)
 		in.sources = game->eventSystem.people.enabled() && !game->eventSystem.people.pool.empty() ? this : nullptr;
 		releaseVisitors(m);
 		Yoot::tenantIdle(model, d, in, [] { return std::rand(); }, ev);
+		if (ev.callStaff)
+		{
+			ev.callStaff = false;
+			// Staff the pool cannot send (no member table) come at once.
+			const int sent = game->eventSystem.people.callStaff(this, m);
+			model.staffIn = std::min(model.staff, model.staffIn + std::max(0, model.staff - sent));
+		}
 		releaseVisitors(m);
 		rollStaffAnime();
 	}
@@ -178,6 +185,16 @@ void YootTenant::addPerson(Person * p)
 	YootVisitor * v = dynamic_cast<YootVisitor *>(p);
 	if (!v || v->dest != this) return;
 	const long long now = Yoot::absoluteMinute(game->time.absolute);
+	if (v->home == this)
+	{
+		// T2Tenant::Enter -> AddPopulation: a called staff member is in
+		// (while the tenant still waits for its staff or is open).
+		const bool wanted = (model.status == Yoot::kStatusCalling || isOpen()) && model.staffIn < model.staff;
+		if (wanted) ++model.staffIn;
+		game->eventSystem.people.arrived(v, this, wanted, now + 100000000LL);
+		v->stayEnd = -1;
+		return;
+	}
 	Yoot::TenantEvents ev;
 	const bool admitted = Yoot::customerArrives(model, def(), now, ev);
 	v->stayEnd = admitted ? model.inside.back() : -1;
@@ -224,11 +241,18 @@ void YootTenant::render(sf::RenderTarget & target) const
 void YootTenant::releaseVisitors(long long absMinute)
 {
 	if (people.empty()) return;
-	std::vector<YootVisitor *> inside;
+	std::vector<YootVisitor *> inside, staff;
 	for (Person * p : people)
 	{
 		YootVisitor * v = dynamic_cast<YootVisitor *>(p);
-		if (v && v->phase == YootVisitor::kInTenant && v->inside == this) inside.push_back(v);
+		if (v && v->phase == YootVisitor::kInTenant && v->inside == this) (v->home == this ? staff : inside).push_back(v);
+	}
+	// PushOutAll / SetAllPeopleToSleep: the staff past staffIn go home.
+	while ((int)staff.size() > model.staffIn)
+	{
+		YootVisitor * v = staff.back();
+		staff.pop_back();
+		game->eventSystem.people.pushOut(v);
 	}
 	// T2People::Idle case 11: the start minute (end of stay, or the call of
 	// another tenant) came.

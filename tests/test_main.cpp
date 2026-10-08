@@ -4893,6 +4893,7 @@ static void testYootTenants()
 				in.sources = &src;
 				const int before = m.status;
 				Yoot::tenantIdle(m, def, in, rng, ev);
+				if (ev.callStaff) { ev.callStaff = false; m.staffIn = m.staff; }  // the staff walk in at once
 				if (before < Yoot::kStatusOpen && m.status >= Yoot::kStatusOpen && r.opened < 0) r.opened = in.minute;
 				if (before >= Yoot::kStatusOpen && m.status < Yoot::kStatusOpen && r.closed < 0)
 				{

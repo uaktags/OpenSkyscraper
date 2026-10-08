@@ -177,6 +177,9 @@ namespace OT
 			int income = 0;          ///< dollars (CalcInMoney x 100), may be < 0
 			int paidCustomers = 0;   ///< TotalCustomer (+0xa8) at the payment
 			bool estimateChanged = false;
+			/// CallBelongPeople (with the visitor pool): the staff were sent
+			/// for; each one counts in staffIn when it walks in (AddPopulation).
+			bool callStaff = false;
 		};
 
 		/// Pure state of one tenant (T2Tenant fields the families touch).

@@ -641,6 +641,31 @@ void PeopleSystem::schoolTick(Item::Item * school, std::vector<long long> & arri
 	for (size_t k = 0; in.size() - k > (size_t)std::max(0, inside); ++k) pushOut(in[k]);
 }
 
+int PeopleSystem::callStaff(Item::Item * tenant, long long now)
+{
+	if (!enabled() || pool.empty()) return 0;
+	if (belong[tenant].empty()) hireBelong(tenant);  // a reloaded tower
+	const std::vector<Yoot::PeopleType> & types = belong[tenant];
+	std::vector<int> & flags = belongFlagMap[tenant];
+	flags.resize(types.size(), 0);
+	std::vector<bool> out(types.size(), false);
+	for (const YootVisitor * v : visitorList)
+		if (v->home == tenant && v->belongIndex >= 0 && v->belongIndex < (int)out.size()) out[v->belongIndex] = true;
+	int sent = 0;
+	for (size_t k = 0; k < types.size(); ++k)
+	{
+		if (out[k]) { ++sent; continue; }
+		if (flags[k] & Yoot::kPeopleSick) continue;
+		if (visitorList.size() >= kMaxVisitors) break;
+		YootVisitor * v = spawn(types[k], tenant, now + ((long long)std::rand() * 10) % 6, 0);
+		v->home = tenant;
+		v->belongIndex = (int)k;
+		v->state = Person::kCommuting;
+		++sent;
+	}
+	return sent;
+}
+
 void PeopleSystem::releaseBelong(Item::Item * tenant)
 {
 	std::map<Item::Item *, std::vector<Yoot::PeopleType> >::iterator b = belong.find(tenant);

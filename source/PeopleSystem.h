@@ -180,6 +180,10 @@ namespace OT
 		bool alive(const YootVisitor * v) const;
 		/// From the tenant he poses at to the next one / out of the tower.
 		void vipGo(YootVisitor * v, Item::Item * from, Item::Item * next);
+		/// T2Tenant::CallBelongPeople 0x1005fb80: the hired staff who are
+		/// not out walk to the tenant, each starting (rand() x 10) % 6
+		/// minutes after `now`. Returns how many are on their way or in.
+		int callStaff(Item::Item * tenant, long long now);
 		void vipLeave(YootVisitor * v, Item::Item * from);
 
 		/// Skin::Yoot: the people walking on the floors and the posing VIPs

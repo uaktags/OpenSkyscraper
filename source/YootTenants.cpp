@@ -314,8 +314,11 @@ namespace OT
 					{
 						if (withinMinutes(now, open - 60, open - 52))
 						{
-							// CallBelongPeople: the staff commute in for the opening.
-							m.staffIn = in.reachable ? m.staff : 0;
+							// CallBelongPeople: the staff commute in for the opening
+							// (T2Tenant::CallBelongPeople 0x1005fb80 sends them with
+							// a start 0-4 minutes on; T2Tenant::Enter counts them).
+							if (in.sources && in.reachable) ev.callStaff = true;
+							else m.staffIn = in.reachable ? m.staff : 0;
 							m.status = kStatusCalling;
 							if (restaurant)
 							{
