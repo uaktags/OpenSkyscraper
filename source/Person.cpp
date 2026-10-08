@@ -104,8 +104,40 @@ void Person::deliverJourneyStress()
 	pendingJourneyStress = 0.0;
 }
 
+bool Person::yootRules() const
+{
+	return game && game->activeRules.profile().yootWorld;
+}
+
+bool Person::yootWaitTick()
+{
+	int s = (int)stress;
+	const bool gaveUp = Yoot::waitTick(s);
+	stress = s;
+	if (!gaveUp) return false;
+	yootEstimate = Yoot::incEstimate(yootEstimate, -Yoot::kGiveUpEstimatePenalty);
+	journey.jumpToDestination();
+	return true;
+}
+
 void Person::recordNoRoute(int from, int to)
 {
+	if (yootRules())
+	{
+		// T2People::SolveNoRoute 0x10048c40: +30 per failed attempt; at
+		// 300 "No route to destination.", jump there and -150 estimate.
+		int s = (int)stress;
+		const bool exhausted = Yoot::noRouteTry(s);
+		stress = s;
+		pendingJourneyStress = 0.0;
+		if (!exhausted) return;
+		yootEstimate = Yoot::incEstimate(yootEstimate, -Yoot::kNoRouteEstimatePenalty);
+		yootFinishTrip();
+		std::set<FloorPair> &latched = noRouteMessages[game];
+		if (latched.insert(FloorPair(from, to)).second)
+			game->timeWindow.showMessage("No route to destination.");
+		return;
+	}
 	addStress(kMaxStress);
 	pendingJourneyStress = 0.0;
 	if (!game) return;
@@ -192,7 +224,9 @@ void Person::Journey::set(const Route & r)
 	}
 
 	// Queue wait and movement penalties remain banked until final arrival.
-	person->addJourneyStress(routeStress(r));
+	// YootTower stress comes from waiting and failed routes only (P1).
+	if (!person->yootRules())
+		person->addJourneyStress(routeStress(r));
 	toFloor = nodes.front().toFloor;
 	next();
 }
@@ -207,7 +241,8 @@ void Person::Journey::next()
 	if (nodes.empty()) {
 		item = NULL;
 		toFloor = fromFloor;
-		person->deliverJourneyStress();
+		if (person->yootRules()) person->yootFinishTrip();
+		else person->deliverJourneyStress();
 		return;
 	}
 
@@ -215,7 +250,8 @@ void Person::Journey::next()
 	if (nodes.empty()) {
 		item = NULL;
 		toFloor = fromFloor;
-		person->deliverJourneyStress();
+		if (person->yootRules()) person->yootFinishTrip();
+		else person->deliverJourneyStress();
 		return;
 	}
 
@@ -223,6 +259,21 @@ void Person::Journey::next()
 	toFloor = nodes.front().toFloor;
 	assert(item);
 	item->addPerson(person);
+}
+
+void Person::Journey::jumpToDestination()
+{
+	if (person->at) person->at->removePerson(person);
+	while (nodes.size() > 1) nodes.pop();
+	if (nodes.empty()) {
+		item = NULL;
+		toFloor = fromFloor;
+		return;
+	}
+	fromFloor = toFloor;
+	item    = nodes.front().item;
+	toFloor = nodes.front().toFloor;
+	if (item) item->addPerson(person);
 }
 
 int Person::getWidth()

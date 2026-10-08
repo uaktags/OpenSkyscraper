@@ -49,6 +49,9 @@ namespace OT {
 			private:
 				double fullRetryFrame;
 				double waitStartFrame;
+				/// YootTower: last people-idle tick (absolute minute / 2) that
+				/// charged wait stress.
+				long long yootIdleTick = -1;
 				void applyWatchdog();
 			};
 		}

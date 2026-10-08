@@ -6,6 +6,8 @@
 #include "../../Sprite.h"
 #include "Elevator.h"
 #include "Queue.h"
+#include "../../YootRules.h"
+#include <vector>
 
 using namespace OT;
 using namespace OT::Item::Elevator;
@@ -111,6 +113,25 @@ void Queue::advance(double dt)
 		if (frame >= waitStartFrame && ((int)frame % kQueueFullRetryFrames) == 0)
 			callElevator();
 	}
+	if (!people.empty() && people.front()->yootRules())
+	{
+		// YootTower (P1, T2People::IdleWaitMover 0x10048880): every waiting
+		// person idles once per 2 game minutes and gains +5 stress; at 300
+		// they give up and jump to their destination. Replaces the
+		// SimTower watchdog and journey-bank wait stress.
+		const long long tick = Yoot::absoluteMinute(game->time.absolute) / Yoot::kPeopleIdleMinutes;
+		if (yootIdleTick < 0) yootIdleTick = tick;
+		long long ticks = tick - yootIdleTick;
+		yootIdleTick = tick;
+		for (; ticks > 0 && !people.empty(); --ticks)
+		{
+			std::vector<Person *> waiting(people.begin(), people.end());
+			for (size_t i = 0; i < waiting.size(); ++i)
+				waiting[i]->yootWaitTick(); // may remove the person from this queue
+		}
+		return;
+	}
+	yootIdleTick = -1;
 	applyWatchdog();
 	if (elevator->isService()) return;
 	const double frameDelta = game->time.dta / Time::kBaseSpeed;

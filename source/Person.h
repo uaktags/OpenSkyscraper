@@ -64,6 +64,14 @@ namespace OT {
 		/// diagnostic itself is latched per game/floor pair.
 		void recordNoRoute(int fromFloor, int toFloor);
 
+		/// True under the YootTower profile (stress model P1/P2).
+		bool yootRules() const;
+		/// T2People::IdleWaitMover 0x10048880 for one people-idle tick (2
+		/// game minutes) in a mover queue: +5 stress; at 300 the person
+		/// gives up, jumps to the destination and loses 50 estimate.
+		/// Returns true when the person gave up.
+		bool yootWaitTick();
+
 		virtual void encodeXML(tinyxml2::XMLPrinter &xml);
 		virtual void decodeXML(tinyxml2::XMLElement &xml);
 
@@ -77,6 +85,9 @@ namespace OT {
 			void set(const Route & r);
 
 			void next();
+			/// T2People::JumpToDestination: leave the current mover and
+			/// arrive at the final node directly.
+			void jumpToDestination();
 			int fromFloor;
 			Item::Item * item;
 			int toFloor;

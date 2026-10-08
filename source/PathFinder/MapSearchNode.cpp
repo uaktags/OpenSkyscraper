@@ -6,6 +6,8 @@
 #include "../Item/Item.h"
 #include "FloorNode.h"
 #include "MapSearchNode.h"
+#include "../YootCatalog.h"
+#include "../YootRules.h"
 using namespace OT;
 
 
@@ -152,6 +154,14 @@ float MapSearchNode::GetCost(MapSearchNode &successor) {
 		successor.walkFloorsSinceTransport = 0;
 		successor.walkingHasStairs = false;
 	}
+	// YootTower (P3, T2Mover::CalcScore 0x1003ef20): a mover leg costs its
+	// MVDF score x floors (Stairs 50, Escalator 30, Simple 15, Service 8,
+	// Large 5); walking stays free. Only catalogued movers carry a score,
+	// so SimTower/OpenSky routing is untouched.
+	if (i && i->prototype->yoot && i->prototype->yoot->routeScore > 0 &&
+	    (i->isStairlike() || i->isElevator()))
+		traverse_cost = OT::Yoot::moverRouteScore(i->prototype->yoot->routeScore,
+			successor.mapNode->position.y - mapNode->position.y);
 	successor.g += (float)traverse_cost;
 	return (float)traverse_cost;
 }
