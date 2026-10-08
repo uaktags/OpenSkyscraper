@@ -258,6 +258,8 @@ void Item::encodeXML(tinyxml2::XMLPrinter &xml)
 	xml.PushAttribute("x", position.x);
 	xml.PushAttribute("y", position.y);
 	xml.PushAttribute("evaluation", evaluation);
+	if (yootEstimate != 0)
+		xml.PushAttribute("yootEstimate", yootEstimate);
 	if (underConstruction)
 	{
 		xml.PushAttribute("underConstruction", underConstruction);
@@ -268,6 +270,7 @@ void Item::encodeXML(tinyxml2::XMLPrinter &xml)
 void Item::decodeXML(tinyxml2::XMLElement &xml)
 {
 	evaluation = xml.DoubleAttribute("evaluation", 50.0);
+	yootEstimate = xml.IntAttribute("yootEstimate", 0);
 	// Saved state wins over the Factory's "fresh placement" default so a
 	// save mid-construction restores correctly (and finished items stay
 	// finished after a reload).

@@ -1,5 +1,6 @@
 /* Copyright © 2013 Fabian Schuiki */
 #include "../Game.h"
+#include "../YootRules.h"
 #include "../Math/Rand.h"
 #include "Restaurant.h"
 #include "Hotel.h"
@@ -179,6 +180,14 @@ void Restaurant::advance(double dt)
 		population = walkinsToday;
 		game->populationNeedsUpdate = true;
 		spriteNeedsUpdate = true;
+		if (!revenueSettled && prototype->yoot) {
+			// YootTower E6 (T2Tenant::CalcInMoney 0x1005f620): paid at close,
+			// customers x inMoney / 100 - the daily outMoney.
+			const YootItemStats &y = *prototype->yoot;
+			game->yootBook(Yoot::commercialIncome(customersToday, y), "retail_income", "Income from Restaurant");
+			yootEstimate = Yoot::profitEstimate(customersToday, y.inMoneyFor(0) / kYootMoneyUnit, y.outMoney / kYootMoneyUnit);
+			revenueSettled = true;
+		}
 		if (!revenueSettled) {
 			int amount = customersToday >= 50 ? 10000 : customersToday >= 35 ? 6000
 				: customersToday >= 25 ? 4000 : -6000;

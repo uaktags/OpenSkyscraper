@@ -1,5 +1,6 @@
 /* Copyright © 2024 */
 #include "../Game.h"
+#include "../YootRules.h"
 #include "../Math/Rand.h"
 #include "../Time.h"
 #include "Factory.h"
@@ -332,8 +333,15 @@ void Hotel::advance(double dt)
 		// unavailable; a negative checkoutTime is the durable latch.
 		else if (g->checkoutTime >= 0 && t >= g->checkoutTime)
 		{
-			const int stay = openSkyQuarterlyRent(prototype->id, 0);
-			game->transferFunds(stay, "hotel_income", "Hotel room checkout");
+			if (prototype->yoot) {
+				// YootTower E7 (T2GuestroomTable::CalcInMoney 0x10037a00):
+				// the room's inMoney at its price selection.
+				game->yootBook(Yoot::hotelRoomIncome(*prototype->yoot, game->yootPriceSelection(this)),
+				               "hotel_income", "Hotel room checkout");
+			} else {
+				const int stay = openSkyQuarterlyRent(prototype->id, 0);
+				game->transferFunds(stay, "hotel_income", "Hotel room checkout");
+			}
 			g->checkoutTime = -1;
 			const Route &r = game->findRoute(this, game->mainLobby);
 			if (g->at == this)

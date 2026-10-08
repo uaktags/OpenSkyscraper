@@ -78,6 +78,9 @@ namespace OT {
 		/// Condo::isAttractive() consult this when deciding move-in/vacation.
 		double evaluation;
 		virtual double getEvaluation() const { return evaluation; }
+		/// YootTower tenant estimate on the 1..300 scale (T2Tenant +0x90,
+		/// plan step 8); 0 = not evaluated yet / not YootTower.
+		int yootEstimate = 0;
 
 		/// Construction animation state. Set by Factory::make on fresh
 		/// placement; cleared by Game::advance once time.absolute reaches

@@ -1,6 +1,7 @@
 /* Copyright © 2013 Fabian Schuiki */
 #include "Office.h"
 #include "../Game.h"
+#include "../YootRules.h"
 #include "../Math/Rand.h"
 #include "../Time.h"
 #include "Parking.h"
@@ -138,6 +139,10 @@ void Office::advance(double dt)
 			lit = true;
 			spriteNeedsUpdate = true;
 			rentDeposit = rent;
+			// YootTower: SetKind pays inMoney once on occupancy (Office.t2p
+			// FUN_1000c0c0; oracle: 9 offices paid 9 x $3,000).
+			if (prototype->yoot)
+				rentDeposit = prototype->yoot->inMoneyFor(game->yootPriceSelection(this));
 			// A worker record survives a vacancy, but must not remain in
 			// Item::people (or count toward tower population) while the
 			// office is unlet.

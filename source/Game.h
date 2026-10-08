@@ -331,6 +331,19 @@ bool validateBatchCell(Item::AbstractPrototype * proto, int x, int y, std::strin
 		/// time.quarter advances past this, we call Money::finalizeQuarter
 		/// so the finance window's quarterly accumulators reset.
 		int lastAccountingQuarter;
+		/// YootTower: financial cycle whose office rent (04:52-04:59, day 1)
+		/// has been collected (plan step 7, E4).
+		int yootRentCycle = -1;
+	public:
+		/// YootTower price selection (index into inMoney, 0 = cheapest) for
+		/// an item: shops use their rent class, the rest the OpenSky default
+		/// class, which maps to selection 2 (the YootTower default
+		/// inMoneyIndex seen in Sample Tokyo Map.bld).
+		int yootPriceSelection(const Item::Item * item) const;
+		/// Pay `amount` dollars (+ income / - cost) through the YootTower
+		/// ledger categories; no-op for 0.
+		void yootBook(int amount, const char * category, const char * message);
+	private:
 		double zoom;
 		double2 poi;
 		enum class ViewportDrag { None, Vertical, Horizontal };

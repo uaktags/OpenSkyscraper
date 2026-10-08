@@ -21,6 +21,7 @@
 #include "Item/Metro.h"
 #include "Item/Escalator.h"
 #include "OpenGL.h"
+#include "YootRules.h"
 
 using namespace OT;
 #ifdef _WIN32
@@ -153,6 +154,54 @@ static void settleQuarterlyAccounting(Game *game)
 	const int maintenance = quarterlyMaintenanceCost(game);
 	if (maintenance > 0)
 		game->transferFunds(-maintenance, "maintenance", "Quarterly maintenance");
+}
+
+// YootTower quarter (plan step 7, E3): T2.exe FUN_0041dc40 opens the new
+// quarter's books (T2Settlement::Update) and charges
+// T2FloorInfo::CalcMentenanceCost at midnight of day 1. Each item pays its
+// TNDF/MVDF outMoney: lobbies per unit of width, movers per used car
+// (oracle: Sample Tokyo Map's Simple Elevator paid 2 x $12,000 for 2 of 6
+// car slots), stairs/escalators as 2 modules halved by attr 0x2000.
+// Office rent and commercial income are not part of this settlement.
+static void settleYootQuarter(Game *game)
+{
+	game->money.finalizeQuarter();
+	int total = 0;
+	for (Game::ItemSet::const_iterator it = game->items.begin(); it != game->items.end(); ++it)
+	{
+		Item::Item *item = *it;
+		const YootItemStats *stats = item->prototype->yoot;
+		if (!stats || item->underConstruction) continue;
+		int cars = 0;
+		if (item->isElevator())
+		{
+			Item::Elevator::Elevator *e = static_cast<Item::Elevator::Elevator *>(item);
+			cars = (int)e->cars.size();
+		}
+		else if (item->isStairlike())
+			cars = 2;
+		total += Yoot::maintenanceCost(*stats, item->size.x, cars);
+	}
+	if (total > 0)
+		game->transferFunds(-total, "maintenance", "Quarterly maintenance");
+}
+
+// YootTower office rent (plan step 7, E4; Office.t2p FUN_1000c0c0): every
+// let office pays 3 x inMoney[selection] once per quarter between 04:52
+// and 04:59 on day 1. Oracle (Sample Tokyo Map.bld): 9 offices at
+// inMoneyIndex 2 paid 9 x 3 x $3,000 = $81,000 by 05:24.
+static void collectYootOfficeRent(Game *game)
+{
+	Game::ItemSetByString::const_iterator bucket = game->itemsByType.find("office");
+	if (bucket == game->itemsByType.end()) return;
+	int total = 0;
+	for (Game::ItemSet::const_iterator it = bucket->second.begin(); it != bucket->second.end(); ++it)
+	{
+		Item::Office *office = dynamic_cast<Item::Office *>(*it);
+		if (!office || office->underConstruction || !office->isOccupied() || !office->prototype->yoot) continue;
+		total += Yoot::officeQuarterRent(*office->prototype->yoot, game->yootPriceSelection(office));
+	}
+	game->yootBook(total, "rent_income", "Income from office rentals just came in.");
 }
 
 static double autosaveWallClock()
@@ -373,6 +422,8 @@ Game::Game(Application & app)
 	// Store the absolute three-day financial cycle, not Time::quarter's
 	// presentation value. This survives year wrap without duplicate billing.
 	lastAccountingQuarter = (int)floor(time.absolute / 3.0);
+	yootRentCycle = lastAccountingQuarter -
+		((time.day > 0 || time.hour * 60.0 >= Yoot::kOfficeRentFirstMinute) ? 0 : 1);
 	itemBelowCursor = NULL;
 	toolPrototype = NULL;
 	statusMode = kNormal;
@@ -891,8 +942,10 @@ void Game::advanceSimTick(double dt)
 		autosaveIfDue();
 	}
 	const int financialCycle = (int)floor(time.absolute / 3.0);
+	// YootTower settles at midnight of day 1 (FUN_0041dc40), SimTower at 5:00.
+	const bool yootEconomy = activeRules.profile().yootWorld;
 	const bool quarterlySettlementDue =
-		financialCycle > lastAccountingQuarter && time.hour >= 5.0;
+		financialCycle > lastAccountingQuarter && (yootEconomy || time.hour >= 5.0);
 
 	vipSystem.advance(dt);
 	eventSystem.advance(dt);
@@ -922,11 +975,20 @@ void Game::advanceSimTick(double dt)
 	// leavers do not pay the rent that follows.
 	if (quarterlySettlementDue)
 	{
-		settleQuarterlyAccounting(this);
+		if (yootEconomy) settleYootQuarter(this);
+		else settleQuarterlyAccounting(this);
 		lastAccountingQuarter = financialCycle;
 		// The original pops its financial report right after the
 		// quarterly settlement commits (Wave U row 49).
 		showReport();
+	}
+	// YootTower office rent: day 1, from 04:52 (a tick that jumps over the
+	// 8-minute window still pays once, late).
+	if (yootEconomy && time.day == 0 && financialCycle > yootRentCycle &&
+	    time.hour * 60.0 >= Yoot::kOfficeRentFirstMinute)
+	{
+		collectYootOfficeRent(this);
+		yootRentCycle = financialCycle;
 	}
 
 	if (populationNeedsUpdate) {
@@ -1565,6 +1627,8 @@ void Game::applyNewTowerProfile()
 		time.set(7/78.0);
 	lastAccountingDay = (int)floor(time.absolute);
 	lastAccountingQuarter = (int)floor(time.absolute / 3.0);
+	yootRentCycle = lastAccountingQuarter -
+		((time.day > 0 || time.hour * 60.0 >= Yoot::kOfficeRentFirstMinute) ? 0 : 1);
 	timeWindow.updateFunds();
 	timeWindow.updateRating();
 }
@@ -1622,6 +1686,25 @@ const YootItemStats * Game::yootStats(const Item::Item * item) const
 	return item ? item->prototype->yoot : nullptr;
 }
 
+int Game::yootPriceSelection(const Item::Item * item) const
+{
+	const YootItemStats * stats = yootStats(item);
+	if (!stats) return 0;
+	int rentClass = openSkyDefaultRentClass(item->prototype->id);
+	// Hotel checkout historically used class 0; YootTower rooms start at the
+	// same default selection as every other priced tenant.
+	if (rentClass == 0) rentClass = 1;
+	if (const Item::Shop * shop = dynamic_cast<const Item::Shop *>(item))
+		rentClass = shop->rentClass;
+	return Yoot::selectionFromRentClass(rentClass, (int)stats->inMoney.size());
+}
+
+void Game::yootBook(int amount, const char * category, const char * message)
+{
+	if (amount != 0)
+		transferFunds(amount, category, message);
+}
+
 int Game::lobbyToolHeight() const
 {
 	const bool ctrl = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl);
@@ -1645,6 +1728,7 @@ void Game::encodeXML(tinyxml2::XMLPrinter & xml)
 	if (activeRules.profile().yootWorld) {
 		xml.PushAttribute("world", activeRules.profile().worldId.c_str());
 		xml.PushAttribute("yootVipFlags", (unsigned)yootVipFlags);
+		xml.PushAttribute("yootRentCycle", yootRentCycle);
 	}
 	xml.PushAttribute("skin", skinIdentifier(skin));
 
@@ -1800,8 +1884,11 @@ void Game::decodeXML(tinyxml2::XMLDocument & xml)
 	time.set(root->DoubleAttribute("time"));
 	lastAccountingDay = (int)floor(time.absolute);
 	const int currentCycle = (int)floor(time.absolute / 3.0);
+	const bool yootClock = activeRules.profile().yootWorld;
 	lastAccountingQuarter = root->IntAttribute("accountingCycle",
-		currentCycle - (time.hour < 5.0 ? 1 : 0));
+		currentCycle - (!yootClock && time.hour < 5.0 ? 1 : 0));
+	const bool rentDone = time.day > 0 || time.hour * 60.0 >= Yoot::kOfficeRentFirstMinute;
+	yootRentCycle = root->IntAttribute("yootRentCycle", currentCycle - (rentDone ? 0 : 1));
 	setSpeedMode(root->IntAttribute("speed"));
 	sky.rainyDay = root->BoolAttribute("rainy");
 	selectTool(root->Attribute("tool"));

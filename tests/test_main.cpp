@@ -3324,6 +3324,34 @@ static void testYootEconomy()
 	EXPECT(hotel == 3 * 1200);
 	// The opening maintenance precedes the rent of the same quarter.
 	EXPECT(maintenanceAt < firstRentAt);
+
+	// Oracle (T2.exe under Wine, Sample Tokyo Map.bld, Y1 Mar -> Apr): at
+	// 00:10 the settlement showed lobby 46 units x $1,000, 7 restrooms x
+	// $1,000 and the Simple Elevator 2 used cars x $12,000 = $77,000; by
+	// 05:24 the 9 offices (inMoneyIndex 2) had paid 9 x 3 x $3,000.
+	YootItemStats restroom;
+	OT::AbstractPlugin * restroomPlugin = yootTestPlugins().get("Restroom.t2p");
+	EXPECT(restroomPlugin && loadYootItemStats(*restroomPlugin, 0, restroom));
+	std::vector<Y::LedgerItem> sample(2 + 7 + 9);
+	sample[0].stats = &lobby; sample[0].widthUnits = 46;
+	sample[1].stats = &elev; sample[1].cars = 2;
+	for (int i = 2; i < 9; ++i) sample[i].stats = &restroom;
+	for (int i = 9; i < 18; ++i)
+	{
+		sample[i].kind = Y::LedgerItem::Office;
+		sample[i].stats = &office;
+		sample[i].selection = 2;
+	}
+	const std::vector<Y::LedgerEntry> q2 = Y::simulateLedger(sample,
+		2 * Y::kMinutesPerDay + 20 * 60 + 48, 3 * Y::kMinutesPerDay + 5 * 60 + 24);
+	int q2Maintenance = 0, q2Rent = 0;
+	for (size_t i = 0; i < q2.size(); ++i)
+	{
+		if (q2[i].category == "maintenance") q2Maintenance += q2[i].amount;
+		if (q2[i].category == "rent_income") q2Rent += q2[i].amount;
+	}
+	EXPECT(q2Maintenance == -77000);
+	EXPECT(q2Rent == 81000);
 }
 
 // Step 8: 1..300 tenant estimate and the 70/200 decisions.

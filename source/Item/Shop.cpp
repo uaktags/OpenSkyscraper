@@ -1,5 +1,6 @@
 /* Copyright © 2013 Fabian Schuiki */
 #include "../Game.h"
+#include "../YootRules.h"
 #include "../Math/Rand.h"
 #include "Shop.h"
 #include <string>
@@ -174,6 +175,12 @@ void Shop::advance(double dt)
 		population = walkinsToday;
 		patrons = 0;
 		spriteNeedsUpdate = true;
+		if (prototype->yoot && let) {
+			// YootTower E6: shops earn CalcInMoney at close instead of rent.
+			const YootItemStats &y = *prototype->yoot;
+			game->yootBook(Yoot::commercialIncome(customersToday, y), "retail_income", "Income from Shop");
+			yootEstimate = Yoot::profitEstimate(customersToday, y.inMoneyFor(0) / kYootMoneyUnit, y.outMoney / kYootMoneyUnit);
+		}
 	}
 	if (spriteNeedsUpdate) updateSprite();
 }
