@@ -103,13 +103,14 @@ namespace OT
 		/// EventCenter.t2p FUN_1000dcb0 after an event's last day: attendance
 		/// below unkE0 is a flop (36-day cooldown, its bookings dropped, the
 		/// target falls back to unkDC); otherwise the next target is
-		/// 2 x good + medium visitors (OpenSky counts every visitor as good).
+		/// 2 x good + medium leavers (LeaveTenant hook FUN_1000bcb0).
 		const int kHallEventCooldownDays = 36;
 		bool hallEventFlop(const HallEventDef & def, int attendance);
-		int hallEventNextValue(const HallEventDef & def, int attendance);
-		/// EventCenter.t2p FUN_1000bec0: visitors are only collected between
-		/// the TNDF open time and close - customerUnit - 60 (09:00-17:00), so
-		/// the evening events (Rock Live, Fashion Show) draw nobody.
+		int hallEventNextValue(const HallEventDef & def, int attendance, int good, int medium);
+		/// T2Tenant::CollectCustomer 0x1005f440: visitors are only collected
+		/// in [TNDF open, close - customerUnit - 60) (WithinMinutes is half
+		/// open; Event Center 09:00-17:00), so the evening events (Rock Live,
+		/// Fashion Show) draw nobody.
 		bool hallEventCollects(int minute, int tenantOpen, int tenantClose, int customerUnit);
 
 		// ================================================= ads (Billboard)

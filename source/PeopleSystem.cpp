@@ -981,10 +981,41 @@ void PeopleSystem::arrived(YootVisitor * v, Item::Item * tenant, bool admitted, 
 	pushOut(v);
 }
 
+/// T2PeopleDef +0x64 / +0x68 (blue / yellow stress limits) of a PPDF people
+/// type in the world plugin; 100 / 230 when unknown.
+static void peopleStressLimits(Game * game, int peopleType, int & blue, int & yellow)
+{
+	static std::map<std::string, PeopleList> cache;
+	blue = 100; yellow = 230;
+	YootWorld::Id wid;
+	if (!parseYootWorldIdentifier(game->activeRules.profile().worldId, wid)) return;
+	const std::string plugin = yootWorldPluginFile(wid);
+	std::map<std::string, PeopleList>::iterator c = cache.find(plugin);
+	if (c == cache.end())
+	{
+		PeopleList l;
+		AbstractPlugin * p = game->app.pluginManager.get(plugin);
+		if (!p || !p->ensureLoaded() || !p->getPeopleDefs(l)) l.clear();
+		c = cache.insert(std::make_pair(plugin, l)).first;
+	}
+	for (const PeopleDef & d : c->second)
+		if (d.peopleType == peopleType) { blue = d.stressBlueLimit; yellow = d.stressYellowLimit; return; }
+}
+
 void PeopleSystem::pushOut(YootVisitor * v)
 {
 	Item::Item * from = v->inside;
 	const long long now = Yoot::absoluteMinute(game->time.absolute);
+	if (Item::EventCenter * hall = dynamic_cast<Item::EventCenter *>(from))
+	{
+		// EventCenter.t2p LeaveTenant hook FUN_1000bcb0: good below the blue
+		// limit, medium below the yellow one (stress gained inside: entry
+		// cleared it), bad counts nothing.
+		int blue, yellow;
+		peopleStressLimits(game, v->peopleType.silhouette, blue, yellow);
+		if (v->stress < blue) hall->good++;
+		else if (v->stress < yellow) hall->medium++;
+	}
 	v->prevTenant = from;
 	v->inside = nullptr;
 	if (!v->dest && !v->returns.empty())

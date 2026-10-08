@@ -124,6 +124,9 @@ namespace OT {
 			int span = 0;
 			std::string today;        ///< event attached today (SetHallEventPlugin)
 			int target = 0;           ///< visitors called for today (catalog value)
+			/// Leavers today by stress (LeaveTenant hook FUN_1000bcb0, +0x30 /
+			/// +0x34): below the people type's blue limit, below its yellow.
+			int good = 0, medium = 0;
 			bool runsOn(int day) const { return !event.empty() && day >= startDay && day < startDay + span; }
 
 		protected:

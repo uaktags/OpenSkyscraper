@@ -191,7 +191,7 @@ void VenueSystem::newDay(int day)
 			if (p && p->ensureLoaded() && p->getHallEventDef(def))
 			{
 				const bool flop = Yoot::hallEventFlop(def, e->visitorsToday);
-				hallValue[e->today] = Yoot::hallEventNextValue(def, e->visitorsToday);
+				hallValue[e->today] = Yoot::hallEventNextValue(def, e->visitorsToday, e->good, e->medium);
 				if (flop)
 				{
 					hallCooldown[e->today] = Yoot::kHallEventCooldownDays;
@@ -500,13 +500,14 @@ void VenueSystem::eventCenterTick(Item::EventCenter * e, int minute, int day)
 			e->lastOpenDay = day;
 			e->visitorsToday = 0;
 			e->walking = 0;
+			e->good = e->medium = 0;
 			std::map<std::string, int>::const_iterator v = hallValue.find(e->today);
 			e->target = v != hallValue.end() ? v->second : def.unkDC;
 		}
 		if (e->lastOpenDay == day) e->status = 30;
 		// FUN_1000dc70 on every idle while open: CollectCustomer(target -
 		// walking - inside) with the hall event's table.
-		if (e->status >= 30 && reachable(e) && Yoot::hallEventCollects(minute, tOpen, tClose, 0) &&
+		if (e->status >= 30 && reachable(e) && Yoot::hallEventCollects(minute, tOpen, tClose, stayOf(e, 0)) &&
 		    minute % Yoot::kTenantIdleMinutes == e->idlePhase && std::min(cap, e->target) - e->users() - e->walking > 0)
 			if (const YootTenantDef * d = game->eventSystem.people.venueDef(e, e->today, def.customerTableID))
 				e->walking += game->eventSystem.people.collectVenue(e, *d, cap - e->users() - e->walking,

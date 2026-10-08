@@ -5454,8 +5454,8 @@ static void testYootVenues()
 	EXPECT(Y::theaterAudienceTarget(140, 200, 250, 140, 500, 95) == 190);
 	// Oracle (Classic, 12:00-22:00, bind 120): the 17:30 doors collect, the
 	// 20:00 show does not; 3 full houses of 40 paid $1,400 at 22:00.
-	EXPECT(Y::theaterCollects(1140, 720, 1320, 120) && !Y::theaterCollects(1141, 720, 1320, 120));
-	EXPECT(Y::theaterCollects(1230, 600, 1320, 0) && !Y::theaterCollects(1261, 600, 1320, 0));
+	EXPECT(Y::theaterCollects(1139, 720, 1320, 120) && !Y::theaterCollects(1140, 720, 1320, 120));
+	EXPECT(Y::theaterCollects(1259, 600, 1320, 0) && !Y::theaterCollects(1260, 600, 1320, 0));
 	EXPECT(Y::calcInMoneyUnits(120, 20, 10) * kYootMoneyUnit == 1400);
 	// CalcInMoney: Theater inMoney 30 ($3,000), outMoney 20: 500 tickets = $13,000.
 	const std::map<std::string, YootItemStats> tc = resolveYootCatalog(pm, 0x7);
@@ -5477,9 +5477,9 @@ static void testYootVenues()
 	EXPECT(art.monthMask == 0xF1Fu && Y::hallEventInMonth(art, 4) && !Y::hallEventInMonth(art, 5));
 	EXPECT(Y::hallEventSettlement(tennis.cost, 100) == 30000 && Y::hallEventSettlement(0, 100) == -10000);
 	EXPECT(Y::hallEventFlop(art, 49) && !Y::hallEventFlop(art, 50));
-	EXPECT(Y::hallEventNextValue(art, 10) == 1000 && Y::hallEventNextValue(art, 60) == 120);
-	EXPECT(Y::hallEventCollects(540, 540, 1080, 0) && Y::hallEventCollects(1020, 540, 1080, 0));
-	EXPECT(!Y::hallEventCollects(1021, 540, 1080, 0)); // evening events draw nobody
+	EXPECT(Y::hallEventNextValue(art, 10, 10, 0) == 1000 && Y::hallEventNextValue(art, 60, 50, 10) == 110);
+	EXPECT(Y::hallEventCollects(540, 540, 1080, 0) && Y::hallEventCollects(1019, 540, 1080, 0));
+	EXPECT(!Y::hallEventCollects(1020, 540, 1080, 0)); // evening events draw nobody
 	const HallEventDef rock = hallDef("PlConcert.t2p");
 	EXPECT(rock.openTime == 1080 && rock.bookingDays == 1 && rock.monthMask == 0xFFFu);
 

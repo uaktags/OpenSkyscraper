@@ -135,7 +135,7 @@ namespace OT
 
 		bool theaterCollects(int minute, int open, int close, int bindTime)
 		{
-			return minute >= open && minute <= close - bindTime - 60;
+			return minute >= open && minute < close - bindTime - 60;  // WithinMinutes: [a, b)
 		}
 
 		// ------------------------------------------------------- hall events
@@ -156,14 +156,14 @@ namespace OT
 			return attendance < def.unkE0;
 		}
 
-		int hallEventNextValue(const HallEventDef & def, int attendance)
+		int hallEventNextValue(const HallEventDef & def, int attendance, int good, int medium)
 		{
-			return hallEventFlop(def, attendance) ? def.unkDC : 2 * attendance;
+			return hallEventFlop(def, attendance) ? def.unkDC : 2 * good + medium;
 		}
 
 		bool hallEventCollects(int minute, int tenantOpen, int tenantClose, int customerUnit)
 		{
-			return minute >= tenantOpen && minute <= tenantClose - customerUnit - 60;
+			return minute >= tenantOpen && minute < tenantClose - customerUnit - 60;
 		}
 
 		// --------------------------------------------------------------- ads

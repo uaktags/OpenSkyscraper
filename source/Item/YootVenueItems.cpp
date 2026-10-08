@@ -162,6 +162,8 @@ void EventCenter::encodeXML(tinyxml2::XMLPrinter & xml)
 	xml.PushAttribute("span", span);
 	xml.PushAttribute("today", today.c_str());
 	xml.PushAttribute("target", target);
+	if (good) xml.PushAttribute("good", good);
+	if (medium) xml.PushAttribute("medium", medium);
 }
 
 void EventCenter::decodeXML(tinyxml2::XMLElement & xml)
@@ -172,6 +174,8 @@ void EventCenter::decodeXML(tinyxml2::XMLElement & xml)
 	span = std::max(0, xml.IntAttribute("span", 0));
 	today = xml.Attribute("today") ? xml.Attribute("today") : "";
 	target = std::max(0, xml.IntAttribute("target", 0));
+	good = std::max(0, xml.IntAttribute("good", 0));
+	medium = std::max(0, xml.IntAttribute("medium", 0));
 }
 
 // ---------------------------------------------------------------- billboard
