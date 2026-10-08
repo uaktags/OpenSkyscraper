@@ -81,6 +81,17 @@ namespace OT {
 				bool isService() const { return prototype->icon == 5; }
 				bool canAddCar(int floor) const;
 				bool canResizeTo(int bottom, int height) const;
+
+				/// YootTower MVDF limits (prototype->yoot, plan step 4); without
+				/// a catalog entry they return the SimTower constants.
+				/// maxSpan: 0 = unlimited (Large / Service Elevator).
+				int maxSpan() const;
+				int maxCars() const;
+				/// Stop cap (Large Elevator maxStop 8); 0 = every floor.
+				int maxStops() const;
+				int servicedFloorCount() const;
+				/// False when enabling one more stop would exceed maxStops().
+				bool canAddStop() const;
 				void reassignCalls(Car *car);
 
 				/// Shaft visibility toggle ("Show: Yes/No" in the elevator

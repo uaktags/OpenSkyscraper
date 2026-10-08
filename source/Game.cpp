@@ -389,6 +389,7 @@ Game::Game(Application & app)
 	metroStation = NULL;
 
 	itemFactory.loadPrototypes();
+	applyItemCatalog();
 
 	/*Item::Item * i = itemFactory.prototypes.front()->make(this);
 	addItem(i);
@@ -694,7 +695,10 @@ bool Game::handleEvent(sf::Event & event)
 							}
 						} else {
 							LOG(DEBUG, "clicked elevator %s on floor %i", itemBelowCursor->desc().c_str(), toolPosition.y);
-							if (!e->unservicedFloors.erase(toolPosition.y)) {
+							if (e->unservicedFloors.count(toolPosition.y) && !e->canAddStop()) {
+								// YootTower Large Elevator stop cap (MVDF maxStop).
+								timeWindow.showMessage("This elevator cannot stop at any more floors.");
+							} else if (!e->unservicedFloors.erase(toolPosition.y)) {
 								e->unservicedFloors.insert(toolPosition.y);
 								gameMap.removeNode(MapNode::Point(e->position.x + e->size.x/2, toolPosition.y), itemBelowCursor);
 							} else {
@@ -1572,6 +1576,50 @@ void Game::setRules(const BuildRules & rules)
 	Time::setLinearClock(profile.linearClock);
 	time.calendar = profile.calendar == RulesProfile::Calendar::YootTower
 		? Time::Calendar::YootTower : Time::Calendar::SimTower;
+	applyItemCatalog();
+}
+
+void Game::applyItemCatalog()
+{
+	// Detach and restore first so switching worlds/rulesets never leaves a
+	// dangling prototype->yoot or a YootTower price behind.
+	for (size_t i = 0; i < itemFactory.prototypes.size(); ++i)
+	{
+		Item::AbstractPrototype * p = itemFactory.prototypes[i];
+		p->yoot = nullptr;
+		std::map<std::string, std::pair<int, int> >::const_iterator base = yootBasePrices.find(p->id);
+		if (base != yootBasePrices.end())
+		{
+			p->price = base->second.first;
+			p->carCost = base->second.second;
+		}
+	}
+	yootCatalog.clear();
+	if (!activeRules.profile().yootWorld || itemFactory.prototypes.empty())
+		return;
+
+	// Plan step 4: TNDF/MVDF price, car price and limits from the world's
+	// plugins (E1, M1-M5). Prototypes without an available plugin keep
+	// their OpenSky numbers.
+	yootCatalog = resolveYootCatalog(app.pluginManager, activeRules.profile().worldMask);
+	for (size_t i = 0; i < itemFactory.prototypes.size(); ++i)
+	{
+		Item::AbstractPrototype * p = itemFactory.prototypes[i];
+		std::map<std::string, YootItemStats>::const_iterator s = yootCatalog.find(p->id);
+		if (s == yootCatalog.end()) continue;
+		if (!yootBasePrices.count(p->id))
+			yootBasePrices[p->id] = std::make_pair(p->price, p->carCost);
+		p->yoot = &s->second;
+		p->price = s->second.price;
+		if (s->second.mover && s->second.carPrice > 0)
+			p->carCost = s->second.carPrice;
+	}
+	LOG(INFO, "YootTower item catalog: %zu prototypes overlaid from plugin data", yootCatalog.size());
+}
+
+const YootItemStats * Game::yootStats(const Item::Item * item) const
+{
+	return item ? item->prototype->yoot : nullptr;
 }
 
 int Game::lobbyToolHeight() const
@@ -2086,6 +2134,11 @@ void Game::zoomBy(double factor, const sf::Vector2i * anchorPx)
 void Game::toggleElevatorService(Item::Elevator::Elevator * e, int floor)
 {
 	if (!e) return;
+	if (e->unservicedFloors.count(floor) && !e->canAddStop())
+	{
+		timeWindow.showMessage("This elevator cannot stop at any more floors.");
+		return;
+	}
 	if (!e->unservicedFloors.erase(floor))
 	{
 		e->unservicedFloors.insert(floor);
@@ -2217,6 +2270,13 @@ if (!handled) {
 		constructionBlocked = true;
 		blockReason = toolPrototype->name + " unlocks at " +
 		              std::to_string(minRating + 1) + " stars";
+	}
+	else if (toolPrototype->yoot && toolPrototype->yoot->maxBuild > 0 &&
+	         (int)itemsByType[toolPrototype->id].size() >= toolPrototype->yoot->maxBuild)
+	{
+		// YootTower TenantDef maxBuildCount (W6, T2.exe STRTABLE 9999).
+		constructionBlocked = true;
+		blockReason = toolPrototype->name + " can only be placed once";
 	}
 
 	const int lowestFloor = activeRules.profile().lowestFloor;
@@ -2689,6 +2749,13 @@ bool Game::validateBatchCell(Item::AbstractPrototype * proto, int x, int y, std:
 	if (minRating > rating) {
 		reason = proto->name + " unlocks at " + std::to_string(minRating + 1) + " stars";
 		return false;
+	}
+	if (proto->yoot && proto->yoot->maxBuild > 0) {
+		Game::ItemSetByString::const_iterator same = itemsByType.find(proto->id);
+		if (same != itemsByType.end() && (int)same->second.size() >= proto->yoot->maxBuild) {
+			reason = proto->name + " can only be placed once";
+			return false;
+		}
 	}
 	const int lowestFloor = activeRules.profile().lowestFloor;
 	if (y < lowestFloor) { reason = "Cannot build below floor B" + std::to_string(-lowestFloor); return false; }

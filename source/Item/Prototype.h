@@ -9,6 +9,7 @@
 
 namespace OT {
 	class Game;
+	struct YootItemStats;
 	
 	namespace Item {
 		class Factory;
@@ -25,7 +26,11 @@ namespace OT {
 			int variant;
 			int entrance_offset;
 			int exit_offset;
-			int carCost;    ///< Optional per-car cost for elevator shafts (0 = none).
+			int carCost = 0; ///< Optional per-car cost for elevator shafts (0 = none).
+			/// YootTower catalog entry (TNDF/MVDF data, plan step 4); null
+			/// outside YootTower mode. Owned by Game::yootCatalog, which
+			/// also overlays price and carCost while it is set.
+			const YootItemStats * yoot = nullptr;
 			
 			virtual Item * make(Game * game) = 0;
 			virtual ~AbstractPrototype() {}

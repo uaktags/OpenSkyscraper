@@ -2,6 +2,7 @@
 #include <vector>
 #include "../../Game.h"
 #include "../../Sprite.h"
+#include "../../YootCatalog.h"
 #include "Elevator.h"
 #include "Car.h"
 #include "Queue.h"
@@ -60,10 +61,42 @@ int Elevator::schedulePatienceTicks() const
 	return std::max(0, std::min(3, patience)) * 30;
 }
 
+int Elevator::maxSpan() const
+{
+	// YootTower: MVDF maxLength (Simple 15; Large/Service 0 = any height).
+	if (prototype->yoot) return prototype->yoot->maxLength;
+	return isExpress() ? 0 : kNonExpressMaxSpan;
+}
+
+int Elevator::maxCars() const
+{
+	if (prototype->yoot && prototype->yoot->maxCars > 0)
+		return std::min((int)kMaxCarsPerShaft, prototype->yoot->maxCars);
+	return kMaxCarsPerShaft;
+}
+
+int Elevator::maxStops() const
+{
+	return prototype->yoot ? prototype->yoot->maxStops : 0;
+}
+
+int Elevator::servicedFloorCount() const
+{
+	int n = 0;
+	for (int f = position.y; f < position.y + size.y; ++f)
+		if (!unservicedFloors.count(f)) ++n;
+	return n;
+}
+
+bool Elevator::canAddStop() const
+{
+	return maxStops() <= 0 || servicedFloorCount() < maxStops();
+}
+
 bool Elevator::canResizeTo(int bottom, int height) const
 {
 	if (height < 1) return false;
-	if (!isExpress() && height > kNonExpressMaxSpan) return false;
+	if (maxSpan() > 0 && height > maxSpan()) return false;
 	if (bottom <= -10) return false;
 	if (game->metroStation && bottom < game->metroStation->position.y - kMetroClearanceFloors)
 		return false;
@@ -86,7 +119,7 @@ bool Elevator::canResizeTo(int bottom, int height) const
 
 bool Elevator::canAddCar(int floor) const
 {
-	return (int)cars.size() < kMaxCarsPerShaft &&
+	return (int)cars.size() < maxCars() &&
 	       floor >= position.y && floor < position.y + size.y;
 }
 
@@ -109,6 +142,17 @@ void Elevator::init()
 	maxCarAcceleration = 7.5;
 	maxCarSpeed = 10.0;
 	maxCarCapacity = isExpress() ? 42 : 21;
+	if (prototype->yoot)
+	{
+		// YootTower MVDF: capacity per car (Simple 17, Large 40, Service 21)
+		// and the top speed tier (speed[2], else speed[1]) relative to the
+		// Simple Elevator's 3. The car physics stay OpenSky's.
+		if (prototype->yoot->capacity > 0)
+			maxCarCapacity = prototype->yoot->capacity;
+		const int top = std::max(prototype->yoot->speed[1], prototype->yoot->speed[2]);
+		if (top > 0)
+			maxCarSpeed = 10.0 * top / 3.0;
+	}
 	resetSchedules();
 
 	Item::init();
@@ -408,9 +452,11 @@ bool Elevator::repositionMotor(int motor, int y)
 		height = y - position.y;
 	}
 	if (height < 1) height = 1;
-	if (!isExpress() && height > kNonExpressMaxSpan) return false;
+	if (maxSpan() > 0 && height > maxSpan()) return false;
 	if (!canResizeTo(newy, height)) return false;
 	if (newy == position.y && height == size.y) return false;
+	const int oldBottom = position.y;
+	const int oldTop = position.y + size.y;
 
 	setPosition(int2(position.x, newy));
 	size.y = height;
@@ -430,6 +476,19 @@ bool Elevator::repositionMotor(int motor, int y)
 	{
 		if (*i < newy || *i >= maxY) unservicedFloors.erase(i++);
 		else ++i;
+	}
+	if (maxStops() > 0)
+	{
+		// YootTower Large Elevator: at most maxStop stops (T2MoverDef +0x170,
+		// T2Mover::AddStop). Floors added by this drag become stops, nearest
+		// to the old shaft first, until the cap; the rest stay unserviced.
+		int serviced = 0;
+		for (int f = std::max(newy, oldBottom); f < std::min(maxY, oldTop); ++f)
+			if (!unservicedFloors.count(f)) ++serviced;
+		for (int f = oldTop; f < maxY; ++f)
+			if (serviced < maxStops()) ++serviced; else unservicedFloors.insert(f);
+		for (int f = oldBottom - 1; f >= newy; --f)
+			if (serviced < maxStops()) ++serviced; else unservicedFloors.insert(f);
 	}
 	updateSprite();
 	cleanQueues();

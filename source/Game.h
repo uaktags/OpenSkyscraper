@@ -36,6 +36,7 @@
 #include "EventSystem.h"
 #include "BuildRules.h"
 #include "Skin.h"
+#include "YootCatalog.h"
 
 
 namespace OT {
@@ -51,6 +52,18 @@ namespace OT {
 		/// Switch the active ruleset/profile and apply its process-wide
 		/// clock mode (YootTower minute-linear time) and calendar.
 		void setRules(const BuildRules & rules);
+
+		/// YootTower item catalog (plan step 4): prototype id -> TNDF/MVDF
+		/// stats for the active world. Empty outside YootTower mode.
+		std::map<std::string, YootItemStats> yootCatalog;
+		/// OpenSky price/carCost of every overlaid prototype, restored when
+		/// the catalog is removed.
+		std::map<std::string, std::pair<int, int> > yootBasePrices;
+		/// Overlay (or, outside YootTower, remove) the catalog onto the
+		/// prototypes: price, carCost and prototype->yoot.
+		void applyItemCatalog();
+		/// Catalog entry for an item's prototype, or null.
+		const YootItemStats * yootStats(const Item::Item * item) const;
 
 
 		virtual ~Game();
