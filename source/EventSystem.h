@@ -130,6 +130,13 @@ namespace OT
 		struct Guard;
 		struct GuardOffice;
 
+	public:
+		/// Drop the under-construction tracking entry for a dying item
+		/// (pointer-keyed; SimLess dereferences keys in deterministic runs).
+		void forgetItem(const Item::Item * item);
+
+	private:
+
 		// --- calendar ---
 		void dailyDispatch();
 		void launchSanta();

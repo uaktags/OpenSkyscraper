@@ -70,6 +70,12 @@ namespace OT
 		};
 		const Counts & counts() const { return lastCounts; }
 
+		/// Drop tracking entries for an object that is being destroyed:
+		/// the maps are keyed by pointer and SimLess dereferences keys in
+		/// deterministic runs, so stale entries would be use-after-free.
+		void forget(const Person * p);
+		void forget(const Item::Item * item);
+
 	private:
 		/// Per-item scoring helpers. Each returns a value in [0, 100].
 		double scoreOffice(Game * game, Item::Item * item);

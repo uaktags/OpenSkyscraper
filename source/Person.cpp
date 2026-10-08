@@ -82,7 +82,11 @@ Person::~Person()
 		LOG(DEBUG, "forcefully removed from %s", at->desc().c_str());
 		at->removePerson(this);
 	}
-	if (game) game->people.erase(this);
+	if (game) {
+		game->people.erase(this);
+		// Judge tracking keyed by pointer outlives its keys otherwise.
+		game->forgetTracking(this);
+	}
 }
 
 void Person::addStress(double amount)

@@ -41,6 +41,9 @@ Item::~Item()
 	sprites.clear();
 	while (!people.empty())
 		removePerson(*people.begin());
+	// Tracking containers keyed by this pointer must not outlive it
+	// (SimLess dereferences keys in deterministic mode).
+	if (game) game->forgetTracking(this);
 		}
 
 void Item::setPosition(int2 p)

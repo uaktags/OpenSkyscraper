@@ -3200,6 +3200,17 @@ void Game::updateRoutes()
 	}
 }
 
+void Game::forgetTracking(const Person * p)
+{
+	judgeSystem.forget(p);
+}
+
+void Game::forgetTracking(const Item::Item * item)
+{
+	judgeSystem.forget(item);
+	eventSystem.forgetItem(item);
+}
+
 /** Recomputes queued lobby routes, bounded to a few milliseconds per frame
  *  so a full rebuild of a maxed tower spreads over a couple of seconds
  *  instead of blocking the load or the frame loop. */

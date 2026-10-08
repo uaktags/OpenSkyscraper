@@ -308,6 +308,14 @@ namespace OT {
 		void decodeXML(tinyxml2::XMLDocument & xml);
 		void reloadGUI();
 
+		/// Deregister a dying object from the pointer-keyed tracking
+		/// containers (JudgeSystem visitorDaySeen/badDayStreak, EventSystem
+		/// pendingBuilds). SimLess dereferences its keys during deterministic
+		/// runs, so a stale entry for a freed object would be a
+		/// use-after-free on the next find()/insert().
+		void forgetTracking(const Person * p);
+		void forgetTracking(const Item::Item * item);
+
 	private:
 		void clearWorld();
 		/// New-tower funds, rating and clock from the active profile.

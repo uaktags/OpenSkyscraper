@@ -504,6 +504,16 @@ bool JudgeSystem::reviewHotels(Game * game)
 	return false;
 }
 
+void JudgeSystem::forget(const Person * p)
+{
+	visitorDaySeen.erase(const_cast<Person *>(p));
+}
+
+void JudgeSystem::forget(const Item::Item * item)
+{
+	badDayStreak.erase(const_cast<Item::Item *>(item));
+}
+
 void JudgeSystem::reviewUnderperformers(Game * game)
 {
 	// ExpandoBadHotel equivalent. The original dynamically grew/shrank

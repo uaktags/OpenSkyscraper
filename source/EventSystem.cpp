@@ -755,6 +755,11 @@ void EventSystem::armTreasureLatch(int star)
 	treasureLatched = treasureCondition(star);
 }
 
+void EventSystem::forgetItem(const Item::Item * item)
+{
+	pendingBuilds.erase(const_cast<Item::Item *>(item));
+}
+
 void EventSystem::notifyBuilt()
 {
 	// NotifyFacilityBuilt (1148:0163): on every successful build an armed
