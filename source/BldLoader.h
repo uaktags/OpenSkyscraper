@@ -311,7 +311,10 @@ namespace Bld {
 		std::vector<TowerEventRec> events;
 
 		Rect mainWindow;
-		int32_t scrollH = 0, scrollV = 0;
+		/// Main view scroll in pixels at the 1:1 zoom (36 px per row, 8 px
+		/// per unit). Vertical first: bld.py's "scrollH"/"scrollV" names are
+		/// swapped (checked against the oracle).
+		int32_t scrollTop = 0, scrollLeft = 0;
 		Rect toolPalette, controlPalette, messageWindow, unusedRect;
 		uint8_t uiFlags[4] = {0, 0, 0, 0};
 		uint16_t searchedTenant = 0;

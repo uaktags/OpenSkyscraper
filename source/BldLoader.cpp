@@ -615,8 +615,8 @@ namespace Bld {
 			}
 		});
 		a.srect(d.mainWindow);
-		a.s32(d.scrollH);
-		a.s32(d.scrollV);
+		a.s32(d.scrollTop);
+		a.s32(d.scrollLeft);
 		a.srect(d.toolPalette);
 		a.srect(d.controlPalette);
 		a.srect(d.messageWindow);
@@ -1013,7 +1013,10 @@ namespace Bld {
 
 			// T2Tenant status: 8 = for rent, 10 = contracted, 12+ = open/working.
 			const bool occupied = t.hdr.status >= 10;
-			const int residents = t.hasBelongList ? (int)t.belongList.size() : 0;
+			// The belong list has one slot per staff/resident place; filled
+			// slots hold people ids.
+			int residents = 0;
+			for (uint32_t id : t.belongList) residents += id != 0 ? 1 : 0;
 			if (proto == "lobby")
 			{
 				snprintf(buf, sizeof(buf), " width=\"%d\" height=\"%d\"", w, h);
