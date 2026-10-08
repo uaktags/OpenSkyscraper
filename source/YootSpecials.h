@@ -61,8 +61,9 @@ namespace OT
 			void reset17();
 		};
 		const char * const kHotelIncomeMessage = "Income from Hotel Facilities just came in.";
-		/// Front.t2p DefIdleProc 0x10013970: while 07:00..07:07 or
-		/// 22:00..22:07, guest rooms exist (registry 1) but no Front Desk.
+		/// Front.t2p 0x10013970: while 07:00..07:07 or 22:00..22:07, guest
+		/// rooms exist (registry 1) but no Front Desk. Dead code in the shipped
+		/// game: vtable slot 50, past T2TenantDef's 50 virtuals; kept for reference.
 		bool frontDeskWarningMinute(int minuteOfDay);
 		const char * const kFrontDeskWarning = "A Front is required to make the Hotel Facilities work.";
 
@@ -120,8 +121,9 @@ namespace OT
 			bool leave(int peopleId);
 			void updatePattern();
 		};
-		/// Parking.t2p DefIdleProc 0x1000cb60: while 06:10..06:19 or
-		/// 21:10..21:19 and no parking has been built.
+		/// Parking.t2p 0x1000cb60: while 06:10..06:19 or 21:10..21:19 and no
+		/// parking is built. Dead code (vtable slot 50, never called; the
+		/// oracle at grade 3 never showed it); kept for reference.
 		bool parkingWarningMinute(int minuteOfDay);
 		const char * const kParkingWarning = "The residents are requesting parking facilities.";
 		/// T2People::MoveToTowerEntrance 0x10048910: a driver that finds no

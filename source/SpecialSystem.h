@@ -30,7 +30,11 @@ namespace OT
 	 * - rooms are (re)linked every game hour and when a desk is built
 	 *   instead of only when the desk's staff arrive (FUN_10013b70);
 	 * - one maid trip covers up to three dirty rooms, each drawn as its own
-	 *   housekeeper walking from the Housekeeping item. */
+	 *   housekeeper walking from the Housekeeping item.
+ * Not shown: "A Front is required..." and "The residents are requesting
+ * parking facilities." live in vtable slot 50 of Front.t2p / Parking.t2p,
+ * past T2TenantDef's 50 virtuals, so the engine never calls them (the
+ * oracle never showed the parking one at grade 3 either). */
 	class SpecialSystem : public GameObject
 	{
 	public:
@@ -73,7 +77,6 @@ namespace OT
 		int lastMinute, prevMinute;
 		long long lastAbsMinute;
 		size_t lastItemCount;
-		bool frontWarned, parkingWarned;
 		std::map<Item::Item *, Item::FrontDesk *> roomDesk;
 		std::map<Person *, Item::ParkingLot *> parked;
 		struct Trip { Item::Housekeeping * from; std::vector<Item::Hotel *> rooms; };
@@ -92,6 +95,5 @@ namespace OT
 		void deskTick(int minute);
 		void housekeepingTick(int minute);
 		void parkingTick();
-		void warnings(int minute);
 	};
 }

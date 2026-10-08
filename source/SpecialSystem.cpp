@@ -59,7 +59,6 @@ void SpecialSystem::reset()
 	lastMinute = prevMinute = -1;
 	lastAbsMinute = -1;
 	lastItemCount = 0;
-	frontWarned = parkingWarned = false;
 	roomDesk.clear();
 	parked.clear();
 	trips.clear();
@@ -158,7 +157,6 @@ void SpecialSystem::minuteTick(int minute)
 	deskTick(minute);
 	housekeepingTick(minute);
 	if (minute % 60 == 0 || prevMinute < 0 || minute / 60 != prevMinute / 60) parkingTick();
-	warnings(minute);
 }
 
 void SpecialSystem::linkRooms()
@@ -337,33 +335,6 @@ void SpecialSystem::parkingTick()
 			}
 		parked.clear();
 	}
-}
-
-void SpecialSystem::warnings(int minute)
-{
-	// Front.t2p DefIdleProc 0x10013970 and Parking.t2p 0x1000cb60 run once
-	// the plugin is loaded (its grade) and none of the item is built.
-	auto unlocked = [&](const char * id) {
-		const int r = game->activeRules.minRatingToBuild(id);
-		return r != BuildRules::kUnavailable && r <= game->rating;
-	};
-	if (Yoot::frontDeskWarningMinute(minute)) {
-		bool rooms = false;
-		for (const char * kind : kRoomKinds) rooms = rooms || !itemsOf(game, kind).empty();
-		if (!frontWarned && rooms && unlocked("frontdesk") && itemsOf(game, "frontdesk").empty()) {
-			frontWarned = true;
-			game->timeWindow.showMessage(Yoot::kFrontDeskWarning);
-			LOG(IMPORTANT, "%s (%02d:%02d)", Yoot::kFrontDeskWarning, minute / 60, minute % 60);
-		}
-	} else frontWarned = false;
-	if (Yoot::parkingWarningMinute(minute)) {
-		if (!parkingWarned && unlocked("parkinggate") &&
-		    itemsOf(game, "parkinggate").empty() && itemsOf(game, "parkinglot").empty()) {
-			parkingWarned = true;
-			game->timeWindow.showMessage(Yoot::kParkingWarning);
-			LOG(IMPORTANT, "%s (%02d:%02d)", Yoot::kParkingWarning, minute / 60, minute % 60);
-		}
-	} else parkingWarned = false;
 }
 
 std::vector<std::pair<Item::Item *, int> > SpecialSystem::firemen()
