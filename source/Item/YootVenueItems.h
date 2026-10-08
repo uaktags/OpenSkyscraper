@@ -29,6 +29,12 @@ namespace OT {
 			double arrivalCarry = 0;  ///< fractional arrivals (VenueSystem)
 			int lastOpenDay = -1;     ///< absolute day the venue last opened
 			int settledDay = -1;      ///< absolute day of the last settlement
+			int walking = 0;          ///< T2Tenant +0x98: called, on their way
+			int idlePhase = 0;        ///< minute (mod 8) of the plugin idle
+			int idleStatus = 10;      ///< status at the last plugin idle
+
+			/// A walking visitor arrives (VenueSystem::enter).
+			virtual void addPerson(Person * p);
 
 			int openMinute() const;
 			int closeMinute() const;

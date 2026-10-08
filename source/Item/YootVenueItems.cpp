@@ -1,9 +1,11 @@
 /* Copyright (c) 2026 OpenSkyscraper Project */
 #include "../Game.h"
 #include "../Logger.h"
+#include "../PeopleSystem.h"
 #include "../YootCatalog.h"
 #include "../YootItemArt.h"
 #include "../YootMovie.h"
+#include "../YootRules.h"
 #include "YootVenueItems.h"
 
 #include <algorithm>
@@ -42,6 +44,14 @@ void YootVenue::init()
 	status = 10;
 	visitorsToday = 0;
 	arrivalCarry = 0;
+	idlePhase = (int)(((unsigned)(position.x * 31 + position.y * 17)) % Yoot::kTenantIdleMinutes);
+}
+
+void YootVenue::addPerson(Person * p)
+{
+	YootFacility::addPerson(p);
+	if (YootVisitor * v = dynamic_cast<YootVisitor *>(p))
+		if (v->dest == this) game->eventSystem.venues.enter(this, v);
 }
 
 int YootVenue::openMinute() const

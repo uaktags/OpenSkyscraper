@@ -256,7 +256,7 @@ YootVisitor * PeopleSystem::spawn(const Yoot::PeopleType & type, Item::Item * de
 	return v;
 }
 
-int PeopleSystem::callFromPool(Item::YootTenant * tenant, const YootTenantDef & def, int free, long long now)
+int PeopleSystem::callFromPool(Item::Item * tenant, const YootTenantDef & def, int free, long long now)
 {
 	if (visitorList.size() >= kMaxVisitors) return 0;
 	const unsigned mask = routeMask(tenant, Yoot::customerScore(def, 0));
@@ -264,7 +264,7 @@ int PeopleSystem::callFromPool(Item::YootTenant * tenant, const YootTenantDef & 
 	const int minute = (int)(((now % 1440) + 1440) % 1440);
 	const unsigned flag = def.customers.specialFlag;
 	return Yoot::collectFromPool(def, pool, mask, free, minute, rngInt,
-		[&](const Yoot::PeopleType & t, int start) { spawn(t, tenant, now + (start - minute), flag); });
+		[&](const Yoot::PeopleType & t, int start) { spawn(t, collectDest ? collectDest : tenant, now + (start - minute), flag); });
 }
 
 namespace
@@ -378,7 +378,7 @@ Item::Item * PeopleSystem::selectNearTenant(Item::Item * tenant, int score)
 	return near[std::rand() % near.size()];
 }
 
-int PeopleSystem::callFromTenant(Item::YootTenant * tenant, const YootTenantDef & def, int free, long long now)
+int PeopleSystem::callFromTenant(Item::Item * tenant, const YootTenantDef & def, int free, long long now)
 {
 	// T2Tenant::CollectCustomerFromTenant 0x1005f0c0: the people inside a
 	// tenant near the entrance (SelectNearTenant) within the PLDF tenant
@@ -396,16 +396,16 @@ int PeopleSystem::callFromTenant(Item::YootTenant * tenant, const YootTenantDef 
 			if (((unsigned)v->yootFlags & flag) != flag) continue;
 			if (v->freeTime(now) <= def.bindMinutes || sameKind(v->prevTenant, tenant)) continue;
 			if (!Yoot::checkWithDemand(v->peopleType, m, econo)) continue;
-			v->dest = tenant;
+			v->dest = collectDest ? collectDest : tenant;
 			v->startMinute = now;
-			v->goingTo = tenant->prototype->name;
+			v->goingTo = v->dest->prototype->name;
 			++got;
 		}
 		return got;
 	});
 }
 
-int PeopleSystem::callFromFloor(Item::YootTenant * tenant, const YootTenantDef & def, int free, long long now)
+int PeopleSystem::callFromFloor(Item::Item * tenant, const YootTenantDef & def, int free, long long now)
 {
 	// T2Tenant::CollectCustomerFromFloor 0x1005f250 / StopOnHisWay
 	// 0x100494b0: people walking on the tenant's floor (the floor tenant's
@@ -437,13 +437,14 @@ int PeopleSystem::callFromFloor(Item::YootTenant * tenant, const YootTenantDef &
 			if (!Yoot::checkWithDemand(v->peopleType, m, econo)) continue;
 			if (v->returns.size() >= 3) continue;  // SetDestinationToReturn failed
 			v->returns.push_back(std::make_pair(v->dest, v->startMinute));
-			v->dest = tenant;
+			v->dest = collectDest ? collectDest : tenant;
 			v->startMinute = now;
-			v->goingTo = tenant->prototype->name;
+			v->goingTo = v->dest->prototype->name;
 			v->state = Person::kShopping;
 			// ChangeStatus(3): a new route from where the person stands.
 			v->journey.clear();
-			beginWalk(v, tenant, floor, YootVisitor::kWalkDest);
+			if (v->dest->position.y == floor) beginWalk(v, v->dest, floor, YootVisitor::kWalkDest);
+			else walkTo(v, tenant, v->dest, now);
 			++got;
 		}
 		return got;
@@ -488,6 +489,89 @@ int PeopleSystem::drawVisitors(Item::Item * item, int n)
 		k = (k + 1) % members;
 	}
 	return drawn;
+}
+
+// ------------------------------------------------------------------ venues
+
+const YootTenantDef * PeopleSystem::venueDef(Item::Item * venue, const std::string & subPlugin, int tableId)
+{
+	if (!venue->prototype->yoot) return nullptr;
+	const std::string & plugin = venue->prototype->yoot->plugin;
+	const std::string key = plugin + "|" + subPlugin + "|" + std::to_string(tableId);
+	std::map<std::string, bool>::const_iterator known = venueDefValid.find(key);
+	if (known != venueDefValid.end()) return known->second ? &venueDefs[key] : nullptr;
+	YootTenantDef d;
+	bool ok = false;
+	AbstractPlugin * p = game->app.pluginManager.get(plugin);
+	const YootTenantPlugin entry = {plugin.c_str(), venue->prototype->id.c_str(), YootTenantFamily::None};
+	if (p && p->ensureLoaded() && loadYootTenantDef(*p, entry, d))
+	{
+		ok = d.hasCustomers;
+		if (!subPlugin.empty())
+		{
+			// T2Tenant::SetCustomerTable 0x10062c00: the sub-plugin's table.
+			AbstractPlugin * sp = game->app.pluginManager.get(subPlugin);
+			MemberTableDef t;
+			ok = sp && sp->ensureLoaded() && sp->getMemberTable(t, tableId) && !t.members.empty();
+			if (ok)
+			{
+				d.customers = t;
+				d.hasCustomers = true;
+				d.hasDayParam = t.dayParamID != 0 && sp->getDayParamDef(d.dayParam, t.dayParamID);
+				d.hasPlaceParam = t.placeParamID != 0 && sp->getPlaceParamDef(d.placeParam, t.placeParamID);
+				d.bindMinutes = 1;
+			}
+		}
+	}
+	venueDefValid[key] = ok;
+	if (!ok) return nullptr;
+	venueDefs[key] = d;
+	return &venueDefs[key];
+}
+
+int PeopleSystem::collectVenue(Item::Item * venue, const YootTenantDef & def, int free, long long now, Item::Item * dest)
+{
+	if (!enabled() || pool.empty() || free <= 0 || visitorList.size() >= kMaxVisitors) return 0;
+	// CollectCustomer 0x1005f440 after the venue's own gates: the pool
+	// (IsCollectFromPool 0x10063430: PLDF rate and DPDF holiday rate, fair
+	// weather), then the tenant and the floor sources by their PLDF rates.
+	collectDest = dest && dest != venue ? dest : nullptr;
+	auto roll = [](uint32_t percent) { return Yoot::float2IntRng((float)percent * 0.01f, rngInt) != 0; };
+	const bool holiday = game->time.isHoliday();
+	int called = 0;
+	bool fromPool = !def.hasPlaceParam || roll(def.placeParam.places[0].percent);
+	if (fromPool && def.hasDayParam && !roll(def.dayParam.percent[holiday ? 1 : 0][0])) fromPool = false;
+	if (fromPool) called += callFromPool(venue, def, free - called, now);
+	if (def.hasPlaceParam && roll(def.placeParam.places[1].percent) && free - called > 0)
+		called += callFromTenant(venue, def, free - called, now);
+	if (def.hasPlaceParam && roll(def.placeParam.places[2].percent) && free - called > 0)
+		called += callFromFloor(venue, def, free - called, now);
+	collectDest = nullptr;
+	return called;
+}
+
+std::vector<YootVisitor *> PeopleSystem::visitorsIn(Item::Item * item) const
+{
+	return visitorsInside(item);
+}
+
+void PeopleSystem::releaseVisitors(Item::YootFacility * f, long long now)
+{
+	if (f->people.empty()) return;
+	std::vector<YootVisitor *> inside = visitorsInside(f);
+	// T2People::Idle case 11: the stay ended.
+	for (size_t k = 0; k < inside.size();)
+	{
+		YootVisitor * v = inside[k];
+		if (v->startMinute > now) { ++k; continue; }
+		std::vector<long long>::iterator e = std::find(f->leaveAt.begin(), f->leaveAt.end(), v->stayEnd);
+		if (e != f->leaveAt.end()) f->leaveAt.erase(e);
+		inside.erase(inside.begin() + k);
+		pushOut(v);
+	}
+	// PushOutAll / PushOutCustomer(n) shrank the list: the first due leave.
+	std::stable_sort(inside.begin(), inside.end(), [](const YootVisitor * a, const YootVisitor * b) { return a->startMinute < b->startMinute; });
+	for (size_t k = 0; inside.size() - k > f->leaveAt.size(); ++k) pushOut(inside[k]);
 }
 
 // --------------------------------------------------------------- lifecycle

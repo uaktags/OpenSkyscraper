@@ -15,6 +15,7 @@ namespace tinyxml2 { class XMLPrinter; class XMLElement; }
 
 namespace OT
 {
+	class YootVisitor;
 	namespace Item { class Item; class YootVenue; class Theater; class EventCenter; class Billboard; class Subway; }
 
 	/** YootTower venues, final items, transport and cosmetic world events
@@ -25,9 +26,11 @@ namespace OT
 	 * PowerSystem and FacilitySystem; every entry point is a no-op outside
 	 * YootTower.
 	 *
+	 * The audiences are pool people called by T2Tenant::CollectCustomer
+	 * from each venue plugin's 8-minute idle (PeopleSystem::collectVenue);
+	 * they walk in, stay by the venue's EnterCustomer rule and walk out.
+	 *
 	 * Simplifications (documented in game-parity.md):
-	 * - venue visitors are counted (Yoot::venueArrivals from the plugin's
-	 *   DPDF) and do not walk; subway riders become Metro visitors;
 	 * - the Event Center keeps one booking instead of the 12-day ring;
 	 * - the baseball naming dialog has no fireworks after it. */
 	class VenueSystem : public GameObject
@@ -50,6 +53,10 @@ namespace OT
 
 		/// Inspector lines for venues ("" if none).
 		std::string describe(Item::Item * item);
+
+		/// A called visitor reaches the venue (the plugin's EnterCustomer):
+		/// admitted while open, with the venue's stay.
+		void enter(Item::YootVenue * v, YootVisitor * p);
 
 		// --- player choices (inspector) ---
 		/// Labels and plugin names offered for a theater / event center /
@@ -114,6 +121,10 @@ namespace OT
 		void minuteTick(int minute);
 		void newDay(int day);
 		void collect(Item::YootVenue * v, int minute, int stay);
+		/// One CollectCustomer for the venue with its own table, the people
+		/// walking to `dest` (null: the venue).
+		void collectNow(Item::YootVenue * v, Item::Item * dest = nullptr);
+		void ticketBoothIdle(Item::YootVenue * booth, Item::YootVenue * obs);
 		void pay(Item::Item * item, int dollars, const char * message);
 		void theaterTick(Item::Theater * t, int minute, int day);
 		void eventCenterTick(Item::EventCenter * e, int minute, int day);

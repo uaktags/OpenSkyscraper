@@ -15,7 +15,7 @@ namespace tinyxml2 { class XMLPrinter; class XMLElement; }
 namespace OT
 {
 	struct YootTenantDef;
-	namespace Item { class Item; class YootTenant; namespace Elevator { class Elevator; } }
+	namespace Item { class Item; class YootTenant; class YootFacility; namespace Elevator { class Elevator; } }
 
 	/** A YootTower visitor called from the pool (T2People with a
 	 * T2PeopleType): it waits in the pool until its start minute, enters
@@ -101,9 +101,29 @@ namespace OT
 		unsigned routeMask(Item::Item * tenant, int score);
 
 		// --- the customer sources of a plugin tenant (CollectCustomer) ---
-		int callFromPool(Item::YootTenant * tenant, const YootTenantDef & def, int free, long long now);
-		int callFromTenant(Item::YootTenant * tenant, const YootTenantDef & def, int free, long long now);
-		int callFromFloor(Item::YootTenant * tenant, const YootTenantDef & def, int free, long long now);
+		int callFromPool(Item::Item * tenant, const YootTenantDef & def, int free, long long now);
+		int callFromTenant(Item::Item * tenant, const YootTenantDef & def, int free, long long now);
+		int callFromFloor(Item::Item * tenant, const YootTenantDef & def, int free, long long now);
+
+		// --- venues (theaters, Event Center, Stadium, Cathedral, Attraction,
+		// Observatory, Gathering Area): T2Tenant::CollectCustomer from the
+		// venue plugin's idle ---
+		/// The venue plugin's TenantDef with its TMDF 2 customer table, or
+		/// with the table `tableId` of `subPlugin` (MovieDef / HallEventDef
+		/// customerTableID; SetCustomerTable 0x10062c00 forces bind 1, so
+		/// the units are the capacity). Null when there is no table.
+		const YootTenantDef * venueDef(Item::Item * venue, const std::string & subPlugin = std::string(), int tableId = 0);
+		/// CollectCustomer 0x1005f440's three sources for a venue whose own
+		/// idle has decided to collect: the pool (PLDF and DPDF holiday
+		/// rates), the tenant and the floor sources. The people walk to
+		/// `dest` (the venue itself, or the Observatory's ticket booth).
+		/// Returns how many were called (the venue's walking count).
+		int collectVenue(Item::Item * venue, const YootTenantDef & def, int free, long long now, Item::Item * dest = nullptr);
+		/// The visitors inside `f` whose stay ended (or beyond its leaveAt
+		/// count: PushOutAll / PushOutCustomer) leave (PushOutPeople).
+		void releaseVisitors(Item::YootFacility * f, long long now);
+		/// Visitors inside `item` (status 11), in the item's stable order.
+		std::vector<YootVisitor *> visitorsIn(Item::Item * item) const;
 
 		/// The tenant took the visitor in (status 11) or turned it away.
 		void arrived(YootVisitor * v, Item::Item * tenant, bool admitted, long long leaveMinute);
@@ -138,6 +158,9 @@ namespace OT
 		size_t routeCacheItems = 0;
 		struct Table { bool valid = false; MemberTableDef table; bool hasPlace = false; PlaceParamDef place; };
 		std::map<std::string, Table> tables;
+		std::map<std::string, YootTenantDef> venueDefs;
+		std::map<std::string, bool> venueDefValid;
+		Item::Item * collectDest = nullptr;  ///< collectVenue: where the called walk to
 
 		bool ensurePool();
 		void minuteTick(long long absMinute);

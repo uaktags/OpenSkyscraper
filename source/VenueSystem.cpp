@@ -10,6 +10,7 @@
 #include "Item/Item.h"
 #include "Item/YootVenueItems.h"
 #include "Logger.h"
+#include "PeopleSystem.h"
 #include "PluginManager.h"
 #include "YootCatalog.h"
 #include "YootFacilities.h"
@@ -176,10 +177,15 @@ VenueSystem::Movie * VenueSystem::movie(const std::string & plugin)
 void VenueSystem::advance()
 {
 	if (!enabled()) return;
-	const int minute = std::max(0, std::min(1439, (int)std::floor(game->time.hour * 60.0)));
-	if (minute == lastMinute) return;
-	lastMinute = minute;
-	minuteTick(minute);
+	// Every game minute in turn (a fast frame spans several), so the
+	// plugins' 8-minute idles are not skipped; lastMinute is absolute.
+	const int now = (int)Yoot::absoluteMinute(game->time.absolute);
+	if (lastMinute < 0 || now < lastMinute || now - lastMinute > 1440) lastMinute = now - 1;
+	while (lastMinute < now)
+	{
+		++lastMinute;
+		minuteTick(((lastMinute % 1440) + 1440) % 1440);
+	}
 }
 
 void VenueSystem::newDay(int day)
@@ -274,18 +280,130 @@ void VenueSystem::minuteTick(int minute)
 	cruiseTick(minute);
 	if (baseball.active) baseballTick();
 	cloudTick(now);
+
+	// T2People::Idle case 11 and the push-outs: the audiences walk out.
+	static const char * venues[] = {"theater", "classictheater", "eventcenter", "stadium", "yootcathedral", "attraction",
+		"observatory", "ticketbooth", "gatheringarea", "boatdeck"};
+	for (const char * kind : venues)
+	{
+		const Game::ItemSet & s = itemsOf(game, kind);
+		const std::vector<Item::Item *> list(s.begin(), s.end());
+		for (Item::Item * i : list)
+			if (Item::YootVenue * v = dynamic_cast<Item::YootVenue *>(i))
+				game->eventSystem.people.releaseVisitors(v, now);
+	}
 }
 
 void VenueSystem::collect(Item::YootVenue * v, int minute, int stay)
 {
-	(void)minute;
+	(void)stay;
+	// The plugin's ChangeStatusOnIdle runs every 8 minutes.
+	if (minute % Yoot::kTenantIdleMinutes == v->idlePhase) collectNow(v);
+}
+
+void VenueSystem::collectNow(Item::YootVenue * v, Item::Item * dest)
+{
 	if (!reachable(v)) return;
-	const int cap = v->capacity();
-	// The arrivals are people of the visitor pool (T2Pool::Call).
-	const int n = game->eventSystem.people.drawVisitors(v, Yoot::venueArrivals(cap, v->users(), percentFor(v), stay, v->arrivalCarry));
+	const YootTenantDef * def = game->eventSystem.people.venueDef(v);
+	if (!def) return;
 	const long long now = Yoot::absoluteMinute(game->time.absolute);
-	for (int k = 0; k < n; ++k) v->leaveAt.push_back(now + std::max(1, stay));
-	v->visitorsToday += n;
+	v->walking += game->eventSystem.people.collectVenue(v, *def, v->capacity() - v->users() - v->walking, now, dest);
+}
+
+void VenueSystem::enter(Item::YootVenue * v, YootVisitor * p)
+{
+	// The venue plugins' EnterCustomer (agent notes: Theater 0x1000ccc0,
+	// Event Center 0x1000bba0, Stadium 0x1000bc20, Cathedral / Attraction
+	// 0x1000bcb0, Observatory 0x1000cb90, Ticket 0x1000cc90, Gathering Area
+	// 0x1000bce0): closed -> Return and -100 estimate; else the stay below
+	// and TotalCustomer + 1.
+	const long long now = Yoot::absoluteMinute(game->time.absolute);
+	const int minute = (int)(((now % 1440) + 1440) % 1440);
+	const std::string & id = v->prototype->id;
+	int stay = stayOf(v, 60);
+	bool admitted = v->isOpen();
+	if (id == "ticketbooth")
+	{
+		// The booth queues its people with no stay; its idle forwards them.
+		p->stayEnd = admitted ? now + 100000 : -1;
+		if (admitted) v->leaveAt.push_back(p->stayEnd);
+		game->eventSystem.people.arrived(p, v, admitted, p->stayEnd);
+		if (!admitted)
+			if (Item::YootVenue * obs = firstBuilt<Item::YootVenue>(game, "observatory"))
+				if (obs->walking > 0) --obs->walking;
+		return;
+	}
+	if (v->walking > 0) --v->walking;
+	if (Item::Theater * t = dynamic_cast<Item::Theater *>(v))
+	{
+		Movie * m = movie(t->movie);
+		admitted = admitted && m && !t->expired;
+		stay = (m ? m->def.runningTime : 120) + 30 + stay;
+	}
+	else if (Item::EventCenter * e = dynamic_cast<Item::EventCenter *>(v))
+	{
+		HallEventDef def;
+		AbstractPlugin * hp = e->today.empty() ? nullptr : game->app.pluginManager.get(e->today);
+		admitted = admitted && hp && hp->ensureLoaded() && hp->getHallEventDef(def);
+		if (admitted) stay = std::max(0, def.bindTime) + stay;
+	}
+	else if (id == "stadium")
+		stay = v->closeMinute() - minute;  // the leave minute is the close
+	else if (id == "yootcathedral")
+		stay = v->closeMinute() - (std::rand() % 6) * 10 - minute;
+	const long long leave = now + std::max(1, stay);
+	p->stayEnd = admitted ? leave : -1;
+	if (admitted)
+	{
+		v->leaveAt.push_back(leave);
+		v->visitorsToday++;
+	}
+	game->eventSystem.people.arrived(p, v, admitted, leave);
+}
+
+void VenueSystem::ticketBoothIdle(Item::YootVenue * booth, Item::YootVenue * obs)
+{
+	// Ticket.t2p FUN_1000d200 / 0x1000d320 every idle while open: forward up
+	// to 2 people to the observatory (counted as the booth's customers);
+	// everyone still queued gets +15 stress and above 229 goes home (the
+	// observatory's walking count drops); with no observatory everyone
+	// loses 100 estimate and is pushed out.
+	PeopleSystem & people = game->eventSystem.people;
+	std::vector<YootVisitor *> queue = people.visitorsIn(booth);
+	std::stable_sort(queue.begin(), queue.end(), [](const YootVisitor * a, const YootVisitor * b) { return a->stayEnd < b->stayEnd; });
+	const long long now = Yoot::absoluteMinute(game->time.absolute);
+	auto leave = [&](YootVisitor * v) {
+		std::vector<long long>::iterator e = std::find(booth->leaveAt.begin(), booth->leaveAt.end(), v->stayEnd);
+		if (e != booth->leaveAt.end()) booth->leaveAt.erase(e);
+		people.pushOut(v);
+	};
+	int forwarded = 0;
+	for (YootVisitor * v : queue)
+	{
+		if (!obs || !obs->isOpen())
+		{
+			v->yootEstimate = Yoot::incEstimate(v->yootEstimate, -100);
+			if (obs && obs->walking > 0) --obs->walking;
+			leave(v);
+			continue;
+		}
+		if (forwarded < 2)
+		{
+			++forwarded;
+			booth->visitorsToday++;
+			v->dest = obs;
+			v->startMinute = now;
+			v->goingTo = obs->prototype->name;
+			leave(v);
+			continue;
+		}
+		v->addStress(15);
+		if (v->stress > 229)
+		{
+			if (obs->walking > 0) --obs->walking;
+			leave(v);
+		}
+	}
 }
 
 // --------------------------------------------------------------- theaters
@@ -313,6 +431,7 @@ void VenueSystem::theaterTick(Item::Theater * t, int minute, int day)
 		// 0x1000e640 at the day's first door opening.
 		t->lastOpenDay = day;
 		t->visitorsToday = 0;
+		t->walking = 0;
 		t->audienceTarget = Yoot::theaterAudienceTarget(t->audienceTarget, t->showBest,
 			classic ? m->state.bestF : m->state.bestR, m->def.clipSeconds, cap, m->def.unk104);
 		t->yesterdayBest = t->showBest;
@@ -327,19 +446,19 @@ void VenueSystem::theaterTick(Item::Theater * t, int minute, int day)
 	}
 	// Customers are only collected until close - bindTime - 60 (Theater
 	// 21:00, Classic 19:00: its last show draws nobody; oracle-confirmed).
-	if (sh.status != Yoot::TheaterShow::Closed && reachable(t) && Yoot::theaterCollects(minute, open, close, stayOf(t, 0)))
+	// FUN_1000e770 on the plugin idle: CollectCustomer(target - walking -
+	// inside) with the movie's audience table when the doors open (the
+	// change into 30) and on every idle of a show.
+	if (minute % Yoot::kTenantIdleMinutes == t->idlePhase)
 	{
-		// CollectCustomer(target - inside), spread over the door window.
-		const int want = std::min(cap, std::max(0, t->audienceTarget)) - t->users();
-		if (want > 0)
-		{
-			const int start = open + 30 + sh.show * (running + 30);
-			const int left = std::max(1, start - minute);
-			const int n = sh.status == Yoot::TheaterShow::Doors ? (want + left - 1) / left : want;
-			const long long now = Yoot::absoluteMinute(game->time.absolute);
-			for (int k = 0; k < n; ++k) t->leaveAt.push_back(now + 30 + running);
-			t->visitorsToday += n;
-		}
+		const bool doorsOpened = sh.status == Yoot::TheaterShow::Doors && t->idleStatus != Yoot::TheaterShow::Doors;
+		if ((doorsOpened || sh.status == Yoot::TheaterShow::Playing) && m && reachable(t) &&
+		    Yoot::theaterCollects(minute, open, close, stayOf(t, 0)) &&
+		    std::min(cap, std::max(0, t->audienceTarget)) - t->users() - t->walking > 0)
+			if (const YootTenantDef * d = game->eventSystem.people.venueDef(t, m->plugin, m->def.customerTableID))
+				t->walking += game->eventSystem.people.collectVenue(t, *d, cap - t->users() - t->walking,
+					Yoot::absoluteMinute(game->time.absolute));
+		t->idleStatus = sh.status;
 	}
 	t->status = sh.status;
 	t->setPattern(sh.status == Yoot::TheaterShow::Closed ? 0
@@ -387,18 +506,18 @@ void VenueSystem::eventCenterTick(Item::EventCenter * e, int minute, int day)
 			// FUN_1000dbb0 10 -> 30: reset the counters, target = catalog value.
 			e->lastOpenDay = day;
 			e->visitorsToday = 0;
+			e->walking = 0;
 			std::map<std::string, int>::const_iterator v = hallValue.find(e->today);
 			e->target = v != hallValue.end() ? v->second : def.unkDC;
 		}
 		if (e->lastOpenDay == day) e->status = 30;
-		if (e->status >= 30 && reachable(e) && Yoot::hallEventCollects(minute, tOpen, tClose, 0))
-		{
-			const int want = std::min(cap, e->target) - e->users();
-			const int n = std::max(0, std::min(want, std::max(1, want / 10)));
-			const long long now = Yoot::absoluteMinute(game->time.absolute);
-			for (int k = 0; k < n; ++k) e->leaveAt.push_back(now + std::max(1, def.bindTime));
-			e->visitorsToday += n;
-		}
+		// FUN_1000dc70 on every idle while open: CollectCustomer(target -
+		// walking - inside) with the hall event's table.
+		if (e->status >= 30 && reachable(e) && Yoot::hallEventCollects(minute, tOpen, tClose, 0) &&
+		    minute % Yoot::kTenantIdleMinutes == e->idlePhase && std::min(cap, e->target) - e->users() - e->walking > 0)
+			if (const YootTenantDef * d = game->eventSystem.people.venueDef(e, e->today, def.customerTableID))
+				e->walking += game->eventSystem.people.collectVenue(e, *d, cap - e->users() - e->walking,
+					Yoot::absoluteMinute(game->time.absolute));
 	}
 	else if (e->status >= 30)
 	{
@@ -431,18 +550,11 @@ void VenueSystem::genericTick(Item::YootVenue * v, int minute)
 		// Stadium.t2p FUN_1000bf10.
 		const int prev = v->status;
 		v->status = Yoot::stadiumStatus(prev, minute, open, close, Yoot::stadiumSeason(dayOfYear()), rand());
-		if (prev == 10 && v->status == 30) { v->visitorsToday = 0; v->lastOpenDay = day; }
+		if (prev == 10 && v->status == 30) { v->visitorsToday = 0; v->walking = 0; v->lastOpenDay = day; }
 		if (prev >= 30 && v->status == 10) v->status = 10;
-		// CollectCustomer from 12:00 to 19:00 while there is room; visitors
-		// stay until the close (EnterCustomer bind = TNDF close), so the
-		// house fills over the 420-minute window.
-		if (v->status >= 30 && v->status < 35 && minute < 1140)
-		{
-			const int before = v->users();
-			collect(v, minute, 1140 - open);
-			const long long leave = Yoot::absoluteMinute(game->time.absolute) + (close - minute);
-			for (size_t k = before; k < v->leaveAt.size(); ++k) v->leaveAt[k] = leave;
-		}
+		// CollectCustomer on every idle below status 33 (until 18:00);
+		// visitors stay until the close (EnterCustomer).
+		if (v->status >= 30 && v->status < 33) collect(v, minute, 0);
 		if (v->status == 35 && prev < 35) v->leaveAt.resize(v->leaveAt.size() / 2);
 		else if (v->status == 35 && minute % 8 == 0) v->leaveAt.resize(v->leaveAt.size() - v->leaveAt.size() / 4);
 		if (prev >= 30 && v->status == 10)
@@ -472,28 +584,35 @@ void VenueSystem::genericTick(Item::YootVenue * v, int minute)
 	{
 		if (v->status < 30 || v->lastOpenDay != day)
 		{
-			if (v->lastOpenDay != day) v->visitorsToday = 0;
+			if (v->lastOpenDay != day) { v->visitorsToday = 0; v->walking = 0; }
 			v->lastOpenDay = day;
 			v->status = 30;
 		}
-		if (draws)
+		const bool idle = minute % Yoot::kTenantIdleMinutes == v->idlePhase;
+		if (id == "ticketbooth")
 		{
-			if (id == "ticketbooth")
-			{
-				// Ticket.t2p FUN_1000d200: the booth sells the tickets and
-				// passes its customers on to the observatory.
-				Item::YootVenue * obs = firstBuilt<Item::YootVenue>(game, "observatory");
-				if (obs && obs->isOpen())
-				{
-					const int before = obs->visitorsToday;
-					collect(obs, minute, stayOf(obs, 30));
-					v->visitorsToday += obs->visitorsToday - before;
-				}
-			}
-
-			else if (id != "observatory")
-				collect(v, minute, stay);
+			if (idle) ticketBoothIdle(v, firstBuilt<Item::YootVenue>(game, "observatory"));
 		}
+		else if (draws && id == "observatory")
+		{
+			// Observatory.t2p FUN_1000cd70 / 0x1000d040: collect for the
+			// open booth with the fewest people; they walk to the booth.
+			Item::YootVenue * booth = nullptr;
+			const Game::ItemSet & booths = itemsOf(game, "ticketbooth");
+			for (Game::ItemSet::const_iterator b = booths.begin(); b != booths.end(); ++b)
+				if (Item::YootVenue * c = dynamic_cast<Item::YootVenue *>(*b))
+					if (built(c) && c->isOpen() && (!booth || c->users() < booth->users())) booth = c;
+			if (booth && idle) collectNow(v, booth);
+		}
+		else if (draws && id == "yootcathedral")
+		{
+			// Cathedral.t2p 0x1000c080: on the opening idle, CollectCustomer
+			// ten times back to back.
+			if (idle && minute < open + Yoot::kTenantIdleMinutes)
+				for (int k = 0; k < 10; ++k) collectNow(v);
+		}
+		else if (draws)
+			collect(v, minute, stay);
 	}
 	else if (v->status >= 30)
 	{
