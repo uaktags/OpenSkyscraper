@@ -158,11 +158,10 @@ namespace OT
 	/// §2.2-2.3) for running without the .t2p. No FINF mask and no events.
 	YootWorld builtinYootWorld(YootWorld::Id id);
 
-	/// Plugin identity read straight from the binary ATTR bytes
+	/// Plugin identity from the ATTR resource
 	/// (CFilePlugin ctor 0x1000df20 / T2PluginSpecifier::Initialize 0x1004fd00):
 	/// mID, mAttrib, mDependID, mGameLevel, mSecretItem, mItemType, mMustItem, name.
-	/// Local reader because the shared PluginAttr currently drops mAttrib;
-	/// switch to parsePluginAttr once its field naming fix lands.
+	/// Decoded with parsePluginAttr; 4ccs are the LE u32 (== Mac constant).
 	struct YootPluginIdentity
 	{
 		uint32_t id = 0;

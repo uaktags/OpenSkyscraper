@@ -416,18 +416,18 @@ namespace OT
 
 	bool readYootPluginIdentity(const char * data, int length, YootPluginIdentity & out)
 	{
-		// Binary ATTR only (the text form is DefaultToolPalette).
-		ResReader r(data, length);
+		// The shared ATTR codec (PluginResources.h) now names every field.
+		PluginAttr a;
+		if (!parsePluginAttr(data, length, a)) return false;
 		YootPluginIdentity p;
-		p.id = r.u();
-		p.attrib = r.u();
-		p.dependId = r.u();
-		p.gameLevel = r.i();
-		p.secretItem = r.i();
-		p.itemType = r.i();
-		p.mustItem = r.i();
-		p.name = r.s();
-		if (!r.ok()) return false;
+		p.id = a.id.toUint32LE();
+		p.attrib = a.attrib;
+		p.dependId = a.dependID.toUint32LE();
+		p.gameLevel = a.gameLevel;
+		p.secretItem = a.secretItem;
+		p.itemType = a.itemType;
+		p.mustItem = a.mustItem;
+		p.name = a.name;
 		out = p;
 		return true;
 	}
