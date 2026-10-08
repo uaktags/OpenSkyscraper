@@ -1844,6 +1844,134 @@ static void testPluginPopulationSweep()
     EXPECT(byType["SP:ADDF"].typed == 7);
 }
 
+// World resource encoders: YootWorld's typed encoders and the lossless
+// WorldResourceCodec both reproduce every world resource of Tokyo, Hawai and
+// Kegon byte for byte, and an edited Json record re-encodes to what the
+// game-side parser then reads back.
+static void testYootWorldEncoders()
+{
+    using namespace OT;
+    const char * files[3] = {"Tokyo.t2p", "Hawai.t2p", "Kegon.t2p"};
+    const YootWorld::Id ids[3] = {YootWorld::Id::Tokyo, YootWorld::Id::Hawaii, YootWorld::Id::Kegon};
+    int typedEncoded = 0, codecResources = 0, codecIdentical = 0, events = 0;
+    for (int w = 0; w < 3; ++w)
+    {
+        Plugin p(files[w], std::string("../data/Plugins/") + files[w]);
+        EXPECT(p.ensureLoaded());
+        YootWorld world;
+        EXPECT(loadYootWorld(p, ids[w], world));
+
+        auto same = [&](const std::string & type, int id, const std::string & bytes) {
+            const WindowsPEExecutable::Resource * r = p.getResource(type, id);
+            return r && bytes == std::string(r->data, size_t(r->length));
+        };
+        std::string b;
+        EXPECT(encodeYootWorldDef(world, b) && same("WORLDDEF", 1, b));
+        EXPECT(encodeYootWatr(world, b) && same("WATR", 128, b));
+        typedEncoded += 2;
+        if (p.getResource("FINF", 1))
+        {
+            EXPECT(encodeYootFinf(world, b) && same("FINF", 1, b));
+            ++typedEncoded;
+        }
+        EXPECT(encodeYootTowerEvents(world.events, b) && same("T2EV", 1, b));
+        ++typedEncoded;
+        for (const YootEvent & e : world.events)
+        {
+            if (!e.found) continue;
+            const bool ok = encodeYootEventResource(e, b) && same(e.resType, e.resId, b);
+            if (!ok) std::cerr << "  event mismatch: " << files[w] << " " << e.resType << " " << e.resId << "\n";
+            EXPECT(ok);
+            ++typedEncoded;
+            ++events;
+        }
+
+        // Lossless codec: every world-family resource decodes typed.
+        for (const AbstractPlugin::ResourceKey & k : p.enumerateResources())
+        {
+            const ResourceCodec want = codecForResourceType(k.type, ResourceContainer::PE);
+            if (want != ResourceCodec::WorldRecord && want != ResourceCodec::BkgndInfo
+                && want != ResourceCodec::FloorInfoMask && want != ResourceCodec::PaletteAnime
+                && want != ResourceCodec::Palette)
+                continue;
+            const WindowsPEExecutable::Resource * r = p.getResource(k.type, k.id);
+            DecodedResource d = decodeResource(k.type, k.id, r->data, size_t(r->length));
+            std::string again;
+            ++codecResources;
+            const bool ok = d.codec == want && encodeResource(d, again)
+                && again == std::string(r->data, size_t(r->length));
+            if (!ok) std::cerr << "  world codec mismatch: " << files[w] << " " << k.type << " " << k.id << "\n";
+            if (ok) ++codecIdentical;
+        }
+    }
+    std::cout << "World encoders: " << typedEncoded << " YootWorld resources (" << events
+              << " events) and " << codecIdentical << "/" << codecResources
+              << " WorldResourceCodec resources byte-identical\n";
+    EXPECT(codecIdentical == codecResources);
+    EXPECT(codecResources > 60);
+
+    // Spot checks on the typed text codecs.
+    {
+        Plugin tokyo("Tokyo.t2p", "../data/Plugins/Tokyo.t2p");
+        DecodedResource binf;
+        EXPECT(tokyo.decodeResource("BINF", 1, binf) || tokyo.decodeResource("BINF", 128, binf));
+        if (binf.codec == ResourceCodec::BkgndInfo)
+        {
+            const BkgndInfoDef & d = std::get<BkgndInfoDef>(binf.value);
+            EXPECT(d.rows == 61 && d.cols == 46 && d.cells.size() == 61u * 46u);
+        }
+        DecodedResource watr;
+        EXPECT(tokyo.decodeResource("WATR", 128, watr) && watr.codec == ResourceCodec::WorldRecord);
+        if (watr.codec == ResourceCodec::WorldRecord)
+        {
+            Json rec = std::get<Json>(watr.value);
+            EXPECT(rec["initialFunds"].asInt() == 100000 && rec["moneyUnit"].asString() == "$");
+            rec.set("initialFunds", Json(123456));
+            std::string bytes;
+            EXPECT(encodeWorldSchemaResource(WorldSchema::Watr, "WATR", rec, bytes));
+            YootWorld w;
+            EXPECT(parseYootWatr(bytes.data(), int(bytes.size()), w) && w.initialFunds == 123456);
+            // A wrong-typed field is rejected with its path.
+            rec.set("exchangeMul", Json("x"));
+            std::string err;
+            EXPECT(!encodeWorldSchemaResource(WorldSchema::Watr, "WATR", rec, bytes, &err) && err.find("exchangeMul") != std::string::npos);
+        }
+        DecodedResource wd;
+        EXPECT(tokyo.decodeResource("WORLDDEF", 1, wd) && wd.codec == ResourceCodec::WorldRecord);
+        if (wd.codec == ResourceCodec::WorldRecord)
+        {
+            Json rec = std::get<Json>(wd.value);
+            EXPECT(rec["grades"].size() == 4 && rec["cashAmounts"].size() == 8);
+            EXPECT(rec["buildArea"]["left"].asInt() == 36 && rec["buildArea"]["bottom"].asInt() == 120);
+            // Removing a cash step re-derives numCash.
+            rec.find("cashAmounts")->elements().pop_back();
+            std::string bytes;
+            EXPECT(encodeWorldSchemaResource(WorldSchema::WorldDef, "WORLDDEF", rec, bytes));
+            YootWorld w;
+            EXPECT(parseYootWorldDef(bytes.data(), int(bytes.size()), w) && w.cashAmounts.size() == 7);
+        }
+    }
+    {
+        Plugin kegon("Kegon.t2p", "../data/Plugins/Kegon.t2p");
+        DecodedResource finf;
+        EXPECT(kegon.decodeResource("FINF", 1, finf) && finf.codec == ResourceCodec::FloorInfoMask);
+        if (finf.codec == ResourceCodec::FloorInfoMask)
+        {
+            const FloorInfoMaskDef & d = std::get<FloorInfoMaskDef>(finf.value);
+            EXPECT(d.height == 44 && d.width == 192);
+            int set = 0;
+            for (int32_t v : d.cells) set += v != 0;
+            EXPECT(set == 5849);
+            FloorInfoMaskDef back;
+            EXPECT(floorInfoMaskFromJson(floorInfoMaskToJson(d), back) && back.cells == d.cells);
+        }
+        DecodedResource ptdf;
+        EXPECT(kegon.decodeResource("PTDF", 1, ptdf) || kegon.decodeResource("PTDF", 128, ptdf));
+        if (ptdf.codec == ResourceCodec::PaletteAnime)
+            EXPECT(std::get<PaletteAnimeDef>(ptdf.value).fields.size() == 8);
+    }
+}
+
 // ItemTypeCatalog: keyed by plugin id (ATTR mID) with the numeric item type.
 static void testItemTypeCatalog()
 {
@@ -3661,6 +3789,7 @@ int main()
 	testYootEvaluation();
 	testYootStress();
 	testOspAttrCompat();
+	testYootWorldEncoders();
     if (g_failures > 0)
     {
         std::cerr << g_failures << " test(s) failed\n";

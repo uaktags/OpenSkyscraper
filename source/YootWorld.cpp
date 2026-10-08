@@ -3,6 +3,7 @@
 
 #include "AbstractPlugin.h"
 #include "PluginManager.h"
+#include "PluginResources.h"
 #include "WindowsPEExecutable.h"
 
 #include <cctype>
@@ -39,6 +40,7 @@ namespace OT
 				return v;
 			}
 			int left() const { return int(end_ - p_); }
+			std::string rest() { std::string v(p_, end_); p_ = end_; return v; }
 			bool ok() const { return ok_; }
 		private:
 			const char * p_;
@@ -257,6 +259,8 @@ namespace OT
 		e.header = h;
 		e.body.clear();
 		e.vips.clear();
+		e.bodyTail.clear();
+		e.text.clear();
 		if (resType == "VIEV")
 		{
 			const int n = r.i();
@@ -276,6 +280,7 @@ namespace OT
 			}
 			if (!r.ok()) return false;
 			assignYootVipFlags(e.vips);
+			e.bodyTail = r.rest();
 		}
 		else if (resType == "MAEV")
 		{
@@ -284,10 +289,12 @@ namespace OT
 			for (int k = 0; k < 4; ++k) e.body.push_back(r.i());
 			e.text = r.s();
 			if (!r.ok()) return false;
+			e.bodyTail = r.rest();
 		}
 		else
 		{
 			while (r.left() >= 4) e.body.push_back(r.i());
+			e.bodyTail = r.rest();
 		}
 		e.found = true;
 		return true;
@@ -305,6 +312,128 @@ namespace OT
 			used |= flag;
 			v.vipFlag = flag;
 		}
+	}
+
+	// T2WorldDef::T2WorldDef 0x1006e4e0 write order (inverse of parseYootWorldDef).
+	bool encodeYootWorldDef(const YootWorld & t, std::string & out)
+	{
+		if (t.discarded10.size() != 10 || t.gradeIconAnimIds.size() != 5) return false;
+		CResWriter w;
+		w.i32(t.sortKey);
+		w.i32(t.height);
+		w.i32(t.width);
+		w.i32(t.groundLine);
+		w.i32(t.buildArea.top);
+		w.i32(t.buildArea.left);
+		w.i32(t.buildArea.bottom);
+		w.i32(t.buildArea.right);
+		w.i32(t.entranceY); // POINT is stored y, x
+		w.i32(t.entranceX);
+		w.i32(t.topFloorLine);
+		w.i32(t.bottomFloorLine);
+		w.i32(t.startGrade);
+		w.i32(t.startMonth);
+		w.i32(t.lobbyHeight);
+		w.i32(t.outViewKind);
+		w.i32(t.unk17c);
+		w.i32(t.tiledBkgnd);
+		w.count(t.grades.size());
+		for (const YootGradeRow & g : t.grades)
+		{
+			w.u32(g.vipFlag);
+			w.i32(g.population);
+			w.i32(g.animId);
+			w.i32(g.animFrames);
+			w.i32(g.unk);
+			w.i32(g.animParam);
+		}
+		w.i32(t.bkgndTileHeight);
+		w.i32(t.bkgndTileWidth);
+		w.i32(t.unk188);
+		w.i32(t.unk18c);
+		for (int v : t.discarded10) w.i32(v);
+		for (int v : t.gradeIconAnimIds) w.i32(v);
+		w.str(t.towerNamePrefix);
+		w.i32(t.dustOnAt);
+		w.i32(t.toiletAt);
+		w.i32(t.toiletDenomi);
+		w.i32(t.discarded9999);
+		w.count(t.cashAmounts.size());
+		for (int v : t.cashAmounts) w.i32(v);
+		return w.finish(out);
+	}
+
+	bool encodeYootWatr(const YootWorld & t, std::string & out)
+	{
+		if (t.watrInts.size() != 6) return false;
+		CResWriter w;
+		for (int v : t.watrInts) w.i32(v);
+		w.i32(t.initialFunds);
+		w.i32(t.exchangeMul);
+		w.i32(t.exchangeDiv);
+		w.str(t.moneyUnit);
+		return w.finish(out);
+	}
+
+	bool encodeYootFinf(const YootWorld & t, std::string & out)
+	{
+		if (t.finfHeader.size() != 7 || t.finfWidth <= 0 || t.finfHeight <= 0
+		    || t.unbuildable.size() != size_t(t.finfHeight) * size_t(t.finfWidth))
+			return false;
+		out.clear();
+		for (int v : t.finfHeader) { out += std::to_string(v); out += "\r\n"; }
+		for (uint8_t v : t.unbuildable) out += v ? "1\r\n" : "0\r\n";
+		return true;
+	}
+
+	bool encodeYootEventResource(const YootEvent & e, std::string & out)
+	{
+		CResWriter w;
+		w.i32(e.header.levelBit);
+		w.i32(e.header.exclusive);
+		w.i32(e.header.cycleDay);
+		w.i32(e.header.beginMin);
+		w.i32(e.header.endMin);
+		if (e.resType == "VIEV")
+		{
+			w.count(e.vips.size());
+			for (const YootVipDef & v : e.vips)
+			{
+				w.i32(v.grade);
+				w.u32(v.destPluginId);
+				w.i32(v.arrivalMin);
+				w.i32(v.f3c);
+				w.i32(v.f40);
+				w.i32(v.f44);
+				w.i32(v.viplRes);
+				w.str(v.goodMsg);
+				w.str(v.badMsg);
+			}
+		}
+		else if (e.resType == "MAEV")
+		{
+			for (int v : e.body) w.i32(v);
+			w.str(e.text);
+		}
+		else
+		{
+			for (int v : e.body) w.i32(v);
+		}
+		if (!w.finish(out)) return false;
+		out += e.bodyTail;
+		return true;
+	}
+
+	bool encodeYootTowerEvents(const std::vector<YootEvent> & events, std::string & out)
+	{
+		CResWriter w;
+		w.count(events.size());
+		for (const YootEvent & e : events)
+		{
+			w.u32(e.typeTag);
+			w.i32(e.resId);
+		}
+		return w.finish(out);
 	}
 
 	bool loadYootWorld(const AbstractPlugin & plugin, YootWorld::Id id, YootWorld & out, std::string * error)

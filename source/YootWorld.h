@@ -75,6 +75,7 @@ namespace OT
 		YootEventHeader header;
 		std::vector<int> body;     ///< remaining ints (non-VIEV events)
 		std::string text;          ///< MAEV trailing pstr (T2Maru_Reggae ctor 0x1003a770)
+		std::string bodyTail;      ///< bytes after the last whole int (MAEV message); kept for encodeYootEventResource
 		std::vector<YootVipDef> vips; ///< VIEV only
 	};
 
@@ -149,6 +150,22 @@ namespace OT
 	bool parseYootEventResource(const std::string & resType, const char * data, int length, YootEvent & out);
 	/// Derives each VIP's flag exactly like T2VisitVIP::Init (shared mask accumulator).
 	void assignYootVipFlags(std::vector<YootVipDef> & vips);
+
+	// --- Resource encoders (inverse of the parsers above) ---
+	// Each writes the bytes its parser reads, so parse + encode is
+	// byte-identical for the shipped worlds (tests/test_main.cpp
+	// testYootWorldEncoders). The lossless editable form of every world
+	// resource is WorldResourceCodec.h; these keep the game's typed view
+	// writable. Return false when a string exceeds 255 bytes or a grid does
+	// not match its header.
+	bool encodeYootWorldDef(const YootWorld & w, std::string & out);          ///< WORLDDEF
+	bool encodeYootWatr(const YootWorld & w, std::string & out);              ///< WATR
+	/// FINF text: the 7-int header, then the mask as 0/1, one per CRLF line.
+	bool encodeYootFinf(const YootWorld & w, std::string & out);
+	/// One `*EV` resource: header, then the VIP list (VIEV) or the raw body ints.
+	bool encodeYootEventResource(const YootEvent & e, std::string & out);
+	/// T2EV: count, then {typeTag, resId} per event.
+	bool encodeYootTowerEvents(const std::vector<YootEvent> & events, std::string & out);
 
 	/// Loads every rule resource from a world plugin. Returns false when
 	/// WORLDDEF or WATR is missing/garbled (`error` says which).
