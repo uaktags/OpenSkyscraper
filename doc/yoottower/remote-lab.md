@@ -39,3 +39,29 @@ $L pull out/ ~/yoottower-decomp/lab-out/
 
 `oracle` runs `run_yoot.sh` from `/lab/src/$LAB_TREE` (default `OpenSky`), so sync
 that tree first. Always pass a distinct instance name per concurrent user.
+
+## Round trip through the original (bld_roundtrip.py)
+
+`tools/yoottower/remote/bld_roundtrip.py` checks that an OpenSky tower survives
+a trip through the original game. It runs inside the lab container:
+
+```sh
+L=tools/yoottower/remote/lab.sh
+$L sync . save && $L build save
+$L exec python3 /lab/src/save/tools/yoottower/remote/bld_roundtrip.py \
+    --tree /lab/src/save --out /lab/out/roundtrip [--days 1] [NAME=TOWER[:TEMPLATE] ...]
+```
+
+Per case (default: Tokyo people, Tokyo visitors, Tokyo bridge, Hawaii, Kegon):
+
+1. `BldTool export` writes the tower as a `.bld` against the world's template save,
+   and `BldTool import` reads it back (the expected tower).
+2. The oracle (instance `rt-NAME`) loads the `.bld`, runs one game day at full speed,
+   and saves through File > Save As.
+3. The game's save must rewrite byte-identical through `bld.py`, and OpenSky must
+   load it (`OpenSkyscraper --load-game ... --sim 1`). Checks: items (no expected
+   item missing; extra items are reported), funds, and population (the game's pool
+   population must match the re-imported pool and OpenSky's people count).
+
+If the original shows a "Plugin Check Error" dialog for the export, the case fails at
+`load` with a screenshot in the case directory.
