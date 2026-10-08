@@ -627,9 +627,6 @@ namespace OT
 			{"hotel_single",      {"Singleroom.t2p", "Smallroom.t2p", nullptr}},
 			{"hotel_double",      {"Twinroom.t2p", "Smallroom.t2p", nullptr}},
 			{"hotel_suite",       {"Suiteroom.t2p", "Largeroom.t2p", nullptr}},
-			{"partyhall",         {"EventCenter.t2p", nullptr}},
-			{"cinema",            {"Theater.t2p", "ClassicTheater.t2p", nullptr}},
-			{"metro",             {"Subway.t2p", nullptr}},
 			{"office",            {"Office.t2p", nullptr}},
 			{"parking",           {"Parking.t2p", nullptr}},
 			{"condo",             {"Condo.t2p", "HawaianCondo.t2p", nullptr}},
@@ -640,8 +637,22 @@ namespace OT
 			{"doctor",            {"Doctor's.t2p", nullptr}},
 			{"trashfacility",     {"TrashFacility.t2p", "KTrashFacility.t2p", nullptr}},
 			{"restroom",          {"Restroom.t2p", "KRestroom.t2p", nullptr}},
-			{"cathedral",         {"Cathedral.t2p", nullptr}},
 			{"powerroom",         {"PowerRoom.t2p", nullptr}},
+			// Native YootTower venues, final items and transport (plan step
+			// 14 part B); they replace the SimTower Movie Theatre, Party
+			// Hall, Metro Station and Cathedral in this ruleset.
+			{"theater",           {"Theater.t2p", nullptr}},
+			{"classictheater",    {"ClassicTheater.t2p", nullptr}},
+			{"eventcenter",       {"EventCenter.t2p", nullptr}},
+			{"billboard",         {"Billboard.t2p", nullptr}},
+			{"stadium",           {"Stadium.t2p", nullptr}},
+			{"yootcathedral",     {"Cathedral.t2p", nullptr}},
+			{"attraction",        {"Attraction.t2p", nullptr}},
+			{"observatory",       {"Observatory.t2p", nullptr}},
+			{"ticketbooth",       {"Ticket.t2p", nullptr}},
+			{"gatheringarea",     {"GatheringArea.t2p", nullptr}},
+			{"boatdeck",          {"Boatdeck.t2p", nullptr}},
+			{"subway",            {"Subway.t2p", nullptr}},
 		};
 		return links;
 	}

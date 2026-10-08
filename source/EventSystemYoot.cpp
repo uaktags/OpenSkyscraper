@@ -111,6 +111,7 @@ void EventSystem::yootDispatch()
 
 	power.advance();
 	facilities.advance();
+	venues.advance();
 	if (reggae.active) stepReggae(minute);
 	yootSyncRunning();
 }
@@ -142,19 +143,18 @@ void EventSystem::yootBegin(int index)
 	} else if (e.type == "ODEV") {
 		// Persistent: drawn every frame (drawOutDecorations).
 	} else if (e.type == "MREV") {
-		// TODO(I6): metro timetable (decodeYootMetro) for Item/Metro.
-		LOG(DEBUG, "MREV begins: metro timetable hook");
+		// The timetable itself runs in VenueSystem::subwayTick.
+		LOG(DEBUG, "MREV begins: subway timetable");
 	} else if (e.type == "BBEV") {
-		// TODO(V6): Tokyo baseball needs the Stadium item (T2Baseball
-		// IsValidStadium, Tokyo.t2p 0x100118d0); decodeYootBaseball has the data.
-		LOG(DEBUG, "BBEV begins: needs a Stadium (not implemented)");
+		venues.beginBaseball(); // T2Baseball (Tokyo.t2p 0x100118d0..)
 	} else if (e.type == "WDEV") {
-		// TODO(V6): Hawaii wedding (Hawai.t2p 0x10014ed0) needs the YootTower
-		// Cathedral and STRTBL 1 text.
-		LOG(DEBUG, "WDEV begins: needs a Cathedral wedding (not implemented)");
+		venues.beginWedding();  // T2Wedding (Hawai.t2p 0x10014ed0..)
+	} else if (e.type == "CLEV") {
+		// Persistent: VenueSystem moves and draws the clouds.
 	} else {
-		// TODO(V6): CLEV clouds (Sky), DOEV dolphins, TOEV black kite,
-		// HSEV hot spring, CREV cruise: world-plugin X-events.
+		// TODO(V6): DOEV dolphins, TOEV black kite (cosmetic animation
+		// scripts) and HSEV hot spring (unlocks the Kegon Spa, which has no
+		// OpenSky item yet).
 		LOG(DEBUG, "%s begins: world X-event hook", e.type.c_str());
 	}
 }

@@ -27,6 +27,7 @@
 #include "Cathedral.h"
 #include "PowerRoom.h"
 #include "YootFacilityItems.h"
+#include "YootVenueItems.h"
 
 using namespace OT;
 using namespace Item;
@@ -74,6 +75,18 @@ void Factory::loadPrototypes()
 	register_item(TrashFacility); // YootTower-only facilities (plan step 12)
 	register_item(Restroom);
 	register_item(DoctorsOffice);
+	register_item(Theater); // YootTower-only venues (plan step 14 part B)
+	register_item(ClassicTheater);
+	register_item(EventCenter);
+	register_item(Billboard);
+	register_item(Stadium);
+	register_item(YootCathedral);
+	register_item(Attraction);
+	register_item(Observatory);
+	register_item(TicketBooth);
+	register_item(GatheringArea);
+	register_item(BoatDeck);
+	register_item(Subway);
 	#undef register_item
 	
 	for (int i = 0; i < prototypes.size(); i++) {

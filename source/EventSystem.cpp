@@ -78,6 +78,7 @@ EventSystem::EventSystem(Game * game)
 : GameObject(game)
 , power(game)
 , facilities(game)
+, venues(game)
 , yoot(false)
 {
 	reset();
@@ -117,6 +118,7 @@ void EventSystem::reset()
 	reggae = Reggae();
 	power.configure(nullptr);
 	facilities.reset();
+	venues.reset();
 	prevHour = game ? game->time.hour : 0.0;
 	lastDispatchDay = -1;
 	santaActive = false;
@@ -882,6 +884,7 @@ void EventSystem::draw(sf::RenderTarget & target, sf::RenderStates /*states*/) c
 	if (yoot) {
 		power.drawDarkening(target);
 		drawOutDecorations(target);
+		venues.draw(target);
 	}
 
 	// Rubble from past fires and blasts persists until rebuilt.
@@ -957,6 +960,7 @@ void EventSystem::encodeXML(tinyxml2::XMLPrinter & xml) const
 	}
 	xml.PushAttribute("eventRubble", r.c_str());
 	power.encodeXML(xml);
+	venues.encodeXML(xml);
 	// Active events are not persisted mid-resolution; they end on reload.
 }
 
@@ -980,6 +984,7 @@ void EventSystem::decodeXML(tinyxml2::XMLElement & xml)
 	// The blackout persists (T2BlackOut::Write); the scheduler re-syncs.
 	syncRuleset();
 	power.decodeXML(xml);
+	venues.decodeXML(xml);
 
 	// A save with an active event reloads safe.
 	type = Type::None;

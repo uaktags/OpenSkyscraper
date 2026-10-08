@@ -67,7 +67,7 @@ namespace OT {
 			virtual void addPerson(Person *p) override;
 			virtual void removePerson(Person *p) override;
 
-		private:
+		protected:
 			/// Absolute time at which the next train event (arrival if the
 			/// train is currently absent, departure otherwise) is due.
 			double nextTrainTime;

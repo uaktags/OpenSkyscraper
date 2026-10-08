@@ -3,6 +3,7 @@
 #include "GameObject.h"
 #include "FacilitySystem.h"
 #include "PowerSystem.h"
+#include "VenueSystem.h"
 #include "Sprite.h"
 #include "YootEvents.h"
 #include "Math/Vector2D.h"
@@ -104,6 +105,8 @@ namespace OT
 		PowerSystem power;
 		/// YootTower trash, restrooms and doctors (plan step 12). Inert elsewhere.
 		FacilitySystem facilities;
+		/// YootTower venues, final items and the subway (plan step 14 B). Inert elsewhere.
+		VenueSystem venues;
 		/// True while the YootTower T2EV scheduler drives the calendar.
 		bool yootMode() const { return yoot; }
 		const YootEventScheduler & yootScheduler() const { return scheduler; }

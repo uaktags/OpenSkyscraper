@@ -72,6 +72,10 @@ std::string Yoot::placementError(const Game & game, const Item::AbstractPrototyp
 		code = subwayRule(floor, profile.lowestFloor);
 	else if (proto->icon == ICON_LOBBY)
 		code = lobbyRule(floor);
+	else if (proto->id == "boatdeck")
+		code = fixedSiteRule(profile.unitForX(x), profile.rowForFloor(floor + height - 1), 56, 55, kErrBoatDeckSite);
+	else if (proto->id == "observatory")
+		code = fixedSiteRule(profile.unitForX(x), profile.rowForFloor(floor + height - 1), 81, 40, kErrObservatorySite);
 	if (!code && !isMover(proto))
 		code = finalItemRule(proto->yoot && proto->yoot->finalItem(), floor, height, profile.highestFloor);
 

@@ -4,6 +4,7 @@
 #include <TGUI/Widgets/ChildWindow.hpp>
 #include <TGUI/Widgets/Label.hpp>
 #include <TGUI/Widgets/Button.hpp>
+#include <TGUI/Widgets/ComboBox.hpp>
 #include <string>
 
 namespace OT
@@ -43,6 +44,10 @@ namespace OT
 		tgui::Label::Ptr       content;
 		tgui::Button::Ptr      floorsButton;  ///< Shown only for elevators.
 		tgui::Button::Ptr      transformerButton; ///< YootTower Power Room only.
+		tgui::ComboBox::Ptr    venueChoice;   ///< YootTower movie / hall event / sponsor.
+		tgui::Button::Ptr      venueButton;   ///< YootTower subway schedule upgrade.
+		bool                   fillingChoice = false;
+		void refreshVenueChoice();
 		Item::Item *           currentItem;
 
 		void buildWindow();

@@ -49,6 +49,8 @@
 #include "../source/YootBackdrop.h"
 #include "../source/YootFacilities.h"
 #include "../source/YootPlacement.h"
+#include "../source/YootVenues.h"
+#include "../source/YootMovie.h"
 
 static int g_failures = 0;
 
@@ -3416,8 +3418,8 @@ static void testYootUnlocks()
 	const std::map<std::string, YootUnlock> hawaii = resolveYootUnlocks(pm, 0xF01);
 	const std::map<std::string, YootUnlock> kegon = resolveYootUnlocks(pm, 0xF0);
 	EXPECT(tokyo.count("office") && tokyo.at("office").available && tokyo.at("office").minGrade == 1);
-	EXPECT(tokyo.count("cathedral") && !tokyo.at("cathedral").available);
-	EXPECT(hawaii.count("cathedral") && hawaii.at("cathedral").available && hawaii.at("cathedral").minGrade == 4);
+	EXPECT(tokyo.count("yootcathedral") && !tokyo.at("yootcathedral").available);
+	EXPECT(hawaii.count("yootcathedral") && hawaii.at("yootcathedral").available && hawaii.at("yootcathedral").minGrade == 4);
 	EXPECT(tokyo.count("elevator-express") && tokyo.at("elevator-express").minGrade == 3);
 	EXPECT(tokyo.count("security") && tokyo.at("security").minGrade == 2);
 	EXPECT(kegon.count("stairs") && !kegon.at("stairs").available);
@@ -3719,7 +3721,7 @@ static void testYootCatalog()
 		EXPECT(burger.openMinute == 8 * 60 && burger.closeMinute == 22 * 60);
 	}
 	else EXPECT(false);
-	if (tokyo.count("cinema")) EXPECT(tokyo.at("cinema").maxBuild == 1);
+	if (tokyo.count("theater")) EXPECT(tokyo.at("theater").maxBuild == 1);
 	// Kegon has no Stair.t2p; its standard elevator is the K-variant.
 	EXPECT(kegon.count("stairs") == 0u);
 	EXPECT(kegon.count("elevator-standard") && kegon.at("elevator-standard").plugin == "KElev.t2p");
@@ -4347,7 +4349,7 @@ static void testYootFacilities()
 	EXPECT(tc.count("trashfacility") && tc.at("trashfacility").capacity == 50);
 	EXPECT(tc.at("trashfacility").openMinute == 450 && tc.at("trashfacility").closeMinute == 420);
 	EXPECT(tc.count("doctor") && tc.at("doctor").capacity == 20 && tc.at("doctor").bindMinutes == 30);
-	EXPECT(hc.count("cathedral") && hc.at("cathedral").finalItem());
+	EXPECT(hc.count("yootcathedral") && hc.at("yootcathedral").finalItem());
 }
 
 // Step 13: one placement predicate test per rule (L1, L2, M6, I7).
@@ -4435,6 +4437,241 @@ static void testYootPlacementRules()
 	EXPECT(Y::floorRemoveRule(lobby) == Y::kErrFloorCannotRemove);
 }
 
+// Step 14 part B: venues, final items and the subway (S1, S2, R4, V6, I7, M8).
+static std::string qtAtom(const char * type, const std::string & body)
+{
+	std::string a;
+	const uint32_t n = (uint32_t)(body.size() + 8);
+	a += (char)(n >> 24); a += (char)(n >> 16); a += (char)(n >> 8); a += (char)n;
+	a.append(type, 4);
+	return a + body;
+}
+
+static std::string qtBe32(uint32_t v)
+{
+	std::string s;
+	s += (char)(v >> 24); s += (char)(v >> 16); s += (char)(v >> 8); s += (char)v;
+	return s;
+}
+
+static void testYootVenues()
+{
+	using namespace OT;
+	namespace Y = OT::Yoot;
+	const PluginManager & pm = yootTestPlugins();
+	auto movieDef = [&](const char * name) {
+		MovieDef d;
+		AbstractPlugin * p = pm.get(name);
+		EXPECT(p && p->ensureLoaded() && p->getMovieDef(d));
+		return d;
+	};
+
+	// MODF life cycle (GetMovieLifePhase 0x10043320): 1st Contact p = 0/6/18.
+	const MovieDef contact = movieDef("MV_1stContact.t2p");
+	EXPECT(contact.phase1Months == 0 && contact.phase2Months == 6 && contact.phase3Months == 18);
+	EXPECT(contact.famousAudience == 300 && contact.remakeAudience == 70 && contact.unkFC == 500);
+	const Y::MovieCycle cc = Y::movieCycle(contact);
+	EXPECT(cc.p1 == 0 && cc.p2 == 6 && cc.p3 == 24 && cc.cycle() == 24);
+	Y::MovieState s;
+	EXPECT(Y::movieLifePhase(contact, s, 10, 10) == 1);
+	EXPECT(Y::movieLifePhase(contact, s, 15, 10) == 1 && Y::movieLifePhase(contact, s, 16, 10) == 2);
+	EXPECT(Y::movieLifePhase(contact, s, 34, 10) == 1); // next cycle
+	const MovieDef hours = movieDef("MV_49h.t2p");     // 12/6/18
+	EXPECT(Y::movieLifePhase(hours, s, 0, 0) == 0 && Y::movieLifePhase(hours, s, 12, 0) == 1);
+	EXPECT(Y::movieLifePhase(hours, s, 17, 0) == 1 && Y::movieLifePhase(hours, s, 18, 0) == 2);
+	EXPECT(Y::isRoadshowFilm(contact) && !Y::isFamousFilm(contact, s));
+	EXPECT(Y::isFamousFilm(movieDef("MV_Shakeit.t2p"), s)); // filmKind 2
+
+	// ReMake 0x100434c0: famous at R >= 300, sequel at R >= 70, else retired.
+	Y::MovieState hit; hit.bestR = 320;
+	Y::movieReMake(contact, hit);
+	EXPECT((hit.flags & Y::MovieState::kFamous) && (hit.flags & Y::MovieState::kSequel));
+	EXPECT(hit.bestF == 320 && hit.bestR == -1 && hit.remakeCount == 1);
+	EXPECT(Y::isFamousFilm(contact, hit));
+	EXPECT(Y::movieTitle(contact, hit, false) == "1st Contact PART II");
+	EXPECT(Y::movieTitle(contact, hit, true) == "1st Contact");
+	Y::MovieState ok; ok.bestR = 100;
+	Y::movieReMake(contact, ok);
+	EXPECT(!(ok.flags & Y::MovieState::kFamous) && (ok.flags & Y::MovieState::kSequel) && ok.bestF == -1);
+	Y::MovieState flop; flop.bestR = 50;
+	Y::movieReMake(contact, flop);
+	EXPECT((flop.flags & Y::MovieState::kRetired) && Y::movieLifePhase(contact, flop, 10, 10) == 4);
+	const MovieDef cellmax = movieDef("MV_Cellmax.t2p");  // famous 30, remake 200
+	Y::MovieState cm; cm.bestR = 100;
+	Y::movieReMake(cellmax, cm);
+	EXPECT((cm.flags & Y::MovieState::kFamous) && (cm.flags & Y::MovieState::kRetired) && cm.bestF == 100);
+	// ChkReMake 0x10043720: commit the pending record; judge on day 24, 48...
+	Y::MovieState p; p.pendingR = 90;
+	EXPECT(!Y::movieChkReMake(contact, p, 23) && p.bestR == 90 && p.pendingR == -1);
+	EXPECT(!Y::movieChkReMake(contact, p, 0));
+	EXPECT(Y::movieChkReMake(contact, p, 24) && (p.flags & Y::MovieState::kSequel));
+	Y::MovieState never;
+	EXPECT(!Y::movieChkReMake(contact, never, 24) && never.flags == 0); // never shown: not judged
+	EXPECT(Y::movieOffered(contact, s, false, 1) && !Y::movieOffered(contact, s, false, 2));
+	EXPECT(!Y::movieOffered(contact, s, true, 1) && Y::movieOffered(contact, hit, true, 2));
+
+	// Show schedule (Theater.t2p 0x1000e5e0): 10:00-22:00, 120-minute films.
+	EXPECT(Y::theaterShowCount(600, 1320, 120) == 4 && Y::theaterShowCount(720, 1320, 120) == 4);
+	EXPECT(Y::theaterShowAt(599, 600, 1320, 120).status == Y::TheaterShow::Closed);
+	EXPECT(Y::theaterShowAt(600, 600, 1320, 120).status == Y::TheaterShow::Doors);
+	EXPECT(Y::theaterShowAt(630, 600, 1320, 120).status == Y::TheaterShow::Playing);
+	EXPECT(Y::theaterShowAt(750, 600, 1320, 120).status == Y::TheaterShow::Doors && Y::theaterShowAt(750, 600, 1320, 120).show == 1);
+	EXPECT(Y::theaterShowAt(1199, 600, 1320, 120).show == 3 && Y::theaterShowAt(1200, 600, 1320, 120).status == Y::TheaterShow::Closed);
+	// Audience target 0x1000e640: record, then the movie's initial audience, then 95%.
+	EXPECT(Y::theaterAudienceTarget(-1, 0, -1, contact.clipSeconds, 500, contact.unk104) == 140);
+	EXPECT(Y::theaterAudienceTarget(-1, 0, 250, 140, 500, 95) == 250);
+	EXPECT(Y::theaterAudienceTarget(-1, 0, -1, 0, 500, 95) == 500);
+	EXPECT(Y::theaterAudienceTarget(140, 200, 250, 140, 500, 95) == 190);
+	// CalcInMoney: Theater inMoney 30 ($3,000), outMoney 20: 500 tickets = $13,000.
+	const std::map<std::string, YootItemStats> tc = resolveYootCatalog(pm, 0x7);
+	EXPECT(tc.count("theater") && tc.at("theater").capacity == 500);
+	if (tc.count("theater")) EXPECT(Yoot::commercialIncome(500, tc.at("theater")) == 13000);
+
+	// HEDF month mask (bit d = day-of-year d) and the settlement.
+	auto hallDef = [&](const char * name) {
+		HallEventDef d;
+		AbstractPlugin * h = pm.get(name);
+		EXPECT(h && h->ensureLoaded() && h->getHallEventDef(d));
+		return d;
+	};
+	const HallEventDef tennis = hallDef("PlTennis.t2p");
+	EXPECT(tennis.monthMask == 0x1F8u && tennis.bookingDays == 3 && tennis.cost == 400);
+	EXPECT(!Y::hallEventInMonth(tennis, 2) && Y::hallEventInMonth(tennis, 3));
+	EXPECT(Y::hallEventInMonth(tennis, 8) && !Y::hallEventInMonth(tennis, 9) && !Y::hallEventInMonth(tennis, 12));
+	const HallEventDef art = hallDef("PlArt.t2p");
+	EXPECT(art.monthMask == 0xF1Fu && Y::hallEventInMonth(art, 4) && !Y::hallEventInMonth(art, 5));
+	EXPECT(Y::hallEventSettlement(tennis.cost, 100) == 30000 && Y::hallEventSettlement(0, 100) == -10000);
+	EXPECT(Y::hallEventFlop(art, 49) && !Y::hallEventFlop(art, 50));
+	EXPECT(Y::hallEventNextValue(art, 10) == 1000 && Y::hallEventNextValue(art, 60) == 120);
+	EXPECT(Y::hallEventCollects(540, 540, 1080, 0) && Y::hallEventCollects(1020, 540, 1080, 0));
+	EXPECT(!Y::hallEventCollects(1021, 540, 1080, 0)); // evening events draw nobody
+	const HallEventDef rock = hallDef("PlConcert.t2p");
+	EXPECT(rock.openTime == 1080 && rock.bookingDays == 1 && rock.monthMask == 0xFFFu);
+
+	// ADDF: 12 campaign days, $50,000 up front, only on a 'BoPI' medium.
+	static const char * ads[] = {"AirJamaica.t2p", "Aquazone.t2p", "GAMEWORKSAD.t2p", "Ob9003.t2p",
+	                             "SandalBeachResort.t2p", "Segapc.t2p", "Yoot.t2p"};
+	TemplateDef board;
+	AbstractPlugin * bp = pm.get("Billboard.t2p");
+	EXPECT(bp && bp->ensureLoaded() && bp->getTemplateDef(board) && board.kind == TemplateDef::OuterObj);
+	uint32_t host = 0;
+	for (int k = 3; k >= 0; --k) host = (host << 8) | (unsigned char)board.tool.subPluginType.c[k];
+	EXPECT(host == 0x426F5049u); // 'BoPI'
+	for (const char * name : ads)
+	{
+		AdvertiseDef d;
+		AbstractPlugin * a = pm.get(name);
+		EXPECT(a && a->ensureLoaded() && a->getAdvertiseDef(d));
+		EXPECT(d.days == 12 && d.money * kYootMoneyUnit == 50000);
+		EXPECT(Y::advertiseFits(d, host) && !Y::advertiseFits(d, 0x4D6F5049u)); // not on a 'MoPI' theater
+	}
+
+	// Final items: each world's item is category 100, and its event grants the
+	// top grade only at grade == numGrades (doc vt+0x188, FUN_00422670).
+	struct World { YootWorld::Id id; const char * item; uint32_t mask; };
+	const World worlds[] = {{YootWorld::Id::Tokyo, "stadium", 0x7}, {YootWorld::Id::Hawaii, "yootcathedral", 0xF01},
+	                        {YootWorld::Id::Kegon, "attraction", 0xF0}};
+	for (const World & w : worlds)
+	{
+		const RulesProfile prof = RulesProfile::yootTower(loadYootWorld(pm, w.id));
+		const std::map<std::string, YootItemStats> cat = resolveYootCatalog(pm, w.mask);
+		EXPECT(cat.count(w.item) && cat.at(w.item).finalItem() && cat.at(w.item).maxBuild == 1);
+		const int top = (int)prof.grades.size();
+		EXPECT(top == 4);
+		uint32_t flags = 0;
+		EXPECT(!LevelUp::yootGrantFinalGrade(top - 1, top, prof.grades[top - 2].vipFlag, flags) && flags == 0);
+		EXPECT(LevelUp::yootGrantFinalGrade(top, top, prof.grades[top - 1].vipFlag, flags));
+		EXPECT(LevelUp::yootPromotionReady(prof.grades[top - 1].vipFlag, prof.grades[top - 1].population,
+		                                   flags, prof.grades[top - 1].population));
+	}
+	EXPECT(!Y::stadiumSeason(2) && Y::stadiumSeason(3) && Y::stadiumSeason(9) && !Y::stadiumSeason(10));
+	EXPECT(Y::baseballBeginDay(false, 5, true) && !Y::baseballBeginDay(true, 5, true));
+	EXPECT(!Y::baseballBeginDay(false, 11, true) && !Y::baseballBeginDay(false, 5, false));
+	EXPECT(Y::kBaseballVisitors == 200 && Y::kBaseballMinute == 1200);
+	EXPECT(Y::stadiumStatus(10, 720, 720, 1380, true, 0) == 30 && Y::stadiumStatus(10, 720, 720, 1380, false, 0) == 10);
+	EXPECT(Y::stadiumStatus(30, 960, 720, 1380, true, 0) == 31 && Y::stadiumStatus(31, 1080, 720, 1380, true, 1) == 33);
+	EXPECT(Y::stadiumStatus(33, 1100, 720, 1380, true, 10) == 34 && Y::stadiumStatus(34, 1260, 720, 1380, true, 1) == 35);
+	EXPECT(Y::stadiumStatus(35, 1379, 720, 1380, true, 1) == 35 && Y::stadiumStatus(35, 1380, 720, 1380, true, 1) == 10);
+	EXPECT(Y::weddingBeginDay(false, true, true) && !Y::weddingBeginDay(false, false, true) && !Y::weddingBeginDay(true, true, true));
+	EXPECT(Y::weddingReady(true, 30, true) && !Y::weddingReady(true, 29, true) && !Y::weddingReady(false, 40, true) && !Y::weddingReady(true, 40, false));
+	EXPECT(Y::weddingAnnouncement("3F", "A", "4F", "B") ==
+	       "'From now at the top of the Cathedral,,3F of A Mr. and ,4F of B Ms. of the wedding will start.'");
+	EXPECT(Y::cathedralOpen(true, 660, 660, 1020) && !Y::cathedralOpen(false, 700, 660, 1020) && !Y::cathedralOpen(true, 1020, 660, 1020));
+	EXPECT(Y::attractionRenovates(4, 200, false) && !Y::attractionRenovates(4, 199, false));
+	EXPECT(!Y::attractionRenovates(5, 300, false) && !Y::attractionRenovates(4, 300, true));
+	EXPECT(Y::attractionPattern(0) == 0 && Y::attractionPattern(39) == 1 && Y::attractionPattern(40) == 2);
+
+	// Subway: MREV 12 trains; level L runs the types < L (4/8/10/12 trains).
+	const RulesProfile tokyo = RulesProfile::yootTower(loadYootWorld(pm, YootWorld::Id::Tokyo));
+	YootMetroDef metro;
+	bool haveMetro = false;
+	for (const YootEventSpec & e : tokyo.events) if (decodeYootMetro(e, metro)) { haveMetro = true; break; }
+	EXPECT(haveMetro && metro.unk == 5000 && metro.trains.size() == 12u);
+	EXPECT(Y::subwayArrivals(metro.trains, 1) == std::vector<int>({490, 650, 1060, 1270}));
+	EXPECT(Y::subwayArrivals(metro.trains, 2).size() == 8u && Y::subwayArrivals(metro.trains, 3).size() == 10u);
+	const std::vector<int> all = Y::subwayArrivals(metro.trains, 4);
+	EXPECT(all.size() == 12u && all.front() == 410 && all.back() == 1420);
+	EXPECT(Y::subwayStoppedTrain(all, 409) == -1 && Y::subwayStoppedTrain(all, 410) == 0);
+	EXPECT(Y::subwayStoppedTrain(all, 417) == 0 && Y::subwayStoppedTrain(all, 418) == -1);
+	EXPECT(Y::subwayStoppedTrain(all, 1425) == 11);
+	EXPECT(Y::subwayOpen(390, 390, 1439) && !Y::subwayOpen(389, 390, 1439) && !Y::subwayOpen(1439, 390, 1439));
+	EXPECT(Y::subwayPattern(false, 5, 100) == 0 && Y::subwayPattern(true, 0, 100) == 1);
+	EXPECT(Y::subwayPattern(true, 49, 100) == 2 && Y::subwayPattern(true, 50, 100) == 3);
+
+	// Sky bridge (SkyBrdge.t2p AreaCheck FUN_1000bcc0) and fixed sites.
+	EXPECT(Y::skyBridgeRule(3, true, true, 10, true) == Y::SkyBridgeError::TooLow);
+	EXPECT(Y::skyBridgeRule(4, true, false, 10, true) == Y::SkyBridgeError::NotBetweenTowers);
+	EXPECT(Y::skyBridgeRule(4, true, true, 73, true) == Y::SkyBridgeError::TooLong);
+	EXPECT(Y::skyBridgeRule(4, true, true, 72, false) == Y::SkyBridgeError::NotClear);
+	EXPECT(Y::skyBridgeRule(4, true, true, 72, true) == Y::SkyBridgeError::None);
+	EXPECT(Y::fixedSiteRule(56, 55, 56, 55, Y::kErrBoatDeckSite) == 0 && Y::fixedSiteRule(57, 55, 56, 55, Y::kErrBoatDeckSite) == 74);
+	EXPECT(std::string(Y::buildErrorText(Y::kErrObservatorySite)) == "The observatory can only be placed at left edge of the B32 floor.");
+
+	// Clouds and the visitor stand-in.
+	for (int r = 0; r < 2000; r += 37) { const int f = Y::cloudFloor(95, r * 7919); EXPECT(f >= 1 && f <= 95); }
+	EXPECT(Y::cloudFloor(10, 0) == 10 && Y::cloudFloor(10, 99) == 1);
+	double carry = 0;
+	int arrived = 0;
+	for (int m = 0; m < 60; ++m) arrived += Y::venueArrivals(70, 0, 100, 45, carry);
+	EXPECT(arrived == 93); // 70 per 45 minutes
+	carry = 0;
+	EXPECT(Y::venueArrivals(70, 70, 100, 45, carry) == 0 && Y::venueArrivals(70, 0, 0, 45, carry) == 0);
+
+	// The venues exist only in YootTower and replace the SimTower ones there.
+	const BuildRules sim(BuildRules::Ruleset::SimTower);
+	const BuildRules yoot(BuildRules::Ruleset::YootTower, tokyo);
+	EXPECT(sim.minRatingToBuild("theater") == BuildRules::kUnavailable && sim.minRatingToBuild("subway") == BuildRules::kUnavailable);
+	EXPECT(sim.minRatingToBuild("cinema") == LevelUp::minRatingToBuild("cinema"));
+	EXPECT(yoot.minRatingToBuild("cinema") == BuildRules::kUnavailable && yoot.minRatingToBuild("metro") == BuildRules::kUnavailable);
+	const std::map<std::string, YootUnlock> tu = resolveYootUnlocks(pm, 0x7);
+	EXPECT(tu.count("subway") && tu.at("subway").available && tu.at("subway").minGrade == 2);
+	EXPECT(tu.count("stadium") && tu.at("stadium").available && tu.at("stadium").minGrade == 4);
+	EXPECT(tu.count("observatory") && !tu.at("observatory").available);
+	EXPECT(tu.count("billboard") && tu.at("billboard").available && tu.at("billboard").minGrade == 1);
+
+	// QuickTime sound track: a synthetic 'raw ' movie, and a shipped clip if present.
+	std::string hdlr = qtBe32(0) + "mhlr" + "soun" + std::string(12, '\0');
+	std::string entry = qtBe32(36) + "raw " + std::string(6, '\0') + std::string("\0\1", 2) +
+		std::string(8, '\0') + std::string("\0\1\0\x08", 4) + std::string(4, '\0') + qtBe32(11025u << 16);
+	std::string stsd = qtBe32(0) + qtBe32(1) + entry;
+	std::string stsc = qtBe32(0) + qtBe32(1) + qtBe32(1) + qtBe32(4) + qtBe32(1);
+	const std::string pcm("\x80\xff\x00\x80\x40\x40\x40\x40", 8);
+	std::string moov;
+	// mdat goes first so its offset is known: 8 (mdat header).
+	std::string stco = qtBe32(0) + qtBe32(2) + qtBe32(8) + qtBe32(12);
+	std::string stbl = qtAtom("stsd", stsd) + qtAtom("stsc", stsc) + qtAtom("stco", stco);
+	moov = qtAtom("moov", qtAtom("trak", qtAtom("mdia", qtAtom("hdlr", hdlr) + qtAtom("minf", qtAtom("stbl", stbl)))));
+	const std::string movie = qtAtom("mdat", pcm) + moov;
+	YootMovieSound snd;
+	EXPECT(decodeQuickTimeSound(movie.data(), movie.size(), snd));
+	EXPECT(snd.channels == 1 && snd.sampleRate == 11025 && snd.samples.size() == 8u);
+	EXPECT(snd.samples[0] == 0 && snd.samples[1] == 127 * 256 && snd.samples[2] == -128 * 256);
+	EXPECT(!decodeQuickTimeSound(pcm.data(), pcm.size(), snd));
+	YootMovieSound clip;
+	if (loadQuickTimeSound("../data/Movie/HE_Tennis.MOV", clip))
+		EXPECT(clip.channels == 1 && clip.sampleRate == 11025 && clip.samples.size() == 44100u);
+}
+
 int main()
 {
 	testBldSyntheticRoundTrip();
@@ -4496,6 +4733,7 @@ int main()
 	testYootStress();
 	testYootFacilities();
 	testYootPlacementRules();
+	testYootVenues();
 	testOspAttrCompat();
 	testYootWorldEncoders();
 	testOspV3Sweep();

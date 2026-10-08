@@ -235,6 +235,19 @@ namespace {
 		{"trashfacility", 2},  // TrashFacility.t2p / KTrashFacility.t2p, grade 3
 		{"restroom", 0},       // Restroom.t2p / KRestroom.t2p, grade 1
 		{"doctor", 2},         // Doctor's.t2p, grade 3
+		// Venues, final items and transport (plan step 14 part B).
+		{"theater", 2},        // Theater.t2p, grade 3
+		{"classictheater", 2}, // ClassicTheater.t2p, grade 3
+		{"eventcenter", 2},    // EventCenter.t2p, grade 3
+		{"billboard", 0},      // Billboard.t2p, grade 1
+		{"stadium", 3},        // Stadium.t2p, grade 4 (Tokyo final item)
+		{"yootcathedral", 3},  // Cathedral.t2p, grade 4 (Hawaii final item)
+		{"attraction", 3},     // Attraction.t2p, grade 4 (Kegon final item)
+		{"observatory", 2},    // Observatory.t2p, grade 3
+		{"ticketbooth", 2},    // Ticket.t2p, grade 3
+		{"gatheringarea", 3},  // GatheringArea.t2p, grade 4
+		{"boatdeck", 2},       // Boatdeck.t2p, grade 3
+		{"subway", 1},         // Subway.t2p, grade 2
 	};
 }
 
@@ -248,8 +261,11 @@ bool BuildRules::isYootOnlyPrototype(const std::string & prototypeId)
 bool BuildRules::isReplacedInYoot(const std::string & prototypeId)
 {
 	// The YootTower plugins behind them are the Trash Facility and the
-	// Doctor's Office, which are native items there.
-	return prototypeId == "recycling" || prototypeId == "medicalcenter";
+	// Doctor's Office, the Theater, Event Center, Subway and Cathedral,
+	// which are native items there.
+	return prototypeId == "recycling" || prototypeId == "medicalcenter" ||
+	       prototypeId == "cinema" || prototypeId == "partyhall" ||
+	       prototypeId == "metro" || prototypeId == "cathedral";
 }
 
 bool BuildRules::allowsFootprint(int x, int floor, int width, int height) const

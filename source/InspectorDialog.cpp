@@ -8,6 +8,7 @@
 #include "Item/Condo.h"
 #include "Item/Shop.h"
 #include "Item/PowerRoom.h"
+#include "Item/YootVenueItems.h"
 #include "Person.h"
 
 #include <cstdio>
@@ -100,6 +101,37 @@ void InspectorDialog::buildWindow()
 		refresh();
 	});
 	window->add(transformerButton);
+
+	// YootTower venues: the movie (Theater.t2p 0x1000de70), the hall event
+	// (EventCenter.t2p FUN_1000d010) or the sponsor (Billboard.t2p
+	// FUN_1000bff0) is picked from a list; the subway schedule is expanded
+	// with a button (T2Transport::UpGrade).
+	venueChoice = tgui::ComboBox::create();
+	venueChoice->setSize(208 * app->uiScale, 18 * app->uiScale);
+	venueChoice->setPosition({6 * app->uiScale, 210 * app->uiScale});
+	venueChoice->setTextSize(11 * app->uiScale);
+	venueChoice->setVisible(false);
+	venueChoice->onItemSelect([this](const tgui::String &, const tgui::String & id) {
+		if (fillingChoice || !currentItem) return;
+		std::string reason;
+		if (!game->eventSystem.venues.choose(currentItem, id.toStdString(), &reason) && !reason.empty())
+			game->timeWindow.showMessage(reason);
+		refresh();
+	});
+	window->add(venueChoice);
+
+	venueButton = tgui::Button::create("Expand schedule");
+	venueButton->setSize(100 * app->uiScale, 18 * app->uiScale);
+	venueButton->setPosition({6 * app->uiScale, 210 * app->uiScale});
+	venueButton->setTextSize(11 * app->uiScale);
+	venueButton->setVisible(false);
+	venueButton->onPress([this] {
+		std::string reason;
+		if (!game->eventSystem.venues.upgradeSubway(dynamic_cast<Item::Subway *>(currentItem), &reason) && !reason.empty())
+			game->timeWindow.showMessage(reason);
+		refresh();
+	});
+	window->add(venueButton);
 
 	// Close button at the bottom.
 	auto closeBtn = tgui::Button::create("Close");
@@ -225,6 +257,7 @@ std::string InspectorDialog::describeItem(Item::Item * item)
 	}
 
 	s << game->eventSystem.facilities.describe(item);
+	s << game->eventSystem.venues.describe(item);
 
 	if (!item->people.empty())
 	{
@@ -264,4 +297,26 @@ void InspectorDialog::refresh()
 	if (transformerButton)
 		transformerButton->setVisible(dynamic_cast<Item::PowerRoom *>(currentItem) != NULL &&
 		                              game->eventSystem.power.enabled());
+	refreshVenueChoice();
+}
+
+void InspectorDialog::refreshVenueChoice()
+{
+	if (!venueChoice || !venueButton) return;
+	VenueSystem & venues = game->eventSystem.venues;
+	const bool isVenue = venues.enabled() && (dynamic_cast<Item::Theater *>(currentItem) ||
+		dynamic_cast<Item::EventCenter *>(currentItem) || dynamic_cast<Item::Billboard *>(currentItem));
+	venueButton->setVisible(venues.enabled() && dynamic_cast<Item::Subway *>(currentItem) != NULL);
+	venueChoice->setVisible(isVenue);
+	if (!isVenue) return;
+	std::string current;
+	if (Item::Theater * t = dynamic_cast<Item::Theater *>(currentItem)) current = t->movie;
+	else if (Item::EventCenter * e = dynamic_cast<Item::EventCenter *>(currentItem)) current = e->event;
+	else if (Item::Billboard * b = dynamic_cast<Item::Billboard *>(currentItem)) current = b->ad;
+	fillingChoice = true;
+	venueChoice->removeAllItems();
+	for (const auto & c : venues.choices(currentItem))
+		venueChoice->addItem(c.first, c.second);
+	if (!current.empty()) venueChoice->setSelectedItemById(current);
+	fillingChoice = false;
 }

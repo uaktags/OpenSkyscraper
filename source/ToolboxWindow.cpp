@@ -427,7 +427,8 @@ tgui::Button::Ptr ToolboxWindow::makeItemButton(Item::AbstractPrototype* proto, 
         const std::string plugin = proto->yoot ? proto->yoot->plugin
             : proto->id == "trashfacility" ? "TrashFacility.t2p"
             : proto->id == "restroom" ? "Restroom.t2p"
-            : proto->id == "doctor" ? "Doctor's.t2p" : "PowerRoom.t2p";
+            : proto->id == "doctor" ? "Doctor's.t2p"
+            : proto->id == "billboard" ? "Billboard.t2p" : "PowerRoom.t2p";
         sf::Texture sheet;
         if (app->bitmaps.loadFromPlugin(plugin, 100, sheet)) {
             sf::Image full = sheet.copyToImage();
