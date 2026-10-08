@@ -173,9 +173,15 @@ void YootTenant::decodeXML(tinyxml2::XMLElement & xml)
 	Item::decodeXML(xml);
 	const YootTenantDef & d = def();
 	model.status = xml.IntAttribute("tenantStatus", Yoot::kStatusBuilt);
-	model.pattern = std::max(0, xml.IntAttribute("pattern", 0));
-	model.staff = std::max(0, std::min(d.belongCapacity, xml.IntAttribute("staff", 0)));
-	model.staffIn = std::max(0, std::min(model.staff, xml.IntAttribute("staffIn", 0)));
+	// Statuses below 9 (for rent / unbuilt records of a .bld) restart as built.
+	if (model.status < Yoot::kStatusBuilt) model.status = Yoot::kStatusBuilt;
+	const bool open = isOpen();
+	// Imported towers carry no staff counts: a tenant past hiring (11+)
+	// has its staff, at work while open.
+	const int staffDefault = model.status >= Yoot::kStatusNight ? d.belongCapacity : 0;
+	model.staff = std::max(0, std::min(d.belongCapacity, xml.IntAttribute("staff", staffDefault)));
+	model.staffIn = std::max(0, std::min(model.staff, xml.IntAttribute("staffIn", open ? model.staff : 0)));
+	model.pattern = std::max(0, xml.IntAttribute("pattern", open ? 1 : 0));
 	model.customers = std::max(0, xml.IntAttribute("customers", 0));
 	model.estimate = yootEstimate;
 	// Customers inside are transient: they finish their stay from now.

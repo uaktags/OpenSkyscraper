@@ -69,6 +69,10 @@ void Office::init()
 	rentDeposit = rent;
 
 	sprite.setTexture(App->bitmaps.editionTexture("office", "simtower/office"));
+	// Skin::Yoot: the Office.t2p sheet, its windows keyed to the backdrop.
+	yootView = game->skin == Skin::Yoot
+		? yootPluginView(game->app, prototype->yoot ? prototype->yoot->plugin : "Office.t2p", kYootWindowKey) : nullptr;
+	if (yootView) sprite.setTexture(yootView->texture);
 	sprite.setOrigin({0.f, 24.f});
 	sprite.setPosition({static_cast<float>(position.x * 8), static_cast<float>(position.y * -36)});
 	addSprite(&sprite);
@@ -119,6 +123,13 @@ void Office::decodeXML(tinyxml2::XMLElement &xml)
 void Office::updateSprite()
 {
 	spriteNeedsUpdate = false;
+	if (yootView) {
+		// Office.t2p View patterns: 7 kinds x 2 (kind 0 vacant, 1..6 the
+		// furnished offices; pattern 0 lit, 1 dark).
+		sprite.setTextureRect(yootView->band(2 * (occupied ? 1 + variant % 6 : 0) + (lit ? 0 : 1)));
+		sprite.setPosition({static_cast<float>(position.x * 8), static_cast<float>(position.y * -36)});
+		return;
+	}
 	int index_x = (lit ? 0 : 1);
 	int index_y = (occupied ? variant : 6);
 	sprite.setTextureRect(sf::IntRect({index_x * 72, index_y * 24}, {72, 24}));

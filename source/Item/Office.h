@@ -1,6 +1,7 @@
 /* Copyright © 2013 Fabian Schuiki */
 #pragma once
 #include "Item.h"
+#include "../YootItemArt.h"
 #include <queue>
 #include <vector>
 #include <set>
@@ -140,6 +141,8 @@ return out;
 
 			Sprite sprite;
 			bool spriteNeedsUpdate;
+			/// Skin::Yoot: Office.t2p art (YootItemArt.h), null = OpenSky art.
+			const YootPluginView * yootView = nullptr;
 			typedef std::set<Worker *, SimLess> Workers;
 			Workers workers;
 
