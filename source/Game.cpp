@@ -1704,12 +1704,17 @@ void Game::applyItemCatalog()
 {
 	// Detach and restore first so switching worlds/rulesets never leaves a
 	// dangling prototype->yoot or a YootTower price behind.
-	static std::map<std::string, int2> baseSizes; // YootTower-only prototypes
+	static std::map<std::string, int2> baseSizes; // YootTower-only prototypes and hotel rooms
+	// Hotel rooms take the TNDF footprint too: Singleroom 4, Twinroom 6,
+	// Suiteroom 16, Kegon's Smallroom 10 and Largeroom 16 units wide.
+	auto tndfSized = [](const std::string & id) {
+		return BuildRules::isYootOnlyPrototype(id) || id.compare(0, 6, "hotel_") == 0;
+	};
 	for (size_t i = 0; i < itemFactory.prototypes.size(); ++i)
 	{
 		Item::AbstractPrototype * p = itemFactory.prototypes[i];
 		p->yoot = nullptr;
-		if (BuildRules::isYootOnlyPrototype(p->id))
+		if (tndfSized(p->id))
 		{
 			if (!baseSizes.count(p->id)) baseSizes[p->id] = p->size;
 			p->size = baseSizes[p->id];
@@ -1741,7 +1746,7 @@ void Game::applyItemCatalog()
 		// Per-world footprints of the native YootTower items (KRestroom 10x1,
 		// KTrashFacility 17x2, RMaintenance 12x1, ...). The gate's 16x2 is
 		// not in the TNDF (its width is the lot's), so it keeps its own.
-		if (BuildRules::isYootOnlyPrototype(p->id) && s->second.variation == 0 && s->second.width > 0)
+		if (tndfSized(p->id) && s->second.variation == 0 && s->second.width > 0)
 			p->size = int2(s->second.width, std::max(1, s->second.height));
 		if (s->second.mover && s->second.carPrice > 0)
 			p->carCost = s->second.carPrice;

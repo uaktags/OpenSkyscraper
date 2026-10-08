@@ -1,6 +1,7 @@
 /* Copyright © 2024 */
 #include "../Game.h"
 #include "../YootRules.h"
+#include "../YootSpecials.h"
 #include "../Math/Rand.h"
 #include "../Time.h"
 #include "Factory.h"
@@ -111,11 +112,24 @@ void Hotel::applyVariant()
 		case kDouble: sz = int2(6, 1); tex = "simtower/double"; edition = "hotel_double"; frameWidth = 48; break;
 		case kSuite:  sz = int2(7, 1); tex = "simtower/suite";  edition = "hotel_suite";  frameWidth = 80; break;
 	}
+	// YootTower: the plugin's TNDF footprint (Game::applyItemCatalog).
+	if (prototype->yoot) sz = prototype->size;
 	size = sz;
 	sprite.setTexture(App->bitmaps.editionTexture(edition, tex));
 	sprite.setOrigin({0.f, 24.f});
 	sprite.setPosition({static_cast<float>(getPosition().x * 8), static_cast<float>(-getPosition().y * 36)});
 	(void)frameWidth;
+	// Skin::Yoot: the room plugin's sheet, windows keyed to the sky colour,
+	// its 24 px interior above the 4 px floor strip.
+	yootView = nullptr;
+	if (game->skin == Skin::Yoot) {
+		const char * fallback = variant == kSingle ? "Singleroom.t2p" : variant == kDouble ? "Twinroom.t2p" : "Suiteroom.t2p";
+		yootView = yootPluginView(game->app, prototype->yoot ? prototype->yoot->plugin : fallback, kYootWindowKey);
+	}
+	if (yootView) {
+		sprite.setTexture(yootView->texture);
+		sprite.setPosition({static_cast<float>(getPosition().x * 8), static_cast<float>(-getPosition().y * 36 - kYootInteriorLift)});
+	}
 }
 
 void Hotel::init()
@@ -154,9 +168,30 @@ static int hotelRoomFrame(int roomState, double hour)
 	return night ? 4 : 3;
 }
 
+int Hotel::currentFrame() const
+{
+	if (!yootView) return hotelRoomFrame(roomState, game->time.hour);
+	int in = 0, asleep = 0, up = 0;
+	for (std::set<Guest *, SimLess>::const_iterator it = guests.begin(); it != guests.end(); ++it) {
+		const Guest * g = *it;
+		if (!g->atHotel) continue;
+		++in;
+		if (g->state == Person::kResting) ++asleep;
+		else if (game->time.absolute >= g->wakeTime) ++up;
+	}
+	const Yoot::RoomLook look = Yoot::roomLook(roomState == kOccupied, roomState == kDirty || roomState == kInfested, in, asleep, up);
+	const int kinds = std::max(1, (int)yootView->bands.size() / 5);
+	return Yoot::roomPatternIndex(look, subVariant + position.x, kinds);
+}
+
 void Hotel::updateSprite()
 {
 	spriteNeedsUpdate = false;
+	if (yootView) {
+		roomFrameIndex = currentFrame();
+		sprite.setTextureRect(yootView->band(roomFrameIndex));
+		return;
+	}
 	int frameWidth = 48;
 	switch (variant)
 	{
@@ -413,7 +448,7 @@ void Hotel::advance(double dt)
 		}
 	}
 
-	if (spriteNeedsUpdate || roomFrameIndex != hotelRoomFrame(roomState, game->time.hour))
+	if (spriteNeedsUpdate || roomFrameIndex != currentFrame())
 		updateSprite();
 }
 

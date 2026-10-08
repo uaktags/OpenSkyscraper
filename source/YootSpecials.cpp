@@ -152,5 +152,21 @@ namespace OT
 			}
 			return sent;
 		}
+
+		RoomLook roomLook(bool occupied, bool dirty, int guestsIn, int asleep, int awakeAfterSleep)
+		{
+			if (dirty) return RoomLook::Dirty;
+			if (!occupied) return RoomLook::Vacant;
+			if (guestsIn > 0 && asleep >= guestsIn) return RoomLook::Asleep;
+			if (awakeAfterSleep > 0) return RoomLook::Morning;
+			return RoomLook::Lit;
+		}
+
+		int roomPatternIndex(RoomLook look, int kind, int numKinds)
+		{
+			numKinds = std::max(1, numKinds);
+			kind = ((kind % numKinds) + numKinds) % numKinds;
+			return 5 * kind + static_cast<int>(look);
+		}
 	}
 }

@@ -1,6 +1,7 @@
 #pragma once
 #include "../Sprite.h"
 #include "Item.h"
+#include "../YootItemArt.h"
 #include <queue>
 #include <set>
 
@@ -93,6 +94,11 @@ namespace OT
 			// day/night and 4AM lights-out re-poses).
 			int roomFrameIndex;
 			void updateSprite();
+			/// Skin::Yoot: the room plugin's View sheet (Singleroom, Twinroom,
+			/// Suiteroom; Smallroom/Largeroom in Kegon), null = OpenSky art.
+			const YootPluginView * yootView = nullptr;
+			/// Frame updateSprite() would pick now (sheet column or View band).
+			int currentFrame() const;
 
 			Path getRandomBackgroundSoundPath() override;
 

@@ -4123,7 +4123,8 @@ static void testBldShippedSaves()
 	EXPECT(xml.find("type=\"floor\" x=\"-31\" y=\"9\" evaluation=\"50.0\" width=\"40\"") != std::string::npos);
 	EXPECT(countOf(xml, "type=\"floor\"") == 7);
 	EXPECT(countOf(xml, "type=\"office\"") == 9);
-	EXPECT(xml.find("type=\"office\" x=\"-13\" y=\"4\" evaluation=\"100.000\" yootEstimate=\"300\" occupied=\"1\"") != std::string::npos);
+	// Status 10 offices of kind 0 stand empty (no SetKind yet): not let.
+	EXPECT(xml.find("type=\"office\" x=\"-13\" y=\"4\" evaluation=\"100.000\" yootEstimate=\"300\" occupied=\"0\"") != std::string::npos);
 	EXPECT(xml.find("type=\"office\" x=\"-31\" y=\"4\" evaluation=\"50.0\" occupied=\"0\"") != std::string::npos);
 	// Ice Cream (ICES) is its own plugin-backed shop, carrying the T2Tenant status.
 	EXPECT(xml.find("type=\"yt_icecream\" x=\"-37\" y=\"3\" evaluation=\"50.0\" tenantStatus=\"12\"") != std::string::npos);
@@ -4532,6 +4533,40 @@ static void testYootFacilities()
 	EXPECT(tc.at("trashfacility").openMinute == 450 && tc.at("trashfacility").closeMinute == 420);
 	EXPECT(tc.count("doctor") && tc.at("doctor").capacity == 20 && tc.at("doctor").bindMinutes == 30);
 	EXPECT(hc.count("yootcathedral") && hc.at("yootcathedral").finalItem());
+}
+
+// YootTower skin: guest room patterns and the tower-palette repaint.
+static void testYootItemArt()
+{
+	using namespace OT;
+	using Yoot::RoomLook;
+	// Vacant rooms show pattern 0 day and night (oracle: status 30, patIndex 0).
+	EXPECT(Yoot::roomLook(false, false, 0, 0, 0) == RoomLook::Vacant);
+	EXPECT(Yoot::roomLook(true, false, 0, 0, 0) == RoomLook::Lit);       // let, guests out
+	EXPECT(Yoot::roomLook(true, false, 2, 0, 0) == RoomLook::Lit);       // in, awake
+	EXPECT(Yoot::roomLook(true, false, 2, 1, 0) == RoomLook::Lit);       // one still up
+	EXPECT(Yoot::roomLook(true, false, 2, 2, 0) == RoomLook::Asleep);
+	EXPECT(Yoot::roomLook(true, false, 1, 0, 1) == RoomLook::Morning);
+	EXPECT(Yoot::roomLook(true, true, 0, 0, 0) == RoomLook::Dirty);
+	EXPECT(Yoot::roomLook(false, true, 0, 0, 0) == RoomLook::Dirty);
+	// 5 patterns per kind: Twinroom has 4 kinds (20 bands), Suiteroom 1.
+	EXPECT(Yoot::roomPatternIndex(RoomLook::Asleep, 3, 4) == 17);
+	EXPECT(Yoot::roomPatternIndex(RoomLook::Dirty, 5, 4) == 9);
+	EXPECT(Yoot::roomPatternIndex(RoomLook::Lit, 7, 1) == 1);
+	EXPECT(Yoot::roomPatternIndex(RoomLook::Vacant, -1, 2) == 5);
+
+	// Only indices inside the animated range take the palette colour.
+	std::vector<YootRgb> pal(256);
+	pal[189] = YootRgb{10, 20, 30};
+	pal[200] = YootRgb{40, 50, 60};
+	const std::vector<uint8_t> idx = {0, 189, 200, 188};
+	std::vector<uint8_t> rgba(16, 7);
+	rgba[7] = 0; // a masked window pixel becomes opaque sky colour
+	EXPECT(yootPaintAnimatedIndices(idx, pal, 189, 48, rgba) == 2);
+	EXPECT(rgba[0] == 7 && rgba[3] == 7);
+	EXPECT(rgba[4] == 10 && rgba[5] == 20 && rgba[6] == 30 && rgba[7] == 255);
+	EXPECT(rgba[8] == 40 && rgba[12] == 7);
+	EXPECT(yootPaintAnimatedIndices(idx, pal, 93, 96, rgba) == 1); // Kegon: 93..188
 }
 
 // Step 14 part A: hotel back office, parking, fire department, Kegon sizes.
@@ -5074,6 +5109,7 @@ int main()
 	testYootPlacementRules();
 	testYootVenues();
 	testYootSpecials();
+	testYootItemArt();
 	testOspAttrCompat();
 	testYootWorldEncoders();
 	testOspV3Sweep();

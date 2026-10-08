@@ -136,5 +136,19 @@ namespace OT
 		/// list order. Returns how many each source sends.
 		const int kMaxFiremen = 6;
 		std::vector<int> callFiremen(const std::vector<int> & presentPerSource);
+
+		// ---- guest room art ----
+		/// Singleroom/Twinroom/Suiteroom (and Kegon Small/Large Room) View
+		/// patterns: mNumOfPattern 5 per kind, index = 5 x kind + p.
+		/// p: 0 vacant (curtains drawn, dark; the oracle's status 30 rooms
+		/// show it day and night), 1 let and lit (bed made), 2 guests asleep
+		/// (lights out), 3 guests up in the morning (bed unmade, lit),
+		/// 4 vacated and dirty (waiting for Housekeeping).
+		enum class RoomLook { Vacant = 0, Lit = 1, Asleep = 2, Morning = 3, Dirty = 4 };
+		/// `occupied` (a stay is running), `dirty`, guests in the room now
+		/// and how many of them sleep / are up after waking.
+		RoomLook roomLook(bool occupied, bool dirty, int guestsIn, int asleep, int awakeAfterSleep);
+		/// View band of a room: kinds clamp to the plugin's mNumOfKind.
+		int roomPatternIndex(RoomLook look, int kind, int numKinds);
 	}
 }
