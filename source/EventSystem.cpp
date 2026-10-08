@@ -84,6 +84,7 @@ EventSystem::EventSystem(Game * game)
 	fireSprite.setOrigin({48.f, 36.f});
 
 	chopperSprite.SetImage(App->bitmaps["simtower/fire/chopper"]);
+	chopperSprite.setTextureRect(sf::IntRect({0, 0}, {96, 36})); // 4 x 96px rotor frames
 	chopperSprite.setOrigin({48.f, 36.f});
 
 	alertSprite.SetImage(App->bitmaps["simtower/alerts/fire"]);
@@ -868,7 +869,9 @@ void EventSystem::draw(sf::RenderTarget & target, sf::RenderStates /*states*/) c
 		}
 
 		if (chopperX > 0) {
+			// Rotor animation: same 4-frame / 3-frame cadence as the flames.
 			Sprite chop = chopperSprite;
+			chop.setTextureRect(fireRect);
 			chop.setPosition(tileToPixel(chopperX, fireOriginFloor));
 			target.draw(chop);
 			game->drawnSprites++;
