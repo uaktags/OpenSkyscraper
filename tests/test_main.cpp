@@ -41,6 +41,7 @@
 #include "../source/YootEvents.h"
 #include "../source/YootCatalog.h"
 #include "../source/YootRules.h"
+#include "../source/YootBackdrop.h"
 
 static int g_failures = 0;
 
@@ -2667,6 +2668,167 @@ static void testRulesProfileSeam()
 }
 
 // Step 1: WORLDDEF / WATR / T2EV / FINF parsed from the shipped plugins.
+// YootTower skin: BINF tile layout, backdrop placement and the sky palette.
+static void testYootBackdropLayout()
+{
+	using namespace OT;
+	// Synthetic BINF: 2 rows x 3 cols, column-major, one value with high bits.
+	const std::string text = "2 3 0\r\n1 2\r\n3 4\r\n5 65542\r\n";
+	YootBinf b;
+	EXPECT(parseYootBinf(text.data(), int(text.size()), b));
+	EXPECT(b.rows == 2 && b.cols == 3 && b.cells.size() == 6u);
+	EXPECT(b.tile(0, 0) == 1 && b.tile(1, 0) == 2);
+	EXPECT(b.tile(0, 1) == 3 && b.tile(1, 1) == 4);
+	EXPECT(b.tile(0, 2) == 5 && b.tile(1, 2) == 6);   // & 0xffff
+	EXPECT(b.tile(-3, 9) == 5 && b.tile(7, -1) == 2);  // clamps to the edges
+	YootBinf shortMap;
+	EXPECT(!parseYootBinf("2 3 0 1 2", 9, shortMap));
+
+	// Tokyo: 61x46 cells, the 6 bottom cell rows are the underground tiles 100..105.
+	const PluginManager & pm = yootTestPlugins();
+	AbstractPlugin * tokyo = pm.get("Tokyo.t2p");
+	EXPECT(tokyo != nullptr);
+	if (tokyo)
+	{
+		const WindowsPEExecutable::Resource * r = tokyo->getResource("BINF", 1);
+		EXPECT(r != nullptr);
+		YootBinf tb;
+		if (r)
+		{
+			EXPECT(parseYootBinf(r->data, r->length, tb));
+			EXPECT(tb.rows == 61 && tb.cols == 46);
+			EXPECT(tb.tile(53, 10) == 46 && tb.tile(54, 10) == 47);
+			EXPECT(tb.tile(55, 10) == 100 && tb.tile(60, 10) == 105);
+		}
+	}
+
+	// Placement: Tokyo is 368 units x 122 rows, ground row 110, origin 184.
+	YootBackdropGeometry g;
+	g.width = 368; g.height = 122; g.groundLine = 110; g.unitOrigin = 184;
+	YootBackdropGeometry::Rect c = g.cellRect(55, 23);   // first cell under ground at x = 0
+	EXPECT(c.x == 0 && c.y == 0 && c.w == 64 && c.h == 72);
+	c = g.cellRect(54, 22);                               // 1F/2F, just left of the centre
+	EXPECT(c.x == -64 && c.y == -72);
+	c = g.cellRect(0, 0);
+	EXPECT(c.x == -1472 && c.y == -3960);
+	EXPECT(g.cellRowAt(0.0) == 55 && g.cellRowAt(-0.5) == 54 && g.cellRowAt(-72.0) == 54 && g.cellRowAt(-72.5) == 53);
+	EXPECT(g.cellColAt(0.0) == 23 && g.cellColAt(-1.0) == 22 && g.cellColAt(63.9) == 23 && g.cellColAt(64.0) == 24);
+	YootBackdropGeometry::Rect wr = g.worldRect();
+	EXPECT(wr.x == -1472 && wr.y == -3960 && wr.w == 2944 && wr.h == 4392);
+	YootBackdropGeometry k;   // Kegon: 192 x 44, ground row 10, one picture
+	k.width = 192; k.height = 44; k.groundLine = 10; k.unitOrigin = 96;
+	wr = k.worldRect();
+	EXPECT(wr.x == -768 && wr.y == -360 && wr.w == 1536 && wr.h == 1584);
+}
+
+static void testYootSkyPalette()
+{
+	using namespace OT;
+	// T2DayLightFilter::SetTime: midnight -90 (270), sunrise 0, noon 90, sunset 0.
+	EXPECT(yootDayLightAngleForMinute(0) == 270);
+	EXPECT(yootDayLightAngleForMinute(360) == 0);
+	EXPECT(yootDayLightAngleForMinute(720) == 90);
+	EXPECT(yootDayLightAngleForMinute(1080) == 0);
+	EXPECT(yootDayLightAngleForMinute(420) == 23);
+	EXPECT(yootDayLightAngleForMinute(1260) > 270);
+	EXPECT(yootDayLightFilter(90) == YootRgb(255, 255, 255));
+	EXPECT(yootDayLightFilter(270) == YootRgb(61, 73, 102));
+	EXPECT(yootDayLightFilter(23) == YootRgb(255, 198, 178));
+	// Oracle: Hawaii's first sky colour under the 7:00 filter (the Wine
+	// screenshot oracle-shots/stage_c_yooooot.png shows exactly this pink).
+	EXPECT(yootSkyColor(yootDayLightFilter(23), YootRgb(242, 250, 250)) == YootRgb(249, 195, 175));
+	EXPECT(yootSkyColor(YootRgb(255, 255, 255), YootRgb(255, 255, 255)) == YootRgb(255, 255, 255));
+	EXPECT(yootRefractionColor(YootRgb(255, 128, 0), YootRgb(200, 200, 200)) == YootRgb(200, 100, 0));
+
+	// Tokyo sky states (Jan: sunrise 5, sunset 17).
+	EXPECT(yootTokyoSkyState(0, 12 * 60, false).state == 1);
+	EXPECT(yootTokyoSkyState(0, 3 * 60, false).state == 2);
+	EXPECT(yootTokyoSkyState(0, 10 * 60, true).state == 3);
+	EXPECT(yootTokyoSkyState(0, 8 * 60 + 30, true).state == 9);
+	EXPECT(yootTokyoSkyState(0, 15 * 60, true).state == 10);
+	YootSkyState dawn = yootTokyoSkyState(0, 5 * 60 + 30, false);
+	EXPECT(dawn.state == 7 && dawn.count == 30);
+	EXPECT(yootTokyoSkyState(0, 17 * 60, false).state == 5);
+	EXPECT(yootTokyoSkyState(4, 4 * 60 + 10, false).state == 7);   // Apr-Jun: sunrise 4
+	EXPECT(yootTokyoSkyState(9, 5 * 60 + 59, false).state == 2);   // Oct-Dec: sunrise 6
+	EXPECT(yootTokyoSkyState(11, 3 * 60, false).state == 4);       // Dec night: snow
+
+	// Transition maths: (from-to)/60 * count + to, in bytes.
+	std::vector<YootRgb> day(40, YootRgb(9, 9, 9));
+	day[24] = YootRgb(0, 0, 120);   // night block
+	day[16] = YootRgb(255, 100, 0); // dusk block
+	YootSkyState s; s.state = 7; s.count = 30;
+	std::vector<YootRgb> blended = yootTokyoSkyColors(day, s);
+	EXPECT(blended.size() == 28u && blended[0] == YootRgb(135, 70, 60));
+	EXPECT(blended[8] == blended[0] && blended[27] == blended[3]);
+
+	// Real Tokyo data: PTDF and the PALETTE 101 day block.
+	const PluginManager & pm = yootTestPlugins();
+	AbstractPlugin * tokyo = pm.get("Tokyo.t2p");
+	if (tokyo)
+	{
+		YootPaletteAnimeDef def;
+		const WindowsPEExecutable::Resource * ptdf = tokyo->getResource("PTDF", 1);
+		EXPECT(ptdf && parseYootPtdf(ptdf->data, ptdf->length, def));
+		EXPECT(def.numTowerColor == 238 && def.numAnimColor == 48 && def.animStartIndex == 189);
+		EXPECT(def.numRefractColor == 0 && def.numSkyColor == 32 && def.numSEKind == 6);
+		EXPECT(def.numSEColor == 16 && def.seInterval == 5);
+		std::vector<YootRgb> d101, d102, d100;
+		const WindowsPEExecutable::Resource * p101 = tokyo->getResource("PALETTE", 101);
+		const WindowsPEExecutable::Resource * p102 = tokyo->getResource("PALETTE", 102);
+		const WindowsPEExecutable::Resource * p100 = tokyo->getResource("PALETTE", 100);
+		EXPECT(p101 && parseYootPalette(p101->data, p101->length, d101));
+		EXPECT(p102 && parseYootPalette(p102->data, p102->length, d102));
+		EXPECT(p100 && parseYootPalette(p100->data, p100->length, d100));
+		EXPECT(d101.size() == 45u && d102.size() == 96u && d100.size() == 256u);
+		if (d101.size() == 45u && d102.size() == 96u)
+		{
+			EXPECT(d101[0] == YootRgb(127, 127, 127));
+			// oracle-shots/stage_c_tokyo_via_open.png: the 9:38 sky is (206, 239, 255).
+			EXPECT(d101[8] == YootRgb(206, 239, 255));
+			std::vector<YootRgb> pal(256, YootRgb(1, 2, 3));
+			YootSkyInputs in; in.month = 0; in.minuteOfDay = 9 * 60 + 38;
+			yootApplyAnimatedPalette(YootSkyModel::Tokyo, def, d101, d102, in, pal);
+			EXPECT(pal[189] == YootRgb(206, 239, 255));
+			EXPECT(pal[189 + 7] == d101[15] && pal[189 + 8] == d101[8]);
+			EXPECT(pal[189 + 32] == d102[0]);
+			EXPECT(pal[188] == YootRgb(1, 2, 3) && pal[189 + 48] == YootRgb(1, 2, 3));
+			in.minuteOfDay = 2 * 60;
+			yootApplyAnimatedPalette(YootSkyModel::Tokyo, def, d101, d102, in, pal);
+			EXPECT(pal[189] == d101[24]);
+		}
+	}
+
+	// Hawaii: base T2DayLightFilter path, sky then refraction entries.
+	AbstractPlugin * hawaii = pm.get("Hawai.t2p");
+	if (hawaii)
+	{
+		YootPaletteAnimeDef def;
+		std::vector<YootRgb> d101, d102;
+		const WindowsPEExecutable::Resource * ptdf = hawaii->getResource("PTDF", 1);
+		const WindowsPEExecutable::Resource * p101 = hawaii->getResource("PALETTE", 101);
+		const WindowsPEExecutable::Resource * p102 = hawaii->getResource("PALETTE", 102);
+		EXPECT(ptdf && parseYootPtdf(ptdf->data, ptdf->length, def));
+		EXPECT(p101 && parseYootPalette(p101->data, p101->length, d101));
+		EXPECT(p102 && parseYootPalette(p102->data, p102->length, d102));
+		EXPECT(d101.size() == 39u);
+		if (d101.size() == 39u)
+		{
+			std::vector<YootRgb> pal(256);
+			YootSkyInputs in; in.minuteOfDay = 7 * 60 + 4;   // quantised to 7:00
+			yootApplyAnimatedPalette(YootSkyModel::DayLightFilter, def, d101, d102, in, pal);
+			EXPECT(pal[189] == YootRgb(249, 195, 175));
+			EXPECT(pal[189 + 6] == yootRefractionColor(yootDayLightFilter(23), d101[6]));
+		}
+	}
+
+	// Kegon seasons (1-based month).
+	EXPECT(yootKegonSkyPictId(4) == 1000 && yootKegonSkyPictId(7) == 201);
+	EXPECT(yootKegonSkyPictId(10) == 202 && yootKegonSkyPictId(11) == 203);
+	EXPECT(yootKegonSkyPictId(1) == 204 && yootKegonSkyPictId(12) == 204);
+	EXPECT(yootKegonDayLightPaletteId(4) == 150 && yootKegonDayLightPaletteId(2) == 154);
+}
+
 static void testYootWorldLoader()
 {
 	using namespace OT;
@@ -3485,6 +3647,8 @@ int main()
 	testOspCanonicalSheetNames();
 	testRulesProfileSeam();
 	testYootWorldLoader();
+	testYootBackdropLayout();
+	testYootSkyPalette();
 	testYootPlacement();
 	testYootCalendar();
 	testYootUnlocks();

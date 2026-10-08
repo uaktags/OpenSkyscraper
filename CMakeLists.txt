@@ -193,6 +193,7 @@ add_executable(OpenSkyTests
   source/YootEvents.cpp
   source/YootCatalog.cpp
   source/YootRules.cpp
+  source/YootBackdrop.cpp
   source/Skin.cpp
   source/Time.cpp
   source/Route.cpp
