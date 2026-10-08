@@ -71,6 +71,7 @@ namespace OT
 		int maxCars = 0;
 		int carPrice = 0;              ///< dollars per extra car
 		std::array<int, 3> speed{{0, 0, 0}};
+		int defaultWait = 0;           ///< MVDF +0x174: idles a car holds at a stop
 
 		/// E3: the item is charged quarterly maintenance (attr 0x100).
 		bool paysQuarterly() const { return (attribute & ToolAttribute::PaysMaintenance) != 0; }

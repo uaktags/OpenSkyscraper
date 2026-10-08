@@ -68,12 +68,18 @@ namespace OT {
 				Person * nextPassengerToUnmount() const;
 
 				void moveTo(int floor);
+				void yootDrive();
 
 				/// Door timer is the authentic five-tick countdown. The
 				/// legacy State values remain serialized-compatible.
 				int doorTicks;
 				int holdTicks;
 				int moveTicks;
+				/// YootTower StdElev/BigElev drive (FUN_1000c200/c3b0/c590):
+				/// the gear 0..2 (MVDF speed index) and the car's offset
+				/// inside a floor, 36 units a floor.
+				int yootGear;
+				int yootOffset;
 
 			};
 		}

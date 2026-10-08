@@ -60,6 +60,7 @@ namespace OT
 			s.maxCars = def.mover.maxModule;
 			s.carPrice = def.mover.moduleParam2 * kYootMoneyUnit;
 			s.speed = def.mover.speed;
+			s.defaultWait = def.mover.defaultWait;
 		}
 		out = s;
 		return true;

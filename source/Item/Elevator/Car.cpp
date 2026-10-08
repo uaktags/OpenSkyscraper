@@ -2,6 +2,7 @@
 #include <cassert>
 #include <cmath>
 #include "../../Game.h"
+#include "../../YootCatalog.h"
 #include "Car.h"
 #include "Queue.h"
 
@@ -42,6 +43,8 @@ void Car::init()
 	doorTicks = 0;
 	holdTicks = 0;
 	moveTicks = 0;
+	yootGear = 0;
+	yootOffset = 0;
 	state = kIdle;
 }
 
@@ -248,7 +251,9 @@ void Car::advance(double dt)
 					passengers.erase(p);
 					p->journey.next();
 				}
-				holdTicks = elevator->schedulePatienceTicks();
+				// YootTower: every stop holds defaultWait idles after the
+				// boarding (StdElev FUN_1000bf30 -> state 4, FUN_1000c1b0).
+				holdTicks = yoot ? elevator->prototype->yoot->defaultWait : elevator->schedulePatienceTicks();
 				arrivingSound.Play(game);
 			}
 			if (doorTicks & 1)
@@ -275,7 +280,16 @@ void Car::advance(double dt)
 				elevator->decideCarDestination(this);
 				continue;
 			}
-			if (doorTicks == 1 && holdTicks > 0 && !isFull() &&
+			if (yoot && doorTicks == 1 && holdTicks > 0)
+			{
+				// Hold (FUN_1000c1b0): someone new waiting reopens the
+				// boarding window (state 3, counter 6), then holds again.
+				Queue *q = elevator->getQueue(destinationFloor, direction);
+				if (q && !q->people.empty()) { doorTicks = 4; holdTicks = elevator->prototype->yoot->defaultWait; continue; }
+				--holdTicks;
+				continue;
+			}
+			if (!yoot && doorTicks == 1 && holdTicks > 0 && !isFull() &&
 				(fabs(altitude - homeFloor) < 0.01 || destinationFloor == 0 ||
 				 (game->mainLobby && destinationFloor >= game->mainLobby->position.y &&
 				  destinationFloor < game->mainLobby->position.y + game->mainLobby->size.y)))
@@ -303,6 +317,11 @@ void Car::advance(double dt)
 		}
 		if (state == kMoving && destinationFloor != (int)std::lround(altitude))
 		{
+			if (yoot)
+			{
+				yootDrive();
+				continue;
+			}
 			if (moveTicks > 0) { --moveTicks; continue; }
 			const int current = (int)std::lround(altitude);
 			const int targetDistance = std::abs(destinationFloor - current);
@@ -360,10 +379,46 @@ Person * Car::nextPassengerToUnmount() const
 	return NULL;
 }
 
+/**
+ * One mover idle of a moving YootTower car (StdElev.dll; BigElev and
+ * ServElev run the same code). The car gains speed[gear] x 6 units of a
+ * 36-unit floor per idle: gear 0 (speed 1) 6 idles a floor, gear 1
+ * (speed 3) 2 idles a floor, gear 2 (the Large Elevator's 12) 2 floors an
+ * idle. At each floor boundary it shifts up while the floors left reach
+ * T(n) = sum over i < n of (speed[i] + 5) / 6 and down below it; it only
+ * stops from gear 0 (FUN_1000c200 / c3b0 / c590, T(n) FUN_1000cad0).
+ */
+void Car::yootDrive()
+{
+	const std::array<int, 3> & speed = elevator->prototype->yoot->speed;
+	auto threshold = [&](int n) { int t = 0; for (int i = 0; i < n; ++i) t += (speed[i] + 5) / 6; return t; };
+	const int current = (int)std::lround(altitude);
+	int left = std::abs(destinationFloor - current);
+	yootOffset += std::max(1, speed[yootGear]) * 6;
+	int floors = std::min(left, yootOffset / 36);
+	yootOffset %= 36;
+	if (floors > 0)
+		setAltitude(current + (direction == Elevator::kUp ? floors : -floors));
+	if (yootOffset != 0) return;
+	left -= floors;
+	if (left == 0)
+	{
+		yootGear = 0;
+		doorTicks = 5;
+		setState(kHauling);
+		return;
+	}
+	if (yootGear == 0 && speed[1] > 0 && left >= threshold(2)) yootGear = 1;
+	else if (yootGear == 1 && left < threshold(2)) yootGear = 0;
+	else if (yootGear == 1 && speed[2] > 0 && left >= threshold(3)) yootGear = 2;
+	else if (yootGear == 2 && left < threshold(3)) yootGear = 1;
+}
+
 void Car::moveTo(int floor)
 {
 	if (destinationFloor != floor)
 	{
+		if (state != kMoving) { yootGear = 0; yootOffset = 0; }
 		destinationFloor = floor;
 		startAltitude = altitude;
 		journeyTime = 0;
