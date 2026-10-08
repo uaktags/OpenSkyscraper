@@ -28,6 +28,7 @@ namespace OT
 		s.variation = variation;
 		s.name = v.name;
 		s.attribute = def.tool.attribute;
+		s.category = def.tool.category;
 		s.price = v.price * kYootMoneyUnit;
 		s.outMoney = v.outMoney * kYootMoneyUnit;
 		s.power = v.consumptionPower;

@@ -47,6 +47,8 @@
 #include "../source/YootCatalog.h"
 #include "../source/YootRules.h"
 #include "../source/YootBackdrop.h"
+#include "../source/YootFacilities.h"
+#include "../source/YootPlacement.h"
 
 static int g_failures = 0;
 
@@ -4233,6 +4235,199 @@ static void testBldShippedSaves()
 		EXPECT(ok);
 		if (!ok) std::cerr << rel << ": " << error << "\n";
 	}
+// Step 12: trash, restrooms, colds and doctors (I2, I3, P5, P6, R6).
+static void testYootFacilities()
+{
+	using namespace OT;
+	namespace Y = OT::Yoot;
+	const PluginManager & pm = yootTestPlugins();
+	const RulesProfile tokyo = RulesProfile::yootTower(loadYootWorld(pm, YootWorld::Id::Tokyo));
+	const RulesProfile kegon = RulesProfile::yootTower(loadYootWorld(pm, YootWorld::Id::Kegon));
+	const RulesProfile stub = RulesProfile::yootTowerStub();
+	const YootFacilityRules & r = tokyo.facilities;
+
+	// WORLDDEF +0x170..0x178 and CODF id 1 (same in all worlds).
+	EXPECT(r.dustOnGrade == 3 && r.toiletGrade == 1 && r.toiletDenomi == 10);
+	EXPECT(r.hasColdTable && r.coldMinGrade == 3 && r.coldMonthly[0] == 20 && r.coldMonthly[1] == 30);
+	EXPECT(kegon.facilities.dustOnGrade == 3 && kegon.facilities.coldMonthly[11] == 20);
+	EXPECT(stub.facilities.dustOnGrade == 3 && stub.facilities.toiletDenomi == 10);
+
+	// R6: IsDustOn / GetToiletDenomi / GetColdDenomi by grade.
+	EXPECT(!Y::isDustOn(r, 2) && Y::isDustOn(r, 3) && Y::isDustOn(r, 5));
+	EXPECT(Y::toiletDenomi(r, 0) == 0 && Y::toiletDenomi(r, 1) == 10);
+	EXPECT(Y::coldDenomi(r, 2, 1) == 0);      // below grade 3
+	EXPECT(Y::coldDenomi(r, 3, 0 + 1) == 30); // day 0 reads monthly[1]
+	EXPECT(Y::coldDenomi(r, 3, 10 + 1) == 20);
+	EXPECT(Y::coldDenomi(r, 4, 11 + 1) == 0); // last day of the year: index 12
+	YootFacilityRules off = r;
+	off.dustOnGrade = 0; off.toiletGrade = 0;
+	EXPECT(!Y::isDustOn(off, 5) && Y::toiletDenomi(off, 5) == 0);
+	EXPECT(Y::rollDenomi(10, 20) && !Y::rollDenomi(10, 21) && !Y::rollDenomi(0, 0));
+
+	// I2: the warning window is 06:50-06:59 and 21:50-21:59 (exclusive bounds).
+	EXPECT(!Y::trashWarningMinute(409) && Y::trashWarningMinute(410));
+	EXPECT(Y::trashWarningMinute(419) && !Y::trashWarningMinute(420));
+	EXPECT(!Y::trashWarningMinute(1309) && Y::trashWarningMinute(1310) && !Y::trashWarningMinute(1320));
+
+	// Fill stages at 1, cap/4, 2cap/4, 3cap/4 and cap (TrashFacility cap 50).
+	Y::TrashFacilityModel t;
+	t.capacity = 50;
+	int stages[51] = {0};
+	for (int k = 1; k <= 50; ++k) { EXPECT(t.deliver()); stages[k] = t.pattern; }
+	EXPECT(stages[1] == 1 && stages[11] == 1 && stages[12] == 2 && stages[24] == 3);
+	EXPECT(stages[36] == 4 && stages[49] == 4 && stages[50] == 5);
+	EXPECT(!t.accepts() && !t.deliver());
+	// Close 07:00 empties it; open 07:30 reopens (TNDF 420/450).
+	EXPECT(!t.idle(419, 450, 420) && t.idle(420, 450, 420));
+	EXPECT(t.status == Y::TrashFacilityModel::kEmptying && t.pattern == 6 && t.garbage == 0 && !t.accepts());
+	EXPECT(!t.idle(449, 450, 420) && t.idle(450, 450, 420) && t.pattern == 0 && t.accepts());
+	Y::TrashFacilityModel empty;
+	EXPECT(!empty.idle(420, 450, 420)); // an empty facility does not cycle
+
+	// P5: SearchToilet.
+	std::vector<Y::RestroomCandidate> rooms(3);
+	int idx = 7;
+	EXPECT(Y::searchToilet(rooms, idx) == Y::ToiletResult::NoneNearby && idx == -1);
+	rooms[1].reachable = true; rooms[1].users = 5;
+	EXPECT(Y::searchToilet(rooms, idx) == Y::ToiletResult::Crowded);
+	rooms[2].reachable = true; rooms[2].users = 4;
+	EXPECT(Y::searchToilet(rooms, idx) == Y::ToiletResult::Found && idx == 2);
+	EXPECT(std::string(Y::toiletFailureMessage(Y::ToiletResult::Crowded)) == "Restroom is crowded.");
+	EXPECT(std::string(Y::toiletFailureMessage(Y::ToiletResult::NoneNearby)) == "No restroom nearby.");
+	EXPECT(Y::restroomPattern(0, 1, 5, true) == 1 && Y::restroomPattern(1, 2, 5, true) == 2);
+	EXPECT(Y::restroomPattern(2, 3, 5, true) == 2 && Y::restroomPattern(2, 1, 5, false) == 1);
+	EXPECT(Y::restroomPattern(1, 0, 5, false) == 0);
+
+	// P6: doctors.
+	std::vector<Y::DoctorCandidate> docs(2);
+	EXPECT(Y::searchDoctor(docs) == -3);
+	docs[0].reachable = true; // closed
+	EXPECT(Y::searchDoctor(docs) == -2);
+	docs[1].reachable = true; docs[1].open = true; docs[1].patients = 20;
+	EXPECT(Y::searchDoctor(docs) == -1);
+	docs[1].patients = 3;
+	EXPECT(Y::searchDoctor(docs) == 1);
+	EXPECT(!Y::doctorCallMinute(479) && Y::doctorCallMinute(480) && Y::doctorCallMinute(487));
+	EXPECT(!Y::doctorCallMinute(488) && Y::doctorCallMinute(1020) && !Y::doctorCallMinute(1080));
+	EXPECT(Y::doctorPattern(1, 1, 20, true) == 2 && Y::doctorPattern(2, 10, 20, true) == 3);
+	EXPECT(Y::doctorPattern(3, 9, 20, false) == 2 && Y::doctorPattern(2, 0, 20, false) == 1);
+	EXPECT(std::string(Y::trashCommentText(Y::TrashComment::Full)) == "Full of garbage.");
+
+	// The native facilities exist only in YootTower and replace the
+	// SimTower Recycling Center / Medical Center there.
+	const BuildRules sim(BuildRules::Ruleset::SimTower);
+	const BuildRules yoot(BuildRules::Ruleset::YootTower, tokyo);
+	EXPECT(sim.minRatingToBuild("trashfacility") == BuildRules::kUnavailable);
+	EXPECT(sim.minRatingToBuild("restroom") == BuildRules::kUnavailable);
+	EXPECT(sim.minRatingToBuild("doctor") == BuildRules::kUnavailable);
+	EXPECT(sim.minRatingToBuild("recycling") == LevelUp::minRatingToBuild("recycling"));
+	EXPECT(yoot.minRatingToBuild("trashfacility") == 2 && yoot.minRatingToBuild("restroom") == 0);
+	EXPECT(yoot.minRatingToBuild("doctor") == 2);
+	EXPECT(yoot.minRatingToBuild("recycling") == BuildRules::kUnavailable);
+	EXPECT(yoot.minRatingToBuild("medicalcenter") == BuildRules::kUnavailable);
+	const std::map<std::string, YootUnlock> tu = resolveYootUnlocks(pm, 0x7);
+	const std::map<std::string, YootUnlock> ku = resolveYootUnlocks(pm, 0xF0);
+	EXPECT(tu.count("trashfacility") && tu.at("trashfacility").available && tu.at("trashfacility").minGrade == 3);
+	EXPECT(tu.count("restroom") && tu.at("restroom").minGrade == 1);
+	EXPECT(tu.count("doctor") && tu.at("doctor").available && tu.at("doctor").minGrade == 3);
+	EXPECT(ku.count("trashfacility") && ku.at("trashfacility").available); // KTrashFacility
+	EXPECT(ku.count("doctor") && !ku.at("doctor").available);
+
+	// Catalog flags the facility rules read: TNDF attr 0x2000000 (needs a
+	// toilet), category 100 (final item), plugin capacity and hours.
+	const std::map<std::string, YootItemStats> tc = resolveYootCatalog(pm, 0x7);
+	const std::map<std::string, YootItemStats> hc = resolveYootCatalog(pm, 0xF01);
+	EXPECT(tc.count("office") && tc.at("office").needsToilet() && !tc.at("office").finalItem());
+	EXPECT(tc.count("restroom") && !tc.at("restroom").needsToilet() && tc.at("restroom").capacity == 5);
+	EXPECT(tc.count("trashfacility") && tc.at("trashfacility").capacity == 50);
+	EXPECT(tc.at("trashfacility").openMinute == 450 && tc.at("trashfacility").closeMinute == 420);
+	EXPECT(tc.count("doctor") && tc.at("doctor").capacity == 20 && tc.at("doctor").bindMinutes == 30);
+	EXPECT(hc.count("cathedral") && hc.at("cathedral").finalItem());
+}
+
+// Step 13: one placement predicate test per rule (L1, L2, M6, I7).
+static void testYootPlacementRules()
+{
+	using namespace OT;
+	namespace Y = OT::Yoot;
+	const PluginManager & pm = yootTestPlugins();
+	const RulesProfile tokyoProfile = RulesProfile::yootTower(loadYootWorld(pm, YootWorld::Id::Tokyo));
+	const RulesProfile hawaiiProfile = RulesProfile::yootTower(loadYootWorld(pm, YootWorld::Id::Hawaii));
+	const BuildRules tokyo(BuildRules::Ruleset::YootTower, tokyoProfile);
+	const BuildRules hawaii(BuildRules::Ruleset::YootTower, hawaiiProfile);
+
+	// L2 final item: bottom on the top floor (Tokyo 100F, Hawaii 45F), the
+	// rest rises above the floor area inside the build area.
+	EXPECT(Y::finalItemRule(true, 99, 5, tokyoProfile.highestFloor) == 0);
+	EXPECT(Y::finalItemRule(true, 98, 5, tokyoProfile.highestFloor) == Y::kErrFinalTopFloor);
+	EXPECT(Y::finalItemRule(true, 44, 4, hawaiiProfile.highestFloor) == 0);
+	EXPECT(!hawaii.allowsFootprint(0, 44, 48, 4));
+	EXPECT(hawaii.allowsSpecialFootprint(0, 44, 48, 4));   // rows 7..10 are in the build area
+	EXPECT(!hawaii.allowsSpecialFootprint(0, 44, 48, 9));  // row 2 is not
+	EXPECT(tokyo.allowsSpecialFootprint(0, 99, 56, 5));    // Stadium 56x5: rows 6..10
+	// ... and only final items may touch the top floor.
+	EXPECT(Y::finalItemRule(false, 98, 1, tokyoProfile.highestFloor) == 0);
+	EXPECT(Y::finalItemRule(false, 99, 1, tokyoProfile.highestFloor) == Y::kErrOnlyFinalOnTop);
+	EXPECT(Y::finalItemRule(false, 98, 2, tokyoProfile.highestFloor) == Y::kErrOnlyFinalOnTop);
+	EXPECT(std::string(Y::buildErrorText(Y::kErrOnlyFinalOnTop)) == "Only Final item can be placed on the top floor of building.");
+
+	// I7 subway: bottom row just below the lowest floor (Tokyo B10).
+	EXPECT(tokyoProfile.lowestFloor == -9);
+	EXPECT(Y::subwayRule(-10, tokyoProfile.lowestFloor) == 0);
+	EXPECT(Y::subwayRule(-9, tokyoProfile.lowestFloor) == Y::kErrSubwayLowest);
+	EXPECT(Y::subwayRule(-11, tokyoProfile.lowestFloor) == Y::kErrSubwayLowest);
+	EXPECT(!tokyo.allowsFootprint(0, -10, 40, 3) && tokyo.allowsSpecialFootprint(0, -10, 40, 3));
+	EXPECT(!tokyo.allowsSpecialFootprint(0, -11, 40, 3)); // row 120 is outside
+	EXPECT(std::string(Y::buildErrorText(Y::kErrSubwayLowest)) == "The Subway can only be placed on the lowest floor.");
+
+	// M6 no sky lobby: lobbies on 1F only.
+	EXPECT(Y::lobbyRule(0) == 0 && Y::lobbyRule(15) == Y::kErrLobbyFirstFloorOnly && Y::lobbyRule(-1) != 0);
+	EXPECT(std::string(Y::buildErrorText(Y::kErrLobbyFirstFloorOnly)) == "The lobby item can be only placed on the first floor.");
+
+	// L1 parking: gates stack down from 1F at one x; lots touch a gate/lot.
+	std::vector<Y::ParkingPiece> park;
+	Y::ParkingPiece gate; gate.gate = true; gate.floor = -1; gate.height = 2; gate.minX = 0; gate.maxX = 4;
+	EXPECT(Y::parkingPlaceRule(park, gate) == 0);
+	Y::ParkingPiece deepGate = gate; deepGate.floor = -3; deepGate.height = 2;
+	EXPECT(Y::parkingPlaceRule(park, deepGate) == Y::kErrGateNotFromFirst);
+	park.push_back(gate);
+	EXPECT(Y::parkingPlaceRule(park, deepGate) == 0);
+	Y::ParkingPiece shifted = deepGate; shifted.minX = 8; shifted.maxX = 12;
+	EXPECT(Y::parkingPlaceRule(park, shifted) == Y::kErrGateNotFromFirst);
+	Y::ParkingPiece lot; lot.floor = 0; lot.minX = 4; lot.maxX = 8;
+	EXPECT(Y::parkingPlaceRule(park, lot) == 0);      // next to the gate's top row
+	Y::ParkingPiece far = lot; far.minX = 20; far.maxX = 24;
+	EXPECT(Y::parkingPlaceRule(park, far) == Y::kErrLotNotAdjacent);
+	park.push_back(lot);
+	Y::ParkingPiece lot2 = lot; lot2.minX = 8; lot2.maxX = 12;
+	park.push_back(lot2);
+	// ... removal: outer spaces first; gates last and bottom-up.
+	EXPECT(Y::parkingRemoveRule(park, lot) == Y::kErrLotRemoveOrder);
+	EXPECT(Y::parkingRemoveRule(park, lot2) == 0);
+	EXPECT(Y::parkingRemoveRule(park, gate) == Y::kErrGateRemoveLot);
+	std::vector<Y::ParkingPiece> gatesOnly(1, gate);
+	gatesOnly.push_back(deepGate);
+	EXPECT(Y::parkingRemoveRule(gatesOnly, gate) == Y::kErrGateRemoveOrder);
+	EXPECT(Y::parkingRemoveRule(gatesOnly, deepGate) == 0);
+
+	// L1 floor removal order.
+	Y::FloorRemoval f;
+	f.floor = 5;
+	EXPECT(Y::floorRemoveRule(f) == 0);
+	f.tenantAbove = true;
+	EXPECT(Y::floorRemoveRule(f) == Y::kErrFloorNotTop);
+	f.tenantAbove = false; f.tenantBelow = true;
+	EXPECT(Y::floorRemoveRule(f) == 0);                // above ground only "above" counts
+	f.floor = -2;
+	EXPECT(Y::floorRemoveRule(f) == Y::kErrFloorNotLowest);
+	f.tenantBelow = false; f.tenantOnFloor = true;
+	EXPECT(Y::floorRemoveRule(f) == Y::kErrFloorHasTenant);
+	f.peopleOnFloor = true;
+	EXPECT(Y::floorRemoveRule(f) == Y::kErrFloorHasPeople);
+	f.moverOnFloor = true;
+	EXPECT(Y::floorRemoveRule(f) == Y::kErrFloorHasTransit);
+	Y::FloorRemoval lobby;
+	EXPECT(Y::floorRemoveRule(lobby) == Y::kErrFloorCannotRemove);
 }
 
 int main()
@@ -4294,6 +4489,8 @@ int main()
 	testYootEconomy();
 	testYootEvaluation();
 	testYootStress();
+	testYootFacilities();
+	testYootPlacementRules();
 	testOspAttrCompat();
 	testYootWorldEncoders();
 	testOspV3Sweep();

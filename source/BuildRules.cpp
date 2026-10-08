@@ -94,6 +94,13 @@ RulesProfile RulesProfile::yootTower(const YootWorld & world)
 	// T2EV events: the plugin's list, or the decoded built-in one when the
 	// world came from builtinYootWorld() (no plugin, so no events).
 	p.worldWidth = world.width;
+	p.facilities.dustOnGrade = world.dustOnAt;
+	p.facilities.toiletGrade = world.toiletAt;
+	p.facilities.toiletDenomi = world.toiletDenomi;
+	p.facilities.hasColdTable = world.hasColdTable && world.coldMonthly.size() == 12;
+	p.facilities.coldMinGrade = world.coldMinGrade;
+	if (p.facilities.hasColdTable)
+		for (int k = 0; k < 12; ++k) p.facilities.coldMonthly[k] = world.coldMonthly[k];
 	p.events = yootEventSpecs(world);
 	if (!world.fromPlugin && p.events.empty())
 		p.events = builtinYootEventSpecs((int)world.id);
@@ -193,6 +200,58 @@ bool BuildRules::allowsHorizontalFootprint(int x, int width) const
 	return x >= kSimTowerMinX && end <= kSimTowerMaxX;
 }
 
+bool RulesProfile::allowsBuildAreaCell(int x, int floor) const
+{
+	if (!hasBuildArea) return false;
+	if (x < buildMinX || x >= buildMaxX) return false;
+	const int row = rowForFloor(floor);
+	if (row < buildTopRow || row >= buildBottomRow) return false;
+	if (!unbuildable.empty())
+	{
+		const int unit = unitForX(x);
+		if (unit >= 0 && row >= 0 && unit < maskWidth && row < maskHeight &&
+		    unbuildable[(size_t)row * maskWidth + unit] != 0)
+			return false;
+	}
+	return true;
+}
+
+bool BuildRules::allowsSpecialFootprint(int x, int floor, int width, int height) const
+{
+	if (!m_profile.yootWorld) return allowsFootprint(x, floor, width, height);
+	if (!allowsHorizontalFootprint(x, width)) return false;
+	if (height < 1 || floor > INT_MAX - height) return false;
+	for (int f = floor; f < floor + height; ++f)
+		for (int cx = x; cx < x + width; ++cx)
+			if (!m_profile.allowsBuildAreaCell(cx, f)) return false;
+	return true;
+}
+
+namespace {
+	struct YootOnly { const char * id; int defaultRating; };
+	// ATTR mGameLevel - 1 when no world unlock data is loaded.
+	const YootOnly kYootOnly[] = {
+		{"powerroom", 2},      // PowerRoom.t2p, grade 3
+		{"trashfacility", 2},  // TrashFacility.t2p / KTrashFacility.t2p, grade 3
+		{"restroom", 0},       // Restroom.t2p / KRestroom.t2p, grade 1
+		{"doctor", 2},         // Doctor's.t2p, grade 3
+	};
+}
+
+bool BuildRules::isYootOnlyPrototype(const std::string & prototypeId)
+{
+	for (const YootOnly & y : kYootOnly)
+		if (prototypeId == y.id) return true;
+	return false;
+}
+
+bool BuildRules::isReplacedInYoot(const std::string & prototypeId)
+{
+	// The YootTower plugins behind them are the Trash Facility and the
+	// Doctor's Office, which are native items there.
+	return prototypeId == "recycling" || prototypeId == "medicalcenter";
+}
+
 bool BuildRules::allowsFootprint(int x, int floor, int width, int height) const
 {
 	if (!allowsHorizontalFootprint(x, width)) return false;
@@ -207,12 +266,16 @@ bool BuildRules::allowsFootprint(int x, int floor, int width, int height) const
 
 int BuildRules::minRatingToBuild(const std::string & prototypeId) const
 {
-	// The Power Room (PowerRoom.t2p) exists only in YootTower; without
-	// world unlock data it keeps its ATTR mGameLevel 3.
-	if (prototypeId == "powerroom" && m_ruleset != Ruleset::YootTower)
+	// Power Room, Trash Facility, Restroom and Doctor's Office exist only in
+	// YootTower; without world unlock data they keep their ATTR mGameLevel.
+	for (const YootOnly & y : kYootOnly)
+	{
+		if (prototypeId != y.id) continue;
+		if (m_ruleset != Ruleset::YootTower) return kUnavailable;
+		if (m_profile.unlocks.find(prototypeId) == m_profile.unlocks.end()) return y.defaultRating;
+	}
+	if (m_ruleset == Ruleset::YootTower && isReplacedInYoot(prototypeId))
 		return kUnavailable;
-	if (prototypeId == "powerroom" && m_profile.unlocks.find(prototypeId) == m_profile.unlocks.end())
-		return 2;
 	std::map<std::string, RulesProfile::Unlock>::const_iterator u = m_profile.unlocks.find(prototypeId);
 	if (u == m_profile.unlocks.end())
 		return LevelUp::minRatingToBuild(prototypeId);

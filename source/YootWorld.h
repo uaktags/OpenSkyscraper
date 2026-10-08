@@ -110,6 +110,11 @@ namespace OT
 		int dustOnAt = 0, toiletAt = 0, toiletDenomi = 0, discarded9999 = 0;
 		std::vector<int> cashAmounts;
 
+		// --- CODF id 1 (T2WorldDef::MakeColdTableDef 0x1006ec50) ---
+		bool hasColdTable = false;
+		int coldMinGrade = 0;          ///< first uint (3 in all worlds)
+		std::vector<int> coldMonthly;  ///< 12 cold denominators by day index
+
 		// --- WATR ---
 		std::vector<int> watrInts; ///< 6 ints discarded by the engine ([3]=floors above, [4]=below)
 		int initialFunds = 0;      ///< internal units (x exchangeMul / exchangeDiv = dollars)
@@ -147,6 +152,8 @@ namespace OT
 	bool parseYootWorldDef(const char * data, int length, YootWorld & out);
 	bool parseYootWatr(const char * data, int length, YootWorld & out);
 	bool parseYootFinf(const char * data, int length, YootWorld & out);
+	/// CODF id 1: uint minGrade, uint monthly[12] (FUN_1001c400).
+	bool parseYootColdTable(const char * data, int length, YootWorld & out);
 	bool parseYootEventResource(const std::string & resType, const char * data, int length, YootEvent & out);
 	/// Derives each VIP's flag exactly like T2VisitVIP::Init (shared mask accumulator).
 	void assignYootVipFlags(std::vector<YootVipDef> & vips);

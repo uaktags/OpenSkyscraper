@@ -212,6 +212,19 @@ namespace OT
 		return true;
 	}
 
+	bool parseYootColdTable(const char * data, int length, YootWorld & w)
+	{
+		ResReader r(data, length);
+		const int minGrade = r.i();
+		std::vector<int> monthly;
+		for (int k = 0; k < 12; ++k) monthly.push_back(r.i());
+		if (!r.ok()) return false;
+		w.hasColdTable = true;
+		w.coldMinGrade = minGrade;
+		w.coldMonthly = monthly;
+		return true;
+	}
+
 	bool parseYootWatr(const char * data, int length, YootWorld & w)
 	{
 		ResReader r(data, length);
@@ -461,6 +474,11 @@ namespace OT
 			if (!parseYootFinf(finf->data, finf->length, w) && error)
 				*error = "FINF malformed (ignored)";
 		}
+		if (const WindowsPEExecutable::Resource * codf = plugin.getResource("CODF", 1))
+		{
+			if (!parseYootColdTable(codf->data, codf->length, w) && error)
+				*error = "CODF malformed (ignored)";
+		}
 		if (const WindowsPEExecutable::Resource * t2ev = plugin.getResource("T2EV", 1))
 		{
 			// T2TowerEvent::T2TowerEvent 0x10068ca0: count, then {typeTag, resID}.
@@ -493,6 +511,10 @@ namespace OT
 		w.exchangeMul = 100;
 		w.exchangeDiv = 1;
 		w.moneyUnit = "$";
+		// WORLDDEF +0x170..0x178 and CODF id 1 are the same in all three worlds.
+		w.dustOnAt = 3; w.toiletAt = 1; w.toiletDenomi = 10;
+		w.hasColdTable = true; w.coldMinGrade = 3;
+		w.coldMonthly = {20, 30, 30, 30, 30, 30, 30, 30, 30, 30, 20, 20};
 		auto grades = [&](const int (&rows)[4][2]) {
 			for (int k = 0; k < 4; ++k)
 			{
@@ -613,8 +635,11 @@ namespace OT
 			{"condo",             {"Condo.t2p", "HawaianCondo.t2p", nullptr}},
 			{"yoot_condo",        {"Condo.t2p", "HawaianCondo.t2p", nullptr}},
 			{"security",          {"Securityroom.t2p", nullptr}},
-			{"medicalcenter",     {"Doctor's.t2p", nullptr}},
-			{"recycling",         {"TrashFacility.t2p", "KTrashFacility.t2p", nullptr}},
+			// Native YootTower facilities (plan step 12); they replace the
+			// SimTower Medical Center / Recycling Center in this ruleset.
+			{"doctor",            {"Doctor's.t2p", nullptr}},
+			{"trashfacility",     {"TrashFacility.t2p", "KTrashFacility.t2p", nullptr}},
+			{"restroom",          {"Restroom.t2p", "KRestroom.t2p", nullptr}},
 			{"cathedral",         {"Cathedral.t2p", nullptr}},
 			{"powerroom",         {"PowerRoom.t2p", nullptr}},
 		};

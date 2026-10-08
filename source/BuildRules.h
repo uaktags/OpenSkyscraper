@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "YootEvents.h"
+#include "YootFacilities.h"
 
 namespace OT {
 
@@ -94,10 +95,15 @@ struct RulesProfile
 	std::vector<YootEventSpec> events;
 	int worldWidth = 0;           ///< WORLDDEF width in units (Santa's begin minute)
 
+	/// Trash / restroom / cold rates (WORLDDEF +0x170.., CODF; plan step 12).
+	YootFacilityRules facilities;
+
 	int unitForX(int x) const { return x + unitOriginX; }
 	int rowForFloor(int floor) const { return groundRow - 1 - floor; }
 	/// One cell (x, floor) against bounds, floor limits and the FINF mask.
 	bool allowsCell(int x, int floor) const;
+	/// Build area and FINF mask only, ignoring the floor limits.
+	bool allowsBuildAreaCell(int x, int floor) const;
 
 	static RulesProfile simTower();
 	static RulesProfile openSky();
@@ -144,6 +150,18 @@ public:
 	/// Horizontal check plus floor limits and (YootTower) FINF mask for the
 	/// rectangle [x, x + width) x [floor, floor + height).
 	bool allowsFootprint(int x, int floor, int width, int height = 1) const;
+
+	/// YootTower items placed outside the floor area but inside the
+	/// WORLDDEF build area: a final item stands on the top floor and rises
+	/// above it (Stadium/Cathedral/Attraction AreaCheck), the subway sits
+	/// one row below the lowest floor (Subway.t2p AreaCheck). Checks the
+	/// build-area rows and the FINF mask, not the floor limits.
+	bool allowsSpecialFootprint(int x, int floor, int width, int height) const;
+
+	/// Prototypes that exist only in the YootTower ruleset (plugin-backed
+	/// native items) and the SimTower facilities they replace there.
+	static bool isYootOnlyPrototype(const std::string & prototypeId);
+	static bool isReplacedInYoot(const std::string & prototypeId);
 
 	/// Minimum zero-based rating to build `prototypeId`; kUnavailable when
 	/// the active world does not offer it at all.

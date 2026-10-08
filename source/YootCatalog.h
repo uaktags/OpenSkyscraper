@@ -43,6 +43,7 @@ namespace OT
 		TemplateDef::Kind kind = TemplateDef::Tenant;
 		int variation = 0;             ///< ToolDef variation used for price/outMoney
 		uint32_t attribute = 0;        ///< ToolDef mAttribute (ToolAttribute bits)
+		int category = 0;              ///< ToolDef +0x64 (50 restaurants, 100 final items)
 
 		int price = 0;                 ///< dollars, construction cost of `variation`
 		int outMoney = 0;              ///< dollars, maintenance of `variation`
@@ -69,6 +70,10 @@ namespace OT
 		bool paysQuarterly() const { return (attribute & ToolAttribute::PaysMaintenance) != 0; }
 		/// E3: lobby / sky bridge charge outMoney per unit of width (attr 0x4000).
 		bool maintenancePerUnit() const { return (attribute & ToolAttribute::VariableLength) != 0; }
+		/// L2: TNDF category 100 "Final Item" (Stadium, Cathedral, Attraction).
+		bool finalItem() const { return category == 100; }
+		/// P5: T2Tenant::IsNeedToilet (attr bit 0x2000000).
+		bool needsToilet() const { return (attribute & 0x2000000u) != 0; }
 		/// inMoney (dollars) for a price selection, clamped to the table.
 		int inMoneyFor(int selection) const;
 	};
