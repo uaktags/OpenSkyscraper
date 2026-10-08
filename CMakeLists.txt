@@ -243,6 +243,7 @@ add_executable(BldTool
   source/BldExport.cpp
   source/YootWorld.cpp
   source/YootTenants.cpp
+  source/YootCatalog.cpp
   source/Path.cpp
   source/Logger.cpp
   source/WindowsPEExecutable.cpp

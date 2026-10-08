@@ -3,6 +3,7 @@
 
 #include "AbstractPlugin.h"
 #include "PluginManager.h"
+#include "YootCatalog.h"
 #include "YootTenants.h"
 #include "YootWorld.h"
 #include "tinyxml2.h"
@@ -241,10 +242,36 @@ namespace Bld {
 			}
 			return nullptr;
 		};
+		// Other native YootTower tenants (hotel rooms, facilities, venues):
+		// the first linked plugin in the template, its TNDF footprint and
+		// variation. Movers and outer objects have no tenant record.
+		std::set<const TowerItem *> nativeExported;
+		auto nativeTenant = [&](const std::string & type, int & w, int & h, int & staff, int & variation) -> const PluginInfo *
+		{
+			if (!plugins || type == "floor" || type == "lobby") return nullptr;
+			for (const YootPrototypeLink & link : yootPrototypeLinks())
+			{
+				if (type != link.prototypeId) continue;
+				for (int k = 0; k < 5 && link.plugins[k]; ++k)
+				{
+					const PluginInfo * info = pluginForStem(link.plugins[k]);
+					AbstractPlugin * source = plugins->get(link.plugins[k]);
+					YootItemStats s;
+					if (!info || !source || !source->ensureLoaded() ||
+						!loadYootItemStats(*source, yootPrototypeVariation(type), s) || s.mover || s.width <= 0) continue;
+					w = type == "parkinggate" ? 16 : s.width;  // the gate is 16x2 (Csr2)
+					h = type == "parkinggate" ? 2 : std::max(1, s.height);
+					staff = std::max(0, s.belongCapacity);
+					variation = s.variation;
+					return info;
+				}
+			}
+			return nullptr;
+		};
 		for (const TowerItem & it : tower.items)
 		{
 			const PluginInfo * p = nullptr;
-			int w = 0, h = 1, staff = 0;
+			int w = 0, h = 1, staff = 0, variation = 0;
 			const YootTenantPlugin * tenant = isYootTenantPrototypeId(it.type) ? findYootTenantPlugin(it.type) : nullptr;
 			if (it.type == "office") { p = officePlugin; w = 9; }
 			else if (it.type == "shop") { p = shopPlugin; w = 12; }
@@ -264,6 +291,8 @@ namespace Bld {
 				h = def.height;
 				staff = def.belongCapacity;
 			}
+			else if ((p = nativeTenant(it.type, w, h, staff, variation)) != nullptr)
+				nativeExported.insert(&it);
 			else continue;
 			if (!p) { drop(it.type, "plugin missing from the template"); continue; }
 			Rect area;
@@ -294,8 +323,9 @@ namespace Bld {
 				t.inMoneyIndex = 0;
 				t.hasBelongList = 0;                    // no staff
 			}
-			else if (tenant)
+			else if (tenant || nativeExported.count(&it))
 			{
+				t.valiation = (uint32_t)variation;
 				// Just built: a saved status past hiring without staff
 				// people would wait for them forever (oracle: an exported
 				// status-12 Ice Cream never opened).
@@ -320,7 +350,7 @@ namespace Bld {
 		for (const TowerItem & it : tower.items)
 		{
 			if (it.type == "floor" || it.type == "lobby" || it.type == "office" || it.type == "shop" || it.type == "restroom" || it.type == "apartment") continue;
-			if (isYootTenantPrototypeId(it.type)) continue;
+			if (isYootTenantPrototypeId(it.type) || nativeExported.count(&it)) continue;
 			if (it.type == "elevator-standard" && elevPlugin) continue;
 			drop(it.type, "no YootTower counterpart in the exporter");
 		}
