@@ -38,6 +38,7 @@
 #include "../source/PluginT2pExport.h"
 #include "../source/PluginResourceJson.h"
 #include "../source/TdtLoader.h"
+#include "../source/YootMisc.h"
 #include "../source/BldLoader.h"
 #include "../source/BldExport.h"
 
@@ -5062,6 +5063,128 @@ static void testYootGapClosers()
 	// Calendar (T2WorldDef::DrawCalendar 0x10070a80).
 	EXPECT(yootCalendarText(1, 0, false) == "YEAR 1 Jan. WD");
 	EXPECT(yootCalendarText(3, 11, true) == "YEAR 3 Dec. HD");
+
+	namespace Y = OT::Yoot;
+	// School (School.t2p ChangeStatusOnIdle 0x1000bf30, Enter/LeaveTenant).
+	{
+		Y::SchoolModel s;
+		int r = 0;
+		auto rnd = [&r]() { return r++; };
+		s.idle(0, 0, 480, 1080, false, true, rnd);
+		EXPECT(s.status == Y::SchoolModel::Hiring);
+		s.idle(8, 8, 480, 1080, false, true, rnd);
+		EXPECT(s.status == Y::SchoolModel::Closed);
+		s.idle(480, 480, 480, 1080, true, true, rnd);   // holiday: nobody called
+		EXPECT(s.arrivals.empty());
+		s.idle(480, 480, 480, 1080, false, true, rnd);
+		EXPECT(s.arrivals.size() == 60u);
+		s.arrive(480);                                    // rand % 6 == 0: 10 now
+		EXPECT(s.inside == 10 && s.status == Y::SchoolModel::Some && s.pattern == 1);
+		s.arrive(530);
+		EXPECT(s.inside == 60 && s.status == Y::SchoolModel::Half && s.pattern == 3);
+		s.idle(530, 512, 480, 1080, false, true, rnd);    // 08:30 class
+		EXPECT(s.status == Y::SchoolModel::InClass && s.pattern == 2);
+		s.idle(720, 720, 480, 1080, false, true, rnd);    // lunch
+		EXPECT(s.status == Y::SchoolModel::Half && s.pattern == 3);
+		s.idle(780, 780, 480, 1080, false, true, rnd);    // 13:00 class
+		EXPECT(s.status == Y::SchoolModel::InClass);
+		s.idle(900, 900, 480, 1080, false, true, rnd);    // dismissal
+		EXPECT(s.status == Y::SchoolModel::Half);
+		for (int t = 908; s.inside > 29; t += 8) s.idle(t, t, 480, 1080, false, true, rnd);
+		EXPECT(s.inside == 27 && s.status == Y::SchoolModel::Some && s.pattern == 1); // 30 -> 29 flips it
+		s.idle(1080, 1080, 480, 1080, false, true, rnd);  // 18:00 PushOutAll
+		EXPECT(s.inside == 0 && s.status == Y::SchoolModel::Closed && s.pattern == 0);
+	}
+	// Sky Bridge AreaCheck (FUN_1000bcc0) and split (FUN_1000c0b0).
+	{
+		// Towers at units [40,60) and [90,110), rows 30..60; Tokyo-like area.
+		auto towers = [](int row, int u) { return row >= 30 && row <= 60 && ((u >= 40 && u < 60) || (u >= 90 && u < 110)); };
+		const Y::BuildRect area{36, 6, 332, 120};
+		Y::BuildRect r{70, 39, 78, 40};
+		EXPECT(Y::skyBridgeAreaCheck(r, area, 120, towers) == 0 && r.left == 60 && r.right == 90);
+		Y::BuildRect low{70, 116, 78, 117};
+		EXPECT(Y::skyBridgeAreaCheck(low, area, 120, towers) == 62);
+		Y::BuildRect edge{20 + 16, 39, 44, 40};
+		Y::BuildRect lone{120, 39, 128, 40};
+		EXPECT(Y::skyBridgeAreaCheck(lone, area, 120, towers) == 63);
+		(void)edge;
+		auto blocked = [&](int row, int u) { return towers(row, u) || (row == 42 && u == 75); };
+		Y::BuildRect r2{70, 39, 78, 40};
+		EXPECT(Y::skyBridgeAreaCheck(r2, area, 120, blocked) == 59);
+		auto wide = [](int row, int u) { return row >= 30 && row <= 60 && (u < 50 || u >= 123); };
+		Y::BuildRect r3{70, 39, 78, 40};
+		EXPECT(Y::skyBridgeAreaCheck(r3, area, 120, wide) == 60 && r3.right - r3.left == 73);
+		auto ok72 = [](int row, int u) { return row >= 30 && row <= 60 && (u < 50 || u >= 122); };
+		Y::BuildRect r4{70, 39, 78, 40};
+		EXPECT(Y::skyBridgeAreaCheck(r4, area, 120, ok72) == 0);
+		const auto runs = Y::skyBridgeSplit(60, 90, [](int u) { return u >= 70 && u < 75; });
+		EXPECT(runs.size() == 2u && runs[0] == std::make_pair(60, 70) && runs[1] == std::make_pair(75, 90));
+		EXPECT(Y::skyBridgeSplit(60, 90, [](int) { return true; }).empty());
+	}
+	// Tonbi / Dolphin flights (T2Tonbi::Exec, TonbiAnim::Fly).
+	{
+		const Y::TonbiDef kite = Y::builtinYootTonbi(false);
+		EXPECT(kite.layer == 1 && kite.points.size() == 3u && kite.points[0] == std::make_pair(5, 123));
+		EXPECT(kite.anims.size() == 14u && kite.minPict == 8600 && kite.maxPict == 8611);
+		const Y::TonbiDef dol = Y::builtinYootTonbi(true);
+		EXPECT(dol.layer == 2 && dol.points.size() == 1u && dol.anims.size() == 40u && dol.minPict == 8901);
+		auto flight = [](const Y::TonbiDef & d, int & minX, int & maxX, int & ticks) {
+			Y::TonbiFlight f;
+			f.start(d);
+			minX = 1 << 30; maxX = -(1 << 30); ticks = 0;
+			bool seen = false;
+			for (ticks = 1; ticks < 20000; ++ticks)
+			{
+				f.tick(600, 1020, true, []() { return 0; });
+				if (f.visible()) { seen = true; minX = std::min(minX, f.x()); maxX = std::max(maxX, f.x()); }
+				else if (seen) break;
+			}
+			return f.steps();
+		};
+		int lo, hi, t;
+		EXPECT(flight(kite, lo, hi, t) == 206);
+		EXPECT(lo == 989 && hi == 1267);
+		EXPECT(flight(dol, lo, hi, t) == 260);
+		EXPECT(lo == -59 && hi == 333);
+		// Tries every 512 ticks; ends after a flight past endMin.
+		Y::TonbiFlight f;
+		f.start(kite);
+		EXPECT(!f.tick(900, 1020, false, []() { return 0; })); // not ready: no flight, tick 1
+		bool stopped = false;
+		int k = 2;
+		for (; k <= 2000 && !stopped; ++k) stopped = f.tick(1100, 1020, false, []() { return 0; });
+		EXPECT(stopped && k - 1 == 513); // next try 512 ticks later, past 17:00
+		YootEventSpec spec;
+		spec.type = "TOEV";
+		spec.body = {1, 1, 5, 123, 1, 8600, 2, -4, 5};
+		Y::TonbiDef dd;
+		EXPECT(Y::decodeYootTonbi(spec, dd) && dd.anims.size() == 1u && dd.points[0].second == 123);
+	}
+	// Mr. Maru, hot spring.
+	EXPECT(Y::maruPhase(0) == 0 && Y::maruPhase(30) == 1 && Y::maruPhase(37) == 1 && Y::maruPhase(38) == 2 && Y::maruPhase(68) == 3);
+	EXPECT(Y::hotSpringTriggers(false, 4, 3, 100, 100, -1));
+	EXPECT(!Y::hotSpringTriggers(false, 4, 3, 99, 100, -1) && !Y::hotSpringTriggers(false, 4, 4, 200, 100, -1));
+	EXPECT(!Y::hotSpringTriggers(false, 4, 3, 100, 100, 0) && !Y::hotSpringTriggers(true, 4, 3, 100, 100, -5));
+	// Traffic map (T2TrafficInfo).
+	{
+		Y::TrafficMap m;
+		m.configure(36, 6, 332, 120);
+		EXPECT(m.cols() == 74 && m.rows() == 114);
+		EXPECT(Y::TrafficMap::calcRange(24) == 0 && Y::TrafficMap::calcRange(25) == 1 && Y::TrafficMap::calcRange(125) == 2 && Y::TrafficMap::calcRange(250) == 3);
+		m.pass(50, 100, 108);  // cells 16, 17, 18 of row 50
+		EXPECT(m.cell(50, 100)->count == 1 && m.cell(50, 108)->count == 1 && m.cell(50, 112)->count == 0);
+		m.pass(6, 36, 39);     // cell 0 never counts (GetUnit quirk)
+		EXPECT(m.cell(6, 36) == nullptr);
+		for (int h = 0; h < 200; ++h) { for (int k = 0; k < 10; ++k) m.pass(50, 100, 100); m.hourChanged(); }
+		EXPECT(m.range(50, 100) == 3 && m.range(50, 112) == 0);
+		const int acc = m.cell(50, 100)->accum;
+		Y::TrafficMap m2;
+		m2.configure(36, 6, 332, 120);
+		m2.decode(m.encode());
+		EXPECT(m2.cell(50, 100)->accum == acc && m2.range(50, 100) == 3);
+	}
+	EXPECT(Y::yearsSinceBuilt(30, 5) == 2 && Y::yearsSinceBuilt(5, 5) == 0 && Y::yearsSinceBuilt(5, -1) == 0);
+	EXPECT(Y::floorCharge(500, 12) == 6000 && Y::floorCharge(500, 0) == 0);
 }
 
 int main()

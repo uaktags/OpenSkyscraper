@@ -200,6 +200,7 @@ add_executable(OpenSkyTests
   source/YootMovie.cpp
   source/YootPlacement.cpp
   source/YootSpecials.cpp
+  source/YootMisc.cpp
   source/Skin.cpp
   source/Time.cpp
   source/Route.cpp
