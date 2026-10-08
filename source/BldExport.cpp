@@ -174,7 +174,21 @@ namespace Bld {
 
 		// -- World-wide sections from the template; tower state reset ----------
 		out = templ;
-		out.level = (int16_t)std::max(1, std::min(6, tower.rating + 1));
+		// The star level must be a grade the world has: startGrade .. the
+		// last grade-up (5, the "Tower" icon). FUN_0041ca80 (doc vtbl+0x114,
+		// run while loading) calls FUN_00420b50, which loads the grade icon
+		// WorldDef+0x144+level*4 (gradeIconAnimIds[5] at +0x148..+0x158).
+		// Level 6 reads towerNamePrefix (+0x15c) as a bitmap id, T2BitImage
+		// throws, and the load's catch shows "File load error".
+		const int maxLevel = (int)world.grades.size() + 1;
+		out.level = (int16_t)std::max(world.startGrade, std::min(maxLevel, tower.rating + 1));
+		if (out.level != tower.rating + 1)
+		{
+			char buf[96];
+			snprintf(buf, sizeof(buf), "Star level %d written as %d (the world's grades are %d..%d).",
+				tower.rating + 1, (int)out.level, world.startGrade, maxLevel);
+			report.notes.push_back(buf);
+		}
 		out.fa0 = tower.vipFlags;
 		const double t = std::max(0.0, tower.time);
 		const long long day = (long long)std::floor(t);

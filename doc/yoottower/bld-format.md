@@ -54,7 +54,7 @@ It begins with `64 a1 00 00 00 00`, right after a `ret 4` + nop pad.
 |---|---|---|---|
 | 1 | magic | 4 bytes `002T` | u32 `0x54323030` 'T200'. Any other value: load fails (H) |
 | 2 | world | 4cc | world plugin mID, looked up with `FindPlugin(id,'lPdW')`. `IAWH` Hawaii, `KJNS` Tokyo (H) |
-| 3 | header.level | s16 | doc+0x8c, the **star level**. Compared against plugin `GetGameLevel` to unlock tools (M) |
+| 3 | header.level | s16 | doc+0x8c, the **star level**. Compared against plugin `GetGameLevel` to unlock tools (M). Valid range: the world's startGrade..5. Loading runs FUN_00420b50, which loads the grade icon at WorldDef+0x144+level*4 (gradeIconAnimIds at +0x148..+0x158). Level 6 reads the towerNamePrefix string as a bitmap id, `T2BitImage` throws, and the load fails with "File load error" (oracle) |
 | 4 | header.f9c | s16 | doc+0x9c |
 | 5 | header.fa0 | u32 | doc+0xa0 |
 | 6 | header.f80 | s16 | doc+0x80 |

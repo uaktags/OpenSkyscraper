@@ -4247,6 +4247,20 @@ static void testBldShippedSaves()
 		EXPECT(exportReport.dropped["cinema (no YootTower counterpart in the exporter)"] == 1);
 		EXPECT(exportReport.imported["lobby"] == 1 && exportReport.imported["elevator-standard"] == 1);
 		EXPECT(exported.year == 2 && exported.month0 == 1 && exported.minutes == 720 && exported.level == 2);
+		{
+			// Star levels outside the world's grades do not load in T2.exe
+			// (level 6 -> "File load error"): clamp to startGrade..5.
+			TowerState graded = state;
+			BldData clamped;
+			ImportReport clampReport;
+			graded.rating = 5;
+			EXPECT(exportTower(graded, hawaii, clamped, clampReport, error, &yootTestPlugins()));
+			EXPECT(clamped.level == 5 && clamped.pool.gameLevel == 5);
+			EXPECT(std::any_of(clampReport.notes.begin(), clampReport.notes.end(), [](const std::string & n) { return n.find("Star level 6 written as 5") == 0; }));
+			graded.rating = 0;   // Hawaii starts at grade 2
+			EXPECT(exportTower(graded, hawaii, clamped, clampReport, error, &yootTestPlugins()));
+			EXPECT(clamped.level == 2 && clamped.pool.gameLevel == 2);
+		}
 		EXPECT(writeBytes(exported, rebuilt, error) && parseBytes(rebuilt, reread, error));
 		EXPECT(toTowerXml(reread, bldTestPrototypes, again, againReport, error));
 		EXPECT(again.find("type=\"elevator-standard\" x=\"10\" y=\"0\" evaluation=\"50.0\" height=\"3\" showShaft=\"1\"><car altitude=\"2.0\" homeFloor=\"0\"/></item>") != std::string::npos);
