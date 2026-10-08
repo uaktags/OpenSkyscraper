@@ -127,6 +127,7 @@ bool YootWorldArt::load(const PluginManager & plugins, YootWorld::Id id)
 	m_geom.groundLine = world.groundLine;
 	m_geom.unitOrigin = world.width / 2;
 	m_tiled = world.tiledBkgnd != 0;
+	m_outViewKind = world.outViewKind;
 	m_tileW = world.bkgndTileWidth;
 	m_tileH = world.bkgndTileHeight;
 	m_model = (id == YootWorld::Id::Tokyo) ? YootSkyModel::Tokyo : YootSkyModel::DayLightFilter;
@@ -256,7 +257,7 @@ void YootWorldArt::update(const YootSkyInputs & in)
 	{
 		// WorldDef::DayChanged 0x10015110: seasonal picture and daylight palette.
 		const int month1 = in.month % 12 + 1;
-		const int pict = yootKegonSkyPictId(month1);
+		const int pict = m_outside ? 210 + yootKegonSeasonIndex(month1) : yootKegonSkyPictId(month1);
 		if (pict != m_pictureId && !loadBackdropPicture(pict))
 			loadBackdropPicture(1000);
 		const int pal = yootKegonDayLightPaletteId(month1);

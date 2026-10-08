@@ -446,6 +446,11 @@ namespace OT
 		return 150 + yootKegonSeasonIndex(month1);
 	}
 
+	int yootOutViewPattern(int base, int valiation, int outViewKind)
+	{
+		return (base + 10 * valiation + 100 * (outViewKind + 1)) * 100;
+	}
+
 	int yootFloorFixedUnits(int fixedUnits, int leftUnit)
 	{
 		const int r = (fixedUnits - 7 + leftUnit) % 8;

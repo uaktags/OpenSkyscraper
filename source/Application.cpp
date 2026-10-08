@@ -257,6 +257,8 @@ Application::Application(int argc, char *argv[])
             startupViewportScrollHorizontal = atof(argv[++i]);
             startupViewportScrollVertical = atof(argv[++i]);
         }
+        if (strcmp(argv[i], "--qa-outside") == 0)
+            startupOutside = true;
         if (strcmp(argv[i], "--qa-zoom") == 0)
         {
             // Viewport zoom factor for captures (2 = the original games' 1:1 scale).
@@ -904,6 +906,8 @@ void Application::init()
             game->qaSetViewportScrollFractions(startupViewportScrollHorizontal, startupViewportScrollVertical);
         if (startupZoomFactor > 0.0)
             game->zoomBy(startupZoomFactor);
+        if (startupOutside && game->skin == Skin::Yoot)
+            game->statusMode = Game::kOutside;
         if (setMouseAtStartup)
             sf::Mouse::setPosition(startupMousePosition, window);
     }

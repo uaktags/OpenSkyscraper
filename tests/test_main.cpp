@@ -4819,6 +4819,10 @@ static void testYootItemArt()
 	EXPECT(yootFloorFixedUnits(14, 32) == 7);
 	for (int u = 0; u < 16; ++u)
 		EXPECT((u + yootFloorFixedUnits(14, u)) % 8 == 7);
+	// Outside view parts: Floor.t2p 1003 (Tokyo, kind 2) and Office.t2p.
+	EXPECT(100000 + yootOutViewPattern(1, 0, 2) == 130100);
+	EXPECT(100000 + yootOutViewPattern(3, 1, 2) == 131300);
+	EXPECT(yootOutViewPattern(1, 0, 2) == 30100 && yootOutViewPattern(1, 0, 0) == 10100);
 }
 
 // Step 14 part A: hotel back office, parking, fire department, Kegon sizes.

@@ -150,6 +150,7 @@ namespace OT
 		double startupViewportScrollHorizontal;
 		double startupViewportScrollVertical;
 		double startupZoomFactor = 0.0; ///< --qa-zoom: Game::zoomBy factor (0 = none)
+		bool startupOutside = false;    ///< --qa-outside: start in the Outside view
 		bool fullscreen;
 		std::string simTowerExecutable;
 		/// User-selected folder containing YootTower .t2p plugins

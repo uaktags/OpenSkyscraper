@@ -161,7 +161,9 @@ namespace OT {
 	// Yoot source. Read by ToolboxWindow's "View" button click handler (not
 	// at construction time), but declared here for proximity to the related
 	// state.
-	enum StatusMode { kNormal, kEval, kPric, kHotel };
+	// kOutside: Skin::Yoot only, the Control palette's "Outside" view
+	// (T2WorldDef::ClickOutViewButton 0x10071c00, view mode 1).
+	enum StatusMode { kNormal, kEval, kPric, kHotel, kOutside };
 	StatusMode statusMode;
 	void cycleStatusMode();
 

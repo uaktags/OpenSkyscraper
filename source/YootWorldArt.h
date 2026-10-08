@@ -44,6 +44,12 @@ namespace OT
 		/// the backdrop loaded.
 		bool load(const PluginManager & plugins, YootWorld::Id id);
 		YootWorld::Id worldId() const { return m_id; }
+		/// WORLDDEF outViewKind (+0x218): the Outside view facades are
+		/// bitmap / OBJMAP 1001 + kind of the floor and tenant plugins.
+		int outViewKind() const { return m_outViewKind; }
+		/// The Outside view: Kegon swaps its backdrop to 210 + season
+		/// (WorldDef::CalcSkyPictID 0x10014e20), the inn facade.
+		void setOutside(bool outside) { m_outside = outside; }
 		bool loaded() const { return m_loaded; }
 
 		/// Re-fills the animated palette (and Kegon's seasonal picture) for
@@ -124,6 +130,8 @@ namespace OT
 		std::vector<YootRgb> m_daylight, m_se;
 		YootSkyModel m_model = YootSkyModel::DayLightFilter;
 		int m_pictureId = 1000, m_daylightId = 101;
+		int m_outViewKind = 0;
+		bool m_outside = false;
 		std::vector<YootRgb> m_lastPalette;
 		std::vector<uint8_t> m_rgba;
 		sf::Texture m_backdropTex;

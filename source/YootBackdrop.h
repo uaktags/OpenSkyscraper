@@ -173,6 +173,12 @@ namespace OT
 	/// cut so the loop starts on a unit u with u % 8 == 7.
 	int yootFloorFixedUnits(int fixedUnits, int leftUnit);
 
+	/// Outside view OBJMAP pattern (T2TenantDef::DrawProc 0x10062780 with
+	/// view mode 1): (base + 10 * valiation + 100 * (outViewKind + 1)) * 100,
+	/// + 1 in snow, + 2 when damaged. Floor.t2p adds 100000 and uses the
+	/// height in rows as the base (0x1000bc60).
+	int yootOutViewPattern(int base, int valiation, int outViewKind);
+
 	/// Kegon.t2p WorldDef::CalcSeasonIndex 0x10014dc0 (1-based month):
 	/// 0 spring (3-5), 1 summer (6-8), 2 autumn (9-10), 3 November, 4 winter.
 	int yootKegonSeasonIndex(int month1);

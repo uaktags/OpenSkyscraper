@@ -26,6 +26,7 @@
 #include "YootPlacementGame.h"
 #include "YootItemArt.h"
 #include "YootMisc.h"
+#include "YootOutView.h"
 #include "YootWorld.h"
 #include "SimHarness.h"
 
@@ -1130,6 +1131,7 @@ void Game::advance(double dt)
 		// T2PaletteAnime::ChangeSE: one SE step every 5 of the 30 Hz
 		// IsSETime ticks, i.e. 6 steps a second.
 		sky_in.seKind = (int)(yootClock * 6);
+		yootArt->setOutside(statusMode == kOutside);
 		yootArt->update(sky_in);
 		// Plugin item sheets follow the tower palette (windows, signs).
 		yootRecolourPluginViews(yootArt->palette(), yootArt->animStart(), yootArt->animCount());
@@ -1214,7 +1216,12 @@ void Game::advance(double dt)
 	Item::Item * previousItemBelowCursor = itemBelowCursor;
 	itemBelowCursor = NULL;
 
+	// Skin::Yoot Outside view: the facades replace the tower interior.
+	const bool yootOutside = statusMode == kOutside && yootSkinArt();
+	if (yootOutside) drawYootOutView(*this, win);
+
 	//Draw floor items first
+	if (!yootOutside)
 	for (ItemSet::iterator i = itemsByType["floor"].begin(); i != itemsByType["floor"].end(); i++) {
 		const int2 & vp = (*i)->getPositionPixels();
 		const sf::Vector2u & vs = (*i)->getSizePixels();
@@ -1226,7 +1233,7 @@ void Game::advance(double dt)
 	}
 
 	//Draw the remaining items in the building
-	for (int layer = 0; layer < 2; layer++) {
+	for (int layer = 0; layer < 2 && !yootOutside; layer++) {
 		if (layer == 1) eventSystem.drawUnderMovers(win);
 		for (ItemSet::iterator i = items.begin(); i != items.end(); i++) {
 			if ((*i)->layer != layer) continue;
@@ -2285,9 +2292,10 @@ void Game::setSpeedMode(int sm)
 
 void Game::cycleStatusMode()
 {
-	StatusMode next = static_cast<StatusMode>((static_cast<int>(statusMode) + 1) % 4);
+	StatusMode next = static_cast<StatusMode>((static_cast<int>(statusMode) + 1) % 5);
+	if (next == kOutside && skin != Skin::Yoot) next = kNormal;
 	statusMode = next;
-	const char *names[] = { "Normal view", "Evaluation view", "Pricing view", "Hotel view" };
+	const char *names[] = { "Normal view", "Evaluation view", "Pricing view", "Hotel view", "Outside view" };
 	timeWindow.showMessage(names[static_cast<int>(next)]);
 }
 
