@@ -192,7 +192,9 @@ void Decorations::render(sf::RenderTarget & target) const
 		target.draw(s);
 	} else if (craneVisible) target.draw(crane);
 
-	if (tracksVisible) {
+	// YootTower draws no tracks: the tunnel along the Subway's row is part
+	// of the world backdrop (Tokyo 'Sky' tiles 104 / 110).
+	if (tracksVisible && !yoot) {
 		// sf::FloatRect view = target.getView().getViewport();
 		recti rect = game->metroStation->getRect();
 
