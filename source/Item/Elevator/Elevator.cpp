@@ -37,7 +37,7 @@ int Elevator::schedulePeriod(double hour)
 
 bool Elevator::scheduleAllows(Direction dir) const
 {
-	const int day = (game->time.day == 2) ? 1 : 0;
+	const int day = (game->time.isHoliday()) ? 1 : 0;
 	const SchedulePeriod &period = schedules[day][schedulePeriod(game->time.hour)];
 	if (period.mode == kScheduleExpressUp)
 		return dir == kUp;
@@ -48,14 +48,14 @@ bool Elevator::scheduleAllows(Direction dir) const
 
 int Elevator::scheduleThreshold() const
 {
-	const int day = (game->time.day == 2) ? 1 : 0;
+	const int day = (game->time.isHoliday()) ? 1 : 0;
 	const int threshold = schedules[day][schedulePeriod(game->time.hour)].threshold;
 	return std::max(0, std::min(5, threshold));
 }
 
 int Elevator::schedulePatienceTicks() const
 {
-	const int day = (game->time.day == 2) ? 1 : 0;
+	const int day = (game->time.isHoliday()) ? 1 : 0;
 	const int patience = schedules[day][schedulePeriod(game->time.hour)].patience;
 	return std::max(0, std::min(3, patience)) * 30;
 }

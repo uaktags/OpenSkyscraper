@@ -29,7 +29,19 @@ void Sky::advance(double dt)
 	// Decide whether we're about to have a rainy day.
 	if (game->time.checkHour(5))
 	{
-		rainyDay = ((rand() % 3) == 0); // Statistically, every 3rd day will be rainy.
+		switch (game->activeRules.profile().rain)
+		{
+			case RulesProfile::Rain::Random:
+				rainyDay = ((rand() % 3) == 0); // Statistically, every 3rd day will be rainy.
+				break;
+			case RulesProfile::Rain::YootTokyo:
+				// Tokyo.t2p IsRainyDay: fixed days 4 and 8 of each year.
+				rainyDay = Time::yootTokyoIsRainy((unsigned)game->time.dayOfYear());
+				break;
+			case RulesProfile::Rain::Never:
+				rainyDay = false; // base T2WorldDef::IsRainyDay (Hawaii, Kegon)
+				break;
+		}
 		rainAnimation = 0;
 		game->timeWindow.showMessage(rainyDay ? "I've heard we're in for some bad weather..." : "Weather's going to be good today!");
 	}

@@ -143,7 +143,7 @@ void Restaurant::advance(double dt)
 {
 	(void)dt;
 	const int day = static_cast<int>(std::floor(game->time.absolute));
-	const int period = game->sky.rainyDay ? 2 : (game->time.day == 2 ? 1 : 0);
+	const int period = game->sky.rainyDay ? 2 : (game->time.isHoliday() ? 1 : 0);
 	const int cap = period == 0 ? 35 : period == 1 ? 50 : 25;
 	if (game->time.checkHour(17)) {
 		open = true;
@@ -235,7 +235,7 @@ void Restaurant::addPerson(Person *p)
 	m.arrivalTime = game->time.absolute;
 	eatingCustomers.push_back(p);
 	++customersToday;
-	const int period = game->sky.rainyDay ? 2 : (game->time.day == 2 ? 1 : 0);
+	const int period = game->sky.rainyDay ? 2 : (game->time.isHoliday() ? 1 : 0);
 	serviceScore[period] = std::min(50, serviceScore[period] + 2);
 	spriteNeedsUpdate = true;
 }

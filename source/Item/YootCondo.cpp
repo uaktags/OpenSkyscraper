@@ -155,7 +155,7 @@ void YootCondo::render(sf::RenderTarget &target) const
 
 void YootCondo::advance(double dt)
 {
-	if (!occupied && game->time.day != 2 && game->time.hour >= 7 && game->time.hour < 17 && isAttractive())
+	if (!occupied && !game->time.isHoliday() && game->time.hour >= 7 && game->time.hour < 17 && isAttractive())
 	{
 		if (game->time.checkTick(0.002) && (rand() % 10) == 0)
 		{

@@ -96,7 +96,7 @@ void Condo::updateSprite()
 void Condo::advance(double dt)
 {
 	// Occupy the condo if it is attractive enough.
-	if (!occupied && game->time.day != 2 && game->time.hour >= 7 && game->time.hour < 17 && isAttractive())
+	if (!occupied && !game->time.isHoliday() && game->time.hour >= 7 && game->time.hour < 17 && isAttractive())
 	{
 		// The item has a 10% chance of being occupied every 1/500th of a day. This means
 		// that on average, an item is occupied after 1/250th of a day.

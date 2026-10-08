@@ -477,7 +477,7 @@ void Item::renderPeople(sf::RenderTarget & target, const sf::Color & statusTint,
 		{
 			// AnimateCondoPeople 1028:0FEB - 3 residents.
 			const double hourNow = game->time.hour;
-			const bool weekend = (game->time.day % 3 == 2);
+			const bool weekend = game->time.isHoliday();
 			const bool daylit = (hourNow < 17.0);
 			const bool nightTime = (hourNow >= 21.0 || hourNow < 5.0);
 			bandCount = 3;

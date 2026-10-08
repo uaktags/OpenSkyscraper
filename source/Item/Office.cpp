@@ -127,7 +127,7 @@ void Office::updateSprite()
 void Office::advance(double dt)
 {
 	// Occupy the office if it is attractive enough.
-	if (!occupied && game->time.day != 2 && game->time.hour >= 7 && game->time.hour < 17 && isAttractive())
+	if (!occupied && !game->time.isHoliday() && game->time.hour >= 7 && game->time.hour < 17 && isAttractive())
 	{
 		// The item has a 10% chance of being occupied every 1/500th of a day. This means
 		// that on average, an item is occupied after 1/250th of a day.
@@ -170,7 +170,7 @@ void Office::advance(double dt)
 	}
 
 	// Reset worker schedules at 5:00 if the office is occupied.
-	if (occupied && game->time.checkHour(5) && game->time.day != 2)
+	if (occupied && game->time.checkHour(5) && !game->time.isHoliday())
 	{
 		rescheduleWorkers();
 	}
@@ -344,7 +344,7 @@ void Office::advance(double dt)
 	}
 
 	// Turn on the office lights.
-	bool shouldBeLit = (game->time.day != 2 && game->time.hour >= 7 && game->time.hour < 17) || !people.empty();
+	bool shouldBeLit = (!game->time.isHoliday() && game->time.hour >= 7 && game->time.hour < 17) || !people.empty();
 	if (lit != shouldBeLit)
 	{
 		lit = shouldBeLit;

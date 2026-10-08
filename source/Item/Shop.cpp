@@ -139,7 +139,7 @@ void Shop::advance(double dt)
 {
 	(void)dt;
 	const int day = static_cast<int>(std::floor(game->time.absolute));
-	const int period = game->sky.rainyDay ? 2 : (game->time.day == 2 ? 1 : 0);
+	const int period = game->sky.rainyDay ? 2 : (game->time.isHoliday() ? 1 : 0);
 	const int cap = period == 0 ? 25 : period == 1 ? 30 : 18;
 	if (game->time.checkHour(10)) {
 		open = true;

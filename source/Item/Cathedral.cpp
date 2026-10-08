@@ -17,7 +17,7 @@ static const double kWeddingSummonHour   = 7.0;   // OpenChurch 7:00 AM, weekend
 static const double kWeddingDeadlineHour = 12.5;  // InChurchPeple deadline ft 0x320 = 12:30 PM
 static const double kWeddingCloseHour    = 13.0;  // CloseChurch 1:00 PM dismissal
 static const int    kWeddingPopulation   = 15000; // CheckMarry star-5 population line (tuning +0x50)
-static const int    kWeddingWeekendDay   = 2;     // Time::day == 2 is the weekend (EventSystem convention)
+// Weddings run on the weekend/holiday (Time::isHoliday; SimTower day == 2).
 static const int    kWeddingStarRating   = 4;     // internal rating 4 = 5 stars
 static const int    kCoupleSheetCells    = 8;     // 0x8828 sheet: walk-in 0/1, ceremony 2..6, held pose 7
 static const int    kCoupleWalkinSteps   = 14;    // counter < 14: the two walk in (bride cell 0, groom cell 27)
@@ -69,7 +69,7 @@ void Cathedral::advance(double dt)
 		if (weddingPhase == kWeddingIdle && !weddingDone &&
 		    game->rating == kWeddingStarRating &&
 		    game->population >= kWeddingPopulation &&
-		    game->time.day == kWeddingWeekendDay)
+		    game->time.isHoliday())
 		{
 			weddingPhase = kWeddingGuestsArriving;
 			for (int i = 0; i < kWeddingGuestCount; i++) {
