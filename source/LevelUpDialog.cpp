@@ -45,7 +45,7 @@ std::string LevelUpDialog::unlockedAt(int rating) const
 	{
 		Item::AbstractPrototype * p = *it;
 		if (!p) continue;
-		if (LevelUp::minRatingToBuild(p->id) != rating) continue;
+		if (game->activeRules.minRatingToBuild(p->id) != rating) continue;
 		if (!first) out << ", ";
 		out << p->name;
 		first = false;

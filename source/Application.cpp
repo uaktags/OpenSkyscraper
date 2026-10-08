@@ -50,6 +50,8 @@ Application::Application(int argc, char *argv[])
       m_rulesetExplicit(false),
       m_skin(Skin::OpenSky),
       m_skinExplicit(false),
+      m_world(YootWorld::Id::Tokyo),
+      m_worldExplicit(false),
       m_loadedSimTowerResources(false),
       m_debugMenu(false)
 {
@@ -151,6 +153,21 @@ Application::Application(int argc, char *argv[])
             else
             {
                 LOG(ERROR, "invalid ruleset '%s'; expected simtower, opensky, or yoottower", identifier);
+            }
+        }
+        if (strcmp(argv[i], "--world") == 0)
+        {
+            assert(i + 1 < argc && "--world is missing value");
+            const char * identifier = argv[++i];
+            YootWorld::Id parsed;
+            if (parseYootWorldIdentifier(identifier, parsed))
+            {
+                setWorldOverride(parsed);
+                LOG(INFO, "world override set to %s", identifier);
+            }
+            else
+            {
+                LOG(ERROR, "invalid world '%s'; expected tokyo, hawaii, or kegon", identifier);
             }
         }
         if (strcmp(argv[i], "--skin") == 0)
@@ -398,7 +415,7 @@ void Application::loadGameFromFile(const std::string &filename)
         }
         if (!hasRulesetOverride())
         {
-            game->activeRules = BuildRules(BuildRules::Ruleset::SimTower);
+            game->setRules(BuildRules(BuildRules::Ruleset::SimTower));
             LOG(INFO, "TDT import selected SimTower ruleset");
         }
         game->decodeXML(xml);
@@ -458,7 +475,7 @@ void Application::loadGameFromFile(const std::string &filename)
             // an old save) owns its ruleset. Clear any prior TDT import
             // preselection before Game decodes this normal XML load.
             if (!hasRulesetOverride())
-                game->activeRules = BuildRules(selectedRuleset());
+                game->setRules(makeBuildRules(selectedRuleset(), selectedWorld()));
             game->decodeXML(xml);
             game->reloadGUI();
             game->saveFilename = filename;
@@ -1537,6 +1554,46 @@ void Application::showMessageDialog(const std::string &title, const std::string 
     dialog->moveToFront();
 }
 
+BuildRules Application::makeBuildRules(BuildRules::Ruleset ruleset, YootWorld::Id world)
+{
+    if (ruleset != BuildRules::Ruleset::YootTower)
+        return BuildRules(ruleset);
+
+    std::map<int, RulesProfile>::const_iterator cached = m_yootProfiles.find(static_cast<int>(world));
+    if (cached != m_yootProfiles.end())
+        return BuildRules(ruleset, cached->second);
+
+    std::string error;
+    const YootWorld w = loadYootWorld(pluginManager, world, &error);
+    if (!w.fromPlugin)
+        LOG(WARNING, "YootTower world %s: %s; using built-in constants",
+            yootWorldDisplayName(world), error.c_str());
+    else if (!error.empty())
+        LOG(WARNING, "YootTower world %s: %s", yootWorldDisplayName(world), error.c_str());
+
+    RulesProfile profile = RulesProfile::yootTower(w);
+    // Item unlocks from plugin ATTR (mGameLevel + world mask). Prototypes
+    // with no YootTower counterpart stay on the SimTower lock table.
+    const std::map<std::string, YootUnlock> unlocks = resolveYootUnlocks(pluginManager, w.worldMask);
+    for (std::map<std::string, YootUnlock>::const_iterator u = unlocks.begin(); u != unlocks.end(); ++u)
+    {
+        RulesProfile::Unlock unlock;
+        unlock.available = u->second.available;
+        unlock.minRating = u->second.minGrade > 0 ? u->second.minGrade - 1 : 0;
+        profile.unlocks[u->first] = unlock;
+    }
+    for (size_t i = 0; i < profile.vips.size(); ++i)
+        profile.vips[i].destPrototypes = yootPrototypesForPluginId(pluginManager, profile.vips[i].destPluginId);
+
+    LOG(INFO, "YootTower world %s: funds $%d, start %d stars, floors %d..%d, x [%d, %d), lobby %d, %zu grade rows, %zu VIPs, %zu unlocks%s",
+        profile.worldName.c_str(), profile.startFunds, profile.startRating + 1,
+        profile.lowestFloor, profile.highestFloor, profile.buildMinX, profile.buildMaxX,
+        profile.lobbyHeight, profile.grades.size(), profile.vips.size(), profile.unlocks.size(),
+        profile.unbuildable.empty() ? "" : ", FINF mask");
+    m_yootProfiles[static_cast<int>(world)] = profile;
+    return BuildRules(ruleset, profile);
+}
+
 void Application::showNewTowerDialog()
 {
     auto existing = gui.get<tgui::ChildWindow>("NewTowerDialog");
@@ -1550,7 +1607,7 @@ void Application::showNewTowerDialog()
 
     auto dialog = tgui::ChildWindow::create("New Tower");
     dialog->setWidgetName("NewTowerDialog");
-    const float dialogH = (currentGame ? 350.f : 300.f) * uiScale;
+    const float dialogH = (currentGame ? 394.f : 344.f) * uiScale;
     dialog->setClientSize({420 * uiScale, dialogH});
     dialog->getRenderer()->setTitleBarHeight(24 * uiScale);
     dialog->setTitleTextSize(14 * uiScale);
@@ -1596,6 +1653,22 @@ void Application::showNewTowerDialog()
     modeR->setBorders(1);
     modeR->setRoundedBorderRadius(4 * uiScale);
     dialog->add(modeBtn);
+    currentY += 44.f * uiScale;
+
+    // World (YootTower mode only)
+    auto worldBtn = tgui::Button::create(std::string("World: ") + yootWorldDisplayName(selectedWorld()));
+    worldBtn->setSize(dialog->getClientSize().x - 2 * padding, 34 * uiScale);
+    worldBtn->setTextSize(13 * uiScale);
+    worldBtn->setPosition(padding, currentY);
+    auto worldR = worldBtn->getRenderer();
+    worldR->setBackgroundColor(sf::Color(42, 48, 62));
+    worldR->setTextColor(sf::Color(230, 235, 245));
+    worldR->setBackgroundColorHover(sf::Color(55, 64, 82));
+    worldR->setBorderColor(sf::Color(65, 76, 98));
+    worldR->setBorders(1);
+    worldR->setRoundedBorderRadius(4 * uiScale);
+    worldBtn->setEnabled(selectedRuleset() == BuildRules::Ruleset::YootTower);
+    dialog->add(worldBtn);
     currentY += 44.f * uiScale;
 
     // Skin selector button
@@ -1678,11 +1751,18 @@ void Application::showNewTowerDialog()
     };
     updateSkinState();
 
-    modeBtn->onPress([this, modeBtn, updateSkinState] {
+    modeBtn->onPress([this, modeBtn, worldBtn, updateSkinState] {
         BuildRules::Ruleset next = static_cast<BuildRules::Ruleset>((static_cast<int>(selectedRuleset()) + 1) % 3);
         setRulesetOverride(next);
         modeBtn->setText(std::string("Game Mode: ") + BuildRules(next).displayName());
+        worldBtn->setEnabled(next == BuildRules::Ruleset::YootTower);
         updateSkinState();
+    });
+
+    worldBtn->onPress([this, worldBtn] {
+        YootWorld::Id next = static_cast<YootWorld::Id>((static_cast<int>(selectedWorld()) + 1) % 3);
+        setWorldOverride(next);
+        worldBtn->setText(std::string("World: ") + yootWorldDisplayName(next));
     });
 
     skinBtn->onPress([this, updateSkinState] {

@@ -48,6 +48,9 @@ namespace OT {
 		Application & app;
 		Game(Application & app);
 		BuildRules activeRules;
+		/// Switch the active ruleset/profile and apply its process-wide
+		/// clock mode (YootTower minute-linear time) and calendar.
+		void setRules(const BuildRules & rules);
 
 
 		virtual ~Game();
@@ -105,6 +108,16 @@ namespace OT {
 		void setRating(int r);
 		void setPopulation(int p);
 		void ratingMayIncrease();
+
+		/// YootTower VIP-visited bits (T2TowerDoc +0xa0). Each grade row's
+		/// vipFlag must be set before population can promote.
+		uint32_t yootVipFlags;
+		/// YootTower final-item hook (T2.exe FUN_00422670, doc vtable
+		/// +0x188): at the top grade (grade == numGrades) OR that grade's
+		/// flag into yootVipFlags so the last promotion can land. Called by
+		/// the world's final event (Tokyo stadium baseball, Hawaii cathedral
+		/// wedding, Kegon attraction). Returns false (no-op) otherwise.
+		bool grantFinalGrade();
 
 		// State read by ToolboxWindow during construction (it calls updateTool()/
 	// updateSpeed() inside its constructor, which read these fields). They
@@ -253,6 +266,14 @@ namespace OT {
 
 	private:
 		void clearWorld();
+		/// New-tower funds, rating and clock from the active profile.
+		void applyNewTowerProfile();
+		/// YootTower promotion gate (population + VIP flag), cheap enough
+		/// to run every tick (CheckGameLevel 0x10073290).
+		void yootCheckGrade();
+		/// Lobby height for a placement: Ctrl = 2, Ctrl+Shift = 3, otherwise
+		/// the profile default (1, or the YootTower world's lobby height).
+		int lobbyToolHeight() const;
 		/// One simulation tick: the sim core of advance() (clock,
 		/// accounting, items, people, hour boundaries). Fast mode runs
 		/// several of these per rendered frame.

@@ -17,6 +17,9 @@
 #include "SoundManager.h"
 
 #include "Skin.h"
+#include "YootWorld.h"
+#include "BuildRules.h"
+#include <map>
 
 #include <TGUI/TGUI.hpp>
 #include <TGUI/Backend/SFML-Graphics.hpp>
@@ -67,6 +70,13 @@ namespace OT
 		bool hasRulesetOverride() const { return m_rulesetExplicit; }
 		Skin selectedSkin() const { return m_skin; }
 		bool hasSkinOverride() const { return m_skinExplicit; }
+		/// YootTower world (--world / New Tower dialog). Default Tokyo.
+		YootWorld::Id selectedWorld() const { return m_world; }
+		bool hasWorldOverride() const { return m_worldExplicit; }
+		void setWorldOverride(YootWorld::Id w) { m_world = w; m_worldExplicit = true; }
+		/// Rules for a ruleset; YootTower loads the world plugin through the
+		/// plugin catalog (cached per world) and resolves item unlocks.
+		BuildRules makeBuildRules(BuildRules::Ruleset ruleset, YootWorld::Id world);
 		bool debugMenuEnabled() const { return m_debugMenu; }
 
 
@@ -146,6 +156,9 @@ namespace OT
 		bool m_rulesetExplicit;
 		Skin m_skin;
 		bool m_skinExplicit;
+		YootWorld::Id m_world;
+		bool m_worldExplicit;
+		std::map<int, RulesProfile> m_yootProfiles;
 		bool m_loadedSimTowerResources;
 		bool m_debugMenu;
 	};

@@ -182,7 +182,7 @@ void ToolboxWindow::reload()
     // slot will revert to its parent on the next render pass.
     std::map<std::string, std::string> savedSubs;
     for (auto& kv : parentActiveChild) {
-        if (LevelUp::minRatingToBuild(kv.second) <= game->rating)
+        if (game->activeRules.minRatingToBuild(kv.second) <= game->rating)
             savedSubs[kv.first] = kv.second;
     }
     parentActiveChild.clear();
@@ -202,7 +202,7 @@ void ToolboxWindow::reload()
     {
         Item::AbstractPrototype *prototype = game->itemFactory.prototypes[i];
 
-        if (LevelUp::minRatingToBuild(prototype->id) > game->rating)
+        if (game->activeRules.minRatingToBuild(prototype->id) > game->rating)
             continue;
 
         std::string parent;
@@ -450,7 +450,7 @@ void ToolboxWindow::showOverlayFor(const std::string& parentId)
             continue;
 
         // Skip tools the player can't build yet.
-        if (LevelUp::minRatingToBuild(protoId) > game->rating)
+        if (game->activeRules.minRatingToBuild(protoId) > game->rating)
             continue;
 
         auto pit = game->itemFactory.prototypesById.find(protoId);

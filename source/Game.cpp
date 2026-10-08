@@ -160,11 +160,11 @@ static double autosaveWallClock()
 	return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
 }
 
-static bool allowsFloorSpan(const BuildRules & rules, int minX, int maxX)
+static bool allowsFloorSpan(const BuildRules & rules, int floor, int minX, int maxX)
 {
 	const long long width = (long long)maxX - minX;
 	return width > 0 && width <= INT_MAX &&
-		rules.allowsHorizontalFootprint(minX, (int)width);
+		rules.allowsFootprint(minX, floor, (int)width);
 }
 
 // Wave U row 51 (Fast Mode): speed index 4 tops the ladder. It bypasses
@@ -186,7 +186,7 @@ static bool canExtendFloor(const Game & game, int floor, int minX, int maxX)
 		minX = std::min(minX, existing->second->position.x);
 		maxX = std::max(maxX, existing->second->getRect().maxX());
 	}
-	return allowsFloorSpan(game.activeRules, minX, maxX);
+	return allowsFloorSpan(game.activeRules, floor, minX, maxX);
 }
 
 void Game::askEventChoice(const std::string & title, const std::string & text,
@@ -313,7 +313,7 @@ void Game::debugRedraw()
 Game::Game(Application & app)
 :	State("game"),
 	app(app),
-	activeRules(app.selectedRuleset()),
+	activeRules(app.makeBuildRules(app.selectedRuleset(), app.selectedWorld())),
 	skin(app.selectedSkin()),
 	itemFactory(this),
 	toolboxWindow(this),
@@ -355,15 +355,20 @@ Game::Game(Application & app)
 	}
 	//mapWindow     = NULL;
 
-	funds  = 2000000;
+	setRules(activeRules);
+	funds  = activeRules.profile().startFunds;
 	money.setBalance(funds);
-	rating = 0;
+	rating = activeRules.profile().startRating;
 	population = 0;
 	populationNeedsUpdate = false;
+	yootVipFlags = 0;
 	lastAutosaveDay = (int)floor(time.absolute);
 	lastAutosaveWallClock = autosaveWallClock();
 
-	time.set(7/78.0);
+	if (activeRules.profile().yootWorld)
+		time.set(activeRules.profile().startDay + Time::hourToAbsolute(7.0));
+	else
+		time.set(7/78.0);
 	lastAccountingDay = (int)floor(time.absolute);
 	// Store the absolute three-day financial cycle, not Time::quarter's
 	// presentation value. This survives year wrap without duplicate billing.
@@ -637,13 +642,7 @@ bool Game::handleEvent(sf::Event & event)
 				int height = toolPrototype->size.y;
 				int yHeightOffset = height;
 				if (toolPrototype->icon == ICON_LOBBY) {
-					bool ctrl = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl);
-					bool shift = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LShift);
-					if (ctrl) {
-						height = shift ? 3 : 2;
-					} else {
-						height = 1;
-					}
+					height = lobbyToolHeight();
 					yHeightOffset = 1;
 				}
 				toolPosition = int2(round(mp.x/8-toolPrototype->size.x/2.0), round(mp.y/36-yHeightOffset/2.0));
@@ -720,7 +719,8 @@ return false;
 
 if (batchDragActive()) updateBatchDrag();
 if (draggingElevator &&
-    !activeRules.allowsHorizontalFootprint(draggingElevator->position.x, draggingElevator->size.x)) {
+    !activeRules.allowsFootprint(draggingElevator->position.x, draggingElevator->position.y,
+                                 draggingElevator->size.x, draggingElevator->size.y)) {
 	timeWindow.showMessage("Cannot extend elevator outside the " +
 		std::string(activeRules.displayName()) + " build boundary.");
 	draggingElevator = NULL;
@@ -946,7 +946,13 @@ void Game::advanceSimTick(double dt)
 	// weekdays. Population/item events already re-evaluate; this catches a
 	// tower that became eligible while the window was shut (e.g. a good VIP
 	// review at 4PM) so it is crowned the moment 5PM opens.
-	if (time.checkHour(LevelUp::kPromotionWindowStartHour)) ratingMayIncrease();
+	if (!activeRules.profile().grades.empty()) {
+		// YootTower checks the grade gate every idle tick (T2.exe
+		// FUN_0041da20 -> CheckGameLevel), with no time-of-day window.
+		yootCheckGrade();
+	} else if (time.checkHour(LevelUp::kPromotionWindowStartHour)) {
+		ratingMayIncrease();
+	}
 }
 
 void Game::advance(double dt)
@@ -1024,13 +1030,7 @@ void Game::advance(double dt)
 		int height = toolPrototype->size.y;
 		int yHeightOffset = height;
 		if (toolPrototype->icon == ICON_LOBBY) {
-			bool ctrl = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl);
-			bool shift = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LShift);
-			if (ctrl) {
-				height = shift ? 3 : 2;
-			} else {
-				height = 1;
-			}
+			height = lobbyToolHeight();
 			yHeightOffset = 1;
 		}
 		toolPosition = int2(round(mp.x/8-toolPrototype->size.x/2.0), round(mp.y/36-yHeightOffset/2.0));
@@ -1156,13 +1156,7 @@ void Game::advance(double dt)
 	if (toolPrototype) {
 		int height = toolPrototype->size.y;
 		if (toolPrototype->icon == ICON_LOBBY) {
-			bool ctrl = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl);
-			bool shift = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LShift);
-			if (ctrl) {
-				height = shift ? 3 : 2;
-			} else {
-				height = 1;
-			}
+			height = lobbyToolHeight();
 		}
 		sf::RectangleShape placement({
 			static_cast<float>(toolPrototype->size.x * 8),
@@ -1538,22 +1532,55 @@ void Game::seedOfficeLunchQa()
 void Game::seedNewTower()
 {
 	clearWorld();
-	funds = 2000000; // the EXE's starting cash (tower_init 10d0:0ac2: 20000 x $100; concilia adoption row 24)
-	money.clear(funds);
-	rating = 0;
-	population = 0;
-	populationNeedsUpdate = false;
-	time.set(7/78.0);
-	lastAccountingDay = (int)floor(time.absolute);
-	lastAccountingQuarter = (int)floor(time.absolute / 3.0);
+	applyNewTowerProfile();
 	setSpeedMode(1);
 	selectTool("inspector");
 	poi.x = 0;
 	poi.y = 200;
-
-	funds = 2000000; // keep in lockstep with the balance above (corner-click doubler arms on this exact value)
 	updateRoutes();
-	LOG(IMPORTANT, "seeded new tower");
+	LOG(IMPORTANT, "seeded new tower (%s, funds $%d, %d stars)", activeRules.displayName(), funds, rating + 1);
+}
+
+void Game::applyNewTowerProfile()
+{
+	const RulesProfile & profile = activeRules.profile();
+	// SimTower/OpenSky: the EXE's starting cash (tower_init 10d0:0ac2:
+	// 20000 x $100; concilia adoption row 24), kept in lockstep with the
+	// balance (the corner-click doubler arms on this exact value).
+	// YootTower: WATR initialFunds x ExchangeMoney.
+	funds = profile.startFunds;
+	money.clear(funds);
+	rating = profile.startRating;
+	population = 0;
+	populationNeedsUpdate = false;
+	yootVipFlags = 0;
+	// YootTower doc init: T2DateTime(1, worldDef+0x74, 7:00).
+	if (profile.yootWorld)
+		time.set(profile.startDay + Time::hourToAbsolute(7.0));
+	else
+		time.set(7/78.0);
+	lastAccountingDay = (int)floor(time.absolute);
+	lastAccountingQuarter = (int)floor(time.absolute / 3.0);
+	timeWindow.updateFunds();
+	timeWindow.updateRating();
+}
+
+void Game::setRules(const BuildRules & rules)
+{
+	activeRules = rules;
+	const RulesProfile & profile = activeRules.profile();
+	Time::setLinearClock(profile.linearClock);
+	time.calendar = profile.calendar == RulesProfile::Calendar::YootTower
+		? Time::Calendar::YootTower : Time::Calendar::SimTower;
+}
+
+int Game::lobbyToolHeight() const
+{
+	const bool ctrl = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl);
+	const bool shift = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LShift);
+	if (ctrl)
+		return shift ? 3 : 2;
+	return activeRules.profile().lobbyHeight;
 }
 
 void Game::encodeXML(tinyxml2::XMLPrinter & xml)
@@ -1567,6 +1594,10 @@ void Game::encodeXML(tinyxml2::XMLPrinter & xml)
 	xml.PushAttribute("rainy", sky.rainyDay);
 	xml.PushAttribute("tool", selectedTool.c_str());
 	xml.PushAttribute("ruleset", activeRules.identifier());
+	if (activeRules.profile().yootWorld) {
+		xml.PushAttribute("world", activeRules.profile().worldId.c_str());
+		xml.PushAttribute("yootVipFlags", (unsigned)yootVipFlags);
+	}
 	xml.PushAttribute("skin", skinIdentifier(skin));
 
 
@@ -1632,20 +1663,36 @@ void Game::decodeXML(tinyxml2::XMLDocument & xml)
 {
 	tinyxml2::XMLElement * root = xml.RootElement();
 	assert(root);
+	BuildRules::Ruleset decodedRuleset = activeRules.ruleset();
 	if (!app.hasRulesetOverride()) {
 		const char * savedIdentifier = root->Attribute("ruleset");
 		if (savedIdentifier) {
 			BuildRules::Ruleset savedRuleset = BuildRules::Ruleset::OpenSky;
 			if (!BuildRules::parseIdentifier(savedIdentifier, savedRuleset))
 				LOG(WARNING, "invalid saved ruleset '%s'; defaulting to opensky", savedIdentifier);
-			activeRules = BuildRules(savedRuleset);
+			decodedRuleset = savedRuleset;
 		} else if (activeRules.ruleset() == app.selectedRuleset()) {
 			// Normal native XML loads begin at the application's default,
 			// so old saves safely select OpenSky. A TDT conversion marks
 			// its preselected SimTower policy directly before decode.
-			activeRules = BuildRules(BuildRules::Ruleset::OpenSky);
+			decodedRuleset = BuildRules::Ruleset::OpenSky;
 		}
 	}
+	// YootTower world: an explicit --world/menu choice wins, then the saved
+	// attribute; saves written before worlds existed load as Tokyo.
+	YootWorld::Id decodedWorld = YootWorld::Id::Tokyo;
+	if (app.hasWorldOverride()) {
+		decodedWorld = app.selectedWorld();
+	} else if (const char * savedWorld = root->Attribute("world")) {
+		if (!parseYootWorldIdentifier(savedWorld, decodedWorld))
+			LOG(WARNING, "invalid saved world '%s'; defaulting to tokyo", savedWorld);
+	}
+	if (decodedRuleset == BuildRules::Ruleset::YootTower)
+		setRules(app.makeBuildRules(decodedRuleset, decodedWorld));
+	else if (decodedRuleset != activeRules.ruleset())
+		setRules(BuildRules(decodedRuleset));
+	else
+		setRules(activeRules);
 
 
 	// Saved skin. An explicit --skin wins; otherwise the persisted
@@ -1701,6 +1748,7 @@ void Game::decodeXML(tinyxml2::XMLDocument & xml)
 		}
 	}
 	setRating(root->IntAttribute("rating"));
+	yootVipFlags = root->UnsignedAttribute("yootVipFlags", 0);
 	time.set(root->DoubleAttribute("time"));
 	lastAccountingDay = (int)floor(time.absolute);
 	const int currentCycle = (int)floor(time.absolute / 3.0);
@@ -1807,6 +1855,14 @@ void Game::setPopulation(int p)
  *  population, or an item constructed. */
 void Game::ratingMayIncrease()
 {
+	// YootTower worlds promote on population + VIP flag only (no facility
+	// scan, no time window); see yootCheckGrade.
+	if (!activeRules.profile().grades.empty())
+	{
+		yootCheckGrade();
+		return;
+	}
+
 	// Run a fresh judge pass so facility counts reflect the current state
 	// (e.g. the Security office the player just finished). This is cheap
 	// relative to construction events.
@@ -1870,6 +1926,37 @@ void Game::ratingMayIncrease()
 		// starRewardMessage API for callers, but it always returns empty.
 		toolboxWindow.reload(); // refresh build locks
 	}
+}
+
+void Game::yootCheckGrade()
+{
+	const std::vector<RulesProfile::Grade> & grades = activeRules.profile().grades;
+	while (true)
+	{
+		// Row grade-1 gates the step from `grade` (CheckGameLevelProc
+		// 0x10072410 -> 0x2715 -> T2.exe FUN_00421e90 grade++).
+		const int grade = rating + 1;
+		if (grade < 1 || grade > (int)grades.size()) break;
+		const RulesProfile::Grade & row = grades[grade - 1];
+		if (!LevelUp::yootPromotionReady(row.vipFlag, row.population, yootVipFlags, population))
+			break;
+		setRating(rating + 1);
+		levelUpDialog.showForRating(rating);
+		timeWindow.showMessage(std::string("Your tower has been given a ") + std::to_string(rating + 1) + "-Star Award!");
+		toolboxWindow.reload(); // refresh build locks
+	}
+}
+
+bool Game::grantFinalGrade()
+{
+	const std::vector<RulesProfile::Grade> & grades = activeRules.profile().grades;
+	const int grade = rating + 1;
+	if (grade < 1 || grade > (int)grades.size()) return false;
+	if (!LevelUp::yootGrantFinalGrade(grade, (int)grades.size(), grades[grade - 1].vipFlag, yootVipFlags))
+		return false;
+	LOG(IMPORTANT, "final-item event granted grade %d flag 0x%x", grade, (unsigned)grades[grade - 1].vipFlag);
+	yootCheckGrade();
+	return true;
 }
 
 void Game::setSpeedMode(int sm)
@@ -2015,8 +2102,9 @@ void Game::toggleElevatorService(Item::Elevator::Elevator * e, int floor)
 bool Game::constructToolAt(int2 pos)
 {
 	toolPosition = pos;
-	if (!activeRules.allowsHorizontalFootprint(pos.x, toolPrototype->size.x)) {
-		const std::string reason = "Horizontal footprint is outside the " +
+	const int footprintHeight = toolPrototype->icon == ICON_LOBBY ? lobbyToolHeight() : toolPrototype->size.y;
+	if (!activeRules.allowsFootprint(pos.x, pos.y, toolPrototype->size.x, footprintHeight)) {
+		const std::string reason = "Footprint is outside the " +
 			std::string(activeRules.displayName()) + " build boundary";
 		LOG(DEBUG, "cannot construct %s at %ix%i: %s",
 		    toolPrototype->id.c_str(), pos.x, pos.y, reason.c_str());
@@ -2043,13 +2131,7 @@ bool Game::constructToolAt(int2 pos)
 	int height = toolPrototype->size.y;
 	int yHeightOffset = height;
 	if (toolPrototype->icon == ICON_LOBBY) {
-		bool ctrl = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl);
-		bool shift = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LShift);
-		if (ctrl) {
-			height = shift ? 3 : 2;
-		} else {
-			height = 1;
-		}
+		height = lobbyToolHeight();
 		yHeightOffset = 1;
 	}
 	struct SizeGuard {
@@ -2124,17 +2206,24 @@ if (!handled) {
 			blockReason = "Cannot start a shaft inside the lobby's upper stories";
 		}
 	}
-	int minRating = LevelUp::minRatingToBuild(toolPrototype->id);
-	if (minRating > rating)
+	int minRating = activeRules.minRatingToBuild(toolPrototype->id);
+	if (minRating == BuildRules::kUnavailable)
+	{
+		constructionBlocked = true;
+		blockReason = toolPrototype->name + " is not available in " + activeRules.profile().worldName;
+	}
+	else if (minRating > rating)
 	{
 		constructionBlocked = true;
 		blockReason = toolPrototype->name + " unlocks at " +
 		              std::to_string(minRating + 1) + " stars";
 	}
 
-	if (toolPosition.y < -9 && toolPrototype->icon != ICON_METRO) {
+	const int lowestFloor = activeRules.profile().lowestFloor;
+	if (toolPosition.y < lowestFloor &&
+	    (toolPrototype->icon != ICON_METRO || activeRules.profile().yootWorld)) {
 			constructionBlocked = true;
-			blockReason = "Cannot build below floor B9";
+			blockReason = "Cannot build below floor B" + std::to_string(-lowestFloor);
 		}
 
 		if (metroStation != NULL) {
@@ -2586,18 +2675,23 @@ void Game::cancelBatchDrag()
 
 bool Game::validateBatchCell(Item::AbstractPrototype * proto, int x, int y, std::string & reason, const std::set<int> & simulatedSlabs) const
 {
-	if (!activeRules.allowsHorizontalFootprint(x, proto->size.x)) {
-		reason = "Horizontal footprint is outside the " +
+	if (!activeRules.allowsFootprint(x, y, proto->size.x, proto->size.y)) {
+		reason = "Footprint is outside the " +
 			std::string(activeRules.displayName()) + " build boundary";
 		return false;
 	}
 
-	const int minRating = LevelUp::minRatingToBuild(proto->id);
+	const int minRating = activeRules.minRatingToBuild(proto->id);
+	if (minRating == BuildRules::kUnavailable) {
+		reason = proto->name + " is not available in " + activeRules.profile().worldName;
+		return false;
+	}
 	if (minRating > rating) {
 		reason = proto->name + " unlocks at " + std::to_string(minRating + 1) + " stars";
 		return false;
 	}
-	if (y < -9) { reason = "Cannot build below floor B9"; return false; }
+	const int lowestFloor = activeRules.profile().lowestFloor;
+	if (y < lowestFloor) { reason = "Cannot build below floor B" + std::to_string(-lowestFloor); return false; }
 	if (metroStation != NULL && y < metroStation->position.y) {
 		reason = "Cannot build above the metro station";
 		return false;
