@@ -62,10 +62,16 @@ namespace OT
 			return bottomFloor == 0 ? 0 : kErrLobbyFirstFloorOnly;
 		}
 
+		static bool sharesRow(const ParkingPiece & a, const ParkingPiece & b)
+		{
+			// A two-row gate (1F + B1) touches lots on either of its rows.
+			return a.floor <= b.topFloor() && b.floor <= a.topFloor();
+		}
+
 		static bool touchesSide(const ParkingPiece & a, const ParkingPiece & b)
 		{
-			// Same floor, edge to edge (GetTenant(top, left - 1) / (top, right)).
-			return a.topFloor() == b.topFloor() && (a.maxX == b.minX || b.maxX == a.minX);
+			// Edge to edge on a shared row (GetTenant(top, left - 1) / (top, right)).
+			return sharesRow(a, b) && (a.maxX == b.minX || b.maxX == a.minX);
 		}
 
 		int parkingPlaceRule(const std::vector<ParkingPiece> & tower, const ParkingPiece & piece)
@@ -87,7 +93,7 @@ namespace OT
 			for (const ParkingPiece & p : tower) {
 				if (piece.gate && p.gate && p.minX == piece.minX && p.topFloor() == piece.floor - 1)
 					gateBelow = true; // FUN_1000bf00: GetTenant(bottom, left)
-				if (p.topFloor() != piece.topFloor()) continue;
+				if (!sharesRow(p, piece)) continue;
 				if (p.maxX == piece.minX) left = true;
 				if (p.minX == piece.maxX) right = true;
 			}
