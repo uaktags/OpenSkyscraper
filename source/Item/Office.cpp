@@ -347,7 +347,9 @@ void Office::advance(double dt)
 		for (Workers::iterator iw = workers.begin(); iw != workers.end(); ++iw)
 		{
 			Worker *w = *iw;
-			if (w->at == this && w->state == Person::kWorking &&
+			// YootTower has no stress flee: waiting stress costs estimate
+			// (P1/P2) and the office decides by its estimate (J3).
+			if (w->at == this && w->state == Person::kWorking && !w->yootRules() &&
 			    w->stress > kStressFleeThreshold && !homeRoute.empty())
 			{
 				LOG(DEBUG, "Worker %p fleeing office (stress %.1f)", w, w->stress);
