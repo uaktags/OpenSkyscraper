@@ -37,15 +37,30 @@ namespace OT
 		{
 			if (v.indices.empty()) return;
 			std::vector<YootRgb> colours;
+			// The game blits every sheet by index into the tower palette, so
+			// the static entries below the animated range come from the world
+			// too: sheets whose own colour table is shifted (Office.t2p's
+			// Outside view, 172..176 green curtains in Tokyo) draw in its colours.
+			const int end = std::min(p.start + p.count, (int)p.palette.size());
 			if (!p.palette.empty())
 				for (int index : v.usedIndices)
-					if (index >= p.start && index < p.start + p.count && index < (int)p.palette.size())
+					if (index < end)
 						colours.push_back(p.palette[index]);
 			if (colours == v.applied) return;
 			v.applied = colours;
 			std::vector<uint8_t> rgba = v.baseRgba;
 			if (!p.palette.empty())
+			{
+				for (size_t i = 0; i < v.indices.size(); ++i)
+				{
+					const int index = v.indices[i];
+					if (index >= p.start || index >= (int)p.palette.size() || rgba[i * 4 + 3] == 0) continue;
+					rgba[i * 4 + 0] = p.palette[index].r;
+					rgba[i * 4 + 1] = p.palette[index].g;
+					rgba[i * 4 + 2] = p.palette[index].b;
+				}
 				yootPaintAnimatedIndices(v.indices, p.palette, p.start, p.count, rgba);
+			}
 			v.texture.update(rgba.data());
 		}
 	}
