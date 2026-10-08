@@ -21,6 +21,7 @@
 #include "cmath"
 #include "Game.h"
 #include "TGUI/Widgets/Scrollbar.hpp"
+#include "YootWorld.h"
 
 using namespace OT;
 
@@ -249,6 +250,14 @@ lblMoneyStats = tgui::Label::create();
 
 void TimeWindow::updateTime() {
     Time & t = game->time;
+	if (!game->activeRules.profile().worldId.empty()) {
+		// YootTower calendar (T2WorldDef::DrawCalendar): "YEAR 1 Jan. WD",
+		// holidays as "HD" in red.
+		const bool holiday = t.isHoliday();
+		lblDate->setText(yootCalendarText(t.year, t.dayOfYear(), holiday));
+		setLabelColor(lblDate, holiday ? sf::Color(255, 96, 96) : sf::Color(229, 238, 246));
+		return;
+	}
 		
 	std::string timestring;
 	timestring.append(t.day == 0 ? "1st WD" : "2nd WD");

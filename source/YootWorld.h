@@ -147,6 +147,13 @@ namespace OT
 	const char * yootWorldDisplayName(YootWorld::Id id);    ///< "Tokyo" / "Hawaii" / "Kegon"
 	const char * yootWorldPluginFile(YootWorld::Id id);     ///< "Tokyo.t2p" / "Hawai.t2p" / "Kegon.t2p"
 	bool parseYootWorldIdentifier(const std::string & s, YootWorld::Id & out);
+	/// GetGradeUpMessage for the new grade: Tokyo.t2p 0x10015500 (grades
+	/// 2-5), Kegon WorldDef::GetGradeUpMessage 0x100153d0 ("Bamboo" / "Pine"),
+	/// Hawaii keeps T2WorldDef 0x10072490 ("... to a %d star level").
+	std::string yootGradeUpMessage(YootWorld::Id id, int grade);
+	/// T2WorldDef::DrawCalendar 0x10070a80: "YEAR %d %s." with the month
+	/// name of the day of year (Jan..Dec), then "WD" or "HD" (holiday, red).
+	std::string yootCalendarText(int year, int dayOfYear, bool holiday);
 
 	// --- Resource parsers (pure, over raw bytes) ---
 	bool parseYootWorldDef(const char * data, int length, YootWorld & out);

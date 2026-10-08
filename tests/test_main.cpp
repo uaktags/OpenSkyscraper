@@ -5050,6 +5050,20 @@ static void testYootVenues()
 		EXPECT(clip.channels == 1 && clip.sampleRate == 11025 && clip.samples.size() == 44100u);
 }
 
+static void testYootGapClosers()
+{
+	using namespace OT;
+	// Grade-up messages (Tokyo.t2p 0x10015500, Kegon 0x100153d0, T2WorldDef 0x10072490).
+	EXPECT(yootGradeUpMessage(YootWorld::Id::Tokyo, 2) == "Congratulations! Your building has been upgraded to a two star level.");
+	EXPECT(yootGradeUpMessage(YootWorld::Id::Tokyo, 5) == "Congratulations! Your building has been upgraded to The Tower Grade, the highest level.");
+	EXPECT(yootGradeUpMessage(YootWorld::Id::Kegon, 4) == "Congratulations! Your building has been upgraded to the \"Bamboo\" grade.");
+	EXPECT(yootGradeUpMessage(YootWorld::Id::Kegon, 5) == "Congratulations! Your building has been upgraded to the \"Pine\" grade, the highest level.");
+	EXPECT(yootGradeUpMessage(YootWorld::Id::Hawaii, 3) == "Your building has been upgraded to a 3 star level");
+	// Calendar (T2WorldDef::DrawCalendar 0x10070a80).
+	EXPECT(yootCalendarText(1, 0, false) == "YEAR 1 Jan. WD");
+	EXPECT(yootCalendarText(3, 11, true) == "YEAR 3 Dec. HD");
+}
+
 int main()
 {
 	testBldSyntheticRoundTrip();
@@ -5115,6 +5129,7 @@ int main()
 	testYootVenues();
 	testYootSpecials();
 	testYootItemArt();
+	testYootGapClosers();
 	testOspAttrCompat();
 	testYootWorldEncoders();
 	testOspV3Sweep();

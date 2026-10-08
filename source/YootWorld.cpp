@@ -146,6 +146,32 @@ namespace OT
 		return "Tokyo.t2p";
 	}
 
+	std::string yootGradeUpMessage(YootWorld::Id id, int grade)
+	{
+		const char * congrats = "Congratulations! Your building has been upgraded to ";
+		if (id == YootWorld::Id::Tokyo)
+		{
+			switch (grade)
+			{
+			case 5: return std::string(congrats) + "The Tower Grade, the highest level.";
+			case 4: return std::string(congrats) + "a four star level.";
+			case 3: return std::string(congrats) + "a three star level.";
+			default: return std::string(congrats) + "a two star level.";
+			}
+		}
+		if (id == YootWorld::Id::Kegon)
+			return std::string(congrats) + (grade == 5 ? "the \"Pine\" grade, the highest level." : "the \"Bamboo\" grade.");
+		return "Your building has been upgraded to a " + std::to_string(grade) + " star level";
+	}
+
+	std::string yootCalendarText(int year, int dayOfYear, bool holiday)
+	{
+		static const char * const months[12] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
+		                                        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+		const int m = ((dayOfYear % 12) + 12) % 12;
+		return "YEAR " + std::to_string(year) + " " + months[m] + ". " + (holiday ? "HD" : "WD");
+	}
+
 	bool parseYootWorldIdentifier(const std::string & s, YootWorld::Id & out)
 	{
 		if (s == "tokyo")  { out = YootWorld::Id::Tokyo;  return true; }

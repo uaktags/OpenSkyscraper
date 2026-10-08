@@ -24,6 +24,7 @@
 #include "YootRules.h"
 #include "YootPlacementGame.h"
 #include "YootItemArt.h"
+#include "YootWorld.h"
 #include "SimHarness.h"
 
 using namespace OT;
@@ -2175,7 +2176,10 @@ void Game::yootCheckGrade()
 			break;
 		setRating(rating + 1);
 		levelUpDialog.showForRating(rating);
-		timeWindow.showMessage(std::string("Your tower has been given a ") + std::to_string(rating + 1) + "-Star Award!");
+		// The world's GetGradeUpMessage (Tokyo / Kegon override, Hawaii base).
+		YootWorld::Id world = YootWorld::Id::Tokyo;
+		parseYootWorldIdentifier(activeRules.profile().worldId, world);
+		timeWindow.showMessage(yootGradeUpMessage(world, rating + 1));
 		toolboxWindow.reload(); // refresh build locks
 	}
 }
