@@ -87,7 +87,6 @@ void VenueSystem::reset()
 	lastDay = INT_MIN;
 	moviesLoaded = false;
 	movieList.clear();
-	dayParams.clear();
 	hallCooldown.clear();
 	hallValue.clear();
 	movieBaseDay = -1;
@@ -110,27 +109,6 @@ bool VenueSystem::enabled() const
 int VenueSystem::grade() const { return game->rating + 1; }
 
 int VenueSystem::dayOfYear() const { return game->time.dayOfYear(); }
-
-bool VenueSystem::rainy() const
-{
-	return game->activeRules.profile().worldId == "tokyo" && Time::yootTokyoIsRainy((unsigned)dayOfYear());
-}
-
-int VenueSystem::percentFor(const Item::Item * item)
-{
-	const std::string plugin = item->prototype->yoot ? item->prototype->yoot->plugin : std::string();
-	if (plugin.empty()) return 100;
-	std::map<std::string, DayParamDef>::iterator it = dayParams.find(plugin);
-	if (it == dayParams.end())
-	{
-		DayParamDef d;
-		AbstractPlugin * p = game->app.pluginManager.get(plugin);
-		if (!p || !p->ensureLoaded() || !p->getDayParamDef(d, 128))
-			d.percent[0][0] = d.percent[0][1] = d.percent[1][0] = d.percent[1][1] = 100;
-		it = dayParams.insert(std::make_pair(plugin, d)).first;
-	}
-	return (int)it->second.percent[game->time.isHoliday() ? 1 : 0][rainy() ? 1 : 0];
-}
 
 bool VenueSystem::reachable(Item::Item * item) const
 {

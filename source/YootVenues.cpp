@@ -249,18 +249,6 @@ namespace OT
 			return grade < 5 && visitorsToday >= kAttractionRenovateVisitors && !renovated;
 		}
 
-		// ---------------------------------------------------------- visitors
-
-		int venueArrivals(int capacity, int inside, int percent, int stayMinutes, double & carry)
-		{
-			const int room = capacity - inside;
-			if (room <= 0 || percent <= 0) { carry = 0; return 0; }
-			carry += (double)capacity * percent / 100.0 / std::max(30, stayMinutes);
-			int n = (int)carry;
-			carry -= n;
-			return std::min(n, room);
-		}
-
 		// ------------------------------------------------------------ subway
 
 		std::vector<int> subwayArrivals(const std::vector<std::pair<int, int> > & trains, int level)

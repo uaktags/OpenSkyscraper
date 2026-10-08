@@ -101,7 +101,6 @@ namespace OT
 		int lastDay;
 		bool moviesLoaded;
 		std::vector<Movie> movieList;
-		std::map<std::string, DayParamDef> dayParams;
 		std::map<std::string, int> hallCooldown;  ///< event plugin -> days left
 		std::map<std::string, int> hallValue;     ///< event plugin -> target visitors
 
@@ -122,8 +121,6 @@ namespace OT
 
 		int grade() const;
 		int dayOfYear() const;
-		bool rainy() const;
-		int percentFor(const Item::Item * item);
 		bool reachable(Item::Item * item) const;
 		void minuteTick(int minute);
 		void newDay(int day);

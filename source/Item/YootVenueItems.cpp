@@ -43,7 +43,6 @@ void YootVenue::init()
 	YootFacility::init();
 	status = 10;
 	visitorsToday = 0;
-	arrivalCarry = 0;
 	idlePhase = (int)(((unsigned)(position.x * 31 + position.y * 17)) % Yoot::kTenantIdleMinutes);
 }
 

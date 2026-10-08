@@ -158,17 +158,6 @@ namespace OT
 		int attractionPattern(int inside);
 		bool attractionRenovates(int grade, int visitorsToday, bool renovated);
 
-		// ================================================= visitors
-
-		/// OpenSky's stand-in for T2Tenant::CollectCustomer (the pool, TMDF
-		/// and EPlace scoring are not modelled): during the collect window a
-		/// venue draws capacity x percent/100 visitors per stay period, where
-		/// percent is the plugin's DPDF mPercent[holiday][rain] (100 when it
-		/// has none) and the stay is TNDF bindTime (at least 30 minutes).
-		/// `carry` keeps the fraction between minutes. Returns the visitors
-		/// arriving this minute, never more than the free room.
-		int venueArrivals(int capacity, int inside, int percent, int stayMinutes, double & carry);
-
 		// ================================================= subway (I7)
 
 		/// MREV (FUN_1003d690) trains with T2Transport::UpGrade 0x1006bb80:

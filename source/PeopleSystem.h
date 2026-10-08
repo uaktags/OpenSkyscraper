@@ -147,12 +147,6 @@ namespace OT
 		void arrived(YootVisitor * v, Item::Item * tenant, bool admitted, long long leaveMinute);
 		/// T2Tenant::PushOutPeople 0x1005f720: the visitor leaves `tenant`.
 		void pushOut(YootVisitor * v);
-		/// Counted visitors of the items that do not walk them (venues, the
-		/// cruise, hotel guests): up to `n` people are called out of the pool
-		/// with the item plugin's customer table (TMDF 2, PLDF pool score,
-		/// CheckRouteFromPool mask) and return at once. Returns how many came
-		/// (`n` when the pool or the table is missing).
-		int drawVisitors(Item::Item * item, int n);
 		/// Visitors bound for / inside a removed item.
 		void itemRemoved(Item::Item * item);
 		/// YootVisitor::yootWalkTo: starts the walk to a route node.

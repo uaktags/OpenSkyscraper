@@ -519,46 +519,6 @@ int PeopleSystem::callFromFloor(Item::Item * tenant, const YootTenantDef & def, 
 	});
 }
 
-int PeopleSystem::drawVisitors(Item::Item * item, int n)
-{
-	if (n <= 0 || !enabled() || pool.empty() || !item->prototype->yoot) return n;
-	const std::string & plugin = item->prototype->yoot->plugin;
-	std::map<std::string, Table>::iterator ti = tables.find(plugin);
-	if (ti == tables.end())
-	{
-		Table t;
-		AbstractPlugin * p = game->app.pluginManager.get(plugin);
-		if (p && p->ensureLoaded() && p->getMemberTable(t.table, 2) && !t.table.members.empty())
-		{
-			t.valid = true;
-			if (t.table.placeParamID != 0) t.hasPlace = p->getPlaceParamDef(t.place, t.table.placeParamID);
-		}
-		ti = tables.insert(std::make_pair(plugin, t)).first;
-	}
-	const Table & t = ti->second;
-	if (!t.valid) return n;
-	const int score = t.hasPlace ? t.place.places[0].score() : 1000;
-	const unsigned mask = routeMask(item, score);
-	if (mask == 0) return 0;
-	const int econo = t.table.econoType == 0xFFFFFFFFu ? -1 : int(t.table.econoType & ~0x10u);
-	const int members = (int)t.table.members.size();
-	int k = std::rand() % members, misses = 0, drawn = 0;
-	while (drawn < n && misses < members)
-	{
-		Yoot::PeopleType type;
-		if (pool.call(t.table.members[k], econo, mask, type, rngInt))
-		{
-			// The visit is not walked: the person returns satisfied at once.
-			pool.enter(type, Yoot::kPeopleEstimateStart, rngInt);
-			++drawn;
-			misses = 0;
-		}
-		else ++misses;
-		k = (k + 1) % members;
-	}
-	return drawn;
-}
-
 // ------------------------------------------------------------------ venues
 
 const YootTenantDef * PeopleSystem::venueDef(Item::Item * venue, const std::string & subPlugin, int tableId)

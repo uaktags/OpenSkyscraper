@@ -26,7 +26,6 @@ namespace OT {
 
 			int status = 10;          ///< T2Tenant +0x08 (10 closed, 30.. open)
 			int visitorsToday = 0;    ///< TotalCustomer +0xa8
-			double arrivalCarry = 0;  ///< fractional arrivals (VenueSystem)
 			int lastOpenDay = -1;     ///< absolute day the venue last opened
 			int settledDay = -1;      ///< absolute day of the last settlement
 			int walking = 0;          ///< T2Tenant +0x98: called, on their way

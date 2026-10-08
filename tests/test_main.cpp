@@ -5318,15 +5318,9 @@ static void testYootVenues()
 	EXPECT(Y::fixedSiteRule(56, 55, 56, 55, Y::kErrBoatDeckSite) == 0 && Y::fixedSiteRule(57, 55, 56, 55, Y::kErrBoatDeckSite) == 74);
 	EXPECT(std::string(Y::buildErrorText(Y::kErrObservatorySite)) == "The observatory can only be placed at left edge of the B32 floor.");
 
-	// Clouds and the visitor stand-in.
+	// Clouds.
 	for (int r = 0; r < 2000; r += 37) { const int f = Y::cloudFloor(95, r * 7919); EXPECT(f >= 1 && f <= 95); }
 	EXPECT(Y::cloudFloor(10, 0) == 10 && Y::cloudFloor(10, 99) == 1);
-	double carry = 0;
-	int arrived = 0;
-	for (int m = 0; m < 60; ++m) arrived += Y::venueArrivals(70, 0, 100, 45, carry);
-	EXPECT(arrived == 93); // 70 per 45 minutes
-	carry = 0;
-	EXPECT(Y::venueArrivals(70, 70, 100, 45, carry) == 0 && Y::venueArrivals(70, 0, 0, 45, carry) == 0);
 
 	// The venues exist only in YootTower and replace the SimTower ones there.
 	const BuildRules sim(BuildRules::Ruleset::SimTower);
