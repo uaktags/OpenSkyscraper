@@ -380,10 +380,15 @@ namespace Bld {
 	/// into "lobby".
 	std::string prototypeForPluginStem(const std::string & stem);
 
+	/// Sub-plugin file ("GAMEWORKSAD.t2p") for an ATTR mID (Mac-order u32,
+	/// e.g. a Billboard's ad); "" when unknown.
+	typedef std::function<std::string(uint32_t id)> SubPluginLookup;
+
 	/// Converts the save into native <tower> XML (ruleset yoottower). Fails
 	/// only when the world is unknown.
 	bool toTowerXml(const BldData & in, const PrototypeLookup & prototypes,
-		std::string & xml, ImportReport & report, std::string & error);
+		std::string & xml, ImportReport & report, std::string & error,
+		const SubPluginLookup & subPlugins = SubPluginLookup());
 
 }
 }

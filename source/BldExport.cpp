@@ -16,6 +16,7 @@
 #include <cstdio>
 #include <deque>
 #include <map>
+#include <memory>
 #include <set>
 
 namespace OT {
@@ -59,6 +60,8 @@ namespace Bld {
 			it.tenantStatus = e->IntAttribute("tenantStatus", -1);
 			it.variant = e->IntAttribute("variant", 0);
 			it.buildDay = e->IntAttribute("buildDay", -1);
+			it.ad = e->Attribute("ad") ? e->Attribute("ad") : "";
+			it.daysLeft = e->IntAttribute("daysLeft", 0);
 			if (const char * h = e->Attribute("holes"))
 			{
 				std::string s(h);
@@ -124,6 +127,29 @@ namespace Bld {
 	{
 		const size_t blocks = std::max<size_t>(1, (used + per - 1) / per);
 		slots.assign(blocks * per, T());
+	}
+
+	SubPluginLookup subPluginLookup(const PluginManager & plugins)
+	{
+		const PluginManager * pm = &plugins;
+		std::shared_ptr<std::map<uint32_t, std::string> > ids;
+		return [pm, ids](uint32_t id) mutable -> std::string
+		{
+			if (!ids)
+			{
+				ids = std::make_shared<std::map<uint32_t, std::string> >();
+				for (const std::string & name : pm->enumerate())
+				{
+					AbstractPlugin * p = pm->get(name);
+					YootPluginIdentity ident;
+					if (p && p->container() == ResourceContainer::SP && p->ensureLoaded() &&
+						readYootPluginIdentity(*p, ident) && ident.id && !ids->count(ident.id))
+						(*ids)[ident.id] = name;
+				}
+			}
+			std::map<uint32_t, std::string>::const_iterator i = ids->find(id);
+			return i == ids->end() ? std::string() : i->second;
+		};
 	}
 
 	bool exportTower(const TowerState & tower, const BldData & templ, BldData & out,
@@ -546,11 +572,63 @@ namespace Bld {
 		}
 		for (const TowerItem & it : tower.items)
 		{
-			if (it.type == "floor" || it.type == "lobby" || it.type == "office" || it.type == "shop" || it.type == "restroom" || it.type == "apartment" || it.type == "skybridge") continue;
+			if (it.type == "floor" || it.type == "lobby" || it.type == "office" || it.type == "shop" || it.type == "restroom" || it.type == "apartment" || it.type == "skybridge" || it.type == "billboard") continue;
 			if (isYootTenantPrototypeId(it.type) || nativeExported.count(&it)) continue;
 			if (it.type == "elevator-standard" && elevPlugin) continue;
 			drop(it.type, "no YootTower counterpart in the exporter");
 		}
+		// -- Outdoor objects (bld-format.md §4.5): Billboards --------------------
+		std::vector<OutObj> outObjs;
+		for (const TowerItem & it : tower.items)
+		{
+			if (it.type != "billboard") continue;
+			const PluginInfo * p = pluginForStem("Billboard.t2p");
+			if (!p) { drop(it.type, "plugin missing from the template"); continue; }
+			OutObj o;
+			o.hdr.used = 1;
+			o.outObjID = (uint16_t)(1000 + outObjs.size());
+			o.area.left = it.x + origin;
+			o.area.right = o.area.left + 20;           // OODF 20x2
+			o.area.bottom = ground - it.y;
+			o.area.top = o.area.bottom - 2;
+			if (!inGrid(o.area)) { drop(it.type, "outside the world grid"); continue; }
+			// FindOutObjDef matches the OODF tool type (2000), not the ATTR
+			// item type (2100) the plugin table lists (oracle save).
+			o.outObjType = 2000;
+			// Billboard.t2p SaveExtraData 0x1000bdd0: n = 6, u32 ad sub-plugin
+			// mID, s16 days left; a board that never had a sponsor saves n = 0
+			// and status 0, one with an ad status 11.
+			YootPluginIdentity ad;
+			AbstractPlugin * adPlugin = plugins && !it.ad.empty() ? plugins->get(it.ad) : nullptr;
+			if (adPlugin && adPlugin->ensureLoaded() && readYootPluginIdentity(*adPlugin, ad) && ad.id && it.daysLeft > 0)
+			{
+				o.hdr.status = 11;
+				for (int k = 0; k < 4; k++) o.extra.push_back((uint8_t)(ad.id >> (8 * k)));
+				o.extra.push_back((uint8_t)it.daysLeft);
+				o.extra.push_back((uint8_t)(it.daysLeft >> 8));
+			}
+			else if (!it.ad.empty())
+				report.notes.push_back("Billboard ad " + it.ad + " not written (plugin unavailable).");
+			// T2OutsideInfo: one u16 out-object id per cell, LArray-indexed
+			// from 1 (FillOutObjID: index row * hRange + unit).
+			for (int row = o.area.top; row < o.area.bottom; row++)
+				for (int u = o.area.left; u < o.area.right; u++)
+				{
+					const size_t at = (size_t)row * W + u;
+					if (at >= 1 && at - 1 < out.outside.size()) out.outside[at - 1] = o.outObjID;
+				}
+			outObjs.push_back(o);
+			report.imported[it.type]++;
+		}
+		if (!outObjs.empty())
+		{
+			sizeBlocks(out.outObjs, outObjs.size(), 64);
+			for (size_t i = 0; i < outObjs.size(); i++) out.outObjs[i] = outObjs[i];
+			bool listed = false;
+			for (const DefCost & c : out.settlement.outObjCosts) listed |= c.itemType == 2000;
+			if (!listed) { DefCost c; c.itemType = 2000; out.settlement.outObjCosts.push_back(c); }
+		}
+
 		// The game writes the table sorted by plugin id (byte order).
 		for (const PluginInfo & p : added)
 		{

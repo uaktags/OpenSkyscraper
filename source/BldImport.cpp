@@ -1,6 +1,7 @@
 /* Copyright (c) 2026 OpenSkyscraper Project */
 #include "BldImport.h"
 
+#include "BldExport.h"
 #include "BldLoader.h"
 #include "Game.h"
 #include "Logger.h"
@@ -27,7 +28,7 @@ namespace OT
 		};
 		std::string xmlText;
 		Bld::ImportReport report;
-		if (!Bld::toTowerXml(save, lookup, xmlText, report, error))
+		if (!Bld::toTowerXml(save, lookup, xmlText, report, error, Bld::subPluginLookup(game.app.pluginManager)))
 		{
 			LOG(ERROR, "Could not import YootTower save %s: %s", path.c_str(), error.c_str());
 			return false;

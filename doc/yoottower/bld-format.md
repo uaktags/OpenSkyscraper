@@ -430,9 +430,10 @@ then through `yootPrototypeLinks()` to an OpenSky prototype. Positions use
 | 16xx shops without a link (Ice Cream Stand, ...) | the generic `shop` when the footprint fits (reported) |
 | Simple / Service / Large elevators | span from `length` (the shaft rect adds a machine and a pit row), unserviced floors from the request-id pairs, every car's position and home |
 | stairs / escalators | one flight per stair module rect (no sample contains one, untested) |
+| Billboard out-objects | `billboard` at `x = left - width/2`, `y = groundLine - bottom`; the ad's sub-plugin mID resolves to its SP plugin file (`subPluginLookup`), with the days left |
 
 Dropped and reported: tenants without an OpenSky counterpart (in the samples the 7
-Restrooms and the Apartment), out-objects, people (the crowd re-simulates; OpenSky
+Restrooms and the Apartment), people (the crowd re-simulates; OpenSky
 counts an occupied office's 6 staff at once, so populations differ), the visitor pool,
 traffic map, elevator stop tables and schedules, the per-category settlement totals,
 names, movies and tower-event state. The game speed is always imported as 1x.
@@ -440,7 +441,13 @@ names, movies and tower-event state. The game speed is always imported as 1x.
 `BldExport` (`BldTool export IN.tower TEMPLATE.bld OUT.bld`) writes an OpenSky YootTower
 tower back: floors, lobbies, offices (Office.t2p), shops (as Ice Cream Stands) and Simple
 Elevators with cars, stop lists, waiting-area requests, unit map, cross-equip links and
-room numbers laid out as the game does. It reproduces the sample's request table exactly.
+room numbers laid out as the game does. It reproduces the sample's request table exactly. Billboards are written as the game
+writes them (oracle save `save2-agent/saves/billboard.bld`): out-object type **2000** (the
+OODF tool type; the plugin table lists ATTR 2100), area 20x2, status 11 with the ad's
+`u32` mID and `s16` days left as extra data, or status 0 and n = 0 for an empty board, and
+the outside map filled at LArray index `row * hRange + unit` (1-based, so file position
+`row * hRange + unit - 1`). The unit map is not touched. An export of the imported save
+loads in T2.exe with the GAMEWORKS board on the facade (`save2-agent/shots/g0.png`).
 The world-wide sections (plugin table, pool, movies, events, palettes, world statistics)
 are copied from a template save of the same world. Both an export of the imported
 Sample Tokyo Map and an OpenSky-authored Hawaii tower load and run in T2.exe under the

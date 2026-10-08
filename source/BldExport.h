@@ -44,6 +44,8 @@ namespace Bld {
 		int tenantStatus = -1;     ///< plugin-backed tenants: T2Tenant status (-1 = unknown)
 		int variant = 0;           ///< office look (0..5 = Office.t2p kind 1..6)
 		int buildDay = -1;         ///< YootTower build day (T2Equip +0x4c), -1 = unknown
+		std::string ad;            ///< billboard: advertise SP plugin file ("" = empty board)
+		int daysLeft = 0;          ///< billboard: campaign days left
 		std::vector<std::pair<int, int> > holes; ///< floor: [l, r) gaps (Floor::holes)
 		std::vector<int> unserviced;
 		std::vector<TowerCar> cars;
@@ -76,6 +78,10 @@ namespace Bld {
 	/// hires their staff again.
 	bool exportTower(const TowerState & tower, const BldData & templ, BldData & out,
 		ImportReport & report, std::string & error, const PluginManager * plugins = nullptr);
+
+	/// toTowerXml's sub-plugin lookup over the installed plugins: ATTR mID
+	/// -> plugin file (Billboard ads).
+	SubPluginLookup subPluginLookup(const PluginManager & plugins);
 
 }
 }

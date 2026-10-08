@@ -67,7 +67,7 @@ static bool prototypeSize(const std::string & id, int & w, int & h)
 		{"cathedral", {48, 4}}, {"powerroom", {23, 2}},
 		{"trashfacility", {25, 2}}, {"restroom", {9, 1}}, {"doctor", {26, 1}},
 		{"frontdesk", {15, 1}}, {"housekeeping", {15, 1}}, {"parkinglot", {4, 1}}, {"parkinggate", {16, 2}},
-		{"firedept", {12, 1}}, {"apartment", {4, 1}}, {"skybridge", {8, 1}},
+		{"firedept", {12, 1}}, {"apartment", {4, 1}}, {"skybridge", {8, 1}}, {"billboard", {20, 2}},
 	};
 	auto i = sizes.find(id);
 	if (i == sizes.end())
@@ -145,7 +145,7 @@ int main(int argc, char ** argv)
 		if (!loadFile(argv[2], d, error)) { fprintf(stderr, "%s\n", error.c_str()); return 1; }
 		std::string xml;
 		ImportReport report;
-		if (!toTowerXml(d, prototypeSize, xml, report, error)) { fprintf(stderr, "%s\n", error.c_str()); return 1; }
+		if (!toTowerXml(d, prototypeSize, xml, report, error, subPluginLookup(toolPlugins()))) { fprintf(stderr, "%s\n", error.c_str()); return 1; }
 		printReport(report);
 		return writeFile(argv[3], xml.data(), xml.size()) ? 0 : 1;
 	}

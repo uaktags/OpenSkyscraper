@@ -978,7 +978,8 @@ namespace Bld {
 	};
 
 	bool toTowerXml(const BldData & in, const PrototypeLookup & prototypes,
-		std::string & xml, ImportReport & report, std::string & error)
+		std::string & xml, ImportReport & report, std::string & error,
+		const SubPluginLookup & subPlugins)
 	{
 		YootWorld::Id worldId;
 		if (!worldFor4cc(in.world, worldId))
@@ -1271,8 +1272,36 @@ namespace Bld {
 		}
 
 		// -- Things with no place here ----------------------------------------
+		// -- Outdoor objects: the Billboard (OODF tool type 2000, ATTR 2100) --
 		for (const OutObj & o : in.outObjs)
-			if (o.hdr.used) drop(o.outObjType, "outdoor objects are not modelled");
+		{
+			if (!o.hdr.used) continue;
+			const PluginInfo * p = in.pluginForItemType(o.outObjType);
+			const bool billboard = o.outObjType == 2000 || (p && macOrder(p->id) == "BILL");
+			int pw = 0, ph = 0;
+			if (!billboard || !prototypes("billboard", pw, ph)) { drop(o.outObjType, "no OpenSky counterpart"); continue; }
+			const int x = o.area.left - origin, y = floorOf(o.area.bottom);
+			snprintf(buf, sizeof(buf), "<item type=\"billboard\" x=\"%d\" y=\"%d\" evaluation=\"50.0\"", x, y);
+			std::string e = buf;
+			// Billboard.t2p extra: u32 ad sub-plugin mID, s16 days left.
+			if (o.extra.size() >= 6)
+			{
+				const uint32_t id = o.extra[0] | (o.extra[1] << 8) | (o.extra[2] << 16) | ((uint32_t)o.extra[3] << 24);
+				const int days = (int16_t)(o.extra[4] | (o.extra[5] << 8));
+				const std::string ad = id && subPlugins ? subPlugins(id) : "";
+				if (!ad.empty() && days > 0)
+				{
+					snprintf(buf, sizeof(buf), " ad=\"%s\" daysLeft=\"%d\"", ad.c_str(), days);
+					e += buf;
+				}
+				else if (id)
+					report.notes.push_back("A Billboard's ad (" + macOrder(std::string((const char *)&o.extra[0], 4)) +
+						") has no installed plugin; imported empty.");
+			}
+			out.xml += e + "/>\n";
+			out.grow(x, y, pw, ph);
+			report.imported["billboard"]++;
+		}
 		const int people = in.usedPeople();
 		if (people)
 		{

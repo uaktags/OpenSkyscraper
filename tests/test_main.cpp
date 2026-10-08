@@ -3980,7 +3980,7 @@ static bool bldTestPrototypes(const std::string & id, int & w, int & h)
 		{"fastfood", {16, 1}}, {"restaurant", {24, 1}}, {"shop", {12, 1}}, {"office", {9, 1}},
 		{"condo", {16, 1}}, {"yoot_condo", {16, 1}}, {"hotel_single", {4, 1}},
 		{"restroom", {9, 1}}, {"yt_icecream", {12, 1}}, {"apartment", {4, 1}},
-		{"skybridge", {8, 1}},
+		{"skybridge", {8, 1}}, {"billboard", {20, 2}},
 	};
 	std::map<std::string, std::pair<int, int> >::const_iterator i = sizes.find(id);
 	if (i == sizes.end()) return false;
@@ -4163,6 +4163,30 @@ static void testBldPluginSaveData()
 			for (const Tenant & t : g.tenants)
 				if (t.hdr.used && t.equipType == 2001 && t.extraCount == 0x405 && t.extra.size() >= 264 && t.extra.size() < 0x405) stadiums++;
 			EXPECT(stadiums == 1);
+		}
+		if (std::string(name) == "billboard.bld" && ok)
+		{
+			// Sample Tokyo Map + a Billboard on 7F-8F with the GAMEWORKS ad
+			// (12 days): imported with its ad, exported back as the game wrote it.
+			std::string xml;
+			ImportReport report;
+			EXPECT(toTowerXml(g, bldTestPrototypes, xml, report, error, subPluginLookup(yootTestPlugins())));
+			EXPECT(xml.find("<item type=\"billboard\" x=\"-31\" y=\"6\" evaluation=\"50.0\" ad=\"GAMEWORKSAD.t2p\" daysLeft=\"12\"/>") != std::string::npos);
+			TowerState state;
+			BldData exported;
+			ImportReport exportReport;
+			EXPECT(parseTowerXml(xml, state, error));
+			EXPECT(exportTower(state, g, exported, exportReport, error, &yootTestPlugins()));
+			const OutObj * o = nullptr, * want = nullptr;
+			for (const OutObj & e : exported.outObjs) if (e.hdr.used) o = &e;
+			for (const OutObj & e : g.outObjs) if (e.hdr.used) want = &e;
+			EXPECT(o && want && o->outObjType == 2000 && o->hdr.status == want->hdr.status && o->extra == want->extra &&
+			       o->area.left == want->area.left && o->area.top == want->area.top && o->area.right == want->area.right &&
+			       o->area.bottom == want->area.bottom);
+			EXPECT(exported.outside == g.outside);
+			std::vector<uint8_t> bytes2;
+			BldData reread;
+			EXPECT(writeBytes(exported, bytes2, error) && parseBytes(bytes2, reread, error));
 		}
 	}
 }
