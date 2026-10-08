@@ -72,7 +72,7 @@ build)
     in_ctr "cd /lab/src/$name && cmake -S . -B build -DCMAKE_BUILD_TYPE=\${BUILD_TYPE:-Debug} >/dev/null && cmake --build build -j$LAB_CPUS 2>&1 | grep -E 'error|warning: unused|Built target' | tail -20" ;;
 test)
     name=${1:?tree name}
-    in_ctr "cd /lab/src/$name/build && ./OpenSkyTests 2>/dev/null | tail -1 && xvfb-run -a ctest 2>&1 | tail -3" ;;
+    in_ctr "cd /lab/src/$name/build && xvfb-run -a ./OpenSkyTests 2>/dev/null | tail -1 && xvfb-run -a ctest 2>&1 | tail -3" ;;
 sim)
     name=${1:?tree name}; shift
     in_ctr "cd /lab/src/$name && xvfb-run -a -s '-screen 0 1280x800x24' build/OpenSkyscraper $(q "$@")" ;;
