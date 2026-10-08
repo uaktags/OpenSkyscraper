@@ -5,6 +5,7 @@
 #include "ItemTypeCatalog.h"
 #include "PluginManager.h"
 #include "YootCatalog.h"
+#include "YootPool.h"
 #include "YootTenants.h"
 #include "YootWorld.h"
 #include "tinyxml2.h"
@@ -40,6 +41,7 @@ namespace Bld {
 		out.vipFlags = root->UnsignedAttribute("yootVipFlags", 0);
 		out.secretItems = root->UnsignedAttribute("yootSecretItems", 0);
 		out.traffic = root->Attribute("yootTraffic") ? root->Attribute("yootTraffic") : "";
+		out.pool = root->Attribute("yootPool") ? root->Attribute("yootPool") : "";
 		out.lastQuarterBalance = out.funds;
 		if (const tinyxml2::XMLElement * money = root->FirstChildElement("money"))
 			out.lastQuarterBalance = money->Int64Attribute("lastQuarterBalance", out.funds);
@@ -200,7 +202,61 @@ namespace Bld {
 		out.seconds = 0;
 		for (People & p : out.people) p = People();
 		out.pool.population = 0;
+		out.pool.f18 = 0;
 		out.pool.gameLevel = out.level;
+		{
+			// T2Pool: the tower's own pool when it has one with the template's
+			// shape, else the template's demand put on the save's clock. The
+			// template's zone clock is its own (Sample Tokyo Map: about 9
+			// hours from a new tower's 00:30), so every list gets
+			// T2PeopleDemandList::Init(hour) with the windows of a fresh zone
+			// (InitSearchLimit 1.0: start 1, limit count).
+			Yoot::Pool own;
+			const bool useOwn = own.decode(tower.pool) && own.demands.size() == out.pool.timeZones.size();
+			const int hour = out.minutes / 60;
+			for (size_t d = 0; d < out.pool.timeZones.size(); ++d)
+			{
+				TimeZone & z = out.pool.timeZones[d];
+				if (useOwn)
+				{
+					const Yoot::PeopleTimeZoneList & l = own.demands[d];
+					z.fixed = l.fixed ? 1 : 0;
+					z.f28 = (int8_t)l.hoursPerZone;
+					z.currentItem = (int8_t)l.current;
+					z.f30 = (int8_t)l.hourInZone;
+					z.typeArrays.assign(l.zones.size(), TypeArray());
+					for (size_t k = 0; k < l.zones.size(); ++k)
+					{
+						const Yoot::PeopleTypeArray & a = l.zones[k];
+						TypeArray & t = z.typeArrays[k];
+						t.f24 = a.fixed ? 1 : 0;
+						t.f28 = a.start;
+						t.f2c = a.limit;
+						for (const Yoot::PeopleType & y : a.types)
+						{
+							PeopleType pt;
+							pt.f0 = (int8_t)((y.demand & 7) | ((y.timeZone & 0x1f) << 3));
+							pt.silhouetteType = (int8_t)y.silhouette;
+							pt.econoType = (int8_t)y.econo;
+							pt.transportType = (int8_t)y.transport;
+							pt.life = (int8_t)y.life;
+							t.types.push_back(pt);
+						}
+					}
+					continue;
+				}
+				if (z.f28 > 0)
+				{
+					z.currentItem = (int8_t)(hour / z.f28);
+					z.f30 = (int8_t)(hour % z.f28);
+				}
+				for (TypeArray & a : z.typeArrays)
+				{
+					a.f28 = 1;
+					a.f2c = (int32_t)a.types.size();
+				}
+			}
+		}
 		std::fill(out.trafficMap.begin(), out.trafficMap.end(), 0);
 		out.f9c = (int16_t)tower.secretItems;
 		{

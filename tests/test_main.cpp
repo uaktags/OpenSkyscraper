@@ -4229,6 +4229,27 @@ static void testBldShippedSaves()
 			return x;
 		};
 		EXPECT(again.find(" yootPool=\"1 1 ") != std::string::npos);
+		// The tower's own pool is exported as it is (only the people out
+		// of it are not).
+		{
+			auto poolOf = [](const std::string & x) {
+				const size_t p = x.find(" yootPool=\"") + 11;
+				OT::Yoot::Pool pool;
+				pool.decode(x.substr(p, x.find('"', p) - p));
+				return pool;
+			};
+			const OT::Yoot::Pool a = poolOf(xml), b = poolOf(again);
+			bool same = !a.demands.empty() && a.demands.size() == b.demands.size() && b.population == 0;
+			for (size_t d = 0; same && d < a.demands.size(); ++d)
+			{
+				same = a.demands[d].current == b.demands[d].current && a.demands[d].hourInZone == b.demands[d].hourInZone &&
+					a.demands[d].zones.size() == b.demands[d].zones.size();
+				for (size_t z = 0; same && z < a.demands[d].zones.size(); ++z)
+					same = a.demands[d].zones[z].types == b.demands[d].zones[z].types &&
+						a.demands[d].zones[z].limit == b.demands[d].zones[z].limit;
+			}
+			EXPECT(same);
+		}
 		again = stripPool(again);
 		expected = stripPool(expected);
 		EXPECT(again == expected);
@@ -4247,6 +4268,15 @@ static void testBldShippedSaves()
 		EXPECT(exportReport.dropped["cinema (no YootTower counterpart in the exporter)"] == 1);
 		EXPECT(exportReport.imported["lobby"] == 1 && exportReport.imported["elevator-standard"] == 1);
 		EXPECT(exported.year == 2 && exported.month0 == 1 && exported.minutes == 720 && exported.level == 2);
+		// No pool of its own: the template's pool runs on the save's clock
+		// (12:00, not the template's 10:47) with fresh search windows.
+		bool poolOnClock = !exported.pool.timeZones.empty();
+		for (const TimeZone & z : exported.pool.timeZones)
+		{
+			if (z.f28 > 0) poolOnClock = poolOnClock && z.currentItem == 12 / z.f28 && z.f30 == 12 % z.f28;
+			for (const TypeArray & a : z.typeArrays) poolOnClock = poolOnClock && a.f28 == 1 && a.f2c == (int32_t)a.types.size();
+		}
+		EXPECT(poolOnClock);
 		{
 			// Star levels outside the world's grades do not load in T2.exe
 			// (level 6 -> "File load error"): clamp to startGrade..5.

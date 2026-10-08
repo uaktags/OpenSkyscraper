@@ -60,6 +60,7 @@ namespace Bld {
 		unsigned vipFlags = 0;
 		unsigned secretItems = 0;  ///< doc+0x9c
 		std::string traffic;       ///< YootExtrasSystem cells, "count:accum" comma list
+		std::string pool;          ///< PeopleSystem visitor pool (yootPool, Yoot::Pool::encode)
 		std::vector<TowerItem> items;
 	};
 
