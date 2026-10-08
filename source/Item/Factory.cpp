@@ -117,6 +117,9 @@ OT::Item::Item * Factory::make(AbstractPrototype * prototype, int2 position)
 	// Mark fresh placements as under construction. Saved games call
 	// make() too, but their decodeXML() run immediately afterwards and
 	// restore the persisted underConstruction flag, overriding this.
+	// YootTower InitEquip: build day = CalcTotalDays (saved items restore theirs).
+	if (game->activeRules.profile().yootWorld)
+		item->yootBuildDay = (int)floor(game->time.absolute);
 	double duration = item->constructionDuration();
 	if (duration > 0.0)
 	{

@@ -5,6 +5,7 @@
 #include "JudgeSystem.h"
 #include "Person.h"
 #include "YootRules.h"
+#include "YootMisc.h"
 
 #include <algorithm>
 #include <cmath>
@@ -233,10 +234,12 @@ double JudgeSystem::scoreCommercial(Game * game, Item::Item * item)
 
 int JudgeSystem::yootTrafficRange(Game * game, Item::Item * item)
 {
-	// OpenSky has no per-cell traffic counter (T2TrafficInfo, decayed hourly
-	// people passes bucketed into ranges 0..3). Stand-in: people queued at
-	// or riding a mover that serves this floor within 8 cells of the
-	// tenant, one range step per 5 people.
+	// T2TrafficInfo::GetRange at the entrance (YootExtrasSystem keeps the
+	// map: route legs booked per person, decayed hourly, ranges 0..3).
+	if (game->eventSystem.extras.traffic.configured())
+		return game->eventSystem.extras.trafficRange(item);
+	// Fallback without a map: people queued at or riding a mover that
+	// serves this floor within 8 cells of the tenant, one step per 5.
 	const int floor = item->position.y;
 	int count = 0;
 	for (Game::ItemSet::const_iterator it = game->items.begin(); it != game->items.end(); ++it)
@@ -269,12 +272,15 @@ int JudgeSystem::yootEstimate(Game * game, Item::Item * item)
 	Yoot::ResidentialInputs in;
 	for (Item::Item::People::const_iterator p = item->people.begin(); p != item->people.end(); ++p)
 		in.peopleEstimates.push_back((*p)->yootCurrentEstimate());
-	in.previousPeopleEstimate = Yoot::kPeopleEstimateStart;
+	in.previousPeopleEstimate = item->yootPeopleEstimate;
 	in.senseOfNoise = stats->senseOfNoise;
 	in.trafficRange = in.senseOfNoise ? yootTrafficRange(game, item) : 0;
 	in.priceIndex = Yoot::priceIndex(game->yootPriceSelection(item), (int)stats->inMoney.size());
-	in.yearsSinceBuilt = 0; // OpenSky items carry no build date
-	return Yoot::residentialEstimate(in);
+	in.yearsSinceBuilt = Yoot::yearsSinceBuilt((int)std::floor(game->time.absolute), item->yootBuildDay);
+	int peopleEstimate = item->yootPeopleEstimate;
+	const int estimate = Yoot::residentialEstimate(in, &peopleEstimate);
+	item->yootPeopleEstimate = peopleEstimate;
+	return estimate;
 }
 
 void JudgeSystem::evaluateAll(Game * game)

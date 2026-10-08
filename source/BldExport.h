@@ -43,6 +43,8 @@ namespace Bld {
 		int rentClass = 1;         ///< shops
 		int tenantStatus = -1;     ///< plugin-backed tenants: T2Tenant status (-1 = unknown)
 		int variant = 0;           ///< office look (0..5 = Office.t2p kind 1..6)
+		int buildDay = -1;         ///< YootTower build day (T2Equip +0x4c), -1 = unknown
+		std::vector<std::pair<int, int> > holes; ///< floor: [l, r) gaps (Floor::holes)
 		std::vector<int> unserviced;
 		std::vector<TowerCar> cars;
 	};
@@ -56,6 +58,8 @@ namespace Bld {
 		int rating = 0;            ///< zero-based
 		double time = 0;           ///< absolute days
 		unsigned vipFlags = 0;
+		unsigned secretItems = 0;  ///< doc+0x9c
+		std::string traffic;       ///< YootExtrasSystem cells, "count:accum" comma list
 		std::vector<TowerItem> items;
 	};
 

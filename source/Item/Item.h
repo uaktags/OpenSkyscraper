@@ -81,6 +81,12 @@ namespace OT {
 		/// YootTower tenant estimate on the 1..300 scale (T2Tenant +0x90,
 		/// plan step 8); 0 = not evaluated yet / not YootTower.
 		int yootEstimate = 0;
+		/// YootTower T2Equip +0x4c: CalcTotalDays when built (-1 = unknown,
+		/// age 0). The residential estimate loses one point per year (J2).
+		int yootBuildDay = -1;
+		/// YootTower T2Tenant +0x8c: the residents' mean estimate, kept
+		/// while nobody is in (UpdateResidencialEstimate; 300 at InitTenant).
+		int yootPeopleEstimate = 300;
 		/// YootTower J3 (T2Tenant::DecideResidencialEstimation 0x10061380):
 		/// let tenants stay while the estimate is >= 70; a vacant tenant
 		/// fills only above 200. Unevaluated (0) passes.

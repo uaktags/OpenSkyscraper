@@ -990,7 +990,7 @@ namespace Bld {
 				for (int f = y; f < y + h; f++) floorSpans[f].push_back({x, x + w});
 				continue;
 			}
-			if (proto != "lobby" && (w != pw || h != ph))
+			if (proto != "lobby" && proto != "skybridge" && (w != pw || h != ph))
 			{
 				snprintf(buf, sizeof(buf), "%dx%d footprint, '%s' is %dx%d", w, h, proto.c_str(), pw, ph);
 				drop(t.equipType, buf);
@@ -1027,6 +1027,11 @@ namespace Bld {
 				snprintf(buf, sizeof(buf), " width=\"%d\" height=\"%d\"", w, h);
 				attrs += buf;
 			}
+			else if (proto == "skybridge")
+			{
+				snprintf(buf, sizeof(buf), " width=\"%d\"", w);
+				attrs += buf;
+			}
 			else if (proto == "office" || proto == "condo" || proto == "yoot_condo" || proto == "apartment")
 			{
 				snprintf(buf, sizeof(buf), " occupied=\"%d\" population=\"%d\"", occupied ? 1 : 0, occupied ? residents : 0);
@@ -1056,6 +1061,13 @@ namespace Bld {
 			{
 				nonDefaultRent++;
 			}
+			// T2Equip +0x4c buildDay = CalcTotalDays, the same day count as
+			// the OpenSky absolute clock (J2 age term).
+			if (t.buildDay >= 0)
+			{
+				snprintf(buf, sizeof(buf), " buildDay=\"%d\"", (int)t.buildDay);
+				attrs += buf;
+			}
 			out.xml += attrs + "/>\n";
 			out.grow(x, y, w, h);
 			report.imported[proto]++;
@@ -1067,19 +1079,28 @@ namespace Bld {
 			std::vector<Span> & v = i->second;
 			std::sort(v.begin(), v.end(), [](const Span & a, const Span & b) { return a.left < b.left; });
 			int l = v[0].left, r = v[0].right;
+			std::string holes;
 			for (size_t k = 1; k < v.size(); k++)
 			{
-				if (v[k].left > r) bridgedGaps++;
+				// Separate runs on one row stay separate (Floor::holes): two
+				// towers, possibly joined by a Sky Bridge.
+				if (v[k].left > r)
+				{
+					bridgedGaps++;
+					holes += (holes.empty() ? "" : ",") + std::to_string(r) + ":" + std::to_string(v[k].left);
+				}
 				r = std::max(r, v[k].right);
 			}
-			snprintf(buf, sizeof(buf), "<item type=\"floor\" x=\"%d\" y=\"%d\" evaluation=\"50.0\" width=\"%d\"/>\n", l, i->first, r - l);
+			snprintf(buf, sizeof(buf), "<item type=\"floor\" x=\"%d\" y=\"%d\" evaluation=\"50.0\" width=\"%d\"", l, i->first, r - l);
 			out.xml += buf;
+			if (!holes.empty()) out.xml += " holes=\"" + holes + "\"";
+			out.xml += "/>\n";
 			out.grow(l, i->first, r - l, 1);
 			report.imported["floor"]++;
 		}
 		if (bridgedGaps)
 		{
-			snprintf(buf, sizeof(buf), "%d gap(s) between floor slabs on one level were bridged (one slab per level here).", bridgedGaps);
+			snprintf(buf, sizeof(buf), "%d gap(s) between floor slabs on one level kept as floor holes.", bridgedGaps);
 			report.notes.push_back(buf);
 		}
 		if (nonDefaultRent)
@@ -1216,6 +1237,31 @@ namespace Bld {
 			"<tower funds=\"%lld\" rating=\"%d\" time=\"%.6f\" speed=\"1\" rainy=\"0\" tool=\"inspector\" ruleset=\"yoottower\" world=\"%s\" yootVipFlags=\"%u\" x=\"%d\" y=\"%d\">\n",
 			funds, rating, absolute, report.worldId.c_str(), (unsigned)in.fa0, poiX, poiY);
 		xml = buf;
+		// doc+0x9c (secret plugins loaded, e.g. after the Kegon hot spring)
+		// and the T2TrafficInfo cells (u16 count, u16 accum) over the floor
+		// area, 4 units per cell, row-major (YootExtrasSystem's layout).
+		if (in.f9c != 0)
+		{
+			snprintf(buf, sizeof(buf), "yootSecretItems=\"%u\" ", (unsigned)(uint16_t)in.f9c);
+			xml.insert(xml.size() - 2, std::string(" ") + buf);
+		}
+		{
+			const size_t cells = in.trafficMap.size() / 4;
+			const int cols = (world.buildArea.right - world.buildArea.left) / 4;
+			if (cells > 0 && cols > 0 && cells % (size_t)cols == 0)
+			{
+				std::string tr;
+				bool any = false;
+				for (size_t c = 0; c < cells; c++)
+				{
+					const uint8_t * b = &in.trafficMap[c * 4];
+					const unsigned count = b[0] | (b[1] << 8), accum = b[2] | (b[3] << 8);
+					if (c) tr += ",";
+					if (count || accum) { tr += std::to_string(count) + ":" + std::to_string(accum); any = true; }
+				}
+				if (any) xml.insert(xml.size() - 2, " yootTraffic=\"" + tr + "\"");
+			}
+		}
 		// Finances: previousFunds is the balance at the start of the period;
 		// the per-category totals have unconfirmed meanings, so only the net
 		// change is carried over.

@@ -36,6 +36,8 @@ namespace Bld {
 		out.rating = root->IntAttribute("rating");
 		out.time = root->DoubleAttribute("time");
 		out.vipFlags = root->UnsignedAttribute("yootVipFlags", 0);
+		out.secretItems = root->UnsignedAttribute("yootSecretItems", 0);
+		out.traffic = root->Attribute("yootTraffic") ? root->Attribute("yootTraffic") : "";
 		out.lastQuarterBalance = out.funds;
 		if (const tinyxml2::XMLElement * money = root->FirstChildElement("money"))
 			out.lastQuarterBalance = money->Int64Attribute("lastQuarterBalance", out.funds);
@@ -52,6 +54,22 @@ namespace Bld {
 			it.rentClass = e->IntAttribute("rentClass", 1);
 			it.tenantStatus = e->IntAttribute("tenantStatus", -1);
 			it.variant = e->IntAttribute("variant", 0);
+			it.buildDay = e->IntAttribute("buildDay", -1);
+			if (const char * h = e->Attribute("holes"))
+			{
+				std::string s(h);
+				size_t pos = 0;
+				while (pos < s.size())
+				{
+					size_t end = s.find(',', pos);
+					if (end == std::string::npos) end = s.size();
+					const std::string tok = s.substr(pos, end - pos);
+					const size_t colon = tok.find(':');
+					if (colon != std::string::npos)
+						it.holes.push_back(std::make_pair(atoi(tok.substr(0, colon).c_str()), atoi(tok.substr(colon + 1).c_str())));
+					pos = end + 1;
+				}
+			}
 			for (const tinyxml2::XMLElement * u = e->FirstChildElement("unserviced"); u; u = u->NextSiblingElement("unserviced"))
 				it.unserviced.push_back(u->IntAttribute("floor"));
 			for (const tinyxml2::XMLElement * c = e->FirstChildElement("car"); c; c = c->NextSiblingElement("car"))
@@ -168,6 +186,28 @@ namespace Bld {
 		out.pool.population = 0;
 		out.pool.gameLevel = out.level;
 		std::fill(out.trafficMap.begin(), out.trafficMap.end(), 0);
+		out.f9c = (int16_t)tower.secretItems;
+		{
+			// YootExtrasSystem cells -> T2TrafficInfo (u16 count, u16 accum).
+			size_t c = 0, pos = 0;
+			const std::string & s = tower.traffic;
+			while (!s.empty() && pos <= s.size() && (c + 1) * 4 <= out.trafficMap.size())
+			{
+				size_t end = s.find(',', pos);
+				if (end == std::string::npos) end = s.size();
+				const std::string tok = s.substr(pos, end - pos);
+				const size_t colon = tok.find(':');
+				if (colon != std::string::npos)
+				{
+					const int count = std::max(0, std::min(0xffff, atoi(tok.substr(0, colon).c_str())));
+					const int accum = std::max(0, std::min(0xffff, atoi(tok.substr(colon + 1).c_str())));
+					uint8_t * b = &out.trafficMap[c * 4];
+					b[0] = (uint8_t)count; b[1] = (uint8_t)(count >> 8); b[2] = (uint8_t)accum; b[3] = (uint8_t)(accum >> 8);
+				}
+				c++;
+				pos = end + 1;
+			}
+		}
 		out.settlement.funds = (int32_t)std::max<long long>(INT_MIN, std::min<long long>(INT_MAX, tower.funds / 100));
 		out.settlement.previousFunds = (int32_t)std::max<long long>(INT_MIN, std::min<long long>(INT_MAX, tower.lastQuarterBalance / 100));
 		for (int32_t & v : out.settlement.totals) v = 0;
@@ -207,14 +247,29 @@ namespace Bld {
 		{
 			if (it.type != "floor" && it.type != "lobby") continue;
 			const int h = it.type == "lobby" ? std::max(1, it.height) : 1;
-			Rect area;
-			area.left = it.x + origin;
-			area.right = area.left + std::max(1, it.width);
-			area.bottom = ground - it.y;
-			area.top = area.bottom - h;
-			if (!inGrid(area)) { drop(it.type, "outside the world grid"); continue; }
-			Tenant & t = newTenant(*floorPlugin, area, true);
-			t.valiation = it.type == "lobby" ? 1 : 0; // Floor.t2p variation 1 = lobby
+			// Floor holes: one Floor tenant per run of the row.
+			std::vector<std::pair<int, int> > runs;
+			{
+				int from = it.x;
+				for (const std::pair<int, int> & hole : it.holes)
+				{
+					if (hole.first > from) runs.push_back(std::make_pair(from, hole.first));
+					from = std::max(from, hole.second);
+				}
+				if (from < it.x + std::max(1, it.width)) runs.push_back(std::make_pair(from, it.x + std::max(1, it.width)));
+			}
+			for (const std::pair<int, int> & run : runs)
+			{
+				Rect area;
+				area.left = run.first + origin;
+				area.right = run.second + origin;
+				area.bottom = ground - it.y;
+				area.top = area.bottom - h;
+				if (!inGrid(area)) { drop(it.type, "outside the world grid"); continue; }
+				Tenant & t = newTenant(*floorPlugin, area, true);
+				t.valiation = it.type == "lobby" ? 1 : 0; // Floor.t2p variation 1 = lobby
+				if (it.buildDay >= 0) t.buildDay = it.buildDay;
+			}
 			report.imported[it.type]++;
 		}
 		const size_t slabCount = tenants.size();
@@ -277,6 +332,7 @@ namespace Bld {
 			else if (it.type == "shop") { p = shopPlugin; w = 12; }
 			else if (it.type == "restroom") { p = restroomPlugin; w = 9; }
 			else if (it.type == "apartment") { p = apartmentPlugin; w = 4; }
+			else if (it.type == "skybridge") { p = plugin("SKYB"); w = std::max(1, it.width); }
 			else if (tenant)
 			{
 				p = pluginForStem(tenant->plugin);
@@ -303,9 +359,21 @@ namespace Bld {
 			if (!inGrid(area)) { drop(it.type, "outside the world grid"); continue; }
 			const int row = area.bottom - 1;   // the slab under the bottom floor
 			const int under = slabAt(row, area.left);
+			if (it.type == "skybridge")
+			{
+				// Spans the gap between two slabs: no floor under it.
+				Tenant & t = newTenant(*p, area, false);
+				t.patIndex = 3;                         // BuildFinish FUN_1000c3f0
+				t.estimate = 0;
+				t.hasBelongList = 0;
+				if (it.buildDay >= 0) t.buildDay = it.buildDay;
+				report.imported[it.type]++;
+				continue;
+			}
 			if (under < 0 || slabAt(row, area.right - 1) != under) { drop(it.type, "not on one floor slab"); continue; }
 			Tenant & t = newTenant(*p, area, false);
 			t.ce.ids = wordArray({(uint16_t)(1000 + under)});
+			if (it.buildDay >= 0) t.buildDay = it.buildDay;
 			if (it.type == "office" || it.type == "apartment")
 			{
 				t.hdr.status = it.occupied ? 10 : 8;    // contracted / for rent
@@ -349,7 +417,7 @@ namespace Bld {
 		}
 		for (const TowerItem & it : tower.items)
 		{
-			if (it.type == "floor" || it.type == "lobby" || it.type == "office" || it.type == "shop" || it.type == "restroom" || it.type == "apartment") continue;
+			if (it.type == "floor" || it.type == "lobby" || it.type == "office" || it.type == "shop" || it.type == "restroom" || it.type == "apartment" || it.type == "skybridge") continue;
 			if (isYootTenantPrototypeId(it.type) || nativeExported.count(&it)) continue;
 			if (it.type == "elevator-standard" && elevPlugin) continue;
 			drop(it.type, "no YootTower counterpart in the exporter");

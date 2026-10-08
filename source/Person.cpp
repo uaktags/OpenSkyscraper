@@ -237,6 +237,7 @@ void Person::Journey::set(const Route & r)
 		person->addJourneyStress(routeStress(r));
 	else if (r.nodes.front().item && r.nodes.front().item->isLobby() && person->game)
 		person->game->eventSystem.facilities.onEnterTower(person); // leaves the pool
+	if (person->yootRules() && person->game) person->game->eventSystem.extras.bookRoute(r); // T2TrafficInfo::Pass
 	toFloor = nodes.front().toFloor;
 	next();
 }
