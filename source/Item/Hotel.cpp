@@ -216,7 +216,11 @@ void Hotel::scheduleGuest(Guest *g)
 	double today = floor(game->time.absolute);
 
 	// Arrival between 17:00 and 18:00.
-	double arrivalHour = Math::randd(Time::hourToAbsolute(17), Time::hourToAbsolute(18));
+	// YootTower S6: the room plugin's TNDF open (check-in 17:00) and close
+	// (checkout by 11:00) minutes give the same windows.
+	const double checkIn = prototype->yoot && prototype->yoot->openMinute > 0 ? prototype->yoot->openMinute / 60.0 : 17.0;
+	const double checkOut = prototype->yoot && prototype->yoot->closeMinute > 0 ? prototype->yoot->closeMinute / 60.0 - 1.0 : 10.0;
+	double arrivalHour = Math::randd(Time::hourToAbsolute(checkIn), Time::hourToAbsolute(checkIn + 1.0));
 	g->arrivalTime = today + arrivalHour;
 
 	// Dinner: leave ~0.5h after arrival, return ~1h later.
@@ -231,7 +235,7 @@ void Hotel::scheduleGuest(Guest *g)
 	g->wakeTime = nextDay + Math::randd(Time::hourToAbsolute(6), Time::hourToAbsolute(8));
 
 	// Checkout between 8:00 and 10:00 next morning.
-	g->checkoutTime = nextDay + Math::randd(Time::hourToAbsolute(8), Time::hourToAbsolute(10));
+	g->checkoutTime = nextDay + Math::randd(Time::hourToAbsolute(checkOut - 2.0), Time::hourToAbsolute(checkOut));
 
 	g->atHotel = false;
 }

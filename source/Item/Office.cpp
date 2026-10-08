@@ -498,6 +498,14 @@ void Office::rescheduleWorkers()
 		Worker *w = *iw;
 		w->arrivalTime = randd(7, 8);
 		w->departureTime = randd(17, 19);
+		if (prototype->yoot && prototype->yoot->closeMinute > prototype->yoot->openMinute)
+		{
+			// YootTower S6: Office.t2p calls its workers at the TNDF open time
+			// (CallEmployee: now + (rand % 6) * 10 minutes) and they leave
+			// from the close time (08:00 / 17:00).
+			w->arrivalTime = (prototype->yoot->openMinute + (rand() % 6) * 10) / 60.0;
+			w->departureTime = prototype->yoot->closeMinute / 60.0 + randd(0, 0.5);
+		}
 		w->lunchTime = randd(12, 12.2);
 		w->lunchReturnTime = -1;
 		w->stress = 0;
