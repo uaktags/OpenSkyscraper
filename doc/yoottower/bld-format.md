@@ -453,6 +453,16 @@ are copied from a template save of the same world. Both an export of the importe
 Sample Tokyo Map and an OpenSky-authored Hawaii tower load and run in T2.exe under the
 oracle (screenshots in `~/yoottower-decomp/bld-agent/`).
 
+**Sky Bridge.** Oracle saves of a 40-unit bridge between two towers
+(`save2-agent/saves/bridge_fresh.bld`, `bridge.bld`): right after the click the bridge
+(status 0, drawMode 2, no floor ids) stands on a Floor tenant of its own with status 1, and
+the unit map carries that Floor's id. Once built, the game merges the row's Floor tenants
+(left tower, bridge, right tower) into **one status-10 slab** and the bridge becomes a
+room over it: status 10, pattern 3, drawMode 0, `AECT` = [the slab], its own id in the unit
+map. The exporter writes the finished form; a bridge over a floor hole closes the hole on
+its row, and a bridge with no floor item under it gets its own slab. The original loads such
+an export with the finished bridge drawn (`save2-agent/shots/b5.png`).
+
 **Kegon.** Its unit map carries the world's FINF mask: `T2UnitInfo::InitMask` sets **0x8000
 in the first u16** of every unbuildable cell (5849 of 8448 cells: the cliff left of the
 shaft, the right edge and the two bottom rows), and the game saves the map with the bit.

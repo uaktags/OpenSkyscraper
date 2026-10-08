@@ -350,15 +350,63 @@ namespace Bld {
 			tenants.push_back(pd);
 			return tenants.back().rec;
 		};
+		// A finished Sky Bridge stands on one Floor tenant that runs from the
+		// left tower through the bridge to the right tower (oracle: the
+		// construction-time Floor of status 1 under the bridge and the two
+		// towers' slabs are merged into one status-10 slab, the bridge is a
+		// room over it). Bridge spans therefore close the row's floor holes,
+		// and a bridge over a row without a floor item gets its own slab.
+		std::map<int, std::vector<std::pair<int, int> > > bridgeSpans;
 		for (const TowerItem & it : tower.items)
+			if (it.type == "skybridge") bridgeSpans[it.y].push_back(std::make_pair(it.x, it.x + std::max(1, it.width)));
+		std::vector<TowerItem> bridgeFloors;
+		for (const auto & row : bridgeSpans)
+			for (const std::pair<int, int> & span : row.second)
+			{
+				bool covered = false;
+				for (const TowerItem & it : tower.items)
+					covered |= it.type == "floor" && it.y == row.first && it.x <= span.first && it.x + std::max(1, it.width) >= span.second;
+				if (covered) continue;
+				TowerItem f;
+				f.type = "floor";
+				f.x = span.first;
+				f.y = row.first;
+				f.width = span.second - span.first;
+				bridgeFloors.push_back(f);
+			}
+		std::vector<const TowerItem *> slabItems;
+		for (const TowerItem & it : tower.items) slabItems.push_back(&it);
+		for (const TowerItem & it : bridgeFloors) slabItems.push_back(&it);
+		for (const TowerItem * slabItem : slabItems)
 		{
+			const TowerItem & it = *slabItem;
 			if (it.type != "floor" && it.type != "lobby") continue;
 			const int h = it.type == "lobby" ? std::max(1, it.height) : 1;
 			// Floor holes: one Floor tenant per run of the row.
 			std::vector<std::pair<int, int> > runs;
 			{
-				int from = it.x;
+				std::vector<std::pair<int, int> > holes;
+				const auto bridges = bridgeSpans.find(it.y);
 				for (const std::pair<int, int> & hole : it.holes)
+				{
+					// Cut the bridge spans out of the hole.
+					std::vector<std::pair<int, int> > parts(1, hole);
+					if (it.type == "floor" && bridges != bridgeSpans.end())
+						for (const std::pair<int, int> & b : bridges->second)
+						{
+							std::vector<std::pair<int, int> > next;
+							for (const std::pair<int, int> & p : parts)
+							{
+								if (b.second <= p.first || b.first >= p.second) { next.push_back(p); continue; }
+								if (p.first < b.first) next.push_back(std::make_pair(p.first, b.first));
+								if (b.second < p.second) next.push_back(std::make_pair(b.second, p.second));
+							}
+							parts.swap(next);
+						}
+					holes.insert(holes.end(), parts.begin(), parts.end());
+				}
+				int from = it.x;
+				for (const std::pair<int, int> & hole : holes)
 				{
 					if (hole.first > from) runs.push_back(std::make_pair(from, hole.first));
 					from = std::max(from, hole.second);

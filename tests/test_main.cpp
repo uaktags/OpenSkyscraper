@@ -4148,7 +4148,7 @@ static void testBldPluginSaveData()
 	// Game-written saves (oracle, ~/yoottower-decomp/save2-agent/saves):
 	// Stadium, Kegon (HotSpring event) and Billboard towers.
 	const char * home = std::getenv("HOME");
-	static const char * saves[] = {"stadium.bld", "kegon.bld", "billboard.bld"};
+	static const char * saves[] = {"stadium.bld", "kegon.bld", "billboard.bld", "bridge.bld", "bridge_fresh.bld"};
 	for (const char * name : saves)
 	{
 		std::vector<uint8_t> in, out;
@@ -4190,6 +4190,48 @@ static void testBldPluginSaveData()
 			ImportReport againReport;
 			EXPECT(toTowerXml(exported, bldTestPrototypes, again, againReport, error));
 			EXPECT(againReport.imported == report.imported);
+		}
+		if ((std::string(name) == "bridge.bld" || std::string(name) == "bridge_fresh.bld") && ok)
+		{
+			// Two towers, a 40-unit Sky Bridge on 9F (row 101) between units
+			// 164 and 204. Once built the game keeps one Floor tenant from the
+			// left tower through the bridge to the right tower and the bridge
+			// is a room over it (status 10, pattern 3); while it is built the
+			// bridge has a status-1 Floor of its own. Both export like the
+			// finished bridge, also when the floor item has a hole under it.
+			std::string xml;
+			ImportReport report;
+			EXPECT(toTowerXml(g, bldTestPrototypes, xml, report, error));
+			EXPECT(xml.find("<item type=\"skybridge\" x=\"-20\" y=\"8\" evaluation=\"50.0\" width=\"40\"") != std::string::npos);
+			std::string holed = xml;
+			const std::string row = "<item type=\"floor\" x=\"-40\" y=\"8\" evaluation=\"50.0\" width=\"80\"";
+			const size_t at = holed.find(row);
+			EXPECT(at != std::string::npos);
+			if (at != std::string::npos) holed.insert(at + row.size(), " holes=\"-20:20\"");
+			for (const std::string * src : {&xml, &holed})
+			{
+				TowerState state;
+				BldData exported;
+				ImportReport exportReport;
+				EXPECT(parseTowerXml(*src, state, error));
+				EXPECT(exportTower(state, g, exported, exportReport, error, &yootTestPlugins()));
+				EXPECT(exportReport.imported["skybridge"] == 1 && exportReport.dropped.empty());
+				const Tenant * bridge = nullptr;
+				int slabsOnRow = 0;
+				uint16_t slabId = 0;
+				for (const Tenant & t : exported.tenants)
+				{
+					if (!t.hdr.used || t.area.top != 101) continue;
+					const PluginInfo * p = exported.pluginForItemType(t.equipType);
+					if (p && macOrder(p->id) == "SKYB") bridge = &t;
+					if (t.equipType == 1000) { slabsOnRow++; slabId = t.equipID; }
+				}
+				EXPECT(slabsOnRow == 1 && bridge && bridge->hdr.status == 10 && bridge->patIndex == 3 &&
+				       bridge->area.left == 164 && bridge->area.right == 204 && bridge->ce.ids.items.size() == 1 &&
+				       bridge->ce.ids.items[0] == slabId);
+				const size_t c = ((size_t)101 * exported.hRange + 180) * 4;
+				EXPECT(bridge && exported.unitMap[c + 2] == (bridge->equipID & 0xff) && exported.unitMap[c + 3] == (bridge->equipID >> 8));
+			}
 		}
 		if (std::string(name) == "billboard.bld" && ok)
 		{
