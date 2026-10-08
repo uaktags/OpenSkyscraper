@@ -139,14 +139,21 @@ void Office::updateSprite()
 
 void Office::advance(double dt)
 {
+	// YootTower (Office.t2p FUN_1000c0c0, status 10/11): a vacant office
+	// tries CollectEmployee in the first 8 minutes of each hour from 08:00
+	// to 16:59 (estimate above 200), on any day.
+	const bool yootHireWindow = prototype->yoot && game->time.hour >= 8 && game->time.hour < 17 &&
+		std::fmod(game->time.hour, 1.0) * 60.0 < 8.0;
+
 	// Occupy the office if it is attractive enough.
-	if (!occupied && !game->time.isHoliday() && game->time.hour >= 7 && game->time.hour < 17 && isAttractive())
+	if (!occupied && (prototype->yoot ? yootHireWindow : !game->time.isHoliday() && game->time.hour >= 7 && game->time.hour < 17) &&
+	    isAttractive())
 	{
 		// The item has a 10% chance of being occupied every 1/500th of a day. This means
 		// that on average, an item is occupied after 1/250th of a day.
 		// YootTower: the workers come out of the pool (Office.t2p TMDF 1,
 		// CollectEmployee 0x1005f5a0); no workers, no tenant.
-		if (game->time.checkTick(0.002) && (rand() % 10) == 0 &&
+		if ((prototype->yoot || (game->time.checkTick(0.002) && (rand() % 10) == 0)) &&
 		    (!prototype->yoot || game->eventSystem.people.hireBelong(this)))
 		{
 			occupied = true;
@@ -166,7 +173,8 @@ void Office::advance(double dt)
 					addPerson(*iw);
 			population = workers.size();
 			game->populationNeedsUpdate = true;
-			game->transferFunds(rentDeposit, "deposit_income", "Occupied Office's rent deposit");
+			game->transferFunds(rentDeposit, "deposit_income", prototype->yoot ?
+				"Income from office rentals just came in." : "Occupied Office's rent deposit");
 		}
 	}
 
@@ -191,17 +199,19 @@ void Office::advance(double dt)
 	}
 
 	// YootTower: a let office with nobody hired yet (a .bld office of
-	// status 11 with a kind but an empty belong list) hires at the next
-	// window (Office.t2p: 08:00-16:59, first 8 minutes of an hour,
-	// estimate above 200).
-	if (occupied && population == 0 && prototype->yoot && game->eventSystem.people.enabled() &&
-	    !game->eventSystem.people.pool.empty() && !game->time.isHoliday() &&
-	    game->time.hour >= 8 && game->time.hour < 17 && std::fmod(game->time.hour, 1.0) * 60.0 < 8.0 &&
+	// status 10/11, vacant in Office.t2p, with or without a kind) hires at
+	// the next window and pays SetKind's inMoney once, like a vacant one
+	// (oracle, exported tower: 9 offices paid 9 x $3,000 at 08:00 and no
+	// quarterly rent on day 1).
+	if (occupied && population == 0 && yootHireWindow && game->eventSystem.people.enabled() &&
+	    !game->eventSystem.people.pool.empty() &&
 	    yootKeepsTenants(false) && game->eventSystem.people.belongOf(this).empty() &&
 	    game->eventSystem.people.hireBelong(this))
 	{
 		population = workers.size();
 		game->populationNeedsUpdate = true;
+		rentDeposit = prototype->yoot->inMoneyFor(game->yootPriceSelection(this));
+		game->transferFunds(rentDeposit, "deposit_income", "Income from office rentals just came in.");
 	}
 
 	// Reset worker schedules at 5:00 if the office is occupied.

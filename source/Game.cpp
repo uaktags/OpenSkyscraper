@@ -210,6 +210,8 @@ static void collectYootOfficeRent(Game *game)
 		{
 			Item::Item *tenant = *it;
 			if (tenant->underConstruction || !tenant->isOccupied() || !tenant->prototype->yoot) continue;
+			// Statuses 9-11 (no workers yet) take no quarterly rent.
+			if (std::string(kind) == "office" && tenant->population == 0) continue;
 			const int rent = Yoot::officeQuarterRent(*tenant->prototype->yoot, game->yootPriceSelection(tenant));
 			if (std::string(kind) == "apartment") apartments += rent;
 			else total += rent;
