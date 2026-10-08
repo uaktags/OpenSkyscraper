@@ -190,6 +190,20 @@ void Office::advance(double dt)
 		game->eventSystem.people.releaseBelong(this);
 	}
 
+	// YootTower: a let office with nobody hired yet (a .bld office of
+	// status 11 with a kind but an empty belong list) hires at the next
+	// window (Office.t2p: 08:00-16:59, first 8 minutes of an hour,
+	// estimate above 200).
+	if (occupied && population == 0 && prototype->yoot && game->eventSystem.people.enabled() &&
+	    !game->eventSystem.people.pool.empty() && !game->time.isHoliday() &&
+	    game->time.hour >= 8 && game->time.hour < 17 && std::fmod(game->time.hour, 1.0) * 60.0 < 8.0 &&
+	    yootKeepsTenants(false) && game->eventSystem.people.belongOf(this).empty() &&
+	    game->eventSystem.people.hireBelong(this))
+	{
+		population = workers.size();
+		game->populationNeedsUpdate = true;
+	}
+
 	// Reset worker schedules at 5:00 if the office is occupied.
 	if (occupied && game->time.checkHour(5) && !game->time.isHoliday())
 	{
