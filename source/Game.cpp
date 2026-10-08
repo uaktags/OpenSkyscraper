@@ -2080,7 +2080,9 @@ void Game::decodeXML(tinyxml2::XMLDocument & xml)
 	tinyxml2::XMLElement * e = root->FirstChildElement("item");
 	while (e) {
 		Item::Item * item = itemFactory.make(*e);
-		addItem(item);
+		// YootTower-only types in a save loaded under another ruleset are
+		// rejected by the factory (NULL) and skipped here.
+		if (item) addItem(item);
 		e = e->NextSiblingElement("item");
 	}
 	populationNeedsUpdate = true;

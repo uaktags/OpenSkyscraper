@@ -157,6 +157,17 @@ OT::Item::Item * Factory::make(tinyxml2::XMLElement & xml)
 			default: type = "hotel_single"; break;
 		}
 	}
+	// YootTower-only prototypes stay registered for every ruleset (the
+	// build UI hides them via minRatingToBuild), but a save from another
+	// ruleset must not resurrect them: their advance()/decode paths run
+	// ungated YootTower logic. Reject and let the caller skip the element.
+	if (game->activeRules.ruleset() != BuildRules::Ruleset::YootTower &&
+	    BuildRules::isYootOnlyPrototype(type))
+	{
+		LOG(WARNING, "skipping YootTower-only item '%s' in a %s save",
+		    type.c_str(), game->activeRules.displayName());
+		return NULL;
+	}
 	Item * item = make(type, position);
 	assert(item);
 	item->decodeXML(xml);
