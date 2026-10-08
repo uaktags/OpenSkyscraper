@@ -8,6 +8,11 @@ marked "x" when the two games differ by more than the tolerance (TOL).
 import argparse
 import collections
 import json
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import metrics  # noqa: E402
 
 # metric: (relative, absolute) tolerance; a value passes if it is within either.
 TOL = {'funds_delta': (0.25, 20000), 'pop_max': (0.20, 25), 'pop_min': (0.25, 10),
@@ -73,6 +78,23 @@ def daily(series):
                   'workers': {k: max(_staff(r['tenants'].get(k)) for r in rs) for k in last['tenants']}}
         prev_funds = last['funds']
     return res
+
+
+def mover_load(orc, summary):
+    """{day: (orig waiting, orig riding, OpenSky waiting, OpenSky riding)}: mean people waiting
+    at and riding the movers over the 08:00-20:00 samples."""
+    acc = collections.defaultdict(lambda: [[], [], [], []])
+    for r in orc:
+        if 'people' in r and 480 <= r['minute'] < 1200:
+            acc[r['day']][0].append(r['people'].get('6', 0))
+            acc[r['day']][1].append(r['people'].get('8', 0))
+    for t, v in metrics.os_people(summary).items():
+        day, minute = int(t), int(round((t - int(t)) * 1440))
+        if 480 <= minute < 1200:
+            acc[day][2].append(v.get('waiting', 0))
+            acc[day][3].append(v.get('riding', 0))
+    mean = lambda a: round(sum(a) / len(a)) if a else None
+    return {d: tuple(mean(a) for a in v) for d, v in acc.items()}
 
 
 def oracle_events(series):
@@ -149,6 +171,11 @@ def report(orc, osk, summary, title):
             cells.append('%s / %s%s' % (o[m], s[m], mark(ok)))
         lines.append('| %d | %s |' % (d, ' | '.join(cells)))
     lines.append('')
+    load = mover_load(orc, summary)
+    if any(v[0] is not None for v in load.values()):
+        lines += ['Mean people at the movers, 08:00-20:00 (orig / OpenSky): ' + '; '.join(
+            'day %d waiting %s / %s, riding %s / %s' % ((d,) + tuple(fmt(x) for x in load[d]))
+            for d in days if d in load), '']
     keys = sorted(set(do[days[0]]['estimate']) | set(ds[days[0]]['estimate'])) if days else []
     only_o = [k for k in keys if k not in ds[days[0]]['estimate']]
     only_s = [k for k in keys if k not in do[days[0]]['estimate']]

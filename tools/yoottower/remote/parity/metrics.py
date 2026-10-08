@@ -100,13 +100,62 @@ def bld_record(d, frame):
                                'estimate': t.get('estimate'), 'status': t.get('status'),
                                'workers': t.get('workCount'), 'belong': t.get('belongCount'),
                                'inside': t.get('customerCount')}
-    for e in d['towerEvent']['events']:
+    rec['partial'] = d.get('partial', False)
+    for e in d['towerEvent'].get('events', []):
         rec['events']['%s#%d' % (e['type'], e['id'])] = '%d:%s' % (e['standby'], e['data'])
+    # T2People status (+8, T2People::Idle 0x10048570): 1 in the pool, 5 walking to a
+    # mover, 6 waiting at it, 8 riding, 10 walking to a tenant, 11 inside, 12 leaving.
+    people = {}
+    for b in d['people']['blocks']:
+        for q in b['slots']:
+            if isinstance(q, dict) and q.get('used'):
+                people[str(q['status'])] = people.get(str(q['status']), 0) + 1
+    rec['people'] = people
     return rec
 
 
+def parse_save(data):
+    """bld.parse, or a lenient parse when the tail after the traffic map does not parse:
+    some saves written while a Hawaii cruise is docked (CREV vErC) fail bld.py's
+    traffic-map search. Then the known cell count for the world is used and the tail is
+    read as far as it goes (settlement first, so funds survive; d['partial'] is set)."""
+    try:
+        return bld.parse(data)
+    except bld.BldError:
+        pass
+    strict_find, strict_tail = bld.find_traffic_cells, bld.tail
+
+    def find(buf, pos):
+        for n in bld.KNOWN_TRAFFIC_CELLS:
+            c = bld.Codec(bytes(buf))
+            c.pos = pos + n * 4
+            st = {}
+            try:
+                c.s32(st, 'funds'); c.s32(st, 'previousFunds')
+                c.values(st, 'totals', 5, c.s32)
+            except Exception:  # noqa: BLE001
+                continue
+            if abs(st['funds']) < 10 ** 8 and abs(st['previousFunds']) < 10 ** 8:
+                return n
+        raise bld.BldError('no traffic map size fits')
+
+    def tail(c, d):
+        d.setdefault('towerEvent', {'events': []})
+        try:
+            strict_tail(c, d)
+        except Exception:  # noqa: BLE001
+            d['partial'] = True
+            c.pos = len(c.buf)
+
+    bld.find_traffic_cells, bld.tail = find, tail
+    try:
+        return bld.parse(data)
+    finally:
+        bld.find_traffic_cells, bld.tail = strict_find, strict_tail
+
+
 def bld_file_record(path, tower_path, frame=None):
-    d = bld.parse(open(path, 'rb').read())
+    d = parse_save(open(path, 'rb').read())
     return bld_record(d, frame or bld_frame(tower_path, d))
 
 
@@ -142,6 +191,17 @@ def os_record(tower_path, json_path):
             'type': typ, 'customers': _num(cust, 0), 'estimate': _num(a.get('yootEstimate')),
             'status': _num(status), 'workers': _num(workers), 'inside': _num(a.get('inside'))}
     return rec
+
+
+def os_people(summary_path):
+    """{absolute day: {pool, walking, waiting, riding, inside, other}} from the summary's
+    hourly 'people Nh:' lines (PeopleSystem)."""
+    out = {}
+    for t, msg in os_events(summary_path):
+        if msg.startswith('people ') and 'h: pool ' in msg:
+            v = msg.split(': ', 1)[1].split()
+            out[t] = {v[i]: int(v[i + 1]) for i in range(0, len(v) - 1, 2)}
+    return out
 
 
 def os_events(summary_path):

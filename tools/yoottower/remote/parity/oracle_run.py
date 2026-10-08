@@ -66,18 +66,27 @@ def geom(pat):
 def clear_dialogs(tag):
     """Screenshot and dismiss any window the harness did not open."""
     seen = []
+    last = None
     for _ in range(6):
         extra = [w for w in windows() if not KNOWN.search(w[0])]
         if not extra:
             break
         title, x, y, w, h = extra[0]
-        n = len(os.listdir(a.out + '/dialogs'))
-        shot = '%s/dialogs/%03d_%s.png' % (a.out, n, tag)
-        R('shot', shot, check=False)
-        seen.append(title or '%dx%d' % (w, h))
-        say('dialog %r %dx%d+%d+%d -> %s' % (title, w, h, x, y, shot))
+        again = last == extra[0]
+        last = extra[0]
+        if not again:
+            n = len(os.listdir(a.out + '/dialogs'))
+            shot = '%s/dialogs/%03d_%s.png' % (a.out, n, tag)
+            R('shot', shot, check=False)
+            seen.append(title or '%dx%d' % (w, h))
+            say('dialog %r %dx%d+%d+%d -> %s' % (title, w, h, x, y, shot))
         if title == 'Plugin Check Error':
             R('click', x + 359, y + 324)       # Continue
+        elif title == 'Event' or again:
+            # Event choices (terrorist: "Accept offer" / "Look for"; fire: helicopter /
+            # staff) have no default button: take the first, as OpenSky's --sim answers
+            # yes (it pays the ransom, sends the helicopter).
+            R('click', x + w // 2, y + h - 46)
         else:
             R('key', 'Return', check=False)
         time.sleep(1.0)
@@ -110,7 +119,20 @@ def saveas(n):
     if any(re.search('Overwrite|Confirm|Save As', w[0]) for w in windows()):
         say('WARN dialog left after save')
         R('key', 'Return', check=False); time.sleep(1)
-    d = metrics.bld.parse(open(path, 'rb').read())
+    # The game may still be writing under load: wait for a stable size, retry the parse.
+    size, d = -1, None
+    for attempt in range(20):
+        time.sleep(0.5)
+        if not os.path.exists(path) or os.path.getsize(path) != size:
+            size = os.path.getsize(path) if os.path.exists(path) else -1
+            continue
+        try:
+            d = metrics.bld.parse(open(path, 'rb').read())
+            break
+        except metrics.bld.BldError:
+            size = -1
+    if d is None:
+        d = metrics.parse_save(open(path, 'rb').read())
     if frame is None:
         frame = metrics.bld_frame(a.tower, d)
     rec = metrics.bld_record(d, frame)
