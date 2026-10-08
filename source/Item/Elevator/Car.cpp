@@ -287,6 +287,15 @@ void Car::advance(double dt)
 			continue;
 		}
 
+		if (state == kMoving && destinationFloor == (int)std::lround(altitude) && elevator->prototype->yoot)
+		{
+			// A moving car sent to the floor it stands on (respondToCalls on
+			// a car that has just set off) would wait there forever with its
+			// passengers: YootTower opens the doors instead.
+			doorTicks = 5;
+			setState(kHauling);
+			continue;
+		}
 		if (state == kMoving && destinationFloor != (int)std::lround(altitude))
 		{
 			if (moveTicks > 0) { --moveTicks; continue; }
