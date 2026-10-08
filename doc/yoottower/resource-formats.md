@@ -515,6 +515,7 @@ plugin's `.text`.
 - **SP-format plugins** (51 of them, magic `"SP"`): a separate container format
   handled by `WindowsPEExecutable::loadSP`. Out of scope here; they lack
   OBJMAP/ATTR and need their own doc.
+- **Superseded field maps:** see `doc/yoottower/plugin-schema.md` for the byte-exact, population-validated schema of every resource (several labels in §3/§9 above are corrected there — ATTR mID/mItemType, TMDF vs SLDF, PLDF/DPDF/PADF), and `tools/yoottower/t2p_schema.py` for the reference codec.
 
 ---
 
