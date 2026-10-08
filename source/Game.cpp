@@ -1479,11 +1479,22 @@ void Game::addItem(Item::Item * item)
 		floorItems[item->position.y] = f;
 		decorations.updateFloor(item->position.y);
 	} else {
+		// YootTower special footprints (final items rising above the top
+		// floor, the subway below the lowest) deliberately have no slab for
+		// rows outside the floor limits: construction skips them, and so
+		// must the slab minting here (construction calls addItem for the
+		// finished item, and so does loading a save).
+		const bool yootSpecial = Yoot::usesSpecialFootprint(*this, item->prototype);
 		for (int i = 0; i < item->size.y; i++) {
 			itemsByFloor[item->position.y + i].insert(item);
 
 			if (floorItems.count(item->position.y + i) == 0) {
 				// This is necessary in case of loading a save game where the floor item is not loaded before the building item on that floor.
+				if (yootSpecial && !activeRules.profile().allowsCell(item->position.x, item->position.y + i)) {
+					LOG(DEBUG, "no floor slab minted under special-footprint %s on floor %i (outside the floor limits)",
+					    item->prototype->id.c_str(), item->position.y + i);
+					continue;
+				}
 				int minX = item->position.x;
 				int maxX = item->getRect().maxX();
 				Item::Floor * f = (Item::Floor *) itemFactory.make(itemFactory.prototypesById["floor"], int2(minX,item->position.y + i));
@@ -1670,10 +1681,15 @@ bool Game::repairFloorCoverage()
 			continue;
 		}
 		const int h = std::max(1, item->size.y);
+		// Same exclusion as addItem/construction: YootTower special
+		// footprints stand without slabs outside the floor limits, so the
+		// repair must not mint coverage for those rows either.
+		const bool yootSpecial = Yoot::usesSpecialFootprint(*this, item->prototype);
 		for (int yy = item->position.y; yy < item->position.y + h; yy++) {
 			// Haulers only need a slab where the level has none at all;
 			// rooms always need coverage spanning their footprint.
 			if (item->canHaulPeople() && floorItems.count(yy) != 0) continue;
+			if (yootSpecial && !activeRules.profile().allowsCell(item->position.x, yy)) continue;
 			const int minX = item->position.x;
 			const int maxX = item->getRect().maxX();
 			std::map<int, std::pair<int,int> >::iterator n = needs.find(yy);
