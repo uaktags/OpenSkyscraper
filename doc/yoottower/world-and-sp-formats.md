@@ -361,20 +361,20 @@ add HEDF, TMDF, DPDF, PPDF, WODF and DIBs 128/129. Ads add ADDF, DIB 128 and (Ob
 |---|---|---|---|
 | imageID (ushort) | 128 | Poster DIB (`UnfoldPluginSelf` 0x100433b0) | HIGH |
 | filmKind | 0 ×31, 2 ×7 | 0 = roadshow (`IsRoadshowFilm`), 2 = famous (`IsFamousFilm`) | HIGH |
-| phase1..3Months | 0–24 / 6,10 / 0–18 | Life-cycle lengths, made cumulative. `GetMovieLifePhase` 0x10043320 computes `(month−release−12) % cycle` and returns phase 0/1/2/4. | MED |
+| phase1..3Months | 0–24 / 6,10 / 0–18 | Life-cycle lengths, made cumulative (cycle = P3). `GetMovieLifePhase` 0x10043320: `t = (totalDays − doc+0x234) % cycle` (doc+0x234 = the day the first theater opened) gives 0 (t < P1), 1 (now showing) or 2; 4 only when retired by ReMake or a tie-up ended. | HIGH |
 | phase4Months, cycleMonths | 3, 1 | Read, then **zeroed** by the loader | HIGH |
 | production, director, starring (pstr) | "OPeNBooK / Published by : OB9003", … | Credits | HIGH |
 | runningTime | 120 | Minutes | MED |
-| unkFC | 200–500 | Probably price or popularity | LOW |
+| unkFC | 200–500 | **Change cost**: charged with DoPayTool when the player picks the film (Theater.t2p 0x1000dd60; $20k–$50k) | HIGH |
 | description (pstr) | "A science fiction film" | Genre blurb | HIGH |
 | customerTableID (ushort) | 128 | +0xb4 `DupCustomerTableDefRes` points to TMDF 128 (audience member table) | HIGH |
-| unk104, unk108 | 95, 101 | | LOW |
+| unk104, unk108 | 95, 101 | unk104 = daily audience retention %: the next target is yesterday's best × 0.95 (Theater.t2p 0x1000e640). unk108 is not read by either theater | HIGH / LOW |
 | famousAudience | 30–300 | `ReMake` 0x100434c0: audience ≥ this marks the film famous (flag 2) | HIGH |
 | remakeAudience | 30–300 | Audience ≥ this lets the film re-run (count+1), otherwise it retires (flag 0x8000, phase 4) | HIGH |
 | unk114 | 1 (one 0) | | LOW |
 | numExtra + extra[] (pstr) | 0 | Extra strings | HIGH (layout) |
 | stillImageID | 129 | Second DIB (208×117 still) | MED |
-| clipSeconds | 50–140 | Length of the trailer clip | LOW |
+| clipSeconds (+0x11c) | 50–140 | **Initial audience**: the first-day target when the film has no record (Theater.t2p 0x1000e640); the name is kept in SubPluginDefs.h | HIGH |
 | movieFile (pstr) | `MV_1stContact.MOV` | **The link to `Movie/*.MOV`** (+0xe4). Every file exists (validated). | HIGH |
 
 ### 3.4 HEDF: hall event (`T2HallEventPlugin::LoadRsrcFromStream` 0x100380e0)
@@ -387,10 +387,10 @@ add HEDF, TMDF, DPDF, PPDF, WODF and DIBs 128/129. Ads add ADDF, DIB 128 and (Ob
 | openTime | 600 / 1080 / 600 | `GetOpenTime`, minute of day | HIGH |
 | closeTime | 1020 / 1260 / 1020 | `GetCloseTime` | HIGH |
 | monthMask (`unkD4`) | 0xF1F / 0xFFF / 0x1F8 | 12-bit month mask (bit0 = Jan): Tennis Apr–Sep, Plant Apr–Oct, Car show Jul–Dec, Fashion Mar–May & Sep–Nov | MED (data pattern) |
-| cost (`unkD8`) | 250 / 250 / 400 | At close, EventCenter settles `funds += tenantValue − cost` | MED |
+| cost (`unkD8`) | 250 / 250 / 400 | At close EventCenter calls DoPayTool(outMoney − cost), i.e. **funds += cost − outMoney** (FUN_1000bec0) | HIGH |
 | customerTableID (ushort) | 128 | TMDF id | HIGH |
-| unkDC | 1000 / 100 | Copied into the booking entry (+4). Probably a price. | LOW |
-| unkE0, unkE4 | 50,10 / 5,10 | | LOW |
+| unkDC | 1000 / 100 | Initial visitor target of the event (catalog value; after a run the value becomes 2 × good + medium visitors) | HIGH |
+| unkE0, unkE4 | 50,10 / 5,10 | unkE0 = flop threshold: attendance below it starts a 36-day cooldown (FUN_1000dcb0). unkE4 is not read | HIGH / LOW |
 | bindTime | 60 / 180 | `GetBindTime` 0x10004030: minutes visitors stay | HIGH (accessor) |
 | stillImageID (`unkF4`) | 129 | Second DIB | MED |
 | description (pstr) | "Modern art exhibition.\r\n…" | | HIGH |
@@ -404,7 +404,7 @@ add HEDF, TMDF, DPDF, PPDF, WODF and DIBs 128/129. Ads add ADDF, DIB 128 and (Ob
 | imageID (ushort) | 128 | Ad picture DIB (150×50 ×8bpp; Yoot 160×60) | HIGH |
 | unkD0 | 1 | | LOW |
 | days | 12 | `GetDay`: campaign length | HIGH (accessor) |
-| money | 500 | `GetMoney`: cost | HIGH (accessor) |
+| money | 500 | `GetMoney`: paid **to the player** once, up front, when the sponsor is chosen (Billboard.t2p FUN_1000bba0) | HIGH |
 | path (pstr) | "" | `GetPath` | HIGH |
 
 ### 3.6 Other SP payloads
