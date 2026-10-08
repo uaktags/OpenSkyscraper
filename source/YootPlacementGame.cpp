@@ -157,6 +157,7 @@ bool Yoot::constructSkyBridge(Game & game, Item::AbstractPrototype * proto, int2
 		const int code = skyBridgeAreaCheck(r, area, p.groundRow,
 			[&game](int row, int unit) { return cellOccupied(game, row, unit); });
 		if (code) reason = errorText(proto, code);
+		if (!reason.empty() && reason[reason.size() - 1] == '.') reason.erase(reason.size() - 1);
 	}
 	if (!reason.empty()) {
 		LOG(DEBUG, "cannot construct sky bridge at %ix%i: %s", pos.x, pos.y, reason.c_str());

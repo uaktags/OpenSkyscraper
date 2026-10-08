@@ -237,6 +237,14 @@ Application::Application(int argc, char *argv[])
             startupMousePosition.x = atoi(argv[++i]);
             startupMousePosition.y = atoi(argv[++i]);
         }
+        if (strcmp(argv[i], "--qa-build") == 0 && i + 3 < argc)
+        {
+            QaBuild b;
+            b.id = argv[++i];
+            b.x = atoi(argv[++i]);
+            b.floor = atoi(argv[++i]);
+            startupBuilds.push_back(b);
+        }
         if (strcmp(argv[i], "--qa-tool") == 0)
         {
             assert(i + 1 < argc && "--qa-tool is missing tool id");
@@ -885,6 +893,8 @@ void Application::init()
             loadGameFromFile(startupLoadPath);
         if (!startupTool.empty())
             game->selectTool(startupTool.c_str());
+        for (const QaBuild & b : startupBuilds)
+            game->qaBuild(b.id, int2(b.x, b.floor));
         if (setViewportScrollAtStartup)
             game->qaSetViewportScrollFractions(startupViewportScrollHorizontal, startupViewportScrollVertical);
         if (startupZoomFactor > 0.0)

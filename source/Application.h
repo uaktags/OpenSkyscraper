@@ -144,6 +144,8 @@ namespace OT
 		bool setMouseAtStartup;
 		sf::Vector2i startupMousePosition;
 		std::string startupTool;
+		struct QaBuild { std::string id; int x, floor; };
+		std::vector<QaBuild> startupBuilds; ///< --qa-build id x floor (repeatable)
 		bool setViewportScrollAtStartup;
 		double startupViewportScrollHorizontal;
 		double startupViewportScrollVertical;

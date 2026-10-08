@@ -252,6 +252,9 @@ namespace OT {
 		                  const std::function<void(const std::string &)> & onText);
 		/// Close any open event choice without answering it.
 		void closeEventChoice();
+		/// --qa-build: runs the construction flow for prototype `id` at
+		/// (x, floor) as a tool click would. Returns true when built.
+		bool qaBuild(const std::string & id, int2 pos);
 
 		/// ISSUE-039 drag-to-place batching (OpenSkyWeb port): hold an item
 		/// tool and drag to lay out a whole row/column (Shift = full grid).

@@ -313,6 +313,21 @@ void Game::askEventText(const std::string & title, const std::string & text,
 	eventChoiceCallback = [edit, onText](bool) { onText(edit->getText().toStdString()); };
 }
 
+bool Game::qaBuild(const std::string & id, int2 pos)
+{
+	std::map<std::string, Item::AbstractPrototype *>::iterator p = itemFactory.prototypesById.find(id);
+	if (p == itemFactory.prototypesById.end() || !p->second) return false;
+	Item::AbstractPrototype * previous = toolPrototype;
+	toolPrototype = p->second;
+	const size_t before = items.size();
+	const int fundsBefore = funds;
+	constructToolAt(pos);
+	toolPrototype = previous;
+	const bool built = items.size() != before || funds != fundsBefore;
+	LOG(IMPORTANT, "qa-build %s at %d,%d: %s", id.c_str(), pos.x, pos.y, built ? "built" : "refused");
+	return built;
+}
+
 void Game::answerEventChoice(bool yes)
 {
 	if (!eventChoiceCallback) return;
