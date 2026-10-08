@@ -13,6 +13,7 @@
 #include <vector>
 
 #include <climits>
+#include <cstring>
 
 #include "../source/Time.h"
 #include "../source/Route.h"
@@ -33,6 +34,8 @@
 #include "../source/PluginObjmap.h"
 #include "../source/PluginBitmapLoader.h"
 #include "../source/OspPlugin.h"
+#include "../source/PluginT2pExport.h"
+#include "../source/PluginResourceJson.h"
 #include "../source/TdtLoader.h"
 
 #include "../source/BuildRules.h"
@@ -1972,6 +1975,194 @@ static void testYootWorldEncoders()
     }
 }
 
+// OSP v3 sweep: every one of the 156 shipped plugins goes t2p -> OSP v3 on
+// disk -> loaded back, and every resource re-encodes to the original bytes
+// (typed Json, PNG + palette sidecar, .wav, text and raw files alike). The
+// export of the reloaded plugin to .t2p is then byte-identical to the input
+// file, PE and SP. The PE image is not consulted for the resource check: the
+// loaded resources are compared against the original Plugin.
+static void testOspV3Sweep()
+{
+    using namespace OT;
+    PluginManager pm;
+    pm.addPluginDirectory("../data/Plugins");
+    const std::string tmp = "osp_v3_sweep";
+    std::system(("rm -rf " + tmp).c_str());
+    int plugins = 0, saved = 0, resources = 0, identical = 0, exportsIdentical = 0, typed = 0;
+    int bitmapsPng = 0, waves = 0;
+    std::vector<std::string> failures;
+    for (const std::string & name : pm.enumerate())
+    {
+        if (name.size() < 4 || name.compare(name.size() - 4, 4, ".t2p") != 0) continue;
+        Plugin * p = dynamic_cast<Plugin *>(pm.get(name));
+        if (!p || !p->ensureLoaded()) { failures.push_back(name + ": load"); continue; }
+        ++plugins;
+        OspPlugin osp;
+        if (!convertT2pToOsp(*p, osp).ok) { failures.push_back(name + ": convert"); continue; }
+        const std::string dir = tmp + "/" + name.substr(0, name.size() - 4) + ".osp-plugin";
+        const OspResult sr = saveOspPlugin(dir, osp, true);
+        if (!sr.ok) { failures.push_back(name + ": save: " + sr.message); continue; }
+        OspPlugin back;
+        const OspResult lr = loadOspPlugin(dir, back);
+        if (!lr.ok) { failures.push_back(name + ": load: " + lr.message); continue; }
+        ++saved;
+
+        // Original bytes per (type, id), in container order.
+        std::vector<std::pair<std::pair<std::string, int>, std::string>> originals;
+        if (p->container() == ResourceContainer::SP)
+        {
+            std::string bytes;
+            SpContainer c;
+            if (readFileBytes(p->path().str(), bytes) && decodeSpContainer(bytes.data(), bytes.size(), c))
+                for (const SpContainer::Entry & e : c.entries)
+                    originals.push_back({{e.typeName(), int(e.id)}, e.data});
+        }
+        else
+        {
+            for (const AbstractPlugin::ResourceKey & k : p->enumerateResources())
+                if (const WindowsPEExecutable::Resource * r = p->getResource(k.type, k.id))
+                    originals.push_back({{k.type, k.id}, std::string(r->data, size_t(r->length))});
+        }
+        if (originals.size() != back.resources.size())
+            failures.push_back(name + ": resource count " + std::to_string(back.resources.size()));
+        for (size_t i = 0; i < originals.size() && i < back.resources.size(); ++i)
+        {
+            const OspResource & r = back.resources[i];
+            std::string again;
+            ++resources;
+            const bool ok = r.res.type == originals[i].first.first && r.res.id == originals[i].first.second
+                && encodeResource(r.res, again) && again == originals[i].second;
+            if (ok) ++identical;
+            else failures.push_back(name + ": " + resourceTypeDisplayName(originals[i].first.first) + " "
+                                    + std::to_string(originals[i].first.second));
+            if (r.res.codec != ResourceCodec::Raw && r.res.codec != ResourceCodec::Text) ++typed;
+        }
+        std::string file;
+        readFileBytes(p->path().str(), file);
+        std::string exported, err;
+        if (exportOspToT2p(back, exported, &err) && exported == file) ++exportsIdentical;
+        else failures.push_back(name + ": export " + err);
+    }
+    // File census of the written store.
+    {
+        FILE * f = popen(("find " + tmp + " -path '*/bitmaps/*.png' | wc -l; find " + tmp + " -name '*.wav' | wc -l").c_str(), "r");
+        if (f) { if (std::fscanf(f, "%d %d", &bitmapsPng, &waves) != 2) bitmapsPng = waves = -1; pclose(f); }
+    }
+    std::cout << "OSP v3 sweep: " << plugins << " plugins, " << saved << " saved+reloaded, "
+              << identical << "/" << resources << " resources byte-identical (" << typed << " typed Json, "
+              << bitmapsPng << " bitmaps as PNG, " << waves << " .wav), "
+              << exportsIdentical << " .t2p exports byte-identical\n";
+    for (size_t i = 0; i < failures.size() && i < 40; ++i) std::cerr << "  v3 sweep failure: " << failures[i] << "\n";
+    EXPECT(plugins == 156);
+    EXPECT(saved == 156);
+    EXPECT(resources == 2983 + 349);
+    EXPECT(identical == resources);
+    EXPECT(exportsIdentical == 156);
+    EXPECT(bitmapsPng == 958 + 96);
+    EXPECT(waves == 133);
+    std::system(("rm -rf " + tmp).c_str());
+}
+
+// Edited .t2p export: Burger's name and price change; the rebuilt PE loads,
+// carries the new values, and every other resource is unchanged.
+static void testT2pExportEdited()
+{
+    using namespace OT;
+    Plugin burger("Burger.t2p", "../data/Plugins/Burger.t2p");
+    OspPlugin osp;
+    EXPECT(convertT2pToOsp(burger, osp).ok);
+    OspResource * attr = findOspResource(osp, "ATTR", 128);
+    OspResource * tndf = findOspResource(osp, "TNDF", 1);
+    EXPECT(attr && tndf);
+    if (!attr || !tndf) return;
+    std::get<PluginAttr>(attr->res.value).name = "Burger Palace Deluxe Edition";
+    TemplateDef & def = std::get<TemplateDef>(tndf->res.value);
+    def.tool.variations[0].price = 777;
+    def.tool.variations[0].priceString = "$77700";
+    // Grow a bitmap too so .rsrc changes size noticeably (and .reloc moves).
+    OspResource * big = findOspResource(osp, "2", 1000);
+    EXPECT(big != nullptr);
+    if (big)
+    {
+        sf::Image img;
+        Json side;
+        EXPECT(dibToPng(big->res.bytes, img, side));
+        sf::Image wide({img.getSize().x * 2, img.getSize().y}, sf::Color::Black);
+        EXPECT(wide.copy(img, {0, 0}));
+        std::string dib;
+        EXPECT(replaceDibPixels(big->res.bytes, wide, dib));
+        big->res.bytes = dib;
+    }
+    const std::string out = "Burger_edited_test.t2p";
+    std::string err;
+    EXPECT(writeT2pFile(osp, out, &err));
+    Plugin edited("Burger_edited_test.t2p", out);
+    EXPECT(edited.ensureLoaded());
+    PluginAttr a;
+    EXPECT(edited.getAttr(a) && a.name == "Burger Palace Deluxe Edition" && a.id == FourCC::fromMacOrder("BURG"));
+    TemplateDef t;
+    EXPECT(edited.getTemplateDef(t) && t.tool.variations[0].price == 777 && t.tool.variations[0].priceString == "$77700");
+    sf::Image wideBack;
+    const WindowsPEExecutable::Resource * wr = edited.getResource("2", 1000);
+    EXPECT(wr && PluginBitmapLoader::decodeBitmapResource(wr->data, wr->length, wideBack) && wideBack.getSize().x == 2 * 128u);
+    int same = 0, total = 0;
+    for (const AbstractPlugin::ResourceKey & k : burger.enumerateResources())
+    {
+        if (k.type == "ATTR" || k.type == "TNDF" || (k.type == "2" && k.id == 1000)) continue;
+        ++total;
+        const WindowsPEExecutable::Resource * x = burger.getResource(k.type, k.id);
+        const WindowsPEExecutable::Resource * y = edited.getResource(k.type, k.id);
+        if (x && y && x->length == y->length && std::memcmp(x->data, y->data, size_t(x->length)) == 0) ++same;
+    }
+    EXPECT(total > 20 && same == total);
+    // The relocations and the code survive: compare .text bytes and the
+    // relocation table contents through the section table.
+    std::string orig, now;
+    EXPECT(readFileBytes("../data/Plugins/Burger.t2p", orig) && readFileBytes(out, now));
+    EXPECT(now.size() > orig.size());
+    EXPECT(now.compare(0x400, 0xe600, orig, 0x400, 0xe600) == 0);  // .text raw data
+    std::remove(out.c_str());
+
+    // Adding and removing resources switches to a full .rsrc rebuild (new
+    // tree, canonical layout); everything else must still read back.
+    {
+        OspPlugin q;
+        EXPECT(convertT2pToOsp(burger, q).ok);
+        OspResource extra;
+        extra.res.type = "OBJMAP";
+        extra.res.id = 4242;
+        extra.res.codec = ResourceCodec::Text;
+        extra.res.bytes = "DefParts Test\r\n";
+        q.resources.push_back(extra);
+        OspResource extraType;
+        extraType.res.type = "STRTABLE";
+        extraType.res.id = 7;
+        extraType.res.codec = ResourceCodec::StringTable;
+        extraType.res.value = StringTableDef{"hello", "world"};
+        q.resources.push_back(extraType);
+        q.resources.erase(std::remove_if(q.resources.begin(), q.resources.end(), [](const OspResource & r) {
+            return r.res.type == "WAVE";
+        }), q.resources.end());
+        const std::string out2 = "Burger_rebuilt_test.t2p";
+        EXPECT(writeT2pFile(q, out2, &err));
+        Plugin rebuilt("Burger_rebuilt_test.t2p", out2);
+        EXPECT(rebuilt.ensureLoaded());
+        int ok = 0, n = 0;
+        for (const OspResource & r : q.resources)
+        {
+            ++n;
+            std::string want;
+            const WindowsPEExecutable::Resource * y = rebuilt.getResource(r.res.type, r.res.id);
+            if (encodeResource(r.res, want) && y && want == std::string(y->data, size_t(y->length))) ++ok;
+        }
+        EXPECT(n > 20 && ok == n);
+        EXPECT(rebuilt.getResource("WAVE", 165) == nullptr);
+        StringTableDef st;
+        EXPECT(rebuilt.getStringTable(st, 7) && st.size() == 2 && st[1] == "world");
+        std::remove(out2.c_str());
+    }
+}
+
 // ItemTypeCatalog: keyed by plugin id (ATTR mID) with the numeric item type.
 static void testItemTypeCatalog()
 {
@@ -2056,7 +2247,7 @@ static void testOspAttrCompat()
         EXPECT(saveOspPlugin(dir, p, true).ok);
         std::string json;
         EXPECT(readFileBytes(dir + "/plugin.json", json));
-        EXPECT(json.find("\"formatVersion\": 2") != std::string::npos);
+        EXPECT(json.find("\"formatVersion\": 3") != std::string::npos);
         EXPECT(json.find("\"pluginId\": \"BURG\"") != std::string::npos);
         EXPECT(json.find("\"itemType\": 1301") != std::string::npos);
         EXPECT(json.find("\"dependPluginId\": \"FRON\"") != std::string::npos);
@@ -3790,6 +3981,8 @@ int main()
 	testYootStress();
 	testOspAttrCompat();
 	testYootWorldEncoders();
+	testOspV3Sweep();
+	testT2pExportEdited();
     if (g_failures > 0)
     {
         std::cerr << g_failures << " test(s) failed\n";
