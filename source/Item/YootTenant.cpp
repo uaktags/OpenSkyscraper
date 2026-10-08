@@ -2,6 +2,7 @@
 #include "../Game.h"
 #include "../PluginManager.h"
 #include "../PluginObjmap.h"
+#include "../YootItemArt.h"
 #include "../YootRules.h"
 #include "YootTenant.h"
 
@@ -13,40 +14,6 @@
 
 using namespace OT;
 using namespace OT::Item;
-
-namespace
-{
-	struct TenantView
-	{
-		bool loaded = false;
-		sf::Texture texture;
-		std::vector<sf::IntRect> bands;
-	};
-
-	/// RT_BITMAP 1000 + OBJMAP 1000 "View" rects (pattern order) of a plugin.
-	TenantView & tenantView(Game * game, const std::string & plugin)
-	{
-		static std::map<std::string, std::unique_ptr<TenantView> > cache;
-		std::unique_ptr<TenantView> & slot = cache[plugin];
-		if (slot) return *slot;
-		slot.reset(new TenantView);
-		TenantView & v = *slot;
-		v.loaded = game->app.bitmaps.loadFromPlugin(plugin, 1000, v.texture);
-		AbstractPlugin * p = game->app.pluginManager.get(plugin);
-		const WindowsPEExecutable::Resource * om = (p && p->ensureLoaded()) ? p->getResource("OBJMAP", 1000) : nullptr;
-		std::vector<ObjmapBlock> blocks;
-		if (om && parsePluginObjmap(om->data, om->length, blocks)) {
-			std::vector<std::pair<int, sf::IntRect> > views;
-			for (const ObjmapBlock & b : blocks)
-				if (b.name == "View")
-					views.push_back(std::make_pair(b.pattern, sf::IntRect({b.rect.left, b.rect.top}, {b.rect.width(), b.rect.height()})));
-			std::stable_sort(views.begin(), views.end(),
-				[](const std::pair<int, sf::IntRect> & a, const std::pair<int, sf::IntRect> & b) { return a.first < b.first; });
-			for (const auto & view : views) v.bands.push_back(view.second);
-		}
-		return v;
-	}
-}
 
 OT::Item::Item * YootTenantPrototype::make(Game * game)
 {
@@ -91,12 +58,13 @@ void YootTenant::init()
 	// Spread the idles over the 8-minute round robin like the 32 dispatch
 	// slots of T2TenantArray do.
 	idlePhase = (int)(((unsigned)(position.x * 31 + position.y * 17)) % Yoot::kTenantIdleMinutes);
-	TenantView & v = tenantView(game, def().plugin);
-	if (v.loaded) {
-		view = &v.texture;
-		bands = &v.bands;
-		sprite.SetImage(v.texture);
-		sprite.setPosition({static_cast<float>(getPosition().x * 8), static_cast<float>(-getPosition().y * 36)});
+	if (const YootPluginView * v = yootPluginView(game->app, def().plugin)) {
+		view = &v->texture;
+		bands = &v->bands;
+		sprite.SetImage(v->texture);
+		// Skin::Yoot: the 24 px interior sits above the 4 px floor strip.
+		const int lift = game->skin == Skin::Yoot ? kYootInteriorLift : 0;
+		sprite.setPosition({static_cast<float>(getPosition().x * 8), static_cast<float>(-getPosition().y * 36 - lift)});
 		addSprite(&sprite);
 	}
 	updateSprite();

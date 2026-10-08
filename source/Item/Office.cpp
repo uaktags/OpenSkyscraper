@@ -127,7 +127,7 @@ void Office::updateSprite()
 		// Office.t2p View patterns: 7 kinds x 2 (kind 0 vacant, 1..6 the
 		// furnished offices; pattern 0 lit, 1 dark).
 		sprite.setTextureRect(yootView->band(2 * (occupied ? 1 + variant % 6 : 0) + (lit ? 0 : 1)));
-		sprite.setPosition({static_cast<float>(position.x * 8), static_cast<float>(position.y * -36)});
+		sprite.setPosition({static_cast<float>(position.x * 8), static_cast<float>(position.y * -36 - kYootInteriorLift)});
 		return;
 	}
 	int index_x = (lit ? 0 : 1);

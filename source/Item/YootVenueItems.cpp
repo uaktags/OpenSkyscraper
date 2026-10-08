@@ -2,6 +2,7 @@
 #include "../Game.h"
 #include "../Logger.h"
 #include "../YootCatalog.h"
+#include "../YootItemArt.h"
 #include "../YootMovie.h"
 #include "YootVenueItems.h"
 
@@ -185,7 +186,7 @@ void Billboard::showAd(const std::string & plugin, int days)
 	const float boardH = view ? (float)view->getSize().y : 60.f;
 	adSprite.setOrigin({0.f, 0.f});
 	adSprite.setPosition({getPosition().x * 8 + (boardW - s.x) / 2.f,
-	                      -getPosition().y * 36 - boardH + (boardH - s.y) / 2.f});
+	                      -getPosition().y * 36 - interiorLift() - boardH + (boardH - s.y) / 2.f});
 	addSprite(&adSprite);
 	setPattern(1);
 }
@@ -239,14 +240,11 @@ void Attraction::renovate()
 	renovated = true;
 	// FUN_1000c290: the renovated art is RT_BITMAP 9998 with the same
 	// 360x204 View bands.
-	static sf::Texture renovatedTexture;
-	static int loaded = -1;
-	if (loaded < 0)
-		loaded = game->app.bitmaps.loadFromPlugin(defaultPlugin(), 9998, renovatedTexture) ? 1 : 0;
-	if (loaded == 1 && view)
+	const YootPluginView * renovated = yootPluginView(game->app, defaultPlugin(), sf::Color::Transparent, 9998);
+	if (renovated && view)
 	{
-		view = &renovatedTexture;
-		sprite.SetImage(renovatedTexture);
+		view = &renovated->texture;
+		sprite.SetImage(renovated->texture);
 		updateSprite();
 	}
 }
@@ -260,15 +258,12 @@ void Subway::init()
 	// (four 320x96 View bands, bottom-aligned on the station's floor).
 	removeSprite(&station);
 	removeSprite(&platform);
-	static sf::Texture texture;
-	static int loaded = -1;
-	if (loaded < 0)
-		loaded = game->app.bitmaps.loadFromPlugin("Subway.t2p", 1000, texture) ? 1 : 0;
-	if (loaded == 1)
+	if (const YootPluginView * v = yootPluginView(game->app, "Subway.t2p"))
 	{
-		view = &texture;
-		viewSprite.SetImage(texture);
-		viewSprite.setPosition({static_cast<float>(getPosition().x * 8), static_cast<float>(-getPosition().y * 36)});
+		view = &v->texture;
+		viewSprite.SetImage(v->texture);
+		const int lift = game->skin == Skin::Yoot ? kYootInteriorLift : 0;
+		viewSprite.setPosition({static_cast<float>(getPosition().x * 8), static_cast<float>(-getPosition().y * 36 - lift)});
 		addSprite(&viewSprite);
 	}
 	level = 1;

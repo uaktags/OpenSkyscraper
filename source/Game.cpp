@@ -23,6 +23,7 @@
 #include "OpenGL.h"
 #include "YootRules.h"
 #include "YootPlacementGame.h"
+#include "YootItemArt.h"
 #include "SimHarness.h"
 
 using namespace OT;
@@ -1085,6 +1086,8 @@ void Game::advance(double dt)
 		// IsSETime ticks, i.e. 6 steps a second.
 		sky_in.seKind = (int)(yootClock * 6);
 		yootArt->update(sky_in);
+		// Plugin item sheets follow the tower palette (windows, signs).
+		yootRecolourPluginViews(yootArt->palette(), yootArt->animStart(), yootArt->animCount());
 	}
 	toolboxWindow.update();
 
@@ -1779,6 +1782,7 @@ void Game::refreshYootArt()
 {
 	if (skin != Skin::Yoot) {
 		yootArt.reset();
+		yootRecolourPluginViews(std::vector<YootRgb>(), 0, 0);
 		return;
 	}
 	// The YootTower ruleset names its world; other rulesets borrow the

@@ -122,9 +122,9 @@ void Floor::render(sf::RenderTarget &target) const
 	const int floorRight = getRect().maxX();
 	// YootTower skin: the world 1004 roof strip along the whole floor, and
 	// on the spans no tenant covers the Floor.t2p empty-floor view plus the
-	// floor strip (8 + 24 + 4 px, the original's row layout). Above OpenSky
-	// tenants, whose 24 px interior starts 12 px down, the floor strip
-	// fills the remaining 4 px under the roof.
+	// floor strip (8 + 24 + 4 px, the original's row layout). Under the
+	// tenants the floor strip goes at both ends of the interior: plugin art
+	// covers 8..32 px, OpenSky art 12..36 px.
 	const YootWorldArt * yoot = game->yootSkinArt();
 	if (yoot && yoot->hasSlab() && yoot->hasFloorView())
 	{
@@ -141,6 +141,7 @@ void Floor::render(sf::RenderTarget &target) const
 		{
 			emptySpan(from, it->left);
 			yoot->drawFloorStrip(target, std::max(from, it->left) * 8.0f, it->right * 8.0f, top + 8.0f, yootTint);
+			yoot->drawFloorStrip(target, std::max(from, it->left) * 8.0f, it->right * 8.0f, top + 32.0f, yootTint);
 			from = std::max(from, it->right);
 		}
 		emptySpan(from, floorRight);

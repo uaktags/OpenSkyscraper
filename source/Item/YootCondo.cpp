@@ -3,6 +3,7 @@
 #include "../Game.h"
 #include "../Math/Rand.h"
 #include "../YootCatalog.h"
+#include "../YootItemArt.h"
 
 #include <map>
 #include <memory>
@@ -57,6 +58,10 @@ bool YootCondo::loadTextures()
 	}
 	emptyCondoTexture = &slot->empty;
 	residentTexture = &slot->resident;
+	// Skin::Yoot: the shared plugin sheet, whose windows follow the sky.
+	if (game->skin == Skin::Yoot)
+		if (const YootPluginView * v = yootPluginView(game->app, pluginName, kYootWindowKey))
+			emptyCondoTexture = &v->texture;
 	return slot->loaded;
 }
 
@@ -74,7 +79,9 @@ void YootCondo::init()
 
 	baseSprite.setTexture(*emptyCondoTexture);
 	baseSprite.setOrigin({0.f, 24.f});
-	baseSprite.setPosition({static_cast<float>(position.x * 8), static_cast<float>(-position.y * 36)});
+	// Skin::Yoot: the 24 px interior sits above the 4 px floor strip.
+	const int lift = game->skin == Skin::Yoot ? kYootInteriorLift : 0;
+	baseSprite.setPosition({static_cast<float>(position.x * 8), static_cast<float>(-position.y * 36 - lift)});
 
 	residentSprite.setTexture(*residentTexture);
 	residentSprite.setOrigin({8.f, 24.f});

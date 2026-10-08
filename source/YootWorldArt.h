@@ -87,6 +87,12 @@ namespace OT
 		const sf::Texture & craneTexture() const { return m_crane; }
 		sf::IntRect craneRect() const { return m_craneRect; }
 
+		/// The tower palette of the moment (base colours plus the animated
+		/// sky/refraction/SE range) and that range, for the plugin sheets.
+		const std::vector<YootRgb> & palette() const { return m_lastPalette.empty() ? m_basePalette : m_lastPalette; }
+		int animStart() const { return m_ptdf.animStartIndex; }
+		int animCount() const { return m_ptdf.numAnimColor; }
+
 		const YootBackdropGeometry & geometry() const { return m_geom; }
 
 	private:

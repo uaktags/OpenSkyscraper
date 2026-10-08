@@ -83,7 +83,7 @@ void ParkingGate::init()
 {
 	YootFacility::init();
 	// The surface entrance band goes on the gate's top row.
-	sprite.setPosition({static_cast<float>(position.x * 8), static_cast<float>(-(position.y + size.y - 1) * 36)});
+	sprite.setPosition({static_cast<float>(position.x * 8), static_cast<float>(-(position.y + size.y - 1) * 36 - interiorLift())});
 	setGatePattern(2);
 }
 

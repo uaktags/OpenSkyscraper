@@ -38,10 +38,6 @@ namespace OT {
 			int transformers; ///< 1..5 installed (FUN_1000c1d0 starts with one)
 
 			Sprite sprite;
-
-		private:
-			static sf::Texture viewTexture;
-			static bool viewLoaded;
 		};
 	}
 }

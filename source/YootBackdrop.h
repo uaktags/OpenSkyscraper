@@ -158,6 +158,16 @@ namespace OT
 	                              const YootSkyInputs & in,
 	                              std::vector<YootRgb> & palette);
 
+	/// Plugin item sheets (tenants, rooms, facilities) index the tower
+	/// palette like the backdrop: pixels whose index lies in the animated
+	/// range [start, start + count) take `palette` (sky, refraction, SE
+	/// entries: Office/Condo/hotel windows are index 189 = the first sky
+	/// colour in Tokyo and Hawaii); the others keep the sheet's own colour.
+	/// Rewrites those pixels in `rgba` (4 bytes per index, opaque) and
+	/// returns how many it changed.
+	int yootPaintAnimatedIndices(const std::vector<uint8_t> & indices, const std::vector<YootRgb> & palette,
+	                             int start, int count, std::vector<uint8_t> & rgba);
+
 	/// Kegon.t2p WorldDef::CalcSeasonIndex 0x10014dc0 (1-based month):
 	/// 0 spring (3-5), 1 summer (6-8), 2 autumn (9-10), 3 November, 4 winter.
 	int yootKegonSeasonIndex(int month1);

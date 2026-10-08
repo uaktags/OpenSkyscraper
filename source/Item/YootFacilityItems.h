@@ -34,6 +34,8 @@ namespace OT {
 			int stayMinutes() const;
 
 			void setPattern(int p);
+			/// Pixels the art sits above the row's bottom edge.
+			int interiorLift() const;
 
 		protected:
 			/// Plugin file when no catalog entry is loaded.

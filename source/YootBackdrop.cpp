@@ -445,4 +445,23 @@ namespace OT
 	{
 		return 150 + yootKegonSeasonIndex(month1);
 	}
+
+	int yootPaintAnimatedIndices(const std::vector<uint8_t> & indices, const std::vector<YootRgb> & palette,
+	                             int start, int count, std::vector<uint8_t> & rgba)
+	{
+		int painted = 0;
+		if (rgba.size() < indices.size() * 4) return 0;
+		for (std::size_t i = 0; i < indices.size(); ++i)
+		{
+			const int index = indices[i];
+			if (index < start || index >= start + count || index >= int(palette.size())) continue;
+			const YootRgb & c = palette[index];
+			rgba[i * 4 + 0] = c.r;
+			rgba[i * 4 + 1] = c.g;
+			rgba[i * 4 + 2] = c.b;
+			rgba[i * 4 + 3] = 255;
+			++painted;
+		}
+		return painted;
+	}
 }

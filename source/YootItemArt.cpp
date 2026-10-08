@@ -11,6 +11,43 @@
 
 namespace OT
 {
+	namespace
+	{
+		typedef std::tuple<std::string, uint32_t, int, int, std::string> Key;
+		std::map<Key, std::unique_ptr<YootPluginView> > & viewCache()
+		{
+			static std::map<Key, std::unique_ptr<YootPluginView> > cache;
+			return cache;
+		}
+
+		struct PaletteState
+		{
+			std::vector<YootRgb> palette;
+			int start = 0, count = 0;
+		};
+		PaletteState & currentPalette()
+		{
+			static PaletteState s;
+			return s;
+		}
+
+		void recolour(YootPluginView & v, const PaletteState & p)
+		{
+			if (v.indices.empty()) return;
+			std::vector<YootRgb> colours;
+			if (!p.palette.empty())
+				for (int index : v.usedIndices)
+					if (index >= p.start && index < p.start + p.count && index < (int)p.palette.size())
+						colours.push_back(p.palette[index]);
+			if (colours == v.applied) return;
+			v.applied = colours;
+			std::vector<uint8_t> rgba = v.baseRgba;
+			if (!p.palette.empty())
+				yootPaintAnimatedIndices(v.indices, p.palette, p.start, p.count, rgba);
+			v.texture.update(rgba.data());
+		}
+	}
+
 	sf::IntRect YootPluginView::band(int index) const
 	{
 		if (bands.empty())
@@ -21,9 +58,8 @@ namespace OT
 	const YootPluginView * yootPluginView(Application & app, const std::string & plugin,
 		const sf::Color & mask, int bitmapId, int objmapId, const std::string & part)
 	{
-		typedef std::tuple<std::string, uint32_t, int, int, std::string> Key;
-		static std::map<Key, std::unique_ptr<YootPluginView> > cache;
 		static std::map<Key, bool> missing;
+		std::map<Key, std::unique_ptr<YootPluginView> > & cache = viewCache();
 		const Key key(plugin, mask.toInteger(), bitmapId, objmapId, part);
 		auto hit = cache.find(key);
 		if (hit != cache.end()) return hit->second.get();
@@ -52,8 +88,35 @@ namespace OT
 				v->bands.push_back(q.second);
 			}
 		}
+
+		// Keep the palette indices for the tower-palette animation.
+		const WindowsPEExecutable::Resource * bmp = p ? p->getResource("2", bitmapId) : nullptr;
+		YootIndexedImage img;
+		if (bmp && decodeYootIndexedDib(bmp->data, bmp->length, img) &&
+			img.width == (int)v->texture.getSize().x && img.height == (int)v->texture.getSize().y)
+		{
+			const sf::Image base = v->texture.copyToImage();
+			v->baseRgba.assign(base.getPixelsPtr(), base.getPixelsPtr() + img.pixels.size() * 4);
+			v->indices = img.pixels;
+			bool used[256] = {false};
+			for (uint8_t i : img.pixels) used[i] = true;
+			for (int i = 0; i < 256; ++i)
+				if (used[i]) v->usedIndices.push_back(i);
+			recolour(*v, currentPalette());
+		}
+
 		YootPluginView * out = v.get();
 		cache[key] = std::move(v);
 		return out;
+	}
+
+	void yootRecolourPluginViews(const std::vector<YootRgb> & palette, int start, int count)
+	{
+		PaletteState & s = currentPalette();
+		s.palette = palette;
+		s.start = start;
+		s.count = count;
+		for (auto & entry : viewCache())
+			recolour(*entry.second, s);
 	}
 }
