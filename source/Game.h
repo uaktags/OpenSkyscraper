@@ -135,6 +135,9 @@ namespace OT {
 		/// YootTower VIP-visited bits (T2TowerDoc +0xa0). Each grade row's
 		/// vipFlag must be set before population can promote.
 		uint32_t yootVipFlags;
+		/// YootTower doc+0x9c: bit 0 = secret plugins loaded (the Kegon hot
+		/// spring unlocks the Spa). Saved as yootSecretItems.
+		uint32_t yootSecretItems = 0;
 		/// YootTower final-item hook (T2.exe FUN_00422670, doc vtable
 		/// +0x188): at the top grade (grade == numGrades) OR that grade's
 		/// flag into yootVipFlags so the last promotion can land. Called by

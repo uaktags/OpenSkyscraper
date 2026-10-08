@@ -718,8 +718,10 @@ namespace OT
 				if (!p || !readYootPluginIdentity(*p, ident)) continue;
 				anyKnown = true;
 				// Grade-independent part of the filter: world mask + secret.
-				if (!yootPluginAvailable(ident, worldMask, ident.gameLevel)) continue;
+				if (!yootPluginAvailable(ident, worldMask, ident.gameLevel, true)) continue;
+				const bool secret = !yootPluginAvailable(ident, worldMask, ident.gameLevel);
 				if (!u.available || ident.gameLevel < u.minGrade) u.minGrade = ident.gameLevel;
+				u.secret = u.available ? (u.secret && secret) : secret;
 				u.available = true;
 			}
 			if (anyKnown) out[link.prototypeId] = u;

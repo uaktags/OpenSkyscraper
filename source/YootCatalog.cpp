@@ -94,7 +94,7 @@ namespace OT
 				if (!readYootPluginIdentity(*p, ident)) continue;
 				// World part of the toolbox filter (FUN_0041ca80); grade is
 				// handled by the unlock table.
-				if (!yootPluginAvailable(ident, worldMask, ident.gameLevel)) continue;
+				if (!yootPluginAvailable(ident, worldMask, ident.gameLevel, true)) continue;
 				YootItemStats s;
 				if (!loadYootItemStats(*p, yootPrototypeVariation(link.prototypeId), s)) continue;
 				s.dependId = ident.dependId;

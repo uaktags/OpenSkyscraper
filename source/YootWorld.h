@@ -224,6 +224,10 @@ namespace OT
 	{
 		bool available = false;  ///< some counterpart exists in this world
 		int minGrade = 0;        ///< lowest mGameLevel among available counterparts (1-based)
+		/// Every available counterpart has ATTR spec+0x24 set (secretItem,
+		/// e.g. the Kegon Spa): offered only once doc+0x9c is set (FUN_0041ca80;
+		/// T2HotSpring -> FUN_00422080).
+		bool secret = false;
 	};
 	/// Resolves yootPrototypeLinks() through the catalog's ATTR data.
 	/// Prototypes whose counterparts are all missing from the catalog are

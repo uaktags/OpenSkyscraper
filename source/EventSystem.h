@@ -5,6 +5,7 @@
 #include "PowerSystem.h"
 #include "VenueSystem.h"
 #include "SpecialSystem.h"
+#include "YootExtrasSystem.h"
 #include "Sprite.h"
 #include "YootEvents.h"
 #include "Math/Vector2D.h"
@@ -110,6 +111,10 @@ namespace OT
 		VenueSystem venues;
 		/// YootTower front desk, housekeeping, parking, fire dept (step 14).
 		SpecialSystem specials;
+		/// YootTower school, kite/dolphins, Mr. Maru, hot spring, traffic map.
+		YootExtrasSystem extras;
+		/// Layer-1 world sprites (the Kegon kite), drawn before the tower.
+		void drawBehindTower(sf::RenderTarget & target) const { if (yoot) extras.drawBehindTower(target); }
 		/// True while the YootTower T2EV scheduler drives the calendar.
 		bool yootMode() const { return yoot; }
 		const YootEventScheduler & yootScheduler() const { return scheduler; }

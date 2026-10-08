@@ -323,6 +323,7 @@ int BuildRules::minRatingToBuild(const std::string & prototypeId) const
 	std::map<std::string, RulesProfile::Unlock>::const_iterator u = m_profile.unlocks.find(prototypeId);
 	if (u == m_profile.unlocks.end())
 		return LevelUp::minRatingToBuild(prototypeId);
+	if (u->second.secret && !m_secretUnlocked) return kUnavailable;
 	return u->second.available ? u->second.minRating : kUnavailable;
 }
 

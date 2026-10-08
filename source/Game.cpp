@@ -449,6 +449,8 @@ Game::Game(Application & app)
 	population = 0;
 	populationNeedsUpdate = false;
 	yootVipFlags = 0;
+	yootSecretItems = 0;
+	activeRules.setSecretUnlocked(false);
 	lastAutosaveDay = (int)floor(time.absolute);
 	lastAutosaveWallClock = autosaveWallClock();
 
@@ -1190,6 +1192,7 @@ void Game::advance(double dt)
 	else
 		win.draw(sky);
 	win.draw(decorations);
+	eventSystem.drawBehindTower(win);
 
 	//Draw the items that are in view.
 	Item::Item * previousItemBelowCursor = itemBelowCursor;
@@ -1710,6 +1713,8 @@ void Game::applyNewTowerProfile()
 	population = 0;
 	populationNeedsUpdate = false;
 	yootVipFlags = 0;
+	yootSecretItems = 0;
+	activeRules.setSecretUnlocked(false);
 	// YootTower doc init: T2DateTime(1, worldDef+0x74, 7:00).
 	if (profile.yootWorld)
 		time.set(profile.startDay + Time::hourToAbsolute(7.0));
@@ -1726,6 +1731,7 @@ void Game::applyNewTowerProfile()
 void Game::setRules(const BuildRules & rules)
 {
 	activeRules = rules;
+	activeRules.setSecretUnlocked((yootSecretItems & 1) != 0);
 	const RulesProfile & profile = activeRules.profile();
 	Time::setLinearClock(profile.linearClock);
 	time.calendar = profile.calendar == RulesProfile::Calendar::YootTower
@@ -1860,6 +1866,7 @@ void Game::encodeXML(tinyxml2::XMLPrinter & xml)
 		xml.PushAttribute("world", activeRules.profile().worldId.c_str());
 		xml.PushAttribute("yootVipFlags", (unsigned)yootVipFlags);
 		xml.PushAttribute("yootRentCycle", yootRentCycle);
+		if (yootSecretItems) xml.PushAttribute("yootSecretItems", (unsigned)yootSecretItems);
 	}
 	xml.PushAttribute("skin", skinIdentifier(skin));
 
@@ -2012,6 +2019,8 @@ void Game::decodeXML(tinyxml2::XMLDocument & xml)
 	}
 	setRating(root->IntAttribute("rating"));
 	yootVipFlags = root->UnsignedAttribute("yootVipFlags", 0);
+	yootSecretItems = root->UnsignedAttribute("yootSecretItems", 0);
+	activeRules.setSecretUnlocked((yootSecretItems & 1) != 0);
 	time.set(root->DoubleAttribute("time"));
 	lastAccountingDay = (int)floor(time.absolute);
 	const int currentCycle = (int)floor(time.absolute / 3.0);
@@ -2880,6 +2889,8 @@ if (!handled) {
 			timeWindow.showMessage("Cannot place item there. " + blockReason + ".");
 		}
 	}
+	if (items.size() != itemsBefore || funds < fundsBefore)
+		eventSystem.extras.onBuilt(toolPosition.y + footprintHeight - 1); // T2HotSpring
 	return items.size() != itemsBefore;
 }
 

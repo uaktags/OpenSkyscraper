@@ -4288,12 +4288,30 @@ static void testYootTenants()
 		const YootWorld w = loadYootWorld(pm, id);
 		const std::map<std::string, YootUnlock> unlocks = resolveYootUnlocks(pm, w.worldMask);
 		int n = 0;
-		for (const auto & u : unlocks) if (isYootTenantPrototypeId(u.first) && u.second.available) ++n;
+		for (const auto & u : unlocks) if (isYootTenantPrototypeId(u.first) && u.second.available && !u.second.secret) ++n;
 		return n;
 	};
 	EXPECT(offered(YootWorld::Id::Tokyo) == 34);
 	EXPECT(offered(YootWorld::Id::Hawaii) == 26);
 	EXPECT(offered(YootWorld::Id::Kegon) == 12);
+	{
+		// The Kegon Spa (ATTR spec+0x24 = 1) waits for the hot spring (doc+0x9c).
+		const std::map<std::string, YootUnlock> ku = resolveYootUnlocks(pm, loadYootWorld(pm, YootWorld::Id::Kegon).worldMask);
+		EXPECT(ku.count("yt_spa") && ku.at("yt_spa").available && ku.at("yt_spa").secret);
+		RulesProfile kp = RulesProfile::yootTower(loadYootWorld(pm, YootWorld::Id::Kegon));
+		RulesProfile::Unlock su;
+		su.minRating = 2;
+		su.secret = true;
+		kp.unlocks["yt_spa"] = su;
+		BuildRules kr(BuildRules::Ruleset::YootTower, kp);
+		EXPECT(kr.minRatingToBuild("yt_spa") == BuildRules::kUnavailable);
+		kr.setSecretUnlocked(true);
+		EXPECT(kr.minRatingToBuild("yt_spa") == 2);
+		const std::map<std::string, YootUnlock> tu2 = resolveYootUnlocks(pm, loadYootWorld(pm, YootWorld::Id::Tokyo).worldMask);
+		EXPECT(tu2.count("school") && tu2.at("school").available && !tu2.at("school").secret && tu2.at("school").minGrade == 4);
+		EXPECT(tu2.count("skybridge") && tu2.at("skybridge").available && tu2.at("skybridge").minGrade == 1);
+		EXPECT(ku.count("school") && !ku.at("school").available);
+	}
 
 	// A sample shop straight from Icecream.t2p.
 	const YootTenantDef * ice = nullptr;

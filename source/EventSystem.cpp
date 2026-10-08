@@ -82,6 +82,7 @@ EventSystem::EventSystem(Game * game)
 , facilities(game)
 , venues(game)
 , specials(game)
+, extras(game)
 , yoot(false)
 {
 	reset();
@@ -123,6 +124,7 @@ void EventSystem::reset()
 	facilities.reset();
 	venues.reset();
 	specials.reset();
+	extras.reset();
 	prevHour = game ? game->time.hour : 0.0;
 	lastDispatchDay = -1;
 	santaActive = false;
@@ -897,6 +899,7 @@ void EventSystem::draw(sf::RenderTarget & target, sf::RenderStates /*states*/) c
 		power.drawDarkening(target);
 		drawOutDecorations(target);
 		venues.draw(target);
+		extras.drawInFront(target);
 	}
 
 	// Rubble from past fires and blasts persists until rebuilt. Skin::Yoot:
@@ -992,6 +995,7 @@ void EventSystem::encodeXML(tinyxml2::XMLPrinter & xml) const
 	xml.PushAttribute("eventRubble", r.c_str());
 	power.encodeXML(xml);
 	venues.encodeXML(xml);
+	extras.encodeXML(xml);
 	// Active events are not persisted mid-resolution; they end on reload.
 }
 
@@ -1016,6 +1020,7 @@ void EventSystem::decodeXML(tinyxml2::XMLElement & xml)
 	syncRuleset();
 	power.decodeXML(xml);
 	venues.decodeXML(xml);
+	extras.decodeXML(xml);
 
 	// A save with an active event reloads safe.
 	type = Type::None;

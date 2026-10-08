@@ -56,6 +56,7 @@ struct RulesProfile
 	{
 		bool available = true;
 		int minRating = 0; ///< zero-based OpenSky rating (= mGameLevel - 1)
+		bool secret = false; ///< needs BuildRules::setSecretUnlocked (YootUnlock::secret)
 	};
 
 	bool yootWorld = false;       ///< true for a YootTower world profile
@@ -138,6 +139,10 @@ public:
 
 	Ruleset ruleset() const;
 	const RulesProfile & profile() const { return m_profile; }
+	/// YootTower doc+0x9c bit 0 (set by the Kegon hot spring): secret
+	/// plugins (RulesProfile::Unlock::secret) become buildable.
+	void setSecretUnlocked(bool on) { m_secretUnlocked = on; }
+	bool secretUnlocked() const { return m_secretUnlocked; }
 
 	/// Stable, parseable identifier suitable for persistence and configuration.
 	const char * identifier() const;
@@ -176,6 +181,7 @@ public:
 private:
 	Ruleset m_ruleset;
 	RulesProfile m_profile;
+	bool m_secretUnlocked = false;
 };
 
 } // namespace OT

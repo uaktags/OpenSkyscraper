@@ -1647,6 +1647,7 @@ BuildRules Application::makeBuildRules(BuildRules::Ruleset ruleset, YootWorld::I
         RulesProfile::Unlock unlock;
         unlock.available = u->second.available;
         unlock.minRating = u->second.minGrade > 0 ? u->second.minGrade - 1 : 0;
+        unlock.secret = u->second.secret;
         profile.unlocks[u->first] = unlock;
     }
     for (size_t i = 0; i < profile.vips.size(); ++i)

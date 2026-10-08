@@ -4,7 +4,8 @@
  * SimTower paths in EventSystem.cpp with the FBEV/TREV/SAEV parameters; the
  * blackout is PowerSystem; Uncle Reggae (T2Maru_Reggae 0x1003a770..) and
  * the rooftop decorations (T2OutDecoration 0x10045760..) are native here;
- * the world X-events are hooks. See doc/yoottower/game-parity.md V1-V7. */
+ * the kite, dolphins, Mr. Maru and the hot spring are YootExtrasSystem.
+ * See doc/yoottower/game-parity.md V1-V7. */
 #include "EventSystem.h"
 
 #include "Application.h"
@@ -95,6 +96,7 @@ void EventSystem::yootSyncRunning()
 	scheduler.setRunning(yootBlackoutIdx, power.isBlackOut());
 	scheduler.setRunning(yootSantaIdx, santaActive);
 	if (reggae.index >= 0) scheduler.setRunning(reggae.index, reggae.active);
+	extras.syncRunning(scheduler);
 }
 
 void EventSystem::yootDispatch()
@@ -113,6 +115,7 @@ void EventSystem::yootDispatch()
 	facilities.advance();
 	venues.advance();
 	specials.advance();
+	extras.advance();
 	if (reggae.active) stepReggae(minute);
 	yootSyncRunning();
 }
@@ -120,6 +123,7 @@ void EventSystem::yootDispatch()
 void EventSystem::yootBegin(int index)
 {
 	const YootEventSpec & e = scheduler.events()[index];
+	if (extras.begin(e, index)) return; // DOEV, TOEV, MAEV 128 (Mr. Maru)
 	if (e.type == "FBEV") {
 		startFire();
 	} else if (e.type == "TREV") {
@@ -135,12 +139,7 @@ void EventSystem::yootBegin(int index)
 	} else if (e.type == "MAEV") {
 		YootReggaeDef def;
 		if (decodeYootReggae(e, def) && def.isReggae())
-			startReggae(index);
-		else
-			// TODO(V4): Mr. Maru (MAEV 128) is a harmless visitor
-			// (MaruReception 0x1003aec0: walk, sound, no stress). Needs a
-			// scripted VIP walker.
-			LOG(DEBUG, "MAEV %d (Mr. Maru) begins: cosmetic, not modelled", e.resId);
+			startReggae(index); // Mr. Maru is YootExtrasSystem's
 	} else if (e.type == "ODEV") {
 		// Persistent: drawn every frame (drawOutDecorations).
 	} else if (e.type == "MREV") {
@@ -152,10 +151,9 @@ void EventSystem::yootBegin(int index)
 		venues.beginWedding();  // T2Wedding (Hawai.t2p 0x10014ed0..)
 	} else if (e.type == "CLEV") {
 		// Persistent: VenueSystem moves and draws the clouds.
+	} else if (e.type == "HSEV") {
+		// T2HotSpring watches the builds: YootExtrasSystem::onBuilt.
 	} else {
-		// TODO(V6): DOEV dolphins, TOEV black kite (cosmetic animation
-		// scripts) and HSEV hot spring (unlocks the Kegon Spa, which has no
-		// OpenSky item yet).
 		LOG(DEBUG, "%s begins: world X-event hook", e.type.c_str());
 	}
 }
