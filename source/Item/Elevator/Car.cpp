@@ -22,6 +22,11 @@ void Car::init()
 	                                                                    "elevator_standard";
 	sprite.setTexture(app->bitmaps.editionTexture(edition, elevator->carBitmap.c_str()));
 	sprite.setOrigin({0.f, 30.f});
+	if (elevator->yootCars) {
+		// Skin::Yoot: the plugin's 32 px car boxes, 2 px above the floor line.
+		sprite.setTexture(elevator->yootCars->texture);
+		sprite.setOrigin({0.f, elevator->yootCars->band(0).size.y + 2.f});
+	}
 	updateSprite();
 
 	arrivingSound.setBuffer(app->sounds["simtower/elevator/arriving"]);
@@ -89,6 +94,14 @@ void Car::updateSprite()
 		index = 2;
 	}
 
+	if (elevator->yootCars) {
+		// Box patterns: 0 empty, 1 one rider, 2 some, 3 crowded (4 = fire).
+		const int n = (int)passengers.size();
+		const int cap = std::max(1, (int)elevator->maxCarCapacity);
+		sprite.setTextureRect(elevator->yootCars->band(n == 0 ? 0 : n == 1 ? 1 : n < cap / 2 ? 2 : 3));
+		reposition();
+		return;
+	}
 	int w = sprite.getTexture().getSize().x / 5;
 	int h = sprite.getTexture().getSize().y;
 	sprite.setTextureRect(sf::IntRect(sf::Vector2i(index*w, 0), sf::Vector2i(w, h)));

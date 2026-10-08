@@ -181,7 +181,9 @@ void YootTenant::decodeXML(tinyxml2::XMLElement & xml)
 	const int staffDefault = model.status >= Yoot::kStatusNight ? d.belongCapacity : 0;
 	model.staff = std::max(0, std::min(d.belongCapacity, xml.IntAttribute("staff", staffDefault)));
 	model.staffIn = std::max(0, std::min(model.staff, xml.IntAttribute("staffIn", open ? model.staff : 0)));
-	model.pattern = std::max(0, xml.IntAttribute("pattern", open ? 1 : 0));
+	// Vending machines open round the clock keep pattern 0 (Drink.t2p).
+	const bool allDay = d.family == YootTenantFamily::Vending && d.openMinute == d.closeMinute;
+	model.pattern = std::max(0, xml.IntAttribute("pattern", open && !allDay ? 1 : 0));
 	model.customers = std::max(0, xml.IntAttribute("customers", 0));
 	model.estimate = yootEstimate;
 	// Customers inside are transient: they finish their stay from now.

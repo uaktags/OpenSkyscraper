@@ -167,6 +167,23 @@ void Elevator::init()
 	shaft.setOrigin({0.f, 36.f});
 	shaft.setPosition({static_cast<float>(position.x * 8), static_cast<float>(-position.y * 36)});
 
+	// Skin::Yoot: the mover plugin's shaft, machine room, pit and cars.
+	yootShaft = yootCars = nullptr;
+	if (game->skin == Skin::Yoot) {
+		const std::string plugin = prototype->yoot ? prototype->yoot->plugin
+			: prototype->id == "elevator-express" ? "BigElev.t2p"
+			: prototype->id == "elevator-service" ? "ServElev.t2p" : "StdElev.t2p";
+		yootShaft = yootPluginView(game->app, plugin);
+		yootCars = yootPluginView(game->app, plugin, sf::Color::Transparent, 200, 200, "Box");
+		if (yootShaft && yootShaft->bands.size() < 3) yootShaft = nullptr;
+	}
+	if (yootShaft) {
+		const sf::IntRect band = yootShaft->band(0);
+		shaft.setTexture(yootShaft->texture);
+		shaft.setTextureRect(band);
+		shaft.setScale({size.x * 8.f / band.size.x, 36.f / band.size.y});
+	}
+
 	topMotor.setTexture(shaft.getTexture());
 	topMotor.setOrigin({0.f, 36.f});
 	bottomMotor.setTexture(shaft.getTexture());
@@ -184,8 +201,16 @@ void Elevator::updateSprite()
 	int w = getSizePixels().x;
 	int h = getSizePixels().y;
 
-	topMotor.setTextureRect(sf::IntRect({(2 * frame + 1) * w, 0}, {w, 36}));
-	bottomMotor.setTextureRect(sf::IntRect({(2 * frame + 2) * w, 0}, {w, 36}));
+	if (yootShaft) {
+		const sf::IntRect top = yootShaft->band(1), pit = yootShaft->band(2);
+		topMotor.setTextureRect(top);
+		topMotor.setScale({w / (float)top.size.x, 36.f / top.size.y});
+		bottomMotor.setTextureRect(pit);
+		bottomMotor.setScale({w / (float)pit.size.x, 36.f / pit.size.y});
+	} else {
+		topMotor.setTextureRect(sf::IntRect({(2 * frame + 1) * w, 0}, {w, 36}));
+		bottomMotor.setTextureRect(sf::IntRect({(2 * frame + 2) * w, 0}, {w, 36}));
+	}
 	topMotor.setPosition({static_cast<float>(position.x * 8), static_cast<float>(-(position.y + size.y) * 36)});
 	bottomMotor.setPosition({static_cast<float>(position.x * 8), static_cast<float>(-(position.y - 1) * 36)});
 }

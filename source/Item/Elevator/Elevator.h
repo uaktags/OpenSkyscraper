@@ -1,5 +1,6 @@
 #pragma once
 #include "../Item.h"
+#include "../../YootItemArt.h"
 
 namespace OT {
 	namespace Item {
@@ -49,6 +50,12 @@ namespace OT {
 				Sprite shaft;
 				Sprite topMotor;
 				Sprite bottomMotor;
+
+				/// Skin::Yoot art of the linked mover plugin (StdElev/BigElev/
+				/// ServElev...): RT_BITMAP 1000 View 0 shaft, 1 machine room,
+				/// 2 pit; RT_BITMAP 200 Box 0..4 cars. Null = OpenSky art.
+				const YootPluginView * yootShaft = nullptr;
+				const YootPluginView * yootCars = nullptr;
 
 				void updateSprite();
 				virtual void render(sf::RenderTarget & target) const;
