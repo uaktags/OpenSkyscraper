@@ -315,7 +315,11 @@ void YootWorldArt::drawBackdrop(sf::RenderTarget & target) const
 		{
 			for (int col = c0; col <= c1; ++col)
 			{
-				const int t = std::min(m_binf.tile(row, col), m_tileCount - 1);
+				int t = m_binf.tile(row, col);
+				// Tokyo.t2p ViewModeChanged 0x100151c0: the Outside view adds 6 to
+				// every tile id >= 100, the street under the tower (106..111).
+				if (m_outside && m_id == YootWorld::Id::Tokyo && t >= 100) t += 6;
+				t = std::min(t, m_tileCount - 1);
 				const YootBackdropGeometry::Rect r = m_geom.cellRect(row, col);
 				// Half-scale art (Hawaii 32x36 tiles) is stretched to the
 				// 64x72 cell (UT2Coordinate::BkgndToQD).
