@@ -13,7 +13,9 @@
 #include "TimeWindow.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
+#include <cstdio>
 #include <vector>
 
 using namespace OT;
@@ -53,6 +55,10 @@ void VipSystem::reset()
 	vipGuest = NULL;
 	goodReviews = 0;
 	badReviews = 0;
+	yootPendingVip = -1;
+	yootArrivalTime = 0.0;
+	yootLastDay = -1;
+	yootDestination = NULL;
 }
 
 void VipSystem::clearApproval()
@@ -302,9 +308,132 @@ void VipSystem::advanceGuest()
 	}
 }
 
+bool VipSystem::liveItem(Item::Item *item) const
+{
+	if (!item)
+		return false;
+	return game->items.find(item) != game->items.end();
+}
+
+Item::Item * VipSystem::findYootDestination(const std::vector<std::string> & prototypes) const
+{
+	for (size_t i = 0; i < prototypes.size(); ++i)
+	{
+		Game::ItemSetByString::const_iterator bucket = game->itemsByType.find(prototypes[i]);
+		if (bucket == game->itemsByType.end())
+			continue;
+		for (Game::ItemSet::const_iterator it = bucket->second.begin(); it != bucket->second.end(); ++it)
+			if (!(*it)->underConstruction)
+				return *it;
+	}
+	return NULL;
+}
+
+void VipSystem::resolveYootVisit()
+{
+	const std::vector<RulesProfile::Vip> & vips = game->activeRules.profile().vips;
+	const int index = yootPendingVip;
+	Item::Item *dest = yootDestination;
+	yootPendingVip = -1;
+	yootDestination = NULL;
+	if (index < 0 || index >= (int)vips.size())
+		return;
+	const RulesProfile::Vip & vip = vips[index];
+	if (!liveItem(dest))
+	{
+		++badReviews;
+		game->timeWindow.showMessage("The VIP's destination is gone; the visit was cancelled.");
+		return;
+	}
+	const int estimate = LevelUp::yootEstimateFromEvaluation(dest->getEvaluation());
+	if (LevelUp::yootVipSucceeds(estimate))
+	{
+		++goodReviews;
+		game->yootVipFlags |= vip.vipFlag;
+		game->timeWindow.showMessage(vip.goodMsg.empty() ? std::string("The VIP enjoyed the visit.") : vip.goodMsg);
+		LOG(IMPORTANT, "YootTower VIP (grade %d) favourable: estimate %d, flag 0x%x", vip.grade, estimate, (unsigned)vip.vipFlag);
+		game->ratingMayIncrease();
+	}
+	else
+	{
+		++badReviews;
+		game->timeWindow.showMessage(vip.badMsg.empty() ? std::string("The VIP was not satisfied.") : vip.badMsg);
+		LOG(IMPORTANT, "YootTower VIP (grade %d) unfavourable: estimate %d", vip.grade, estimate);
+	}
+}
+
+void VipSystem::advanceYoot()
+{
+	if (yootPendingVip >= 0)
+	{
+		if (game->time.absolute >= yootArrivalTime)
+			resolveYootVisit();
+		return;
+	}
+
+	const RulesProfile & profile = game->activeRules.profile();
+	if (profile.vips.empty())
+		return;
+	// T2VisitVIP::Init forces cycleDay to 1 and IsBeginDay admits the first
+	// call of each day; IsBeginTime matches the VIEV begin minute (10:00).
+	const int day = static_cast<int>(std::floor(game->time.absolute));
+	if (day == yootLastDay || game->time.hour * 60.0 < profile.vips.front().beginMinute)
+		return;
+	yootLastDay = day;
+
+	const int grade = game->rating + 1;
+	const int numGrades = (int)profile.grades.size();
+	for (size_t i = 0; i < profile.vips.size(); ++i)
+	{
+		const RulesProfile::Vip & vip = profile.vips[i];
+		if (vip.grade < 1 || vip.grade > numGrades)
+			continue;
+		const RulesProfile::Grade & row = profile.grades[vip.grade - 1];
+		if (!LevelUp::yootVipMayStart(vip.grade, grade, numGrades, vip.vipFlag, row.vipFlag,
+		                              row.population, game->yootVipFlags, game->population))
+			continue;
+
+		if (vip.destPrototypes.empty())
+		{
+			// No OpenSky counterpart for the destination plugin: like the
+			// engine's "plugin not installed" branch, grant the flag outright.
+			game->yootVipFlags |= vip.vipFlag;
+			LOG(IMPORTANT, "YootTower VIP (grade %d) has no destination counterpart; flag 0x%x granted", vip.grade, (unsigned)vip.vipFlag);
+			game->ratingMayIncrease();
+			return;
+		}
+		Item::Item *dest = findYootDestination(vip.destPrototypes);
+		if (!dest)
+		{
+			const std::string name = game->itemFactory.prototypesById.count(vip.destPrototypes.front())
+				? game->itemFactory.prototypesById[vip.destPrototypes.front()]->name
+				: vip.destPrototypes.front();
+			const char c = name.empty() ? 'x' : (char)std::tolower(name[0]);
+			const bool vowel = c == 'a' || c == 'e' || c == 'i' || c == 'o' || c == 'u';
+			game->timeWindow.showMessage(std::string("To invite a VIP, ") + (vowel ? "an " : "a ") + name + " needs to be built.");
+			return;
+		}
+		yootPendingVip = (int)i;
+		yootDestination = dest;
+		yootArrivalTime = std::floor(game->time.absolute) + Time::hourToAbsolute(vip.arrivalMinute / 60.0);
+		const int h = vip.arrivalMinute / 60, m = vip.arrivalMinute % 60;
+		char when[32];
+		std::snprintf(when, sizeof(when), "%d:%02d %s", (h % 12) ? h % 12 : 12, m, h < 12 ? "a.m." : "p.m.");
+		game->timeWindow.showMessage("A VIP has made a reservation to visit your " + dest->prototype->name +
+			". He will be arriving in the lobby at " + when + ".");
+		LOG(IMPORTANT, "YootTower VIP (grade %d) reserved %s, arriving %s", vip.grade, dest->prototype->name.c_str(), when);
+		return;
+	}
+}
+
 void VipSystem::advance(double dt)
 {
 	(void)dt;
+	if (game->activeRules.profile().yootWorld)
+	{
+		advanceYoot();
+		return;
+	}
 	if (visiting)
 	{
 		advanceGuest();
@@ -336,6 +465,7 @@ void VipSystem::encodeXML(tinyxml2::XMLPrinter & xml) const
 	xml.PushAttribute("vipSuiteFloor", suiteFloor);
 	xml.PushAttribute("vipStressTotal", stressTotal);
 	xml.PushAttribute("vipStressTrips", stressTrips);
+	xml.PushAttribute("yootVipLastDay", yootLastDay);
 }
 
 void VipSystem::decodeXML(tinyxml2::XMLElement & xml)
@@ -348,6 +478,11 @@ void VipSystem::decodeXML(tinyxml2::XMLElement & xml)
 	suiteFloor = xml.IntAttribute("vipSuiteFloor", 0);
 	stressTotal = std::max(0.0, xml.DoubleAttribute("vipStressTotal", 0.0));
 	stressTrips = std::max(0, xml.IntAttribute("vipStressTrips", 0));
+	// A pending YootTower reservation is transient (item pointer); drop it.
+	yootPendingVip = -1;
+	yootDestination = NULL;
+	yootArrivalTime = 0.0;
+	yootLastDay = xml.IntAttribute("yootVipLastDay", -1);
 
 	// Guest pointers are transient. A mid-stay reload voids the EXE visit;
 	// preserve the approval/review counters and let the next cadence retry.

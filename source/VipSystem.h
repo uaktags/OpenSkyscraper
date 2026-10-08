@@ -2,12 +2,13 @@
 
 #include "GameObject.h"
 #include <string>
+#include <vector>
 
 namespace tinyxml2 { class XMLPrinter; class XMLElement; }
 
 namespace OT
 {
-	namespace Item { class Hotel; }
+	namespace Item { class Hotel; class Item; }
 	class Person;
 
 	/** Authentic VIP visit state machine.
@@ -48,6 +49,15 @@ namespace OT
 		void clearApproval();
 
 	private:
+		/// YootTower VIEV visits (T2VisitVIP): one reservation attempt per
+		/// day at the VIEV begin time, arrival at the VIP's +0x38 minute,
+		/// success when the estimate exceeds 200; success sets the VIP's
+		/// flag in Game::yootVipFlags.
+		void advanceYoot();
+		void resolveYootVisit();
+		Item::Item * findYootDestination(const std::vector<std::string> & prototypes) const;
+		bool liveItem(Item::Item * item) const;
+
 		bool promotionNeedsVisit() const;
 		void armVisit();
 		void beginVisit();
@@ -72,5 +82,11 @@ namespace OT
 		Person * vipGuest;
 		int    goodReviews;
 		int    badReviews;
+
+		// --- YootTower VIP state ---
+		int    yootPendingVip;    ///< index into RulesProfile::vips, -1 = none
+		double yootArrivalTime;   ///< absolute time the pending VIP is judged
+		int    yootLastDay;       ///< day of the last reservation attempt
+		Item::Item * yootDestination;
 	};
 }
