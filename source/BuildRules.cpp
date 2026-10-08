@@ -91,6 +91,13 @@ RulesProfile RulesProfile::yootTower(const YootWorld & world)
 		p.grades.push_back(g);
 	}
 
+	// T2EV events: the plugin's list, or the decoded built-in one when the
+	// world came from builtinYootWorld() (no plugin, so no events).
+	p.worldWidth = world.width;
+	p.events = yootEventSpecs(world);
+	if (!world.fromPlugin && p.events.empty())
+		p.events = builtinYootEventSpecs((int)world.id);
+
 	if (const YootEvent * viev = world.findEvent("VIEV"))
 	{
 		for (size_t i = 0; i < viev->vips.size(); ++i)
@@ -200,6 +207,12 @@ bool BuildRules::allowsFootprint(int x, int floor, int width, int height) const
 
 int BuildRules::minRatingToBuild(const std::string & prototypeId) const
 {
+	// The Power Room (PowerRoom.t2p) exists only in YootTower; without
+	// world unlock data it keeps its ATTR mGameLevel 3.
+	if (prototypeId == "powerroom" && m_ruleset != Ruleset::YootTower)
+		return kUnavailable;
+	if (prototypeId == "powerroom" && m_profile.unlocks.find(prototypeId) == m_profile.unlocks.end())
+		return 2;
 	std::map<std::string, RulesProfile::Unlock>::const_iterator u = m_profile.unlocks.find(prototypeId);
 	if (u == m_profile.unlocks.end())
 		return LevelUp::minRatingToBuild(prototypeId);

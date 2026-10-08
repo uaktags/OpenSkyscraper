@@ -277,6 +277,14 @@ namespace OT
 			if (!r.ok()) return false;
 			assignYootVipFlags(e.vips);
 		}
+		else if (resType == "MAEV")
+		{
+			// T2Maru_Reggae ctor 0x1003a770: 4 ints, then the claim pstr
+			// (empty for Mr. Maru, "'Uncle Reggae is noisy.'" for Reggae).
+			for (int k = 0; k < 4; ++k) e.body.push_back(r.i());
+			e.text = r.s();
+			if (!r.ok()) return false;
+		}
 		else
 		{
 			while (r.left() >= 4) e.body.push_back(r.i());
@@ -479,6 +487,7 @@ namespace OT
 			{"medicalcenter",     {"Doctor's.t2p", nullptr}},
 			{"recycling",         {"TrashFacility.t2p", "KTrashFacility.t2p", nullptr}},
 			{"cathedral",         {"Cathedral.t2p", nullptr}},
+			{"powerroom",         {"PowerRoom.t2p", nullptr}},
 		};
 		return links;
 	}

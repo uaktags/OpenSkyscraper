@@ -74,6 +74,7 @@ namespace OT
 		bool found = false;        ///< resource present and header parsed
 		YootEventHeader header;
 		std::vector<int> body;     ///< remaining ints (non-VIEV events)
+		std::string text;          ///< MAEV trailing pstr (T2Maru_Reggae ctor 0x1003a770)
 		std::vector<YootVipDef> vips; ///< VIEV only
 	};
 

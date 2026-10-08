@@ -7,6 +7,8 @@
 #include <string>
 #include <vector>
 
+#include "YootEvents.h"
+
 namespace OT {
 
 struct YootWorld;
@@ -87,6 +89,10 @@ struct RulesProfile
 	std::vector<Grade> grades;    ///< empty = SimTower LevelUp table
 	std::vector<Vip> vips;
 	std::map<std::string, Unlock> unlocks; ///< absent = SimTower lock table
+
+	/// T2EV scenario events (VIEV excluded); empty = SimTower calendar.
+	std::vector<YootEventSpec> events;
+	int worldWidth = 0;           ///< WORLDDEF width in units (Santa's begin minute)
 
 	int unitForX(int x) const { return x + unitOriginX; }
 	int rowForFloor(int floor) const { return groundRow - 1 - floor; }
