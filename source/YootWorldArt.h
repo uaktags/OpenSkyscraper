@@ -75,6 +75,10 @@ namespace OT
 		void drawLobbyView(sf::RenderTarget & target, int height, float x0, float x1, float top, sf::Color tint) const;
 
 		bool hasSides() const { return m_sidesReady; }
+		/// Kegon overrides T2WorldDef::DrawOptionObj (0x100725e0) and
+		/// DrawCrane with empty functions: no fire escapes, awnings or crane
+		/// (its wooden lobby post is painted into the backdrop).
+		bool hidesOptionObjects() const { return m_loaded && m_id == YootWorld::Id::Kegon; }
 		const sf::Texture & sidesTexture() const { return m_sides; }
 		sf::IntRect sideRect(bool right) const { return right ? m_sideR : m_sideL; }
 

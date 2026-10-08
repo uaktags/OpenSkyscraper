@@ -161,6 +161,7 @@ void Decorations::render(sf::RenderTarget & target) const
 	const OT::YootWorldArt * yoot = game->yootSkinArt();
 	const bool yootSides = yoot && yoot->hasSides();
 	const bool yootCrane = yoot && yoot->hasCrane();
+	if (yoot && yoot->hidesOptionObjects()) return;
 
 	sf::FloatRect rect = target.getView().getViewport();
 	for (int y = (int)floor(dmin.y / 36); y <= ceil(dmax.y / 36); y++) {

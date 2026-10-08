@@ -155,6 +155,7 @@ bool YootWorldArt::load(const PluginManager & plugins, YootWorld::Id id)
 			m_slabReady = toTexture(img, false, m_slabTex);
 	}
 	// Fire-escape sides: 1002 SideL / SideR pattern 0.
+	if (id != YootWorld::Id::Kegon)
 	{
 		YootIndexedImage img;
 		std::vector<ObjmapBlock> map;
@@ -163,6 +164,7 @@ bool YootWorldArt::load(const PluginManager & plugins, YootWorld::Id id)
 			m_sidesReady = toTexture(img, true, m_sides);
 	}
 	// Lobby awnings: 1003 TentL / TentR pattern 0.
+	if (id != YootWorld::Id::Kegon)
 	{
 		YootIndexedImage img;
 		std::vector<ObjmapBlock> map;
@@ -171,6 +173,7 @@ bool YootWorldArt::load(const PluginManager & plugins, YootWorld::Id id)
 			m_tentsReady = toTexture(img, true, m_tents);
 	}
 	// Rooftop crane: 3000 OutCrane.
+	if (id != YootWorld::Id::Kegon)
 	{
 		YootIndexedImage img;
 		std::vector<ObjmapBlock> map;
