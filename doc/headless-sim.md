@@ -84,6 +84,13 @@ CTest runs `sim_<default|new>_<simtower|opensky>`: 2000 ticks on
 `data/default.tower` and on a new tower, comparing the summary with
 `tests/sim/<name>.json` (`tests/sim/run_sim_golden.cmake`). They are
 skipped when neither `DISPLAY` nor `xvfb-run` is available.
+`sim_people_yoottower` runs `tests/sim/yoot_people.tower` (a small Tokyo
+tower with nine plugin tenants; the plugins come from `data/Plugins`) for
+2000 ticks and pins the visitor pool and the walking customers: the
+summary's events include each plugin tenant's daily `customers:` count and
+a midnight `pool:` line (people called and entered, pool population,
+visitors by phase). YootTower visitors live in a plain vector in creation
+order, so they need no `SimLess`.
 
 ```sh
 cd build && ctest -R sim_ --output-on-failure
