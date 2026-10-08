@@ -88,6 +88,14 @@ namespace OT {
 		Journey journey;
 		double stress;
 		double eval;
+		/// YootTower people estimate (T2People +0x84, 1..300) and completed
+		/// trips (+0x80, max 4); plan step 8 (P2).
+		int yootEstimate;
+		int yootTrips;
+		/// T2People::CalcCurrEstimate with the current stress.
+		int yootCurrentEstimate() const;
+		/// T2People::UpdateEstimation at the end of a trip.
+		void yootFinishTrip();
 		double pendingJourneyStress;
 		Type type;
 		State state;

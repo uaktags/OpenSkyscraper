@@ -329,6 +329,25 @@ Item::Item * VipSystem::findYootDestination(const std::vector<std::string> & pro
 	return NULL;
 }
 
+int VipSystem::yootVisitEstimate(Item::Item *dest) const
+{
+	// T2People::VIPEstimation: the VIP's CalcCurrEstimate > 200. No VIP
+	// person is spawned, so use the people-estimates (P2) of the people at
+	// the destination, then its 1..300 tenant estimate (J1), and only as a
+	// last resort the 0..100 evaluation x 3.
+	int sum = 0, n = 0;
+	for (Item::Item::People::const_iterator p = dest->people.begin(); p != dest->people.end(); ++p)
+	{
+		sum += (*p)->yootCurrentEstimate();
+		++n;
+	}
+	if (n > 0)
+		return sum / n;
+	if (dest->yootEstimate > 0)
+		return dest->yootEstimate;
+	return LevelUp::yootEstimateFromEvaluation(dest->getEvaluation());
+}
+
 void VipSystem::resolveYootVisit()
 {
 	const std::vector<RulesProfile::Vip> & vips = game->activeRules.profile().vips;
@@ -345,7 +364,7 @@ void VipSystem::resolveYootVisit()
 		game->timeWindow.showMessage("The VIP's destination is gone; the visit was cancelled.");
 		return;
 	}
-	const int estimate = LevelUp::yootEstimateFromEvaluation(dest->getEvaluation());
+	const int estimate = yootVisitEstimate(dest);
 	if (LevelUp::yootVipSucceeds(estimate))
 	{
 		++goodReviews;

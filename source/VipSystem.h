@@ -55,6 +55,8 @@ namespace OT
 		/// flag in Game::yootVipFlags.
 		void advanceYoot();
 		void resolveYootVisit();
+		/// 1..300 estimate the VIP verdict compares with 200.
+		int yootVisitEstimate(Item::Item * dest) const;
 		Item::Item * findYootDestination(const std::vector<std::string> & prototypes) const;
 		bool liveItem(Item::Item * item) const;
 

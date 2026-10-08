@@ -8,6 +8,7 @@
 #include "Item/Item.h"
 #include "NameManager.h"
 #include "Person.h"
+#include "YootRules.h"
 
 using namespace OT;
 const double Person::kMaxStress = 300.0;
@@ -67,6 +68,8 @@ Person::Person(Game * game, Type type)
 	stress = 0.0;
 	eval   = 0.0;
 	pendingJourneyStress = 0.0;
+	yootEstimate = Yoot::kPeopleEstimateStart;
+	yootTrips = 0;
 	animOffset = (double)(rand() % 1000) / 1000.0;
 	name   = NameManager::makeName((int)type);
 	if (game) game->people.insert(this);
@@ -116,6 +119,19 @@ void Person::recordNoRoute(int from, int to)
 	}
 }
 
+int Person::yootCurrentEstimate() const
+{
+	return Yoot::calcCurrEstimate(yootEstimate, yootTrips, (int)stress);
+}
+
+void Person::yootFinishTrip()
+{
+	int s = (int)stress;
+	Yoot::updateEstimation(yootEstimate, yootTrips, s);
+	stress = s;
+	pendingJourneyStress = 0.0;
+}
+
 void Person::advance(double dt)
 {
 	if (state == kHome || state == kResting)
@@ -131,6 +147,11 @@ void Person::encodeXML(tinyxml2::XMLPrinter &xml)
 	xml.PushAttribute("name", name.c_str());
 	xml.PushAttribute("from", from.c_str());
 	xml.PushAttribute("goingTo", goingTo.c_str());
+	if (yootTrips != 0 || yootEstimate != Yoot::kPeopleEstimateStart)
+	{
+		xml.PushAttribute("yootEstimate", yootEstimate);
+		xml.PushAttribute("yootTrips", yootTrips);
+	}
 }
 
 void Person::decodeXML(tinyxml2::XMLElement &xml)
@@ -145,6 +166,8 @@ void Person::decodeXML(tinyxml2::XMLElement &xml)
 	name    = xml.Attribute("name", "");
 	from    = xml.Attribute("from", "");
 	goingTo = xml.Attribute("goingTo", "");
+	yootEstimate = Yoot::clampEstimate(xml.IntAttribute("yootEstimate", Yoot::kPeopleEstimateStart));
+	yootTrips = std::max(0, std::min(Yoot::kMaxTrips, xml.IntAttribute("yootTrips", 0)));
 }
 
 Person::Journey::Journey(Person * p)

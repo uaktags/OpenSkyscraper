@@ -81,6 +81,14 @@ namespace OT {
 		/// YootTower tenant estimate on the 1..300 scale (T2Tenant +0x90,
 		/// plan step 8); 0 = not evaluated yet / not YootTower.
 		int yootEstimate = 0;
+		/// YootTower J3 (T2Tenant::DecideResidencialEstimation 0x10061380):
+		/// let tenants stay while the estimate is >= 70; a vacant tenant
+		/// fills only above 200. Unevaluated (0) passes.
+		bool yootKeepsTenants(bool occupied) const
+		{
+			if (yootEstimate == 0) return true;
+			return occupied ? yootEstimate >= 70 : yootEstimate > 200;
+		}
 
 		/// Construction animation state. Set by Factory::make on fresh
 		/// placement; cleared by Game::advance once time.absolute reaches

@@ -317,6 +317,8 @@ bool Condo::isAttractive()
 	// Need a route to the lobby, and a non-critical evaluation score.
 	// JudgeSystem refreshes evaluation daily; the default of 50 keeps fresh
 	// condos attractive before the first evaluation pass.
+	if (prototype->yoot)
+		return !lobbyRoute.empty() && yootKeepsTenants(occupied);
 	return !lobbyRoute.empty() && evaluation >= 30.0;
 }
 

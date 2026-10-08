@@ -334,6 +334,8 @@ void YootCondo::removePerson(Person *p)
 
 bool YootCondo::isAttractive()
 {
+	if (prototype->yoot)
+		return !lobbyRoute.empty() && yootKeepsTenants(occupied);
 	return !lobbyRoute.empty();
 }
 

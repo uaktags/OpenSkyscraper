@@ -77,6 +77,12 @@ namespace OT
 		double scoreHotel(Game * game, Item::Item * item);
 		double scoreCommercial(Game * game, Item::Item * item);
 
+		/// YootTower 1..300 estimate (plan step 8, J1-J3); 0 when the item
+		/// is not a YootTower-evaluated tenant.
+		int yootEstimate(Game * game, Item::Item * item);
+		/// T2TrafficInfo::GetRange stand-in (0..3) at a tenant's entrance.
+		static int yootTrafficRange(Game * game, Item::Item * item);
+
 		/// Aggregate hotel review (JudgeAllHotel equivalent). Returns
 		/// true if hotels are underperforming enough to surface a daily
 		/// complaint. Also updates lastCounts.hotelAvgEval.

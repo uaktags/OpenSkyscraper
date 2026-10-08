@@ -4,6 +4,7 @@
 #include "Item/Parking.h"
 #include "JudgeSystem.h"
 #include "Person.h"
+#include "YootRules.h"
 
 #include <algorithm>
 #include <cmath>
@@ -230,6 +231,52 @@ double JudgeSystem::scoreCommercial(Game * game, Item::Item * item)
 	return clampScore(score);
 }
 
+int JudgeSystem::yootTrafficRange(Game * game, Item::Item * item)
+{
+	// OpenSky has no per-cell traffic counter (T2TrafficInfo, decayed hourly
+	// people passes bucketed into ranges 0..3). Stand-in: people queued at
+	// or riding a mover that serves this floor within 8 cells of the
+	// tenant, one range step per 5 people.
+	const int floor = item->position.y;
+	int count = 0;
+	for (Game::ItemSet::const_iterator it = game->items.begin(); it != game->items.end(); ++it)
+	{
+		Item::Item *mover = *it;
+		if (!mover->canHaulPeople() || mover->people.empty()) continue;
+		if (floor < mover->position.y || floor >= mover->position.y + mover->size.y) continue;
+		const int gap = mover->position.x >= item->position.x + item->size.x
+			? mover->position.x - (item->position.x + item->size.x)
+			: (item->position.x >= mover->position.x + mover->size.x
+				? item->position.x - (mover->position.x + mover->size.x) : 0);
+		if (gap > 8) continue;
+		for (Item::Item::People::const_iterator p = mover->people.begin(); p != mover->people.end(); ++p)
+			if ((*p)->journey.fromFloor == floor || (*p)->journey.toFloor == floor) ++count;
+	}
+	return std::min(3, count / 5);
+}
+
+int JudgeSystem::yootEstimate(Game * game, Item::Item * item)
+{
+	const YootItemStats *stats = item->prototype->yoot;
+	if (!stats) return 0;
+	const std::string & id = item->prototype->id;
+	const bool residential = id == "office" || id == "condo" || id == "yoot_condo" ||
+		id == "hotel_single" || id == "hotel_double" || id == "hotel_suite";
+	if (!residential)
+		return item->yootEstimate; // commercial: set at close (CalcProfitEstimate)
+
+	// T2Tenant::UpdateResidencialEstimate 0x10060e20.
+	Yoot::ResidentialInputs in;
+	for (Item::Item::People::const_iterator p = item->people.begin(); p != item->people.end(); ++p)
+		in.peopleEstimates.push_back((*p)->yootCurrentEstimate());
+	in.previousPeopleEstimate = Yoot::kPeopleEstimateStart;
+	in.senseOfNoise = stats->senseOfNoise;
+	in.trafficRange = in.senseOfNoise ? yootTrafficRange(game, item) : 0;
+	in.priceIndex = Yoot::priceIndex(game->yootPriceSelection(item), (int)stats->inMoney.size());
+	in.yearsSinceBuilt = 0; // OpenSky items carry no build date
+	return Yoot::residentialEstimate(in);
+}
+
 void JudgeSystem::evaluateAll(Game * game)
 {
 	const int day = static_cast<int>(std::floor(game->time.absolute));
@@ -356,8 +403,16 @@ void JudgeSystem::evaluateAll(Game * game)
 			score = scoreCommercial(game, item);
 		}
 
+		// YootTower (J1): the 1..300 estimate drives the decisions; the
+		// 0..100 evaluation mirrors it for overlays and inspectors.
+		const int yoot = game->activeRules.profile().yootWorld ? yootEstimate(game, item) : 0;
+		if (yoot > 0)
+		{
+			item->yootEstimate = yoot;
+			score = yoot / 3.0;
+		}
 		item->evaluation = score;
-		if (score < 25.0) ++lastCounts.criticalTenants;
+		if (yoot > 0 ? yoot < Yoot::kEstimateMoveOut : score < 25.0) ++lastCounts.criticalTenants;
 
 		// Mirror the item score onto each person currently at the item, so
 		// the inspector and per-person overlays have something to show.
