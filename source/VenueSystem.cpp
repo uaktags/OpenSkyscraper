@@ -623,7 +623,7 @@ void VenueSystem::genericTick(Item::YootVenue * v, int minute)
 	const int inside = v->users();
 	if (id == "attraction")
 	{
-		v->setPattern(Yoot::attractionPattern(inside));
+		v->setPattern(Yoot::attractionPattern(v->status >= 30, inside));
 		Item::Attraction * a = dynamic_cast<Item::Attraction *>(v);
 		if (a && Yoot::attractionRenovates(grade(), a->visitorsToday, a->renovated))
 		{
@@ -635,8 +635,11 @@ void VenueSystem::genericTick(Item::YootVenue * v, int minute)
 		}
 	}
 	else if (id == "observatory")
-		v->setPattern(!open_ ? ((minute < 360 || minute >= 1080) ? 0 : 1)
-			: inside == 0 ? 1 : inside < cap / 3 ? 2 : inside < 2 * cap / 3 ? 3 : 4);
+		// Observatory.t2p FUN_1000cd70 / cb90 / ccb0: the lit, empty deck
+		// (0) by day and while open with nobody in, the dark one (1) from
+		// 18:00 to 06:00, then 2 / 3 / 4 as visitors fill it.
+		v->setPattern(!open_ ? ((minute < 360 || minute >= 1080) ? 1 : 0)
+			: inside == 0 ? 0 : inside < cap / 3 ? 2 : inside < 2 * cap / 3 ? 3 : 4);
 	else if (id == "yootcathedral")
 	{
 		if (v->pattern < 2 || !wedding.active) v->setPattern(open_ ? 1 : 0);

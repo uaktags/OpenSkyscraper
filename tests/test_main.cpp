@@ -5297,7 +5297,8 @@ static void testYootVenues()
 	EXPECT(Y::cathedralOpen(true, 660, 660, 1020) && !Y::cathedralOpen(false, 700, 660, 1020) && !Y::cathedralOpen(true, 1020, 660, 1020));
 	EXPECT(Y::attractionRenovates(4, 200, false) && !Y::attractionRenovates(4, 199, false));
 	EXPECT(!Y::attractionRenovates(5, 300, false) && !Y::attractionRenovates(4, 300, true));
-	EXPECT(Y::attractionPattern(0) == 0 && Y::attractionPattern(39) == 1 && Y::attractionPattern(40) == 2);
+	EXPECT(Y::attractionPattern(false, 5) == 0 && Y::attractionPattern(true, 0) == 1);
+	EXPECT(Y::attractionPattern(true, 39) == 2 && Y::attractionPattern(true, 40) == 3);
 
 	// Subway: MREV 12 trains; level L runs the types < L (4/8/10/12 trains).
 	const RulesProfile tokyo = RulesProfile::yootTower(loadYootWorld(pm, YootWorld::Id::Tokyo));

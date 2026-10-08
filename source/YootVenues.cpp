@@ -238,10 +238,11 @@ namespace OT
 			return holiday && minute >= open && minute < close;
 		}
 
-		int attractionPattern(int inside)
+		int attractionPattern(bool open, int inside)
 		{
-			if (inside <= 0) return 0;
-			return inside < 40 ? 1 : 2;
+			if (!open) return 0;
+			if (inside <= 0) return 1;
+			return inside < 40 ? 2 : 3;
 		}
 
 		bool attractionRenovates(int grade, int visitorsToday, bool renovated)

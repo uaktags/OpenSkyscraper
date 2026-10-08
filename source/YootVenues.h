@@ -151,11 +151,12 @@ namespace OT
 		/// Cathedral.t2p: opens on holidays only, 11:00 (TNDF 660) to 17:00.
 		bool cathedralOpen(bool holiday, int minute, int open, int close);
 
-		/// Attraction.t2p: pattern 0 / 1 / 2 for 0, < 40, >= 40 visitors
-		/// inside (status 30/31/32); FUN_1000c290 renovates it once
+		/// Attraction.t2p ChangeStatusOnIdle (0x1000c290): closed is pattern
+		/// 0; open it is status 30/31/32 for 0, < 40, >= 40 visitors inside,
+		/// drawn as pattern status - 29 (1 / 2 / 3). It renovates once
 		/// grade < 5 and today's visitors reach 200.
 		const int kAttractionRenovateVisitors = 200;
-		int attractionPattern(int inside);
+		int attractionPattern(bool open, int inside);
 		bool attractionRenovates(int grade, int visitorsToday, bool renovated);
 
 		// ================================================= subway (I7)
