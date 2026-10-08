@@ -13,6 +13,7 @@
 #include "Item/Item.h"
 #include "Logger.h"
 #include "Person.h"
+#include "YootCatalog.h"
 #include "YootWorld.h"
 
 #include <algorithm>
@@ -38,7 +39,8 @@ namespace
 	bool isRestaurant(const Item::Item * item)
 	{
 		// ToolDef category 50 = "Restaurants" (FindTargetTenant compares
-		// +0x38 with the tenant ToolDef's +100).
+		// +0x38 with the tenant ToolDef's +100): the plugin restaurants too.
+		if (item->prototype->yoot) return item->prototype->yoot->category == 50;
 		const std::string & id = item->prototype->id;
 		return id == "fastfood" || id == "restaurant";
 	}
