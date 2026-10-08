@@ -629,7 +629,10 @@ namespace OT
 			{"hotel_double",      {"Twinroom.t2p", "Smallroom.t2p", nullptr}},
 			{"hotel_suite",       {"Suiteroom.t2p", "Largeroom.t2p", nullptr}},
 			{"office",            {"Office.t2p", nullptr}},
-			{"parking",           {"Parking.t2p", nullptr}},
+			// Parking.t2p variation 0 is the lot, 1 the gate (plan step 14); the
+			// SimTower parking and ramp are not offered in YootTower.
+			{"parkinglot",        {"Parking.t2p", nullptr}},
+			{"parkinggate",       {"Parking.t2p", nullptr}},
 			{"condo",             {"Condo.t2p", "HawaianCondo.t2p", nullptr}},
 			{"yoot_condo",        {"Condo.t2p", "HawaianCondo.t2p", nullptr}},
 			{"security",          {"Securityroom.t2p", nullptr}},
@@ -654,6 +657,11 @@ namespace OT
 			{"gatheringarea",     {"GatheringArea.t2p", nullptr}},
 			{"boatdeck",          {"Boatdeck.t2p", nullptr}},
 			{"subway",            {"Subway.t2p", nullptr}},
+			// Plan step 14: hotel back office, fire department, apartment.
+			{"frontdesk",         {"Front.t2p", "RFront.t2p", nullptr}},
+			{"housekeeping",      {"Maintenance.t2p", "RMaintenance.t2p", nullptr}},
+			{"firedept",          {"FireDepartment.t2p", nullptr}},
+			{"apartment",         {"Apartment.t2p", nullptr}},
 		};
 		// Plugin-backed tenants (YootTenants.h) come first so that a covered
 		// plugin resolves to its own prototype (BLD import, VIP targets)

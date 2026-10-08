@@ -58,6 +58,10 @@ namespace OT
 		int closeMinute = 0;
 		int bindMinutes = 0;           ///< stay length
 		int maxBuild = 0;              ///< 0 = unlimited
+		int belongCapacity = 0;        ///< T2TenantDef +0x160 residents / staff
+		int toolType = 0;              ///< ToolDef +0x50 (== ATTR mItemType)
+		int width = 0, height = 0;     ///< ToolDef +0x54 / +0x58 footprint units
+		uint32_t dependId = 0;         ///< ATTR mDependID (W4: Front Desk "NORF")
 
 		bool mover = false;
 		int maxLength = 0;             ///< floors; 0 = unlimited

@@ -162,6 +162,9 @@ public:
 	/// native items) and the SimTower facilities they replace there.
 	static bool isYootOnlyPrototype(const std::string & prototypeId);
 	static bool isReplacedInYoot(const std::string & prototypeId);
+	/// Plugin file of a YootTower-only prototype when no catalog entry is
+	/// loaded (toolbox icon, art); nullptr for other prototypes.
+	static const char * yootOnlyPlugin(const std::string & prototypeId);
 
 	/// Minimum zero-based rating to build `prototypeId`; kUnavailable when
 	/// the active world does not offer it at all.

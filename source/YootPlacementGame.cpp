@@ -31,11 +31,11 @@ namespace
 		return item->position.x < maxX && item->getRect().maxX() > minX;
 	}
 
-	/// Parking lots ("parking") and gates ("parkingramp", plan step 14).
+	/// Parking lots and gates (Parking.t2p variations 0 / 1, plan step 14).
 	std::vector<Yoot::ParkingPiece> parkingPieces(const Game & game, const Item::Item * except)
 	{
 		std::vector<Yoot::ParkingPiece> out;
-		static const char * kinds[] = {"parking", "parkingramp"};
+		static const char * kinds[] = {"parkinglot", "parkinggate"};
 		for (const char * kind : kinds) {
 			Game::ItemSetByString::const_iterator it = game.itemsByType.find(kind);
 			if (it == game.itemsByType.end()) continue;
@@ -46,7 +46,7 @@ namespace
 				p.height = (*i)->size.y;
 				p.minX = (*i)->position.x;
 				p.maxX = (*i)->getRect().maxX();
-				p.gate = std::string(kind) == "parkingramp";
+				p.gate = std::string(kind) == "parkinggate";
 				out.push_back(p);
 			}
 		}
@@ -79,16 +79,15 @@ std::string Yoot::placementError(const Game & game, const Item::AbstractPrototyp
 	if (!code && !isMover(proto))
 		code = finalItemRule(proto->yoot && proto->yoot->finalItem(), floor, height, profile.highestFloor);
 
-	// Lot adjacency needs the Parking Gate item (step 14); until it exists
-	// the rule would make lots unplaceable, so it waits for it.
-	const bool hasGate = game.itemFactory.prototypesById.count("parkingramp") != 0;
-	if (!code && hasGate && (proto->id == "parking" || proto->id == "parkingramp")) {
+	// Parking.t2p AreaCheck / Entrance rules (#52, #56), live since the
+	// Parking Gate item exists (step 14).
+	if (!code && (proto->id == "parkinglot" || proto->id == "parkinggate")) {
 		ParkingPiece piece;
 		piece.floor = floor;
 		piece.height = height;
 		piece.minX = x;
 		piece.maxX = x + proto->size.x;
-		piece.gate = proto->id == "parkingramp";
+		piece.gate = proto->id == "parkinggate";
 		code = parkingPlaceRule(parkingPieces(game, nullptr), piece);
 	}
 	return code ? errorText(proto, code) : std::string();
@@ -126,14 +125,14 @@ bool Yoot::removalAllowed(const Game & game, const Item::Item * item, std::strin
 		f.tenantAbove = f.floor > 0 && beyond;
 		f.tenantBelow = f.floor < 0 && beyond;
 		code = floorRemoveRule(f);
-	} else if (proto->id == "parking" || proto->id == "parkingramp") {
+	} else if (proto->id == "parkinglot" || proto->id == "parkinggate") {
 		// Parking.t2p DoDestructProc FUN_1000bf00.
 		ParkingPiece piece;
 		piece.floor = item->position.y;
 		piece.height = item->size.y;
 		piece.minX = item->position.x;
 		piece.maxX = item->getRect().maxX();
-		piece.gate = proto->id == "parkingramp";
+		piece.gate = proto->id == "parkinggate";
 		code = parkingRemoveRule(parkingPieces(game, item), piece);
 	}
 	if (!code) return true;

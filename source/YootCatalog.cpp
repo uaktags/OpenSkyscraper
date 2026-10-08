@@ -31,6 +31,9 @@ namespace OT
 		s.category = def.tool.category;
 		s.categoryName = def.tool.categoryName;
 		s.toolNo = def.tool.toolNo;
+		s.toolType = def.tool.toolType;
+		s.width = def.tool.width;
+		s.height = def.tool.height;
 		s.price = v.price * kYootMoneyUnit;
 		s.outMoney = v.outMoney * kYootMoneyUnit;
 		s.power = v.consumptionPower;
@@ -45,6 +48,7 @@ namespace OT
 			s.closeMinute = def.tenant.closeTime;
 			s.bindMinutes = def.tenant.bindTime;
 			s.maxBuild = def.tenant.maxBuildCount;
+			s.belongCapacity = def.tenant.belongCapacity;
 		}
 		else
 		{
@@ -73,7 +77,7 @@ namespace OT
 	int yootPrototypeVariation(const std::string & prototypeId)
 	{
 		if (prototypeId == "lobby") return 1;    // Floor.t2p: Floor, Lobby
-		if (prototypeId == "parking") return 1;  // Parking.t2p: lot, gate (OpenSky ramp)
+		if (prototypeId == "parkinggate") return 1; // Parking.t2p: 0 lot, 1 gate
 		return 0;
 	}
 
@@ -93,6 +97,7 @@ namespace OT
 				if (!yootPluginAvailable(ident, worldMask, ident.gameLevel)) continue;
 				YootItemStats s;
 				if (!loadYootItemStats(*p, yootPrototypeVariation(link.prototypeId), s)) continue;
+				s.dependId = ident.dependId;
 				out[link.prototypeId] = s;
 				break;
 			}

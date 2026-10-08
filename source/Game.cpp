@@ -194,16 +194,24 @@ static void settleYootQuarter(Game *game)
 // inMoneyIndex 2 paid 9 x 3 x $3,000 = $81,000 by 05:24.
 static void collectYootOfficeRent(Game *game)
 {
-	Game::ItemSetByString::const_iterator bucket = game->itemsByType.find("office");
-	if (bucket == game->itemsByType.end()) return;
-	int total = 0;
-	for (Game::ItemSet::const_iterator it = bucket->second.begin(); it != bucket->second.end(); ++it)
+	// Apartments pay 3 x inMoney the same way (oracle: settlement 1102
+	// -21 = 3 x 7 units at inMoneyIndex 2).
+	int total = 0, apartments = 0;
+	for (const char * kind : {"office", "apartment"})
 	{
-		Item::Office *office = dynamic_cast<Item::Office *>(*it);
-		if (!office || office->underConstruction || !office->isOccupied() || !office->prototype->yoot) continue;
-		total += Yoot::officeQuarterRent(*office->prototype->yoot, game->yootPriceSelection(office));
+		Game::ItemSetByString::const_iterator bucket = game->itemsByType.find(kind);
+		if (bucket == game->itemsByType.end()) continue;
+		for (Game::ItemSet::const_iterator it = bucket->second.begin(); it != bucket->second.end(); ++it)
+		{
+			Item::Item *tenant = *it;
+			if (tenant->underConstruction || !tenant->isOccupied() || !tenant->prototype->yoot) continue;
+			const int rent = Yoot::officeQuarterRent(*tenant->prototype->yoot, game->yootPriceSelection(tenant));
+			if (std::string(kind) == "apartment") apartments += rent;
+			else total += rent;
+		}
 	}
 	game->yootBook(total, "rent_income", "Income from office rentals just came in.");
+	game->yootBook(apartments, "rent_income", ""); // generic tenant payment: no message string
 }
 
 static double autosaveWallClock()
@@ -1693,10 +1701,16 @@ void Game::applyItemCatalog()
 {
 	// Detach and restore first so switching worlds/rulesets never leaves a
 	// dangling prototype->yoot or a YootTower price behind.
+	static std::map<std::string, int2> baseSizes; // YootTower-only prototypes
 	for (size_t i = 0; i < itemFactory.prototypes.size(); ++i)
 	{
 		Item::AbstractPrototype * p = itemFactory.prototypes[i];
 		p->yoot = nullptr;
+		if (BuildRules::isYootOnlyPrototype(p->id))
+		{
+			if (!baseSizes.count(p->id)) baseSizes[p->id] = p->size;
+			p->size = baseSizes[p->id];
+		}
 		std::map<std::string, std::pair<int, int> >::const_iterator base = yootBasePrices.find(p->id);
 		if (base != yootBasePrices.end())
 		{
@@ -1721,6 +1735,11 @@ void Game::applyItemCatalog()
 			yootBasePrices[p->id] = std::make_pair(p->price, p->carCost);
 		p->yoot = &s->second;
 		p->price = s->second.price;
+		// Per-world footprints of the native YootTower items (KRestroom 10x1,
+		// KTrashFacility 17x2, RMaintenance 12x1, ...). The gate's 16x2 is
+		// not in the TNDF (its width is the lot's), so it keeps its own.
+		if (BuildRules::isYootOnlyPrototype(p->id) && s->second.variation == 0 && s->second.width > 0)
+			p->size = int2(s->second.width, std::max(1, s->second.height));
 		if (s->second.mover && s->second.carPrice > 0)
 			p->carCost = s->second.carPrice;
 	}

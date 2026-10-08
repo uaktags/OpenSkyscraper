@@ -260,7 +260,7 @@ int JudgeSystem::yootEstimate(Game * game, Item::Item * item)
 	const YootItemStats *stats = item->prototype->yoot;
 	if (!stats) return 0;
 	const std::string & id = item->prototype->id;
-	const bool residential = id == "office" || id == "condo" || id == "yoot_condo" ||
+	const bool residential = id == "office" || id == "condo" || id == "yoot_condo" || id == "apartment" ||
 		id == "hotel_single" || id == "hotel_double" || id == "hotel_suite";
 	if (!residential)
 		return item->yootEstimate; // commercial: set at close (CalcProfitEstimate)
@@ -389,7 +389,7 @@ void JudgeSystem::evaluateAll(Game * game)
 		{
 			score = scoreOffice(game, item);
 		}
-		else if (id == "condo" || id == "yoot_condo")
+		else if (id == "condo" || id == "yoot_condo" || id == "apartment")
 		{
 			score = scoreCondo(game, item);
 		}

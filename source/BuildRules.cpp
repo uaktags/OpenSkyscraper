@@ -229,26 +229,33 @@ bool BuildRules::allowsSpecialFootprint(int x, int floor, int width, int height)
 }
 
 namespace {
-	struct YootOnly { const char * id; int defaultRating; };
+	struct YootOnly { const char * id; int defaultRating; const char * plugin; };
 	// ATTR mGameLevel - 1 when no world unlock data is loaded.
 	const YootOnly kYootOnly[] = {
-		{"powerroom", 2},      // PowerRoom.t2p, grade 3
-		{"trashfacility", 2},  // TrashFacility.t2p / KTrashFacility.t2p, grade 3
-		{"restroom", 0},       // Restroom.t2p / KRestroom.t2p, grade 1
-		{"doctor", 2},         // Doctor's.t2p, grade 3
+		{"powerroom", 2, "PowerRoom.t2p"},          // grade 3
+		{"trashfacility", 2, "TrashFacility.t2p"},  // / KTrashFacility.t2p, grade 3
+		{"restroom", 0, "Restroom.t2p"},            // / KRestroom.t2p, grade 1
+		{"doctor", 2, "Doctor's.t2p"},              // grade 3
+		// Plan step 14.
+		{"frontdesk", 1, "Front.t2p"},              // / RFront.t2p (grade 3), grade 2
+		{"housekeeping", 1, "Maintenance.t2p"},     // / RMaintenance.t2p (grade 3), grade 2
+		{"parkinglot", 2, "Parking.t2p"},          // grade 3
+		{"parkinggate", 2, "Parking.t2p"},         // grade 3
+		{"firedept", 3, "FireDepartment.t2p"},     // Kegon, grade 4
+		{"apartment", 0, "Apartment.t2p"},         // Tokyo, grade 1
 		// Venues, final items and transport (plan step 14 part B).
-		{"theater", 2},        // Theater.t2p, grade 3
-		{"classictheater", 2}, // ClassicTheater.t2p, grade 3
-		{"eventcenter", 2},    // EventCenter.t2p, grade 3
-		{"billboard", 0},      // Billboard.t2p, grade 1
-		{"stadium", 3},        // Stadium.t2p, grade 4 (Tokyo final item)
-		{"yootcathedral", 3},  // Cathedral.t2p, grade 4 (Hawaii final item)
-		{"attraction", 3},     // Attraction.t2p, grade 4 (Kegon final item)
-		{"observatory", 2},    // Observatory.t2p, grade 3
-		{"ticketbooth", 2},    // Ticket.t2p, grade 3
-		{"gatheringarea", 3},  // GatheringArea.t2p, grade 4
-		{"boatdeck", 2},       // Boatdeck.t2p, grade 3
-		{"subway", 1},         // Subway.t2p, grade 2
+		{"theater", 2, "Theater.t2p"},        // Theater.t2p, grade 3
+		{"classictheater", 2, "ClassicTheater.t2p"}, // ClassicTheater.t2p, grade 3
+		{"eventcenter", 2, "EventCenter.t2p"},    // EventCenter.t2p, grade 3
+		{"billboard", 0, "Billboard.t2p"},      // Billboard.t2p, grade 1
+		{"stadium", 3, "Stadium.t2p"},        // Stadium.t2p, grade 4 (Tokyo final item)
+		{"yootcathedral", 3, "Cathedral.t2p"},  // Cathedral.t2p, grade 4 (Hawaii final item)
+		{"attraction", 3, "Attraction.t2p"},     // Attraction.t2p, grade 4 (Kegon final item)
+		{"observatory", 2, "Observatory.t2p"},    // Observatory.t2p, grade 3
+		{"ticketbooth", 2, "Ticket.t2p"},    // Ticket.t2p, grade 3
+		{"gatheringarea", 3, "GatheringArea.t2p"},  // GatheringArea.t2p, grade 4
+		{"boatdeck", 2, "Boatdeck.t2p"},       // Boatdeck.t2p, grade 3
+		{"subway", 1, "Subway.t2p"},         // Subway.t2p, grade 2
 	};
 }
 
@@ -270,7 +277,15 @@ bool BuildRules::isReplacedInYoot(const std::string & prototypeId)
 	return prototypeId == "recycling" || prototypeId == "medicalcenter" ||
 	       prototypeId == "cinema" || prototypeId == "partyhall" ||
 	       prototypeId == "metro" || prototypeId == "cathedral" ||
-	       prototypeId == "shop" || prototypeId == "restaurant" || prototypeId == "fastfood";
+	       prototypeId == "shop" || prototypeId == "restaurant" || prototypeId == "fastfood" ||
+	       prototypeId == "parking"; // native Parking Gate + Parking Lot
+}
+
+const char * BuildRules::yootOnlyPlugin(const std::string & prototypeId)
+{
+	for (const YootOnly & y : kYootOnly)
+		if (prototypeId == y.id) return y.plugin;
+	return nullptr;
 }
 
 bool BuildRules::allowsFootprint(int x, int floor, int width, int height) const
