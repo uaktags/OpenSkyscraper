@@ -39,7 +39,10 @@ void Metro::init()
 	visitorsToday = 0;
 	lastVisitorDay = static_cast<int>(std::floor(game->time.absolute));
 	station.setTexture(App->bitmaps["simtower/metro/station"]);
-	station.setOrigin({0.f, 66.f});
+	// The 3-floor station art is one 240x96 column (3*36 - 12, like the
+	// 2-floor cinema/party hall's 60px): the 66px concourse stacks directly
+	// on top of the 30px platform, which sits on the bottom (track) floor.
+	station.setOrigin({0.f, 66.f + 30.f});
 	station.setPosition({0.f, 0.f});
 	platform.setTexture(App->bitmaps["simtower/metro/station"]);
 	platform.setOrigin({0.f, 30.f});
