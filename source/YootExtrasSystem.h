@@ -81,6 +81,7 @@ namespace OT
 			long long arriveAt = 0;   ///< absolute minute he reached the target (-1 walking)
 			bool soundPlayed = false;
 			int visits = 0;
+			bool flipped = false;     ///< +0x5c: FindNextTenant turned at an edge once
 			YootVisitor * walker = nullptr;  ///< the pool VIP who walks (PeopleSystem)
 		};
 
@@ -89,6 +90,7 @@ namespace OT
 		void flightMinute(Flight & f, int minute);
 		void maruMinute(long long now, int minute);
 		Item::Item * pickMaruTarget(Item::Item * not_) const;
+		Item::Item * nextMaruTenant();
 		void drawFlight(sf::RenderTarget & target, const Flight & f) const;
 		sf::Texture * worldTexture(int id) const;
 

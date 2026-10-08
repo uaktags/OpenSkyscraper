@@ -213,6 +213,35 @@ Item::Item * YootExtrasSystem::pickMaruTarget(Item::Item * not_) const
 	return pool.empty() ? nullptr : pool[rand() % pool.size()];
 }
 
+Item::Item * YootExtrasSystem::nextMaruTenant()
+{
+	// FindNextTenant 0x1003b760: step along the target's floor row in the
+	// direction he faces to the next other tenant; at the building's edge
+	// turn round once and scan from the target again, at the second edge
+	// give up (0). OpenSky skips the empty floor between tenants, which the
+	// original visits and rejects on the way.
+	const int y = maru.target->position.y;
+	for (int pass = 0; pass < 2; ++pass)
+	{
+		const bool left = maru.walker->facingLeft;
+		Item::Item * best = nullptr;
+		for (Item::Item * item : game->items)
+		{
+			if (item == maru.target || item->underConstruction || item->canHaulPeople() || item->isLobby() ||
+			    item->prototype->id == "floor" || item->prototype->id == "skybridge") continue;
+			if (item->position.y > y || item->position.y + item->size.y <= y) continue;
+			const bool ahead = left ? item->position.x < maru.target->position.x : item->position.x > maru.target->position.x;
+			if (!ahead) continue;
+			if (!best || (left ? item->position.x > best->position.x : item->position.x < best->position.x)) best = item;
+		}
+		if (best) return best;
+		if (maru.flipped) return nullptr;
+		maru.flipped = true;
+		maru.walker->facingLeft = !left;
+	}
+	return nullptr;
+}
+
 void YootExtrasSystem::maruMinute(long long now, int minute)
 {
 	PeopleSystem & people = game->eventSystem.people;
@@ -222,6 +251,23 @@ void YootExtrasSystem::maruMinute(long long now, int minute)
 	{
 		// Walking: he reaches the tenant and stands there (MaruReception).
 		if (!maru.walker->posing && minute < maru.endMin && maru.target) return;
+		if (maru.walker->posing && minute < maru.endMin && maru.target)
+		{
+			// DoReception 0x1003abe0: only a tenant with people inside gets
+			// the reception; otherwise FindNextTenant, then a random tenant
+			// (FindTargetTenant) or home.
+			bool someone = false;
+			for (Person * p : maru.target->people)
+				if (p != maru.walker) { someone = true; break; }
+			if (!someone)
+			{
+				Item::Item * next = nextMaruTenant();
+				if (!next) { maru.flipped = false; next = pickMaruTarget(maru.target); }
+				if (next) people.vipGo(maru.walker, maru.target, next);
+				maru.target = next;
+				return;
+			}
+		}
 		if (maru.walker->posing) maru.arriveAt = now;
 	}
 	if (minute >= maru.endMin || !maru.target)
@@ -269,8 +315,9 @@ void YootExtrasSystem::maruMinute(long long now, int minute)
 	if (phase == 3)
 	{
 		maru.visits++;
+		maru.flipped = false;
 		Item::Item * next = pickMaruTarget(maru.target);
-		if (!next) next = maru.target;
+		if (!next) { maru.target = nullptr; return; }  // none: he goes home
 		const int floors = std::max(1, std::abs(next->position.y - maru.target->position.y));
 		if (maru.walker) people.vipGo(maru.walker, maru.target, next);
 		maru.target = next;
