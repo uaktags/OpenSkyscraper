@@ -203,6 +203,7 @@ add_executable(OpenSkyTests
   source/Logger.cpp
   source/NameManager.cpp
   source/TdtLoader.cpp
+  source/BldLoader.cpp
   source/LevelUp.cpp
   source/PluginManager.cpp
   source/PluginResources.cpp
