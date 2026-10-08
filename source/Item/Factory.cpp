@@ -28,6 +28,7 @@
 #include "PowerRoom.h"
 #include "YootFacilityItems.h"
 #include "YootVenueItems.h"
+#include "YootTenant.h"
 
 using namespace OT;
 using namespace Item;
@@ -88,6 +89,9 @@ void Factory::loadPrototypes()
 	register_item(BoatDeck);
 	register_item(Subway);
 	#undef register_item
+	// YootTower-only: one prototype per shop / restaurant / vending /
+	// service tenant plugin found in the catalog (YootTenants.h).
+	registerYootTenantPrototypes(prototypes, game->app.pluginManager);
 	
 	for (int i = 0; i < prototypes.size(); i++) {
 		prototypesById[prototypes[i]->id] = prototypes[i];
