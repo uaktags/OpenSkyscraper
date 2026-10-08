@@ -259,6 +259,31 @@ add_executable(BldTool
 target_include_directories(BldTool PRIVATE source)
 target_link_libraries(BldTool PRIVATE SFML::Graphics tinyxml2::tinyxml2)
 
+# Headless deterministic sim goldens (doc/headless-sim.md): a fixed-tick
+# --sim run per ruleset whose JSON summary must match tests/sim/*.json.
+# Regenerate with: cmake -DUPDATE_GOLDEN=ON ... -P tests/sim/run_sim_golden.cmake
+foreach(sim_ruleset simtower opensky)
+  foreach(sim_case default new)
+    if(sim_case STREQUAL "new")
+      set(sim_tower new)
+    else()
+      set(sim_tower ${PROJECT_SOURCE_DIR}/data/default.tower)
+    endif()
+    set(sim_name sim_${sim_case}_${sim_ruleset})
+    add_test(NAME ${sim_name}
+      COMMAND ${CMAKE_COMMAND}
+        -DEXE=$<TARGET_FILE:${EXECUTABLE_NAME}>
+        -DTOWER=${sim_tower}
+        -DRULESET=${sim_ruleset}
+        -DTICKS=2000
+        -DGOLDEN=${PROJECT_SOURCE_DIR}/tests/sim/${sim_name}.json
+        -DOUT_DIR=${CMAKE_BINARY_DIR}/sim-golden
+        -P ${PROJECT_SOURCE_DIR}/tests/sim/run_sim_golden.cmake)
+    set_tests_properties(${sim_name} PROPERTIES
+      SKIP_REGULAR_EXPRESSION "SKIP_NO_DISPLAY" TIMEOUT 600)
+  endforeach()
+endforeach()
+
 # ---------------------------------------------------------------------------
 # PluginEditor — standalone editor for YootTower plugins and the OSP format.
 # Links the same SFML 3 + TGUI stack as the game plus the pure plugin seam
