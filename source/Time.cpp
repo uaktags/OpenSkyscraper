@@ -181,6 +181,11 @@ bool Time::checkTick(double p)
 	return (floor(prev_absolute / p) != floor(absolute / p));
 }
 
+long Time::ticksCrossed(double p)
+{
+	return static_cast<long>(floor(absolute / p) - floor(prev_absolute / p));
+}
+
 /** Returns true if the time has just passed said hour. E.g. if the time advanced from 9.98 to 10.1
  * checkHour(10) would return true. */
 bool Time::checkHour(double h)

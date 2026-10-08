@@ -83,6 +83,8 @@ namespace OT {
 		double getHour();
 		bool check(double a);
 		bool checkTick(double p);
+		/// Number of p-sized tick boundaries crossed by the last advance.
+		long ticksCrossed(double p);
 		bool checkHour(double h);
 
 	protected:

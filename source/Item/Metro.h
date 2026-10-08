@@ -1,4 +1,5 @@
 #pragma once
+#include "../Sound.h"
 #include "../Sprite.h"
 #include "Item.h"
 #include <set>
@@ -68,15 +69,12 @@ namespace OT {
 			virtual void removePerson(Person *p) override;
 
 		private:
-			/// Absolute time at which the next train event (arrival if the
-			/// train is currently absent, departure otherwise) is due.
-			double nextTrainTime;
+			Sound trainSound;
 
 			void spawnVisitors(int count);
 			void boardReturnedVisitors();
 			void clearAllVisitors();
 			Item * pickDestinationFor(Visitor *v);
-			void scheduleNextTrain();
 		};
 	}
 }

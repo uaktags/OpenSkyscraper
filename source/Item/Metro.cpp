@@ -12,13 +12,11 @@ using namespace OT;
 using namespace OT::Item;
 using OT::Math::randd;
 
-// Train cadence in absolute-time units. A train dwells at the platform for
-// roughly 10 minutes, then is absent for ~30 minutes before the next arrives.
-// Tuned from initial values (0.02 / 0.08) which were ~3x too long — at 1x
-// speed a full cycle took most of the afternoon, so visitors never got a
-// second train to leave on. 0.007/0.020 maps to ~10 min / ~30 min.
-static const double kTrainDwellAbs = Time::hourToAbsolute(10.0 / 60.0);
-static const double kTrainGapAbs   = Time::hourToAbsolute(0.5);
+// SIMTOWER.EXE runs 2600 simulation frames per day. From 10:00 (frame 240)
+// until the 17:00 close every frame rolls 1 in 100 to toggle the train in or out.
+static const double kFramesPerDay      = 2600.0;
+static const int    kTrainToggleOdds   = 100;
+static const double kTrainFirstHour    = 10.0;
 
 // Dwell window the visitor spends at a commercial venue before heading back.
 static const double kVisitorMinDwell = Time::hourToAbsolute(0.25);
@@ -35,7 +33,7 @@ void Metro::init()
 	Item::init();
 	open = true;
 	trainPresent = false;
-	nextTrainTime = game->time.absolute + kTrainGapAbs;
+	trainSound.setBuffer(App->sounds["simtower/metro"]);
 	visitorsToday = 0;
 	lastVisitorDay = static_cast<int>(std::floor(game->time.absolute));
 	station.setTexture(App->bitmaps["simtower/metro/station"]);
@@ -56,17 +54,11 @@ void Metro::init()
 	updateSprite();
 }
 
-void Metro::scheduleNextTrain()
-{
-	nextTrainTime = game->time.absolute + (trainPresent ? kTrainDwellAbs : kTrainGapAbs);
-}
-
 void Metro::encodeXML(tinyxml2::XMLPrinter &xml)
 {
 	Item::encodeXML(xml);
 	xml.PushAttribute("open", open);
 	xml.PushAttribute("trainPresent", trainPresent);
-	xml.PushAttribute("nextTrainTime", nextTrainTime);
 	xml.PushAttribute("visitorsToday", visitorsToday);
 	xml.PushAttribute("lastVisitorDay", lastVisitorDay);
 	for (std::set<Visitor *>::iterator it = visitors.begin(); it != visitors.end(); ++it) {
@@ -91,7 +83,6 @@ void Metro::decodeXML(tinyxml2::XMLElement &xml)
 	Item::decodeXML(xml);
 	open = xml.BoolAttribute("open", true);
 	trainPresent = xml.BoolAttribute("trainPresent", false);
-	nextTrainTime = xml.DoubleAttribute("nextTrainTime", game->time.absolute + kTrainGapAbs);
 	visitorsToday = std::max(0, xml.IntAttribute("visitorsToday", 0));
 	lastVisitorDay = xml.IntAttribute("lastVisitorDay", static_cast<int>(std::floor(game->time.absolute)));
 	clearAllVisitors();
@@ -206,15 +197,17 @@ void Metro::advance(double dt)
 		spriteNeedsUpdate = true;
 		if (trainPresent) {
 			trainPresent = false;
-			nextTrainTime = game->time.absolute + kTrainGapAbs;
 			spriteNeedsUpdate = true;
 		}
 	}
 	if (open) {
-		if (game->time.hour >= 10.0 && game->time.absolute >= nextTrainTime) {
-			if (!trainPresent) { trainPresent = true; spriteNeedsUpdate = true; }
-			else { trainPresent = false; spriteNeedsUpdate = true; boardReturnedVisitors(); }
-			scheduleNextTrain();
+		if (game->time.hour >= kTrainFirstHour) {
+			const long frames = game->time.ticksCrossed(1.0 / kFramesPerDay);
+			for (long i = 0; i < frames; ++i) {
+				if (rand() % kTrainToggleOdds != 0) continue;
+				if (!trainPresent) { trainPresent = true; spriteNeedsUpdate = true; trainSound.Play(game); }
+				else { trainPresent = false; spriteNeedsUpdate = true; boardReturnedVisitors(); }
+			}
 		}
 		// The station admits a bounded visitor pool during the 10:00-17:00
 		// commercial window.  One 1/36 roll is made per 16 simulation ticks;
