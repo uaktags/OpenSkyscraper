@@ -1,5 +1,6 @@
 #include "../Game.h"
 #include "../Math/Rand.h"
+#include "../YootItemArt.h"
 #include "Condo.h"
 
 using namespace OT;
@@ -23,6 +24,13 @@ void Condo::init()
 	sprite.setTexture(App->bitmaps.editionTexture("condo", "simtower/condo"));
 	sprite.setOrigin({0.f, 24.f});
 	sprite.setPosition({static_cast<float>(position.x * 8), static_cast<float>(-position.y * 36)});
+	// Skin::Yoot: the Condo.t2p View bands (3 kinds x 5, like YootCondo).
+	yootView = game->skin == Skin::Yoot
+		? yootPluginView(game->app, prototype->yoot ? prototype->yoot->plugin : "Condo.t2p", kYootWindowKey) : nullptr;
+	if (yootView) {
+		sprite.setTexture(yootView->texture);
+		sprite.setPosition({static_cast<float>(position.x * 8), static_cast<float>(-position.y * 36 - kYootInteriorLift)});
+	}
 	addSprite(&sprite);
 	updateSprite();
 }
@@ -89,6 +97,12 @@ void Condo::updateSprite()
 			index = 3;
 			break;
 		}
+	}
+	if (yootView) {
+		// 0 vacant day, 1 vacant night, 2 let day, 3 let lit, 4 let night.
+		const int look = occupied ? (lighting == DAYTIME ? 2 : lighting == LIT ? 3 : 4) : (lighting == DAYTIME ? 0 : 1);
+		sprite.setTextureRect(yootView->band(5 * (variant % 3) + look));
+		return;
 	}
 	sprite.setTextureRect(sf::IntRect({index * 128, variant * 24}, {128, 24}));
 }

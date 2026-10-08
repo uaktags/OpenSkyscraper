@@ -1,5 +1,6 @@
 #pragma once
 #include "../Sprite.h"
+#include "../YootItemArt.h"
 #include "Item.h"
 #include <set>
 
@@ -40,6 +41,8 @@ namespace OT {
             int variant;
 
             Sprite sprite;
+            /// Skin::Yoot plugin art (YootItemArt.h), null = OpenSky art.
+            const YootPluginView * yootView = nullptr;
             bool spriteNeedsUpdate;
             void updateSprite();
         };

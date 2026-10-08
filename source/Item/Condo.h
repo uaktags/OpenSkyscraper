@@ -1,5 +1,6 @@
 #pragma once
 #include "../Sprite.h"
+#include "../YootItemArt.h"
 #include "Item.h"
 
 namespace OT
@@ -107,6 +108,8 @@ namespace OT
 			bool occupied;
 
 			Sprite sprite;
+			/// Skin::Yoot plugin art (YootItemArt.h), null = OpenSky art.
+			const YootPluginView * yootView = nullptr;
 			bool spriteNeedsUpdate;
 			std::set<CondoOccupant *, SimLess> occupants;
 			std::priority_queue<CondoOccupant *, std::deque<CondoOccupant *>, CondoOccupant::departsLaterThan> departureQueue;
