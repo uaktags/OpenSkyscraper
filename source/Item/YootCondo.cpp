@@ -105,7 +105,9 @@ void YootCondo::decodeXML(tinyxml2::XMLElement &xml)
 	if (occupied)
 	{
 		createOccupants();
-		population = hasPopulation ? xml.IntAttribute("population") : population;
+		// An imported let home has an empty belong list (population 0);
+		// it is occupied, so keep the residents just created.
+		if (hasPopulation && xml.IntAttribute("population") > 0) population = xml.IntAttribute("population");
 	}
 	else
 	{
@@ -353,7 +355,10 @@ void YootCondo::removeOccupants()
 {
 	for (Person *occupant : occupants)
 	{
-		removePerson(occupant);
+		// Residents out at work are not in this item (same rule as
+		// Hotel::clearAll); removePerson asserts p->at == this.
+		if (occupant->at == this)
+			removePerson(occupant);
 		delete occupant;
 	}
 	occupants.clear();
