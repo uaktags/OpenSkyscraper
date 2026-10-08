@@ -363,6 +363,9 @@ bool validateBatchCell(Item::AbstractPrototype * proto, int x, int y, std::strin
 	private:
 		double zoom;
 		double2 poi;
+		/// Horizontal camera range: poi.x stays in [-limit, limit]. 512 px,
+		/// or half the YootTower world's width so its edges are reachable.
+		double horizontalScrollLimit() const;
 		enum class ViewportDrag { None, Vertical, Horizontal };
 		ViewportDrag viewportDrag;
 

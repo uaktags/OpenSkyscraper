@@ -555,7 +555,7 @@ bool Game::handleEvent(sf::Event & event)
 		}
 		if (wheelEvent->wheel == sf::Mouse::Wheel::Horizontal || isShiftPressed) {
 			poi.x -= delta * 40.f * zoom;
-			poi.x = std::max(-512.0, std::min(512.0, poi.x));
+			poi.x = std::max(-horizontalScrollLimit(), std::min(horizontalScrollLimit(), poi.x));
 		} else {
 			poi.y += delta * 40.f * zoom;
 		}
@@ -599,8 +599,8 @@ bool Game::handleEvent(sf::Event & event)
 	switch (eventType) {
 		case EventType::KeyPressed: {
 			switch (keyCode) {
-				case sf::Keyboard::Key::Left:  poi.x = std::max(-512.0, poi.x - 20); return true;
-				case sf::Keyboard::Key::Right: poi.x = std::min(512.0, poi.x + 20); return true;
+				case sf::Keyboard::Key::Left:  poi.x = std::max(-horizontalScrollLimit(), poi.x - 20); return true;
+				case sf::Keyboard::Key::Right: poi.x = std::min(horizontalScrollLimit(), poi.x + 20); return true;
 				case sf::Keyboard::Key::Up:    poi.y += 20; return true;
 				case sf::Keyboard::Key::Down:  poi.y -= 20; return true;
 				case sf::Keyboard::Key::F1:    reloadGUI(); return true;
@@ -843,7 +843,7 @@ bool Game::handleViewportScrollbarEvent(sf::Event &event)
 	auto setHorizontalFromMouse = [&](int x) {
 		double usable = std::max(1, static_cast<int>(ws.x) - scrollbarSize);
 		double t = std::max(0.0, std::min(1.0, x / usable));
-		poi.x = -512 + t * 1024;
+		poi.x = horizontalScrollLimit() * (2 * t - 1);
 	};
 
 	if (const auto *pressed = event.getIf<sf::Event::MouseButtonPressed>()) {
@@ -911,7 +911,7 @@ void Game::drawViewportScrollbars(sf::RenderTarget &target) const
 	track.setPosition({0.f, bottomY});
 	target.draw(track);
 
-	double ht = std::max(0.0, std::min(1.0, (poi.x + 512) / 1024));
+	double ht = std::max(0.0, std::min(1.0, (poi.x / horizontalScrollLimit() + 1) / 2));
 	thumb.setSize({128.f, scrollbarSize - 2.f});
 	thumb.setPosition({static_cast<float>(ht * std::max(1.f, rightX - 128.f)), bottomY + 1.f});
 	target.draw(thumb);
@@ -919,11 +919,21 @@ void Game::drawViewportScrollbars(sf::RenderTarget &target) const
 	target.setView(previous);
 }
 
+double Game::horizontalScrollLimit() const
+{
+	// YootTower: OpenSky x = 0 is the world centre (unit = x + width/2), so
+	// the world spans +-width/2 units of 8 px (Hawaii's sea, Tokyo's edges).
+	const RulesProfile & profile = activeRules.profile();
+	if (profile.yootWorld && profile.worldWidth > 0)
+		return std::max(512.0, profile.worldWidth * 8 * 0.5);
+	return 512.0;
+}
+
 void Game::qaSetViewportScrollFractions(double horizontal, double vertical)
 {
 	horizontal = std::max(0.0, std::min(1.0, horizontal));
 	vertical = std::max(0.0, std::min(1.0, vertical));
-	poi.x = -512 + horizontal * 1024;
+	poi.x = horizontalScrollLimit() * (2 * horizontal - 1);
 	poi.y = 360 * 12 - vertical * (360 * 13);
 }
 
@@ -1095,7 +1105,7 @@ void Game::advance(double dt)
 	//Constrain the POI.
 	double2 halfsize((win.getView().getSize().x)*0.5*zoom, (win.getView().getSize().y)*0.5*zoom);
 	poi.y = std::max<double>(std::min<double>(poi.y, 360*12 - halfsize.y), -360 + halfsize.y);
-	poi.x = std::max<double>(std::min<double>(poi.x, 512.0), -512.0);
+	poi.x = std::max<double>(std::min<double>(poi.x, horizontalScrollLimit()), -horizontalScrollLimit());
 
 	//Adust the camera.
 	sf::FloatRect view(
