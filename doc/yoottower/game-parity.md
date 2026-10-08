@@ -322,9 +322,9 @@ overlaid with the plugin's catalog data (`yootPrototypeLinks()`); **missing** = 
 | Status | Plugins |
 |---|---|
 | plugin-backed family | 56 (shop 29 incl. Spa, restaurant 22, vending 5) |
-| native | 24 (20 items, 3 worlds, the tool palette) |
-| mapped OpenSky | 19 |
-| missing | 6 |
+| native | 31 (27 items, 3 worlds, the tool palette) |
+| mapped OpenSky | 18 |
+| missing | 0 |
 
 Plugin-backed families (decompiled with Ghidra, `~/yoottower-decomp/{plugins,tenants}-agent/pout/`):
 
@@ -363,7 +363,7 @@ staff place per TNDF staff member.
 | Plugin | Code family | Status | OpenSky prototype / owner |
 |---|---|---|---|
 | Aloha | Shop | plugin-backed family (shop) | yt_aloha |
-| Apartment | Residential | missing | hotel/residential agent |
+| Apartment | Residential | native | apartment (Item::Apartment) |
 | Attraction | Venue | native | attraction |
 | Barber | Shop | plugin-backed family (shop) | yt_barber |
 | BCDMart | Shop | plugin-backed family (shop) | yt_bcdmart |
@@ -390,12 +390,12 @@ staff place per TNDF staff member.
 | Electric | Shop | plugin-backed family (shop) | yt_electric |
 | Escalator | Mover | mapped OpenSky | escalator |
 | EventCenter | Facility/structure | native | eventcenter |
-| FireDepartment | Facility/structure | missing | hotel/residential/parking/fire agent |
+| FireDepartment | Facility/structure | native | firedept (Item::FireDepartment) |
 | Floor | Facility/structure | mapped OpenSky | floor / lobby |
 | Flower | Shop | plugin-backed family (shop) | yt_flower |
 | FoodCoat | Restaurant | plugin-backed family (restaurant) | yt_foodcoat |
 | French | Restaurant | plugin-backed family (restaurant) | yt_french |
-| Front | Hotel | missing | hotel/residential agent |
+| Front | Hotel | native | frontdesk (Item::FrontDesk) |
 | Fruits | Shop | plugin-backed family (shop) | yt_fruits |
 | Gameworks | Shop | plugin-backed family (shop) | yt_gameworks |
 | GatheringArea | Facility/structure | native | gatheringarea |
@@ -422,22 +422,22 @@ staff place per TNDF staff member.
 | KTrashFacility | Facility/structure | native | trashfacility |
 | Largeroom | Facility/structure | mapped OpenSky | hotel_suite |
 | LocalPickle | Shop | plugin-backed family (shop) | yt_localpickle |
-| Maintenance | Facility/structure | missing | hotel/residential agent (Housekeeping) |
+| Maintenance | Facility/structure | native | housekeeping (Item::Housekeeping) |
 | Men'sClothing | Shop | plugin-backed family (shop) | yt_mensclothing |
 | Mexcan | Restaurant | plugin-backed family (restaurant) | yt_mexcan |
 | Observatory | Facility/structure | native | observatory |
 | Office | Office | mapped OpenSky | office |
 | OldTimeCafe | Restaurant | plugin-backed family (restaurant) | yt_oldtimecafe |
 | OrangeJulius | Shop | plugin-backed family (shop) | yt_orangejulius |
-| Parking | Facility/structure | mapped OpenSky | parking |
+| Parking | Facility/structure | native | parkinglot / parkinggate (Item::ParkingLot, Item::ParkingGate) |
 | Petshop | Shop | plugin-backed family (shop) | yt_petshop |
 | Photo | Shop | plugin-backed family (shop) | yt_photo |
 | PowerRoom | Facility/structure | native | powerroom |
 | Ramen | Restaurant | plugin-backed family (restaurant) | yt_ramen |
 | Record | Shop | plugin-backed family (shop) | yt_record |
 | Restroom | Facility/structure | native | restroom |
-| RFront | Hotel | missing | hotel/residential agent |
-| RMaintenance | Facility/structure | missing | hotel/residential agent (Housekeeping) |
+| RFront | Hotel | native | frontdesk (Item::FrontDesk) |
+| RMaintenance | Facility/structure | native | housekeeping (Item::Housekeeping) |
 | School | Facility/structure | native | school (Item::School, YootExtrasSystem) |
 | SeaFood | Restaurant | plugin-backed family (restaurant) | yt_seafood |
 | Securityroom | Facility/structure | mapped OpenSky | security |
@@ -467,6 +467,13 @@ staff place per TNDF staff member.
 | Twinroom | Facility/structure | mapped OpenSky | hotel_double |
 | Video&DVD | Shop | plugin-backed family (shop) | yt_videodvd |
 | Weinstein'sToffee | Restaurant | plugin-backed family (restaurant) | yt_weinsteinstoffee |
+
+The other 51 `.t2p` files in `data/Plugins` are SP-format sub-plugins, not items, so they
+have no row above: all are **native (sub-plugin list)**, i.e. read at run time by
+`VenueSystem` and offered as choices on a native item: the 38 `MV_*` movies (MoPl) on the
+Theater / Classic Theater, the 6 `Pl*` hall events (HePl) on the Event Center, and the 7
+ads (AdPl: AirJamaica, Aquazone, GAMEWORKSAD, Ob9003, SandalBeachResort, Segapc, Yoot) on
+the Billboard (filtered by `Yoot::advertiseFits`).
 
 ## 6. People calibration (oracle, 2026-10-08)
 
