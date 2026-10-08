@@ -25,6 +25,7 @@
 #include "MedicalCenter.h"
 #include "Recycling.h"
 #include "Cathedral.h"
+#include "PowerRoom.h"
 
 using namespace OT;
 using namespace Item;
@@ -68,6 +69,7 @@ void Factory::loadPrototypes()
 	register_item(MedicalCenter);
 	register_item(Recycling);
 	register_item(Cathedral);
+	register_item(PowerRoom); // YootTower-only (BuildRules hides it elsewhere)
 	#undef register_item
 	
 	for (int i = 0; i < prototypes.size(); i++) {

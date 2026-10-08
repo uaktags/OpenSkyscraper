@@ -419,6 +419,21 @@ tgui::Button::Ptr ToolboxWindow::makeItemButton(Item::AbstractPrototype* proto, 
         app->bitmaps.loadFromPlugin("Condo.t2p", 100, yootIconTexture, sf::Color(255, 255, 255));
         return makeButton(kCellW, kCellH, yootIconTexture, 0, state);
     }
+    if (proto->id == "powerroom")
+    {
+        // PowerRoom.t2p RT_BITMAP 100 is a vertical 26x130 icon strip;
+        // OBJMAP 100 names "Power Room" pattern 0 at Rect 0,78,26,104.
+        sf::Texture sheet;
+        if (app->bitmaps.loadFromPlugin("PowerRoom.t2p", 100, sheet)) {
+            sf::Image full = sheet.copyToImage();
+            sf::Image cell({26, 26});
+            if (full.getSize().y >= 104 && cell.copy(full, {0, 0}, sf::IntRect({0, 78}, {26, 26}))) {
+                sf::Texture icon;
+                if (icon.loadFromImage(cell))
+                    return makeButton(kCellW, kCellH, icon, 0, state, 26, 26);
+            }
+        }
+    }
     sf::Texture itemTexture = app->bitmaps["simtower/ui/toolbox/items"];
     return makeButton(kCellW, kCellH, itemTexture, proto->icon, state, 32, 32);
 }
