@@ -330,6 +330,8 @@ namespace OT {
 			virtual void encodeXML(tinyxml2::XMLPrinter & xml);
 			virtual void decodeXML(tinyxml2::XMLElement & xml);
 			virtual int dailyMaintenanceCost() const override { return 0; }
+			/// Pool riders back at the station wait for a train (PeopleSystem).
+			virtual void addPerson(Person * p) override;
 
 			int level = 1;            ///< T2Transport UpGrade level 1..4 (trains enabled)
 			int pattern = 0;

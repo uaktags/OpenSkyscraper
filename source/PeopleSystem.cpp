@@ -89,7 +89,7 @@ void PeopleSystem::reset()
 	tables.clear();
 	stays.clear();
 	roomOuting.clear();
-	calledToday = enteredToday = 0;
+	calledToday = enteredToday = ridersToday = 0;
 	returnedToday[0] = returnedToday[1] = returnedToday[2] = 0;
 }
 
@@ -171,8 +171,9 @@ void PeopleSystem::minuteTick(long long m)
 				" population " + std::to_string(pool.population) + " visitors " + std::to_string(visitorList.size()) +
 				" (pool " + std::to_string(phases[0]) + " walking " + std::to_string(phases[1] + phases[2]) +
 				" inside " + std::to_string(phases[3]) + " leaving " + std::to_string(phases[4]) + ")" +
-				" returned " + std::to_string(returnedToday[0]) + "/" + std::to_string(returnedToday[1]) + "/" + std::to_string(returnedToday[2]));
-			calledToday = enteredToday = 0;
+				" returned " + std::to_string(returnedToday[0]) + "/" + std::to_string(returnedToday[1]) + "/" + std::to_string(returnedToday[2]) +
+				(ridersToday ? " riders " + std::to_string(ridersToday) : std::string()));
+			calledToday = enteredToday = ridersToday = 0;
 			returnedToday[0] = returnedToday[1] = returnedToday[2] = 0;
 		}
 	}
@@ -185,6 +186,70 @@ void PeopleSystem::minuteTick(long long m)
 		if (std::find(visitorList.begin(), visitorList.end(), v) != visitorList.end())
 			visitorTick(v, m);
 	hotelTick(m);
+	transportTick(m);
+}
+
+void PeopleSystem::transportTick(long long now)
+{
+	// Subway.t2p / Boatdeck.t2p FUN_1000d330 while the train (8 minutes) or
+	// ship (30) is in: the riders aboard get off at the station and set off
+	// for their tenant with a return to the station (LeaveFirst, SetReturn);
+	// the people back at the station board it; at departure the ones
+	// aboard go into the pool (T2Transport::Stop 0x1006bf70). The station
+	// closing pushes everyone inside out.
+	for (int k = 0; k < 2; ++k)
+	{
+		const bool ship = k == 1;
+		Item::Item * stopped = game->eventSystem.venues.transportStopped(ship);
+		const std::vector<YootVisitor *> list = visitorList;
+		for (YootVisitor * v : list)
+		{
+			if (!v->aboard || std::find(visitorList.begin(), visitorList.end(), v) == visitorList.end()) continue;
+			const bool here = v->aboard->prototype->id == (ship ? "boatdeck" : "subway");
+			if (!here) continue;
+			if (!v->dest)
+			{
+				if (v->aboard != stopped) goOutTower(v);  // the train left with them
+				continue;
+			}
+			if (v->aboard != stopped) continue;
+			Item::Item * station = v->aboard;
+			v->aboard = nullptr;
+			v->curH = entranceX(station, v);
+			v->curV = station->position.y;
+			if (v->returns.size() < 3) v->returns.push_back(std::make_pair(station, now));
+			game->eventSystem.facilities.onEnterTower(v);
+			if (Item::YootVenue * deck = dynamic_cast<Item::YootVenue *>(station)) deck->visitorsToday++;
+			++ridersToday;
+			walkTo(v, station, v->dest, now);
+		}
+		const Game::ItemSet & stations = game->itemsByType[ship ? "boatdeck" : "subway"];
+		for (Item::Item * station : std::vector<Item::Item *>(stations.begin(), stations.end()))
+		{
+			Item::Subway * subway = dynamic_cast<Item::Subway *>(station);
+			Item::YootVenue * deck = dynamic_cast<Item::YootVenue *>(station);
+			const bool open = subway ? subway->open : deck && deck->isOpen();
+			for (YootVisitor * v : visitorsIn(station))
+			{
+				if (!open) { pushOut(v); continue; }
+				if (station != stopped || v->dest) continue;
+				station->removePerson(v);
+				v->inside = nullptr;
+				v->aboard = station;
+			}
+		}
+	}
+}
+
+void PeopleSystem::stationEnter(Item::Item * station, YootVisitor * v)
+{
+	if (v->dest != station) return;
+	Item::Subway * subway = dynamic_cast<Item::Subway *>(station);
+	Item::YootVenue * deck = dynamic_cast<Item::YootVenue *>(station);
+	const bool open = subway ? subway->open : deck && deck->isOpen();
+	// EnterTenant clears the destination: the rider waits for a train.
+	arrived(v, station, open, 100000000LL);
+	v->stayEnd = -1;
 }
 
 // ------------------------------------------------------------------ routes
@@ -229,7 +294,7 @@ unsigned PeopleSystem::routeMask(Item::Item * tenant, int score)
 		Item::Subway * s = dynamic_cast<Item::Subway *>(i);
 		if (!s || s->underConstruction || !s->open) continue;
 		in.subway = reachableWithin(s, tenant, score);
-		in.trainAvailable = s->trainPresent;
+		in.trainAvailable = game->eventSystem.venues.transportAvailable(false);
 		break;
 	}
 	const Game::ItemSet & decks = game->itemsByType["boatdeck"];
@@ -238,7 +303,7 @@ unsigned PeopleSystem::routeMask(Item::Item * tenant, int score)
 		Item::YootVenue * d = dynamic_cast<Item::YootVenue *>(i);
 		if (!d || d->underConstruction || !d->isOpen()) continue;
 		in.ship = reachableWithin(d, tenant, score);
-		in.cruiseAvailable = game->eventSystem.venues.cruiseDocked();
+		in.cruiseAvailable = game->eventSystem.venues.transportAvailable(true);
 		break;
 	}
 	return Yoot::checkRouteFromPool(in);
@@ -603,16 +668,23 @@ Item::Item * PeopleSystem::entranceFor(YootVisitor * v)
 		}
 		break;
 	case Yoot::kTransportSubway:
-		for (Item::Item * i : game->itemsByType["subway"])
+	case Yoot::kTransportShip:
+	{
+		// MoveToSubway 0x10048a90 / MoveToShip 0x10048af0: board a train or
+		// ship arriving within the hour (T2Transport::Enter, at most 300
+		// aboard); it lands the rider at the station when it stops.
+		const bool ship = v->peopleType.transport == Yoot::kTransportShip;
+		Item::Item * station = nullptr;
+		for (Item::Item * i : game->itemsByType[ship ? "boatdeck" : "subway"])
+			if (!i->underConstruction) { station = i; break; }
+		if (station && game->eventSystem.venues.transportAvailable(ship))
 		{
-			Item::Subway * s = dynamic_cast<Item::Subway *>(i);
-			if (s && s->trainPresent) { e = s; break; }
+			int aboard = 0;
+			for (const YootVisitor * o : visitorList) if (o->aboard == station) ++aboard;
+			if (aboard < 300) { v->aboard = station; return nullptr; }
 		}
 		break;
-	case Yoot::kTransportShip:
-		if (game->eventSystem.venues.cruiseDocked())
-			for (Item::Item * i : game->itemsByType["boatdeck"]) { e = i; break; }
-		break;
+	}
 	default:
 		return game->mainLobby;
 	}
@@ -628,6 +700,7 @@ void PeopleSystem::enterTower(YootVisitor * v, long long now)
 {
 	// T2People::Idle case 1: the start minute came.
 	Item::Item * from = entranceFor(v);
+	if (v->aboard) return;  // riding in (transportTick)
 	if (!from || !v->dest) { goOutTower(v); return; }
 	if (from != game->mainLobby) game->eventSystem.facilities.onEnterTower(v);
 	// MoveToLobby 0x10048990: transport 0 appears at the lobby's left
@@ -740,7 +813,7 @@ void PeopleSystem::visitorTick(YootVisitor * v, long long now)
 	switch (v->phase)
 	{
 	case YootVisitor::kInPool:
-		if (now >= v->startMinute) enterTower(v, now);
+		if (!v->aboard && now >= v->startMinute) enterTower(v, now);
 		break;
 	case YootVisitor::kWalking:
 	case YootVisitor::kLeaving:
@@ -839,6 +912,7 @@ void PeopleSystem::goOutTower(YootVisitor * v)
 	if (v->at) v->at->removePerson(v);
 	v->walking = false;
 	v->walkTarget = nullptr;
+	v->aboard = nullptr;
 	for (Item::Item * i : game->itemsByType["parkinglot"])
 	{
 		Item::ParkingLot * lot = dynamic_cast<Item::ParkingLot *>(i);
@@ -875,7 +949,7 @@ void PeopleSystem::itemRemoved(Item::Item * item)
 			else ++k;
 		if (v->prevTenant == item) v->prevTenant = nullptr;
 		const bool walking = v->phase == YootVisitor::kWalking || v->phase == YootVisitor::kLeaving;
-		const bool bound = v->dest == item || v->inside == item || v->at == item || v->walkTarget == item;
+		const bool bound = v->dest == item || v->inside == item || v->at == item || v->walkTarget == item || v->aboard == item;
 		if (bound || (walking && item->canHaulPeople()))
 		{
 			v->dest = nullptr;

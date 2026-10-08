@@ -75,6 +75,13 @@ namespace OT
 		/// The cruise is at the Boat Deck (CREV: 30 minutes from each
 		/// sailing, grade 3+): T2Transport::GetAvailable for ship visitors.
 		bool cruiseDocked() const;
+		/// T2Transport::GetAvailable 0x1006bd80 / IsAvailable 0x1006be30: a
+		/// train (ship) arrives within the next 60 minutes, so a rider can
+		/// board it (MoveToSubway / MoveToShip).
+		bool transportAvailable(bool ship) const;
+		/// The station of the subway / the Boat Deck while its train or ship
+		/// is stopped (ChkStoppage 0x1006bcf0), else null.
+		Item::Item * transportStopped(bool ship) const;
 
 		// --- movies ---
 		struct Movie

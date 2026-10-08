@@ -311,11 +311,19 @@ void Subway::advance(double dt)
 			else v->returnedToMetro = true;
 		}
 	}
-	int inside = 0;
+	int inside = (int)game->eventSystem.people.visitorsIn(this).size();
 	for (std::set<Visitor *>::iterator it = visitors.begin(); it != visitors.end(); ++it)
 		if ((*it)->at == this) ++inside;
 	const int cap = prototype->yoot && prototype->yoot->capacity > 0 ? prototype->yoot->capacity : 100;
 	setPattern(Yoot::subwayPattern(open, inside, cap));
+}
+
+void Subway::addPerson(Person * p)
+{
+	YootVisitor * v = dynamic_cast<YootVisitor *>(p);
+	if (!v) { Metro::addPerson(p); return; }
+	Item::addPerson(p);
+	game->eventSystem.people.stationEnter(this, v);
 }
 
 void Subway::trainArrives(int riders)

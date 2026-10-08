@@ -283,7 +283,7 @@ void VenueSystem::minuteTick(int minute)
 
 	// T2People::Idle case 11 and the push-outs: the audiences walk out.
 	static const char * venues[] = {"theater", "classictheater", "eventcenter", "stadium", "yootcathedral", "attraction",
-		"observatory", "ticketbooth", "gatheringarea", "boatdeck"};
+		"observatory", "ticketbooth", "gatheringarea"};
 	for (const char * kind : venues)
 	{
 		const Game::ItemSet & s = itemsOf(game, kind);
@@ -322,6 +322,11 @@ void VenueSystem::enter(Item::YootVenue * v, YootVisitor * p)
 	const std::string & id = v->prototype->id;
 	int stay = stayOf(v, 60);
 	bool admitted = v->isOpen();
+	if (id == "boatdeck")
+	{
+		game->eventSystem.people.stationEnter(v, p);
+		return;
+	}
 	if (id == "ticketbooth")
 	{
 		// The booth queues its people with no stay; its idle forwards them.
@@ -718,16 +723,41 @@ void VenueSystem::cruiseTick(int minute)
 		cruiseTimes = {420, 660, 900, 1140};
 	}
 	if (grade() < 3 || !deck->isOpen()) return;
-	for (int t : cruiseTimes)
-		if (minute == t)
+	// The passengers are pool people of transport 4 called by the tenants
+	// (MoveToShip); PeopleSystem lands and boards them while the ship is in.
+	(void)minute;
+}
+
+bool VenueSystem::transportAvailable(bool ship) const
+{
+	const int minute = std::max(0, std::min(1439, (int)std::floor(game->time.hour * 60.0)));
+	std::vector<int> arrivals;
+	if (ship)
+	{
+		Item::YootVenue * deck = firstBuilt<Item::YootVenue>(game, "boatdeck");
+		if (!deck || !deck->isOpen() || grade() < 3 || game->activeRules.profile().worldId != "hawaii") return false;
+		arrivals = {420, 660, 900, 1140};
+	}
+	else
+	{
+		Item::Subway * s = firstBuilt<Item::Subway>(game, "subway");
+		if (!s || !s->open) return false;
+		for (const YootEventSpec & e : game->activeRules.profile().events)
 		{
-			// MoveToShip / CheckRouteFromPool: the ship brings pool visitors.
-			const int n = game->eventSystem.people.drawVisitors(deck,
-				std::max(0, std::min(deck->capacity() - deck->users(), deck->capacity() / 2)));
-			const long long now = Yoot::absoluteMinute(game->time.absolute);
-			for (int k = 0; k < n; ++k) deck->leaveAt.push_back(now + cruiseDockMinutes);
-			deck->visitorsToday += n;
+			YootMetroDef metro;
+			if (decodeYootMetro(e, metro)) { arrivals = Yoot::subwayArrivals(metro.trains, s->level); break; }
 		}
+	}
+	for (int t : arrivals)
+		if (minute >= t - 60 && minute <= t) return true;
+	return false;
+}
+
+Item::Item * VenueSystem::transportStopped(bool ship) const
+{
+	if (ship) return cruiseDocked() ? firstBuilt<Item::YootVenue>(game, "boatdeck") : nullptr;
+	Item::Subway * s = firstBuilt<Item::Subway>(game, "subway");
+	return s && s->trainPresent ? s : nullptr;
 }
 
 bool VenueSystem::cruiseDocked() const

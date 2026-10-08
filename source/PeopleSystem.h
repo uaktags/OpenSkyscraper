@@ -58,6 +58,10 @@ namespace OT
 		Item::Item * walkTarget = nullptr;
 		WalkKind walkKind = kWalkNode;
 
+		/// T2Transport rider: aboard the train / ship of this station
+		/// (status 0x10, not in the tower).
+		Item::Item * aboard = nullptr;
+
 		/// T2People::CalcFreeTime 0x100495b0 at `now`.
 		long long freeTime(long long now) const;
 		bool yootWalkTo(Item::Item * next, int floor) override;
@@ -134,6 +138,11 @@ namespace OT
 		/// Room art: the guests in the room, asleep (33) or up (34).
 		void roomLook(const Item::Hotel * room, int & in, int & asleep, int & up) const;
 
+		// --- subway riders and cruise passengers (T2Transport) ---
+		/// A rider back at the station (Subway / Boat Deck): waits inside
+		/// for the next stopped train or ship.
+		void stationEnter(Item::Item * station, YootVisitor * v);
+
 		/// The tenant took the visitor in (status 11) or turned it away.
 		void arrived(YootVisitor * v, Item::Item * tenant, bool admitted, long long leaveMinute);
 		/// T2Tenant::PushOutPeople 0x1005f720: the visitor leaves `tenant`.
@@ -155,6 +164,7 @@ namespace OT
 		/// Diagnostics for the sim summary.
 		int calledToday = 0;
 		int enteredToday = 0;
+		int ridersToday = 0;   ///< subway / ship riders landed at a station
 		int returnedToday[3] = {0, 0, 0};  ///< T2Pool::Enter by estimate: <= 70, 71..200, > 200
 
 	private:
@@ -182,6 +192,7 @@ namespace OT
 		std::map<Item::Item *, HotelStay> stays;
 		std::map<Item::Item *, bool> roomOuting;  ///< +0x88 (kept across stays)
 		void hotelTick(long long now);
+		void transportTick(long long now);
 		void roomIdle(Item::Hotel * room, int minute, long long now);
 		void deskIdle(Item::FrontDesk * desk, long long now);
 		bool callGuests(Item::Hotel * room, HotelStay & s, Item::FrontDesk * desk, long long now);
