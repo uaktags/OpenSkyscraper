@@ -484,7 +484,10 @@ void VipSystem::encodeXML(tinyxml2::XMLPrinter & xml) const
 	xml.PushAttribute("vipSuiteFloor", suiteFloor);
 	xml.PushAttribute("vipStressTotal", stressTotal);
 	xml.PushAttribute("vipStressTrips", stressTrips);
-	xml.PushAttribute("yootVipLastDay", yootLastDay);
+	// YootTower-only state: SimTower/OpenSky saves stay byte-identical to
+	// the pre-YootTower format (decode defaults to -1).
+	if (game->activeRules.profile().yootWorld)
+		xml.PushAttribute("yootVipLastDay", yootLastDay);
 }
 
 void VipSystem::decodeXML(tinyxml2::XMLElement & xml)
