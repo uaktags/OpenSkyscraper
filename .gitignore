@@ -35,6 +35,9 @@ cmake_install.cmake
 # First-party art source sheets under data/bitmaps are tracked assets.
 !data/bitmaps/**/*.png
 
+# 4x high-resolution twins of those sheets (same layout, 4x pixels).
+!data/bitmaps@4x/**/*.png
+
 # OpenTower edition ships its art as committed folder-plugin sprites.
 !data/Plugins/OpenTower/**/*.png
 
