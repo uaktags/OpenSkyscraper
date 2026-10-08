@@ -247,6 +247,12 @@ Application::Application(int argc, char *argv[])
             startupViewportScrollHorizontal = atof(argv[++i]);
             startupViewportScrollVertical = atof(argv[++i]);
         }
+        if (strcmp(argv[i], "--qa-zoom") == 0)
+        {
+            // Viewport zoom factor for captures (2 = the original games' 1:1 scale).
+            assert(i + 1 < argc && "--qa-zoom is missing factor");
+            startupZoomFactor = atof(argv[++i]);
+        }
     }
 
     // The skin defaults to the ruleset's own era unless --skin was given.
@@ -866,6 +872,8 @@ void Application::init()
             game->selectTool(startupTool.c_str());
         if (setViewportScrollAtStartup)
             game->qaSetViewportScrollFractions(startupViewportScrollHorizontal, startupViewportScrollVertical);
+        if (startupZoomFactor > 0.0)
+            game->zoomBy(startupZoomFactor);
         if (setMouseAtStartup)
             sf::Mouse::setPosition(startupMousePosition, window);
     }
