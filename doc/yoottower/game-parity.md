@@ -537,3 +537,95 @@ Burger 177 vs 119); exported vending machines stay in status 10 in the original 
 has no case for it), so their counts are not compared. Venues, hotel guests, riders and
 students are not part of this tower; `tests/sim/yoot_visitors.tower` (golden
 `sim_visitors_yoottower`) covers them in OpenSky only.
+
+## 7. Parity campaign
+
+Harness: `tools/yoottower/remote/parity/` (`parity.sh run TAG DAYS TOWER...`, then
+`report` / `recompare`). Each tower is exported once to a .bld save and both games start from
+it: the original through the Wine oracle (one save per game hour), OpenSky through `--sim`.
+"Before" is OpenSky at `64f110f` (the branch before this campaign), "after" is the branch
+head. The original's series is the same in both tables. Population peak = the daily maximum
+of the tower population (the people counted in the tower); each cell is original / OpenSky,
+and `x` marks a difference beyond the tolerance (`compare.py` TOL).
+
+### 7.1 Population peak per day (3 game days; day 2 is a holiday)
+
+| Tower (run) | Day | Original | OpenSky before | OpenSky after |
+|---|---|---|---|---|
+| yoot_people (s7) | 0 | 434 | 467 | 336 x |
+| | 1 | 509 | 478 | 317 x |
+| | 2 (holiday) | 559 | 596 | 419 x |
+| tokyo_g4_blackout (s7) | 0 | 308 | 350 | 294 |
+| | 1 | 313 | 386 | 268 |
+| | 2 | 373 | 457 | 466 |
+| tokyo_g3_reggae (s7, days 11-13) | 11 | 302 | 827 x | 814 x |
+| | 12 | 428 | 793 x | 871 x |
+| | 13 | 428 | 1054 x | 967 x |
+| tokyo_g3_venues (s8) | 0 | 288 | 823 x | 726 x |
+| | 1 | 288 | 860 x | 902 x |
+| | 2 | 288 | 1041 x | 1065 x |
+| tokyo_g2_hotel_subway (s8) | 0 | 645 | 1008 x | 936 x |
+| | 1 | 703 | 1426 x | 1380 x |
+| | 2 | 935 | 2165 x | 1826 x |
+| hawaii_g3_boatdeck (s8) | 0 | 540 | 645 | 630 |
+| | 1 | 632 | 724 | 754 |
+| | 2 | 977 | 923 | 819 |
+
+The venues tower's original peak reads 288 on every day. That is suspicious (the same value
+each day in the oracle's snapshots), so its row is not evidence yet.
+
+### 7.2 Within-tolerance counts (report.md, before / after)
+
+| Tower | Funds | Pop max | Pop min | Estimate | Customers |
+|---|---|---|---|---|---|
+| yoot_people | 4/4 / 4/4 | 4/4 / 1/4 | 4/4 / 4/4 | 37/69 / 38/69 | 18/26 / 13/25 |
+| tokyo_g4_blackout | 4/4 / 4/4 | 4/4 / 4/4 | 4/4 / 4/4 | 47/60 / 46/60 | 6/10 / 8/10 |
+| tokyo_g3_reggae | 2/4 / 2/4 | 0/4 / 0/4 | 1/4 / 1/4 | 190/304 / 194/304 | 7/30 / 10/32 |
+| tokyo_g3_venues | 4/4 / 4/4 | 1/4 / 1/4 | 4/4 / 4/4 | 197/312 / 200/312 | 12/32 / 8/29 |
+| tokyo_g2_hotel_subway | 4/4 / 4/4 | 0/4 / 0/4 | 0/4 / 0/4 | 177/376 / 186/376 | 21/67 / 19/64 |
+| hawaii_g3_boatdeck | 1/4 / 1/4 | 3/4 / 3/4 | 1/4 / 1/4 | 180/190 / 182/190 | 45/58 / 44/59 |
+
+### 7.3 Changes in this campaign
+
+- **Hall events (Event Center):** the collect window is [open, close - 60) (WithinMinutes is
+  half open, `T2Tenant::CollectCustomer` 0x1005f440), and the next event value is
+  2 x good + medium leavers (LeaveTenant hook FUN_1000bcb0), not 2 x visitors.
+- **Plugin restaurants** match the find-target category (+0x38 = 50).
+- **Simple elevators** hold `defaultWait` idles at each stop and drive in gears
+  (StdElev FUN_1000bf30 / c1b0 / c200 / c3b0 / c590, FUN_1000cad0). The value is evidenced:
+  T2MoverDef +0x174 is copied to T2Mover +0x68 (InitMover) and is the stop counter. The
+  StdElev.t2p value is 3 idles, speeds 1 / 3 / 0.
+- **Called staff** walk from the visitor pool before opening (CallBelongPeople 0x1005fb80,
+  start (rand x 10) % 6 minutes on) instead of appearing at once.
+- **Mr. Maru** walks on to the next tenant on his row (FindNextTenant 0x1003b760, DoReception
+  0x1003abe0). The original turns round once at the row end; OpenSky turns without the walk back.
+
+### 7.4 Findings and open mismatches
+
+1. **The elevator change lowered the people tower's population** (yoot_people: peak 596 -> 419
+   on the holiday). The mover means show 16 / 13 / 24 riders against the original's 38 / 53 /
+   39, and the pool calls drop from 398 / 409 / 527 (before) to 282 / 263 / 365 after (original
+   365 / 440 / 490; the elevator change alone gives 302 / 267 / 380).
+   Experiment on the same save (3 days, `--sim`, not committed): the gear drive with the old
+   stop hold (`schedulePatienceTicks`) gives pool calls 329 / 431 / 456 and peaks 398 / 500 /
+   525, all within tolerance; the gear drive with the 3-idle hold gives 371 / 336 / 449. So the
+   3-idle stop hold is evidenced, but the boarding cycle that surrounds it is not yet matched:
+   the original's cars carry about twice the riders. The next step is the door and boarding
+   timing (Car::advance door states against FUN_1000bf30's arrival branch), checked with the
+   people timeline, not with the peak alone.
+2. **Uncle Reggae matches in text and time.** Both games print "Uncle Reggae is noisy" at
+   14:32 and "Uncle Reggae was caught by the security staff" at 14:47 on day 11. The Maru walk
+   and reception are not compared step by step.
+3. **Blackout:** both games print "Power down ... please add a power room" at 11:01 on the
+   5213-power tower (tokyo_g4_blackout). The 11:00-14:00 sequence was not run to its end in the
+   3-day oracle run, and the series' blackout field is not compared yet.
+4. **Event Center evening events (item 2):** not evidenced. The Event Center stays in status 10
+   (never opened) in both games in the venues run, so no evening event was drawn in either.
+   The collect window change is evidenced by the decompile only.
+5. **Shop staff, Event Center leavers, venues and hotel:** the venues and hotel populations
+   are 1.5 to 4 times the original in both builds (customers within tolerance 8/29 and 19/64).
+   The hotel's day-2 peak fell from 2165 to 1826, but it is still far off. The cause is not
+   yet isolated (visitor pool sizes or the venue arrival rates are the likely places).
+6. **Holiday population (item 3):** the original's day-2 peak is 559, OpenSky's is 596 before
+   and 419 after the elevator change. The 663-versus-559 gap of the earlier calibration is gone
+   from the peak, but the regression above now puts the holiday under the original.
