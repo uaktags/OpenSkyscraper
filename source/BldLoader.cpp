@@ -977,6 +977,8 @@ namespace Bld {
 			if (w <= 0 || h <= 0) { drop(t.equipType, "empty footprint"); continue; }
 
 			if (proto == "floor" && t.valiation == 1) proto = "lobby"; // Floor.t2p variation 1
+			// Parking.t2p FUN_1000cee0: wider than the TNDF's 4 units is a gate.
+			if (proto == "parkinglot" && w > 4) proto = "parkinggate";
 			int pw = 0, ph = 0;
 			if (!prototypes(proto, pw, ph))
 			{
@@ -1023,7 +1025,7 @@ namespace Bld {
 				snprintf(buf, sizeof(buf), " width=\"%d\" height=\"%d\"", w, h);
 				attrs += buf;
 			}
-			else if (proto == "office" || proto == "condo" || proto == "yoot_condo")
+			else if (proto == "office" || proto == "condo" || proto == "yoot_condo" || proto == "apartment")
 			{
 				snprintf(buf, sizeof(buf), " occupied=\"%d\" population=\"%d\"", occupied ? 1 : 0, occupied ? residents : 0);
 				attrs += buf;

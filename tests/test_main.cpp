@@ -53,6 +53,7 @@
 #include "../source/YootVenues.h"
 #include "../source/YootMovie.h"
 #include "../source/YootTenants.h"
+#include "../source/YootSpecials.h"
 
 static int g_failures = 0;
 
@@ -3960,7 +3961,7 @@ static bool bldTestPrototypes(const std::string & id, int & w, int & h)
 		{"elevator-express", {6, 1}}, {"elevator-service", {4, 1}}, {"elevator-standard", {4, 1}},
 		{"fastfood", {16, 1}}, {"restaurant", {24, 1}}, {"shop", {12, 1}}, {"office", {9, 1}},
 		{"condo", {16, 1}}, {"yoot_condo", {16, 1}}, {"hotel_single", {4, 1}},
-		{"restroom", {9, 1}}, {"yt_icecream", {12, 1}},
+		{"restroom", {9, 1}}, {"yt_icecream", {12, 1}}, {"apartment", {4, 1}},
 	};
 	std::map<std::string, std::pair<int, int> >::const_iterator i = sizes.find(id);
 	if (i == sizes.end()) return false;
@@ -4134,8 +4135,11 @@ static void testBldShippedSaves()
 	// Restroom.t2p (TOIL) maps to the native YootTower restroom (step 12).
 	EXPECT(report.imported["restroom"] == 7 && countOf(xml, "type=\"restroom\"") == 7);
 	EXPECT(report.dropped.count("TOIL Restroom (no OpenSky counterpart)") == 0);
-	EXPECT(report.dropped["HREN Apartment (no OpenSky counterpart)"] == 1);
-	if (report.dropped.size() != 1)
+	// Apartment.t2p (HREN) maps to the native YootTower apartment (step 14).
+	EXPECT(report.imported["apartment"] == 1);
+	EXPECT(xml.find("type=\"apartment\" x=\"5\" y=\"9\" evaluation=\"100.000\" yootEstimate=\"300\" occupied=\"1\" population=\"0\"") != std::string::npos);
+	EXPECT(report.dropped.empty());
+	if (!report.dropped.empty())
 		for (const auto & d : report.dropped) std::cerr << "dropped: " << d.first << " x" << d.second << "\n";
 
 	// --- Yooooot.bld: the empty Hawaii lot -------------------------------
@@ -4178,7 +4182,7 @@ static void testBldShippedSaves()
 		EXPECT(toTowerXml(tokyo, bldTestPrototypes, xml, report, error));
 		TowerState state;
 		EXPECT(parseTowerXml(xml, state, error));
-		EXPECT(state.world == "tokyo" && state.funds == 7877000 && state.items.size() == 26);
+		EXPECT(state.world == "tokyo" && state.funds == 7877000 && state.items.size() == 27);
 		BldData exported;
 		ImportReport exportReport;
 		EXPECT(exportTower(state, tokyo, exported, exportReport, error, &yootTestPlugins()));
@@ -4186,7 +4190,7 @@ static void testBldShippedSaves()
 		EXPECT(writeBytes(exported, rebuilt, error));
 		BldData reread;
 		EXPECT(parseBytes(rebuilt, reread, error));
-		EXPECT(reread.usedTenants() == 25 && reread.usedMovers() == 1 && reread.usedPeople() == 0);
+		EXPECT(reread.usedTenants() == 26 && reread.usedMovers() == 1 && reread.usedPeople() == 0);
 		EXPECT(reread.settlement.funds == 78770 && reread.minutes == 574 && reread.level == 1);
 		// The game's own layout: 16 waiting areas identical to the sample's,
 		// and StdElev's fixed 2 x 10 extra-data table.
@@ -4528,6 +4532,157 @@ static void testYootFacilities()
 	EXPECT(tc.at("trashfacility").openMinute == 450 && tc.at("trashfacility").closeMinute == 420);
 	EXPECT(tc.count("doctor") && tc.at("doctor").capacity == 20 && tc.at("doctor").bindMinutes == 30);
 	EXPECT(hc.count("yootcathedral") && hc.at("yootcathedral").finalItem());
+}
+
+// Step 14 part A: hotel back office, parking, fire department, Kegon sizes.
+static void testYootSpecials()
+{
+	using namespace OT;
+	namespace Y = OT::Yoot;
+	const PluginManager & pm = yootTestPlugins();
+
+	// W4 room linking: Single/Twin/Suite depend on the Front Desk (NORF);
+	// the Kegon rooms do not. Front.t2p FUN_10013b70 links every unlinked
+	// room in route range of an opening desk.
+	YootPluginIdentity front, single, small;
+	EXPECT(pm.get("Front.t2p") && readYootPluginIdentity(*pm.get("Front.t2p"), front) && front.id == Y::kFrontDeskId);
+	EXPECT(pm.get("Singleroom.t2p") && readYootPluginIdentity(*pm.get("Singleroom.t2p"), single));
+	EXPECT(pm.get("Smallroom.t2p") && readYootPluginIdentity(*pm.get("Smallroom.t2p"), small));
+	EXPECT(Y::roomNeedsFrontDesk(single.dependId) && !Y::roomNeedsFrontDesk(small.dependId));
+	std::vector<Y::RoomLink> rooms(4);
+	rooms[0].reachable = true; rooms[1].reachable = false;
+	rooms[2].reachable = true; rooms[2].linkedDesk = 7; rooms[3].reachable = true;
+	EXPECT(Y::linkRooms(9, rooms) == 2);
+	EXPECT(rooms[0].linkedDesk == 9 && rooms[1].linkedDesk == 0 && rooms[2].linkedDesk == 7 && rooms[3].linkedDesk == 9);
+	EXPECT(Y::linkRooms(9, rooms) == 0); // linked rooms stay with their desk
+	EXPECT(Y::guestroomType(1401) == 0 && Y::guestroomType(1481) == 0 && Y::guestroomType(1402) == 1);
+	EXPECT(Y::guestroomType(1482) == 1 && Y::guestroomType(1403) == 2 && Y::guestroomType(1400) == -1);
+	EXPECT(Y::frontDeskWarningMinute(420) && Y::frontDeskWarningMinute(427) && !Y::frontDeskWarningMinute(428));
+	EXPECT(Y::frontDeskWarningMinute(1320) && !Y::frontDeskWarningMinute(1319));
+
+	// E7 check-in income: booked per room type at the desk, paid at 12:00
+	// (FUN_10015540), cleared at 17:00 (FUN_10015450).
+	const std::map<std::string, YootItemStats> tc = resolveYootCatalog(pm, 0x7);
+	const std::map<std::string, YootItemStats> kc = resolveYootCatalog(pm, 0xF0);
+	EXPECT(tc.count("hotel_single") && tc.count("hotel_suite") && tc.count("frontdesk") && tc.count("housekeeping"));
+	if (tc.count("hotel_single") && tc.count("hotel_suite")) {
+		const YootItemStats & s = tc.at("hotel_single");
+		EXPECT(Y::roomNeedsFrontDesk(s.dependId) && s.toolType == 1401);
+		Y::FrontDeskLedger ledger;
+		EXPECT(ledger.selection[0] == 3); // GetInMoneyIndex default -> inMoney[2]
+		ledger.checkIn(Y::guestroomType(s.toolType), Y::hotelRoomIncome(s, 2));
+		ledger.checkIn(Y::guestroomType(s.toolType), Y::hotelRoomIncome(s, 2));
+		const YootItemStats & suite = tc.at("hotel_suite");
+		ledger.checkIn(Y::guestroomType(suite.toolType), Y::hotelRoomIncome(suite, 2));
+		ledger.checkIn(-1, 5000); // not a guest room
+		EXPECT(ledger.accrued[0] == 4000 && ledger.accrued[2] == 9000);
+		EXPECT(ledger.noonIncome() == 13000 && ledger.noonIncome() == 13000); // paying keeps the table
+		ledger.reset17();
+		EXPECT(ledger.noonIncome() == 0);
+	}
+	EXPECT(Y::tenantWindow(720, Y::kHotelPayMinute) && Y::tenantWindow(727, Y::kHotelPayMinute));
+	EXPECT(!Y::tenantWindow(728, Y::kHotelPayMinute) && !Y::tenantWindow(719, Y::kHotelPayMinute));
+	if (tc.count("frontdesk")) {
+		const YootItemStats & d = tc.at("frontdesk");
+		EXPECT(d.price == 100000 && d.outMoney == 10000 && d.width == 15 && d.belongCapacity == 3);
+		EXPECT(d.openMinute == 360 && d.closeMinute == 60);
+	}
+	if (kc.count("frontdesk")) EXPECT(kc.at("frontdesk").plugin == "RFront.t2p" && kc.at("frontdesk").price == 50000);
+	else EXPECT(false);
+
+	// Housekeeping cycle (RMaintenance FUN_1000bd00 / FUN_1000bf70): maids go
+	// out 07:00..14:00 (open .. close - 120), up to three rooms per trip.
+	EXPECT(!Y::housekeepingDispatchMinute(419, 420, 960) && Y::housekeepingDispatchMinute(420, 420, 960));
+	EXPECT(Y::housekeepingDispatchMinute(840, 420, 960) && !Y::housekeepingDispatchMinute(841, 420, 960));
+	const std::vector<bool> dirty = {false, true, true, false, true, true};
+	EXPECT(Y::maidTrip(dirty) == std::vector<int>({1, 2, 4}));
+	EXPECT(Y::maidTrip(std::vector<bool>(3, false)).empty());
+	if (tc.count("housekeeping") && kc.count("housekeeping")) {
+		EXPECT(tc.at("housekeeping").belongCapacity == 6 && tc.at("housekeeping").openMinute == 420);
+		EXPECT(Y::roomNeedsFrontDesk(tc.at("housekeeping").dependId));
+		// Kegon variant with its own size (RMaintenance 12x1, 4 maids).
+		EXPECT(kc.at("housekeeping").width == 12 && kc.at("housekeeping").belongCapacity == 4);
+	}
+	else EXPECT(false);
+
+	// I6 parking: the gate/lot placement rules are live with the gate item.
+	const BuildRules yoot(BuildRules::Ruleset::YootTower, RulesProfile::yootTower(loadYootWorld(pm, YootWorld::Id::Tokyo)));
+	const BuildRules kegonRules(BuildRules::Ruleset::YootTower, RulesProfile::yootTower(loadYootWorld(pm, YootWorld::Id::Kegon)));
+	const BuildRules sim(BuildRules::Ruleset::SimTower);
+	EXPECT(yoot.minRatingToBuild("parkinggate") == 2 && yoot.minRatingToBuild("parkinglot") == 2);
+	EXPECT(yoot.minRatingToBuild("parking") == BuildRules::kUnavailable);
+	EXPECT(sim.minRatingToBuild("parkinggate") == BuildRules::kUnavailable);
+	EXPECT(sim.minRatingToBuild("parking") == LevelUp::minRatingToBuild("parking"));
+	EXPECT(std::string(BuildRules::yootOnlyPlugin("parkinglot")) == "Parking.t2p" && !BuildRules::yootOnlyPlugin("office"));
+	if (tc.count("parkinglot") && tc.count("parkinggate")) {
+		EXPECT(tc.at("parkinglot").price == 5000 && tc.at("parkinglot").variation == 0 && tc.at("parkinglot").width == 4);
+		EXPECT(tc.at("parkinggate").price == 50000 && tc.at("parkinggate").outMoney == 10000 && tc.at("parkinggate").variation == 1);
+	}
+	else EXPECT(false);
+	std::vector<Y::ParkingPiece> park;
+	Y::ParkingPiece gate; gate.gate = true; gate.floor = -1; gate.height = 2; gate.minX = 0; gate.maxX = 16;
+	park.push_back(gate);
+	Y::ParkingPiece lotB1; lotB1.floor = -1; lotB1.minX = 16; lotB1.maxX = 20;
+	EXPECT(Y::parkingPlaceRule(park, lotB1) == 0); // next to the gate's B1 row
+	Y::ParkingPiece lotB2 = lotB1; lotB2.floor = -2;
+	EXPECT(Y::parkingPlaceRule(park, lotB2) == Y::kErrLotNotAdjacent);
+	park.push_back(lotB1);
+	EXPECT(Y::parkingRemoveRule(park, gate) == Y::kErrGateRemoveLot);
+	EXPECT(Y::parkingIsGate(16) && !Y::parkingIsGate(4));
+	EXPECT(Y::gatePattern(true, true) == 0 && Y::gatePattern(false, true) == 1 && Y::gatePattern(false, false) == 2);
+	Y::ParkingLotModel lot;
+	for (int id = 1; id <= 5; ++id) EXPECT(lot.park(id * 100));
+	EXPECT(!lot.hasSpace() && !lot.park(42) && lot.cars() == 5);
+	EXPECT(lot.pattern == 500 % 13 + 1);
+	EXPECT(lot.leave(500) && lot.pattern == 400 % 13 + 1 && lot.hasSpace());
+	EXPECT(!lot.leave(500) && lot.park(42) && lot.cars() == 5);
+	EXPECT(Y::parkingWarningMinute(370) && Y::parkingWarningMinute(379) && !Y::parkingWarningMinute(380));
+	EXPECT(Y::parkingWarningMinute(1270) && !Y::parkingWarningMinute(1280));
+
+	// I4/I5 fire department: registry 5 like the Security Room; CallFireman
+	// sends six people in total, in list order. Kegon only, grade 4, and
+	// Kegon's T2EV list has no FBEv, so it never meets a fire there.
+	EXPECT(Y::callFiremen({6, 8}) == std::vector<int>({6, 0}));
+	EXPECT(Y::callFiremen({2, 8}) == std::vector<int>({2, 4}));
+	EXPECT(Y::callFiremen({}).empty());
+	EXPECT(kegonRules.minRatingToBuild("firedept") == 3 && sim.minRatingToBuild("firedept") == BuildRules::kUnavailable);
+	const std::map<std::string, YootUnlock> tu = resolveYootUnlocks(pm, 0x7), ku = resolveYootUnlocks(pm, 0xF0);
+	EXPECT(ku.count("firedept") && ku.at("firedept").available && ku.at("firedept").minGrade == 4);
+	EXPECT(tu.count("firedept") && !tu.at("firedept").available);
+	EXPECT(tu.count("frontdesk") && tu.at("frontdesk").minGrade == 2 && ku.at("frontdesk").minGrade == 3);
+	EXPECT(tu.count("parkinggate") && tu.at("parkinggate").minGrade == 3 && !ku.at("parkinggate").available);
+	if (kc.count("firedept")) EXPECT(kc.at("firedept").belongCapacity == 8 && kc.at("firedept").width == 12);
+	else EXPECT(false);
+	bool kegonFire = false;
+	for (const YootEvent & e : loadYootWorld(pm, YootWorld::Id::Kegon).events) kegonFire = kegonFire || e.resType == "FBEV";
+	EXPECT(!kegonFire);
+
+	// Residential: Apartment.t2p (Tokyo) rents for 3 x inMoney a quarter.
+	EXPECT(yoot.minRatingToBuild("apartment") == 0);
+	if (tc.count("apartment")) {
+		const YootItemStats & a = tc.at("apartment");
+		EXPECT(a.inMoney == std::vector<int>({300, 500, 700, 1000}) && a.width == 4 && a.belongCapacity == 1);
+		EXPECT(Y::officeQuarterRent(a, 2) == 2100); // oracle: settlement 1102 -21 units
+	}
+	else EXPECT(false);
+	const std::map<std::string, YootItemStats> hc = resolveYootCatalog(pm, 0xF01);
+	EXPECT(hc.count("yoot_condo") && hc.at("yoot_condo").plugin == "HawaianCondo.t2p");
+	EXPECT(hc.count("apartment") == 0u);
+
+	// M4 + Kegon variants with per-world sizes (catalog overlay).
+	if (kc.count("elevator-standard") && kc.count("elevator-service")) {
+		const YootItemStats & ke = kc.at("elevator-standard");
+		EXPECT(ke.plugin == "KElev.t2p" && ke.maxLength == 50 && ke.capacity == 20);
+		EXPECT(ke.price == 50000 && ke.carPrice == 20000 && ke.outMoney == 5000);
+		EXPECT(kc.at("elevator-service").plugin == "KServ.t2p" && kc.at("elevator-service").maxLength == 1000);
+	}
+	else EXPECT(false);
+	if (kc.count("restroom") && kc.count("trashfacility") && kc.count("floor")) {
+		EXPECT(kc.at("restroom").plugin == "KRestroom.t2p" && kc.at("restroom").width == 10);
+		EXPECT(kc.at("trashfacility").width == 17 && kc.at("trashfacility").height == 2);
+		EXPECT(kc.at("floor").plugin == "KFloor.t2p");
+	}
+	else EXPECT(false);
 }
 
 // Step 13: one placement predicate test per rule (L1, L2, M6, I7).
@@ -4918,6 +5073,7 @@ int main()
 	testYootTenants();
 	testYootPlacementRules();
 	testYootVenues();
+	testYootSpecials();
 	testOspAttrCompat();
 	testYootWorldEncoders();
 	testOspV3Sweep();

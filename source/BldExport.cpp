@@ -143,6 +143,7 @@ namespace Bld {
 		const PluginInfo * officePlugin = plugin("OFFC");
 		const PluginInfo * shopPlugin = plugin("ICES");
 		const PluginInfo * restroomPlugin = plugin("TOIL");
+		const PluginInfo * apartmentPlugin = plugin("HREN");
 		const PluginInfo * elevPlugin = plugin("StdE");
 		if (!floorPlugin)
 		{
@@ -247,6 +248,7 @@ namespace Bld {
 			if (it.type == "office") { p = officePlugin; w = 9; }
 			else if (it.type == "shop") { p = shopPlugin; w = 12; }
 			else if (it.type == "restroom") { p = restroomPlugin; w = 9; }
+			else if (it.type == "apartment") { p = apartmentPlugin; w = 4; }
 			else if (tenant)
 			{
 				p = pluginForStem(tenant->plugin);
@@ -274,13 +276,13 @@ namespace Bld {
 			if (under < 0 || slabAt(row, area.right - 1) != under) { drop(it.type, "not on one floor slab"); continue; }
 			Tenant & t = newTenant(*p, area, false);
 			t.ce.ids = wordArray({(uint16_t)(1000 + under)});
-			if (it.type == "office")
+			if (it.type == "office" || it.type == "apartment")
 			{
 				t.hdr.status = it.occupied ? 10 : 8;    // contracted / for rent
 				t.estimate = (int16_t)(it.occupied ? (it.yootEstimate > 0 ? it.yootEstimate : 300) : 0);
 				t.inMoneyIndex = 2;                     // default price selection
 				t.hasBelongList = 1;                    // six empty staff places
-				t.belongList.assign(6, 0);
+				t.belongList.assign(it.type == "office" ? 6 : 1, 0); // Apartment.t2p: one resident
 			}
 			else if (it.type == "restroom")
 			{
@@ -314,7 +316,7 @@ namespace Bld {
 		}
 		for (const TowerItem & it : tower.items)
 		{
-			if (it.type == "floor" || it.type == "lobby" || it.type == "office" || it.type == "shop" || it.type == "restroom") continue;
+			if (it.type == "floor" || it.type == "lobby" || it.type == "office" || it.type == "shop" || it.type == "restroom" || it.type == "apartment") continue;
 			if (isYootTenantPrototypeId(it.type)) continue;
 			if (it.type == "elevator-standard" && elevPlugin) continue;
 			drop(it.type, "no YootTower counterpart in the exporter");

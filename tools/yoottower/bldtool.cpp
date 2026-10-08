@@ -65,6 +65,9 @@ static bool prototypeSize(const std::string & id, int & w, int & h)
 		{"hotel_suite", {7, 1}}, {"partyhall", {24, 2}}, {"cinema", {31, 2}}, {"metro", {30, 3}},
 		{"parking", {8, 1}}, {"security", {16, 1}}, {"medicalcenter", {32, 1}}, {"recycling", {25, 2}},
 		{"cathedral", {48, 4}}, {"powerroom", {23, 2}},
+		{"trashfacility", {25, 2}}, {"restroom", {9, 1}}, {"doctor", {26, 1}},
+		{"frontdesk", {15, 1}}, {"housekeeping", {15, 1}}, {"parkinglot", {4, 1}}, {"parkinggate", {16, 2}},
+		{"firedept", {12, 1}}, {"apartment", {4, 1}},
 	};
 	auto i = sizes.find(id);
 	if (i == sizes.end())
