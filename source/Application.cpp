@@ -1078,7 +1078,9 @@ void Application::loop()
         // window.draw(bg);
         // window.draw(rateIndicator);
 
-        if (captureFrameAtStartup)
+        // OPENSKY_CAPTURE_FRAMES=n delays the --capture-frame shot by n frames.
+        static int captureDelay = std::getenv("OPENSKY_CAPTURE_FRAMES") ? std::atoi(std::getenv("OPENSKY_CAPTURE_FRAMES")) : 0;
+        if (captureFrameAtStartup && captureDelay-- <= 0)
         {
             sf::Texture frame(window.getSize());
             frame.update(window);

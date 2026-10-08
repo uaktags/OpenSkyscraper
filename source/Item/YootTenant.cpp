@@ -1,6 +1,7 @@
 /* Copyright (c) 2026 OpenSkyscraper Project */
 #include "../Game.h"
 #include "../PeopleSystem.h"
+#include "../YootPeopleArt.h"
 #include "../PluginManager.h"
 #include "../PluginObjmap.h"
 #include "../YootItemArt.h"
@@ -113,6 +114,7 @@ void YootTenant::advance(double dt)
 		releaseVisitors(m);
 		Yoot::tenantIdle(model, d, in, [] { return std::rand(); }, ev);
 		releaseVisitors(m);
+		rollStaffAnime();
 	}
 	lastMinute = now;
 
@@ -181,6 +183,42 @@ void YootTenant::addPerson(Person * p)
 	v->stayEnd = admitted ? model.inside.back() : -1;
 	game->eventSystem.people.arrived(v, this, admitted, v->stayEnd);
 	if (ev.patternChanged) updateSprite();
+}
+
+void YootTenant::rollStaffAnime()
+{
+	// Barber.t2p / Burger.t2p call SetPeopleAnime on every idle while open.
+	staffAnime.clear();
+	if (!isOpen() || model.staffIn <= 0) return;
+	const YootTenantPeopleArt & art = yootTenantPeopleArt(game, def().plugin);
+	if (!art.loaded || !art.hasAnime) return;
+	for (int i = 0; i < model.staffIn; ++i)
+	{
+		int pattern = -1, x = 0;
+		if (!rollPeopleAnime(art.anime, i, position.x, [] { return std::rand(); }, pattern, x)) pattern = -1;
+		staffAnime.push_back(std::make_pair(pattern, x));
+	}
+}
+
+void YootTenant::render(sf::RenderTarget & target) const
+{
+	Item::render(target);
+	if (staffAnime.empty() || underConstruction) return;
+	const YootTenantPeopleArt & art = yootTenantPeopleArt(game, def().plugin);
+	if (!art.loaded) return;
+	sf::Sprite s(art.texture);
+	sf::Color color = game->lighting.compose(sf::Color::White);
+	if (game->statusMode == Game::kHotel) color = sf::Color(color.r * 110 / 255, color.g * 110 / 255, color.b * 110 / 255, 160);
+	s.setColor(color);
+	// The 24 px tenant band sits on the floor line (YootTenant::updateSprite).
+	const float top = -position.y * 36.0f - 24.0f;
+	for (const std::pair<int, int> & a : staffAnime)
+	{
+		if (a.first < 0 || a.first >= (int)art.shil.size() || art.shil[a.first].size.x <= 0) continue;
+		s.setTextureRect(art.shil[a.first]);
+		s.setPosition({a.second * 8.0f, top});
+		target.draw(s);
+	}
 }
 
 void YootTenant::releaseVisitors(long long absMinute)

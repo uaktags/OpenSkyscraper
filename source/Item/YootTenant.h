@@ -44,6 +44,13 @@ namespace OT {
 			virtual bool isOccupied() const { return true; }
 			/// A called visitor reaching the door (T2Tenant::EnterTenant).
 			virtual void addPerson(Person * p);
+			/// The view, then the staff animated by the plugin's PADF over
+			/// its OBJMAP 1100 SHIL parts (T2Tenant::SetPeopleAnime).
+			virtual void render(sf::RenderTarget & target) const;
+			/// T2Tenant::SetPeopleAnime 0x10060000: re-roll each staff
+			/// member present (pattern, x unit; -1 = not drawn).
+			std::vector<std::pair<int, int> > staffAnime;
+			void rollStaffAnime();
 
 			// Yoot::CustomerSources: the pool, nearby tenants and the floor
 			// (PeopleSystem); YootTower visitors walk.

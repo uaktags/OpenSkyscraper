@@ -6,6 +6,7 @@
 #include "../../Sprite.h"
 #include "Elevator.h"
 #include "Queue.h"
+#include "../../YootPeopleArt.h"
 #include "../../YootRules.h"
 #include <vector>
 
@@ -182,6 +183,25 @@ void Queue::render(sf::RenderTarget &target) const
 		if (stepping)
 			x -= 16;
 
+		// YootTower: the world silhouette, facing the elevator (rows 0/3;
+		// the walking frame while stepping in).
+		const YootSilhouetteFrame yoot = yootPersonSilhouette(game, p);
+		if (yoot.texture)
+		{
+			Sprite y;
+			y.setTexture(*yoot.texture);
+			y.setTextureRect(yootSilhouetteRect((direction == Elevator::kUp ? 0 : 3) + (stepping ? 1 : 0)));
+			y.setOrigin({0.f, 36.f});
+			y.setPosition({(direction == Elevator::kUp ? -x - 8.f : elevator->size.x * 8.f + x - 8.f) + elevator->getPositionPixels().x,
+				-(float)(floor * 36)});
+			const double blue = 100.0, yellow = 230.0; // PPDF stress limits
+			sf::Color c = p->stress >= yellow ? sf::Color(255, 0, 0) : p->stress >= blue ? sf::Color(255, 128, 128) : sf::Color::White;
+			y.setColor(tinted ? game->lighting.compose(c) : c);
+			target.draw(y);
+			x += (stepping ? 16 : 8 * yoot.width);
+			if (x >= width) break;
+			continue;
+		}
 		// Calculate the texture subrect for this person.
 		int type = p->type;
 		sf::IntRect sr({type * 32, (stepping ? 48 : 0)}, {p->getWidth(), 24});

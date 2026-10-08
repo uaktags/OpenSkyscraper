@@ -241,6 +241,7 @@ void Item::render(sf::RenderTarget &target) const
 		canHaulPeople()
 		|| prototype->icon == ICON_FLOOR || itemId == "floor"
 		|| itemId == "cinema" || itemId == "partyhall"
+		|| itemId.compare(0, 3, "yt_") == 0  // YootTenant draws its PADF staff
 		|| sleepingCondo;
 	if (!people.empty() && !underConstruction && !suppressOccupants)
 	{
