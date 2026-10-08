@@ -9,6 +9,7 @@
 #include "Item/Shop.h"
 #include "Item/PowerRoom.h"
 #include "Item/YootVenueItems.h"
+#include "Item/YootSpecialItems.h"
 #include "Person.h"
 
 #include <cstdio>
@@ -114,7 +115,9 @@ void InspectorDialog::buildWindow()
 	venueChoice->onItemSelect([this](const tgui::String &, const tgui::String & id) {
 		if (fillingChoice || !currentItem) return;
 		std::string reason;
-		if (!game->eventSystem.venues.choose(currentItem, id.toStdString(), &reason) && !reason.empty())
+		if (Item::FrontDesk * desk = dynamic_cast<Item::FrontDesk *>(currentItem))
+			game->eventSystem.specials.chooseRate(desk, id.toStdString());
+		else if (!game->eventSystem.venues.choose(currentItem, id.toStdString(), &reason) && !reason.empty())
 			game->timeWindow.showMessage(reason);
 		refresh();
 	});
@@ -308,6 +311,16 @@ void InspectorDialog::refreshVenueChoice()
 	const bool isVenue = venues.enabled() && (dynamic_cast<Item::Theater *>(currentItem) ||
 		dynamic_cast<Item::EventCenter *>(currentItem) || dynamic_cast<Item::Billboard *>(currentItem));
 	venueButton->setVisible(venues.enabled() && dynamic_cast<Item::Subway *>(currentItem) != NULL);
+	if (Item::FrontDesk * desk = venues.enabled() ? dynamic_cast<Item::FrontDesk *>(currentItem) : NULL) {
+		// Front Desk room rates (Front.t2p T2DLG 1000), "* " marks the current ones.
+		venueChoice->setVisible(true);
+		fillingChoice = true;
+		venueChoice->removeAllItems();
+		for (const auto & c : game->eventSystem.specials.rateChoices(desk))
+			venueChoice->addItem(c.first, c.second);
+		fillingChoice = false;
+		return;
+	}
 	venueChoice->setVisible(isVenue);
 	if (!isVenue) return;
 	std::string current;

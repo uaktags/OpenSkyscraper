@@ -70,6 +70,14 @@ namespace OT
 
 		/// Inspector lines ("" if none).
 		std::string describe(Item::Item * item);
+		/// Front.t2p T2DLG 1000 "Room Rate:" popups (7154/7157/7158, one per
+		/// room type tab): labels and ids "type:selection" (1-based).
+		std::vector<std::pair<std::string, std::string> > rateChoices(Item::FrontDesk * desk) const;
+		/// Stores the selection in the desk's refcon (+0x16[type]).
+		bool chooseRate(Item::FrontDesk * desk, const std::string & id);
+		/// The price selection (0-based inMoney index) of a room: its desk's
+		/// popup for the room type, else -1 (Game falls back to the default).
+		int roomSelection(const Item::Item * room) const;
 
 		long long hotelIncomePaid = 0; ///< dollars, for tests and diagnostics
 

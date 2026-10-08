@@ -225,6 +225,51 @@ Item::FrontDesk * SpecialSystem::deskOf(Item::Item * room) const
 	return it == roomDesk.end() ? nullptr : it->second;
 }
 
+std::vector<std::pair<std::string, std::string> > SpecialSystem::rateChoices(Item::FrontDesk * desk) const
+{
+	std::vector<std::pair<std::string, std::string> > out;
+	if (!desk) return out;
+	// RFront (Kegon) has two tabs, "Small|Big"; Front has "Single|Twin|Suite".
+	const bool kegon = game->activeRules.profile().worldId == "kegon";
+	static const char * names[3] = {"Single", "Twin", "Suite"};
+	static const char * kegonNames[2] = {"Small", "Big"};
+	static const char * protos[3] = {"hotel_single", "hotel_double", "hotel_suite"};
+	static const char * kegonProtos[2] = {"hotel_single", "hotel_suite"};
+	for (int type = 0; type < (kegon ? 2 : 3); ++type) {
+		std::map<std::string, Item::AbstractPrototype *>::const_iterator p =
+			game->itemFactory.prototypesById.find(kegon ? kegonProtos[type] : protos[type]);
+		if (p == game->itemFactory.prototypesById.end() || !p->second->yoot) continue;
+		const std::vector<int> & money = p->second->yoot->inMoney;
+		for (size_t s = 0; s < money.size(); ++s) {
+			const bool current = desk->ledger.selection[type] == (int)s + 1;
+			out.push_back(std::make_pair(std::string(current ? "* " : "") + (kegon ? kegonNames[type] : names[type]) +
+				" rate: $" + std::to_string(money[s]), std::to_string(type) + ":" + std::to_string(s + 1)));
+		}
+	}
+	return out;
+}
+
+bool SpecialSystem::chooseRate(Item::FrontDesk * desk, const std::string & id)
+{
+	const size_t colon = id.find(':');
+	if (!desk || colon == std::string::npos) return false;
+	const int type = atoi(id.substr(0, colon).c_str()), sel = atoi(id.substr(colon + 1).c_str());
+	if (type < 0 || type > 2 || sel < 1 || sel > 4) return false;
+	// T2GuestroomTable::SetInMoneyIndex: rooms with guests keep their rate
+	// until the stay ends; new check-ins take the new one.
+	desk->ledger.selection[type] = sel;
+	return true;
+}
+
+int SpecialSystem::roomSelection(const Item::Item * room) const
+{
+	const Item::Hotel * hotel = dynamic_cast<const Item::Hotel *>(room);
+	if (!enabled() || !hotel) return -1;
+	Item::FrontDesk * desk = deskOf(const_cast<Item::Item *>(room));
+	if (!desk) return -1;
+	return std::max(0, desk->ledger.selection[roomType(hotel)] - 1);
+}
+
 void SpecialSystem::onCheckIn(Item::Hotel * room)
 {
 	if (!enabled() || !room || !room->prototype->yoot) return;

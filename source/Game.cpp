@@ -1809,6 +1809,10 @@ int Game::yootPriceSelection(const Item::Item * item) const
 	if (rentClass == 0) rentClass = 1;
 	if (const Item::Shop * shop = dynamic_cast<const Item::Shop *>(item))
 		rentClass = shop->rentClass;
+	// Hotel rooms take their Front Desk's rate for the room type (Front.t2p
+	// T2DLG 1000 popups; default selection 3 = index 2).
+	const int deskSelection = eventSystem.specials.roomSelection(item);
+	if (deskSelection >= 0) return std::min(deskSelection, std::max(0, (int)stats->inMoney.size() - 1));
 	return Yoot::selectionFromRentClass(rentClass, (int)stats->inMoney.size());
 }
 
