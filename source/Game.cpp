@@ -458,6 +458,30 @@ Game::Game(Application & app)
 	}
 	//mapWindow     = NULL;
 
+	// YootTower floor holes: same-floor walking between two routing nodes
+	// requires continuous slab coverage (a hole is a visible gap). Under
+	// SimTower/OpenSky the test always answers walkable, which reproduces
+	// the previous link-everything graph exactly.
+	gameMap.horizontalWalkable = [this](int y, int x1, int x2) {
+		if (!activeRules.profile().yootWorld) return true;
+		const int lo = std::min(x1, x2), hi = std::max(x1, x2);
+		Item::Floor * slab = NULL;
+		FloorItems::const_iterator fi = floorItems.find(y);
+		if (fi != floorItems.end()) slab = fi->second;
+		for (int x = lo; x <= hi; x++) {
+			if (slab && slab->coversCell(x)) continue;
+			// Lobby cells stay walkable (the atrium is open floor).
+			ItemSetByInt::const_iterator row = itemsByFloor.find(y);
+			bool lobby = false;
+			if (row != itemsByFloor.end())
+				for (ItemSet::const_iterator i = row->second.begin(); i != row->second.end(); ++i)
+					if ((*i)->prototype->icon == ICON_LOBBY &&
+					    x >= (*i)->position.x && x < (*i)->position.x + (*i)->size.x) { lobby = true; break; }
+			if (!lobby) return false;
+		}
+		return true;
+	};
+
 	setRules(activeRules);
 	funds  = activeRules.profile().startFunds;
 	money.setBalance(funds);
@@ -1478,6 +1502,10 @@ void Game::addItem(Item::Item * item)
 
 		floorItems[item->position.y] = f;
 		decorations.updateFloor(item->position.y);
+		// A floor appeared (load order or minted slab): relink this level
+		// so previously severed YootTower runs reconnect where covered.
+		if (activeRules.profile().yootWorld)
+			gameMap.revalidateFloorLinks(item->position.y);
 	} else {
 		// YootTower special footprints (final items rising above the top
 		// floor, the subway below the lowest) deliberately have no slab for
@@ -1618,6 +1646,10 @@ bool Game::extendFloor(int floor, int minX, int maxX, bool free) {
 			playOnce("simtower/construction/normal");
 		}
 	}
+	// Floor coverage on this level changed (extended, or holes punched for
+	// a detached YootTower run): rebuild the level's horizontal links.
+	if (activeRules.profile().yootWorld)
+		gameMap.revalidateFloorLinks(floor);
 	return true;
 }
 
@@ -2102,6 +2134,10 @@ void Game::decodeXML(tinyxml2::XMLDocument & xml)
 		e = e->NextSiblingElement("item");
 	}
 	populationNeedsUpdate = true;
+	// Loaded floors decode their holes after the graph links were made;
+	// rebuild every level's horizontal links against the real coverage.
+	if (activeRules.profile().yootWorld)
+		gameMap.revalidateAllFloorLinks();
 	// Self-heal missing floor slabs on load (OpenSkyWeb ISSUE-041): repairs
 	// towers saved by builds that minted floors with the off-by-one drag bug.
 	if (repairFloorCoverage())
