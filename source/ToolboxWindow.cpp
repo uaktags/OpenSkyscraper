@@ -214,7 +214,23 @@ void ToolboxWindow::reload()
 
     int numItems = visiblePrototypes.size();
     int totalRows = (numItems + kCols - 1) / kCols;
-    int speedY = kItemsTopY + totalRows * kCellH + 8;
+    int itemsHeight = totalRows * kCellH;
+    const bool yootLayout = yootLayoutActive();
+    std::vector<YootToolboxGroup> yootGroups;
+    if (yootLayout) {
+        yootGroups = collectYootGroups();
+        bool known = false;
+        for (const YootToolboxGroup& g : yootGroups) {
+            // Open on the selected tool's category the first time.
+            if (yootCategory < 0 && std::find(g.prototypeIds.begin(), g.prototypeIds.end(),
+                                              game->selectedTool.substr(game->selectedTool.rfind("item-", 0) == 0 ? 5 : 0)) != g.prototypeIds.end())
+                yootCategory = g.category;
+            known = known || g.category == yootCategory;
+        }
+        if (!known) yootCategory = yootGroups.empty() ? -1 : yootGroups.front().category;
+        itemsHeight = yootLayoutHeight(yootGroups);
+    }
+    int speedY = kItemsTopY + itemsHeight + 8;
     int viewY  = speedY + 24 + 4;  // view-toggle row sits below speed controls
     int clientHeight = viewY + 24 + 3;
 
@@ -261,6 +277,10 @@ void ToolboxWindow::reload()
     inspectButton->onPress([this] { game->selectTool("inspector"); });
 
     // STEP 2: BUILDING ITEMS (parents + standalone tools only)
+    if (yootLayout) {
+        addYootItems(yootGroups);
+        visiblePrototypes.clear();
+    }
     int row = 0;
     for (int i = 0; i < (int)visiblePrototypes.size(); i++)
     {
@@ -391,6 +411,8 @@ void ToolboxWindow::updateTool()
         selectedProtoId = game->selectedTool.substr(5);
     }
 
+    if (yootLayoutActive()) followYootTool(selectedProtoId);
+
     std::string parentId;
     if (!selectedProtoId.empty() && isChildTool(selectedProtoId, parentId)) {
         auto activeIt = parentActiveChild.find(parentId);
@@ -404,12 +426,19 @@ void ToolboxWindow::updateTool()
     for (auto &pair : toolButtons) {
         auto it = buttonStates.find(pair.second);
         if (it != buttonStates.end())
-            setButtonVisuals(pair.second, it->second, pair.first == highlightTool);
+            setButtonVisuals(pair.second, it->second, pair.first == highlightTool ||
+                             pair.first == "category-" + std::to_string(yootCategory));
     }
 }
 
 tgui::Button::Ptr ToolboxWindow::makeItemButton(Item::AbstractPrototype* proto, ButtonState& state)
 {
+    // YootTower: the linked plugin's own OBJMAP 100 icon (pattern
+    // variation x 10, e.g. Floor.t2p 0 = Floor, 10 = Lobby).
+    tgui::Button::Ptr pluginButton;
+    if (proto->yoot && !proto->yoot->plugin.empty() &&
+        makePluginIconButton(proto->yoot->plugin, proto->yoot->variation * 10, state, pluginButton))
+        return pluginButton;
     if (proto->id == "yoot_condo")
     {
         // Toolbox icon for the YootCondo is RT_BITMAP 100 inside the
@@ -540,6 +569,11 @@ void ToolboxWindow::rebuildSlotTexture(const std::string& parentId, const std::s
 
 void ToolboxWindow::update()
 {
+    if (yootReloadPending) {
+        yootReloadPending = false;
+        reload();
+        return;
+    }
     if (holdingParent.empty())
         return;
 

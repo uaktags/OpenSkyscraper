@@ -1,6 +1,7 @@
 /* Copyright (c) 2026 OpenSkyscraper contributors */
 #pragma once
 #include "GameObject.h"
+#include "YootTenants.h"
 #include <TGUI/Widget.hpp>
 #include <TGUI/Texture.hpp>
 #include <TGUI/Widgets/ChildWindow.hpp>
@@ -63,6 +64,17 @@ namespace OT {
 
         private:
             tgui::Button::Ptr makeItemButton(Item::AbstractPrototype* proto, ButtonState& state);
+
+            // YootTower layout (ToolboxWindowYoot.cpp): category buttons over
+            // the selected category's items, as in the original Tools window.
+            bool yootLayoutActive() const;
+            std::vector<YootToolboxGroup> collectYootGroups() const;
+            int yootLayoutHeight(const std::vector<YootToolboxGroup>& groups) const;
+            void addYootItems(const std::vector<YootToolboxGroup>& groups);
+            bool makePluginIconButton(const std::string& plugin, int pattern, ButtonState& state, tgui::Button::Ptr& out);
+            void followYootTool(const std::string& protoId);  ///< show the selected item's category
+            int yootCategory = -1;           ///< selected ToolDef category
+            bool yootReloadPending = false;  ///< a category was picked; rebuild next frame
             void showOverlayFor(const std::string& parentId);
             void hideOverlay();
             void rebuildSlotTexture(const std::string& parentId, const std::string& displayedProtoId);
