@@ -247,6 +247,10 @@ add_executable(BldTool
   source/PluginObjmap.cpp
   source/PluginBitmapLoader.cpp
   source/OspPlugin.cpp
+  source/ResourceJson.cpp
+  source/WorldResourceCodec.cpp
+  source/PluginResourceJson.cpp
+  source/PluginT2pExport.cpp
   source/AbstractPlugin.cpp
   source/DecompiledPlugin.cpp
 )
