@@ -8,8 +8,21 @@
 using namespace OT;
 using namespace OT::Item;
 
+namespace
+{
+	/** The EXE never requests soundtracks for films 3 and 6 (sound ids 9004 /
+	 *  9007); those screenings run silent even though the audio ships in the
+	 *  resources. */
+	bool movieHasSoundtrack(int movieType)
+	{
+		return movieType != 3 && movieType != 6;
+	}
+}
+
 Cinema::~Cinema()
 {
+	// Deregister from game->playingSounds before the sf::Sound member dies.
+	soundtrack.Stop();
 	clearCustomers();
 }
 
@@ -24,6 +37,7 @@ void Cinema::init()
 	quotaMatinee = quotaEvening = patronsToday = 0;
 	eveningShow = false;
 	revenueSettled = false;
+	soundtrackPlaying = false;
 	animation = 0;
 	animationFrame = 0;
 	hallSprite.setTexture(App->bitmaps["simtower/cinema/hall"]);
@@ -98,6 +112,8 @@ void Cinema::decodeXML(tinyxml2::XMLElement &xml)
 	}
 	patronsToday = savedPatronsToday;
 	updateSprite();
+	// A mid-screening save resumes its soundtrack on load.
+	updateSoundtrack();
 }
 
 void Cinema::updateSprite()
@@ -227,15 +243,35 @@ void Cinema::advance(double dt)
 	int af = floor(animation * 2);
 	if (af != animationFrame) { animationFrame = af; spriteNeedsUpdate = true; }
 	if (spriteNeedsUpdate) updateSprite();
+	updateSoundtrack();
 }
 
 Path Cinema::getRandomBackgroundSoundPath()
 {
-	if (!open || !playing || intermission)
+	if (!open || !playing || intermission || !movieHasSoundtrack(movieType))
 		return "";
 	char name[128];
 	snprintf(name, 128, "simtower/cinema/movie%i", movieType);
 	return name;
+}
+
+/** Keeps the looping movie soundtrack in sync with the show state: the EXE
+ *  requests sound 9001+movie_id when a screening starts and silences it at
+ *  the intermission and at closing. */
+void Cinema::updateSoundtrack()
+{
+	const bool wantSound = open && playing && !intermission && movieHasSoundtrack(movieType);
+	if (wantSound == soundtrackPlaying) return;
+	if (wantSound) {
+		char name[128];
+		snprintf(name, 128, "simtower/cinema/movie%i", movieType);
+		soundtrack.setBuffer(app->sounds[name]);
+		soundtrack.setLooping(true);
+		soundtrack.Play(game);
+	} else {
+		soundtrack.Stop();
+	}
+	soundtrackPlaying = wantSound;
 }
 
 void Cinema::addPerson(Person *p)

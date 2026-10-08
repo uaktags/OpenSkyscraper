@@ -50,6 +50,10 @@ namespace OT
 
 		/// Returns a reference to the resource map.
 		Resources & getResources() { return resources; }
+
+		/// Releases every cached resource. Callers must re-request the
+		/// resources they still need (used by live skin switching).
+		void clear() { resources.clear(); }
 		
 	protected:
 		/**

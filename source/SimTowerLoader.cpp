@@ -109,8 +109,12 @@ bool SimTowerLoader::load()
 
 	// Find the possible paths to the SimTower executable and use the first that works.
 	DataManager::Paths paths;
-	if (overridePath.empty())
+	if (overridePath.empty()) {
 		paths = app->data.paths("SIMTOWER.EXE");
+		// Case-sensitive filesystems: probe the common lowercase names too.
+		DataManager::Paths lowerPaths = app->data.paths("simtower.exe");
+		paths.insert(paths.end(), lowerPaths.begin(), lowerPaths.end());
+	}
 	else if (!overrideCompressed)
 		paths.push_back(Path(overridePath));
 	bool success = false;
@@ -143,8 +147,11 @@ bool SimTowerLoader::load()
 		//Iterate through the possible locations and try to find a cached/decompressed version, or decompress if not found.
 		if (overrideCompressed)
 			compressedPaths.push_back(Path(overridePath));
-		else if (overridePath.empty())
+		else if (overridePath.empty()) {
 			compressedPaths = app->data.paths("SIMTOWER.EX_");
+			DataManager::Paths lowerCompressed = app->data.paths("simtower.ex_");
+			compressedPaths.insert(compressedPaths.end(), lowerCompressed.begin(), lowerCompressed.end());
+		}
 		mskwaj_decompressor * d = NULL;
 		for (int i = 0; i < compressedPaths.size() && !success; i++) {
 			const Path &path = compressedPaths[i];
@@ -812,6 +819,10 @@ void SimTowerLoader::loadBitmaps()
 		{0xA713, "alerts/treasure",  sf::Color::White},
 		{0xA714, "alerts/fire",      sf::Color::White},
 		{0xA716, "alerts/starup",    sf::Color(0xCC, 0xCC, 0xCC)},
+		//0x81F4 is the quarterly financial report backdrop: the EXE pops
+		//its report on it right after each 4:59AM settlement (Wave U
+		//row 49). White-keyed like the other UI sheets.
+		{0x81F4, "ui/report", sf::Color::White},
 		{0, ""}
 	};
 	for (int i = 0; namedBitmaps[i].id != 0; i++) {
@@ -838,13 +849,32 @@ void SimTowerLoader::loadBitmaps()
 			&bandStrips[4], &bandStrips[5], &bandStrips[6], NULL);
 	}
 
-	// Convert the images we just loaded to textures. Keys with first-party
-	// data/bitmaps art are left empty so BitmapManager loads the file
-	// edition on demand instead of the extracted EXE sheet.
-	LOG(DEBUG, "Converting loaded images to textures");
+	// Convert the loaded images to textures. The skin decides which EXE
+	// sheets are installed:
+	//   Classic  — everything: the classic look is canonical EXE art
+	//              end-to-end, first-party files included.
+	//   OpenSky  — only keys with no first-party data/bitmaps art AND no
+	//              cataloged OpenTower plugin sheet, so the plugin art
+	//              wins instead of a cached EXE sheet.
+	//   Yoot     — only keys with neither YootTower t2p art (condo today)
+	//              nor first-party files; classic fallback where Yoot has
+	//              nothing.
+	const Skin skin = app->bitmaps.skin();
+	LOG(DEBUG, "Converting loaded images to textures (skin %s)", skinIdentifier(skin));
 	for (Images::const_iterator it = images.begin(); it != images.end(); ++it) {
-		if (app->bitmaps.hasFirstPartyArt(it->first))
-			continue;
+		bool firstParty = app->bitmaps.hasFirstPartyArt(it->first);
+		switch (skin) {
+			case Skin::Classic:
+				break;  // install unconditionally
+			case Skin::OpenSky:
+				if (firstParty || app->bitmaps.editionProvidesKey(it->first))
+					continue;
+				break;
+			case Skin::Yoot:
+				if (firstParty || it->first.str() == "simtower/condo")
+					continue;
+				break;
+		}
 		app->bitmaps.getResources()[it->first].loadFromImage(it->second);
 	}
 }

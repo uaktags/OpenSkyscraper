@@ -181,7 +181,7 @@ Phase 3: Game Systems                                        [PARTIAL — 3.1/3.
     - [DONE] Promotion message via `TimeWindow.showMessage()`.
     - [DONE] **VIP visits** — `source/VipSystem.{h,cpp}` schedules random VIP visits once the tower hits 2★ / 150+ population (21–50 day gaps, 14 extra days after a bad review — tuned down from the original 3–8 days which was far too frequent). Each ~2h visit evaluates the latest judge pass and grants a cash bonus (full $50k for excellent, half for content) or a complaint. State persists across save/reload via `vipNextVisit` / `vipVisiting` attributes; `positiveReviews()` is intended to gate the Cathedral ending.
     - [DONE] **Level-up dialog window** — `source/LevelUpDialog.{h,cpp}` TGUI modal pops up on every promotion showing the new star count and the comma-separated list of freshly-unlocked prototypes (driven by `LevelUp::minRatingToBuild`). Closes on OK button, title-bar X, or Escape; auto-closed on `clearWorld()`.
-    - [ ] **Cathedral "Tower of the Year"** ending — needs a Cathedral item (none exists yet); the VIP `positiveReviews` counter is plumbed for future gating.
+    - [DONE] **Cathedral "Tower of the Year"** ending — landed in the third batch (web ISSUE-010): Cathedral item, TOWER rating, bells + award message; VIP `positiveReviews` was the future gate and the item ships.
     - [ ] Spawn an actual walking VIP sprite (currently the visit is abstract).
 
 - [PARTIAL] **3.3 Fire / Emergency / Terror events** — `source/EventSystem.{h,cpp}` landed. Art (fire/large, fire/small, fire/chopper, fire/destroyed, alerts/fire, alerts/terrorist, alerts/chopper) was already loaded by SimTowerLoader but unused; now wired up.
@@ -190,7 +190,7 @@ Phase 3: Game Systems                                        [PARTIAL — 3.1/3.
     - [DONE] Terror: bomb threat with ~2 game-hour countdown. Click the blinking alert to defuse. Detonation damages nearby tenants ($80k + heavy stress).
     - [DONE] Rendering — fire animation (4-frame cycle), helicopter fly-in sweep, alert icons. Drawn on top of all items.
     - [DONE] Save/load — `nextEventTime` persisted; active events cleared on reload (intentional).
-    - [ ] Thief: targets tenants, calls police, existing `Security` item becomes functional (currently STUB).
+    - [RETIRED] Thief: retired by the concilia review (burglar event, row 13) — the original's thief path was retired there; Security remains a satisfaction item.
     - [ ] Emergency mode: reset all person states, evacuate.
     - [ ] Water spray effect (player extinguishing with fire extinguisher).
 
@@ -281,9 +281,9 @@ Phase 5: Polish & Balance                                     [IN PROGRESS]
     - [DONE] Isolation radii from SimTower Notes (30 tiles for condos/240px, 15 tiles for hotels/120px).
     - [DONE] `computeNoisePenalty()` scans same-floor and adjacent-floor neighbours within radius, linear falloff, cross-floor dampening.
     - [DONE] Penalty wired into `scoreCondo` (full) and `scoreHotel` (70%) inside JudgeSystem.
-    - [ ] `noiseLevel` / `noiseSensitivity` as actual `AbstractPrototype` fields (currently a lookup table in JudgeSystem).
-    - [ ] Stress penalty applied directly to occupants (currently only depresses the cached evaluation).
-    - [ ] Per-prototype tuning (e.g. cinema louder than office).
+    - [STALE] The three follow-ups below are superseded by review row 46: the radii model was replaced by the same-floor 20-cell rule (adopted in Wave S); no prototype fields, no direct stress penalty, no per-prototype tuning are wanted.
+    - [ ] (superseded by row 46 / Wave S) `noiseLevel`/`noiseSensitivity` prototype fields — obsolete under the replacement noise rule.
+    - [ ] (superseded by row 46 / Wave S) stress penalty to occupants + per-prototype tuning — obsolete under the replacement noise rule.
 
 - [PARTIAL] **5.3 Elevator control panel** (original `ElvDlogT.h/c`)
     - [DONE] Per-floor service toggle via finger tool.
@@ -305,7 +305,7 @@ Low priority — revisit after Phases 2–5 land.
 - [DEFERRED] **6.1 Outdoor objects** — antennas, ads, parks (original `OutObjT.h/c`).
 - [DEFERRED] **6.2 Outside view toggle** (original `OutSideT.h/c`, `OutTV.h/c`).
 - [DEFERRED] **6.3 Television / multimedia system** — TV placement, commercial revenue (`QTimeT.h/c`, `QCM.h/c`, `QTSelect.h/c`).
-- [DEFERRED] **6.4 Santa / seasonal events** (original `SantaT.h/c`).
+    - [DONE] **6.4 Santa / seasonal events** — landed (review row 18): `deco/santa` art, santaActive event state, `EventSystem` seasonal trigger; the generic batch note is closed.
 - [DEFERRED] **6.5 Church weddings** (original `ChurchT.h/c`).
 - [DEFERRED] **6.6 Future simulation / what-if mode** (original `FutureT.h/c`).
 - [DEFERRED] **6.7 AquaZone** (original `AquaT.h/c`).
@@ -364,7 +364,7 @@ PathFinding
 
 - [DONE] Game map of transport access points + floor nodes; buildings accessible from a generic floor node.
 - [DONE] `findRoute()` rewritten as A-Star over the transport graph.
-- [ ] Balance path costs for each transport to better match the original.
+- [DONE] Balance path costs for each transport to better match the original (satisfied by review row 31 + Wave S thresholds).
 - [ ] Check for sky-lobby availability before allowing elevator transfer.
 - [ ] Handle route changes (accessible ↔ inaccessible) for people already travelling — stop them mid-journey to avoid crashes and transit them out of the flow cleanly.
 
@@ -450,10 +450,13 @@ Improvements brought back from the 1:1 JS conversion at ~/Projects/OpenSkyWeb
   plus a per-car `carCost` ($80000/$150000/$50000) charged when adding cars
   (replaces the hardcoded $80000).
 - [DONE] **Authentic star progression** — advancement table now 300 / 1000 +
-  Security / 5000 + Medical & VIP / 10000 + Metro; toolbox locks moved to the
+  5000 + Medical & VIP / 10000 + Metro; toolbox locks moved to the
   authentic mapping (service elevator/hotel single/security at 2★,
-  escalator/express/restaurant/cinema/party hall/hotel double & suite/
-  medical/recycling/parking at 3★, metro at 4★) (web commit `46372a2`).
+  **shop**/escalator/express/restaurant/cinema/party hall/hotel double &
+  suite/medical/recycling/parking at 3★, metro at 4★) (web commit `46372a2`;
+  shop gate corrected 2026-09-16 — the web table omitted it; SimTower wiki
+  star-rating page + YootTower ATTR `mGameLevel` (coin/mart = level 3) both
+  put retail shops at 3★).
 - [DONE] **Star award gift message** on promotion ("Your tower has been given
   a Two-Star Award!", EXE strings 0x79636-0x79c36; web ISSUE-034).
 - [DONE] **Autosave** — daily snapshot throttled to 1/60s real time, written
@@ -541,7 +544,8 @@ follow-up pass).
 
 Verified: full build green, `OpenSkyTests` all green, smoke launch OK.
 Still open (no web counterpart worth porting / deferred): thief sprite
-walking animation, wedding processions, fireworks particle effects.
+walking animation, fireworks particle effects. Wedding processions were
+superseded by review row 23 (ChurchT ceremony implementation).
 
 ### Fourth batch — occupant animation pacing (2026-08-29)
 
@@ -786,18 +790,22 @@ below, NOT implemented this campaign):
     "People on Floor X need a path to Floor Y" message.
 48. [ADOPT] Escalator landing validated once at placement against commercial
     whitelist; never re-validated (bulldoze trick stands).
-49. [U] Financial report on 0x81f4 art, expense rows reconcile maintenance
-    categories, hotels-show-income-at-zero-population quirk.
-50. [U] Minimap overlays: mode colors/order per MapPaint, true-color elevator
-    lines, abandoned/construction colors.
-51. [U] Fast Mode = tick-throttle bypass semantics onto our speed UI.
-52. [U] Hidden debug menu recreation (9000 Terrorist / 9001 Treasure / 9002
-    Fire + 9003 redraw) as dev tool.
-53. [U] Drop build-complete sound (EXE plays none; only jackhammer during).
+49. [DONE-U] Financial report on 0x81f4 art (`simtower/ui/report` sheet,
+    ReportDialog), expense rows from the maintenance ledger, hotels-show-
+    income-at-zero-population quirk honored. Wave U close-out.
+50. [DONE-U] Minimap overlays: MapPaint mode colors/order (Eval blue/yellow/
+    red; Pric light-blue/yellow/green/red; Hotel red-unclean), true-color
+    elevator lines, abandoned/construction colors, grey-body+sky normal mode.
+51. [DONE-U] Fast Mode as top speed (tick-throttle bypass, 3 sim ticks per
+    frame, '4' keybind + toolbox button).
+52. [DONE-U] Hidden debug menu recreation (Terrorist/Treasure/Fire/Redraw)
+    behind --debug-menu + Ctrl+Shift+D.
+53. [DONE-U] Build-complete sound dropped (EXE plays none; construction-time
+    sounds kept).
 54. [KEEP OURS] Tenancy length persisted across load (EXE-faithful omission
     has no .TDT field; strictly nicer, matches concilia mod note).
-55. [ADOPT-S] Cinema movie-id space 0-13 (sim side, Wave S); soundtrack
-    wiring (ids 9001+movie_id, films 3/6 silent) deferred to U.
+55. [DONE-U] Cinema movie-id space 0-13 (sim side, Wave S); soundtrack wired
+    (simtower/cinema/movieN = EXE id 9001+N; films 3/6 silent) in Wave U.
 56. [ADOPT] Elevator car add path remainder: home = clicked floor, caps,
     funds gate.
 57. [FIX] Latent bugs unconditionally: queue give-up wrong stress scale,
@@ -809,6 +817,12 @@ Retired by this review: burglar event (13), venue stress reliefs (30),
 noise radii model (46), invented daily maintenance table (36), invented
 weekly office rent (37), our $4M start (24), VIP cash rewards (19),
 promotion bonus claim (22).
+
+## Parity ledger — known non-parity (intentional)
+
+The lists below (deliberate divergences + deferred items) are the permanent
+record of where OpenSkyscraper intentionally differs from the original EXE.
+Future reviews read these as decided, not as open bugs.
 
 Deliberate divergences from the EXE (keep our fixed behavior):
 - B7 chopper left-escape fixed (row 14).
@@ -836,14 +850,23 @@ Known deliberate divergences / deferred items:
 
 - Office and Condo rent class is neutral class 1 because their existing public
   save/API surface has no rent-class field; Shop rent class is persisted.
-- Cinema soundtrack IDs and silent-film audio suppression remain deferred to
-  Wave U.
-- Bomb hunt freeze/destruction details and the financial-report art remain
-  explicit Wave E/U follow-ups; current event behavior uses the implemented
-  deterministic safeguards documented in the source.
 - The no-route API accepts explicit floor pairs; an empty Route alone has no
   destination metadata, so its compatibility fallback latches the current
   journey pair.
+- Cinema soundtrack IDs and silent-film audio suppression: DONE in Wave U
+  (simtower/cinema/movieN; films 3/6 gated silent in code).
+- Financial-report art: DONE in Wave U (simtower/ui/report sheet +
+  ReportDialog). Bomb hunt freeze/destruction details remain the implemented
+  deterministic safeguards documented in the source.
+
+## Wave U close-out (2026-09-16)
+
+- Skin selector landed independent of rulesets: `--skin classic|opensky|
+  yoottower` (default = ruleset's era), provider gates in BitmapManager and
+  the SimTowerLoader install pass, live switching via the K keybind / toolbox
+  "Skin" button (XML round-trip rebuild), persisted as the tower `skin`
+  attribute.
+- Wave U rows 49-53 + 55 implemented; see the review row list above.
 
 Verification performed after Wave S integration: `cmake --build build
 -j$(nproc)`, `build/OpenSkyTests`, and the default-tower load smoke under

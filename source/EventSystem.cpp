@@ -721,6 +721,31 @@ void EventSystem::notifyBuilt()
 	}
 }
 
+// --------------------------------------------------------- debug triggers
+
+// Hidden debug menu (EXE actions 9002/9000/9001). These fire the same
+// entry points the calendar dispatch uses; their own gating (no active
+// event, security office, star ladder) still decides — only the calendar
+// scheduling is bypassed.
+
+void EventSystem::debugTriggerFire()
+{
+	startFire();
+}
+
+void EventSystem::debugTriggerTerror()
+{
+	offerBomb();
+}
+
+void EventSystem::debugTriggerTreasure()
+{
+	// The dig ladder tops out at star 3 (tuning +0xA8..0xAC); clamp so the
+	// payout index stays in range at 4/5 stars.
+	const int star = std::max(1, std::min(3, game->rating + 1));
+	payTreasure(star);
+}
+
 // ---------------------------------------------------------------- helpers
 
 double EventSystem::elapsedFrames() const

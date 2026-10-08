@@ -116,11 +116,82 @@ static bool loadFallbackBitmap(Path name, sf::Texture &dst)
 	return dst.loadFromImage(image);
 }
 
+namespace
+{
+	/// Maps a logical item id to the OpenTower folder-plugin that provides
+	/// its art. The folder plugin name is the edition/plugin path the
+	/// PluginManager catalogs (see PluginManager::addPluginDirectory).
+	struct EditionMapEntry { const char * logical; const char * plugin; };
+	const EditionMapEntry kEditionMap[] = {
+		{"office",        "OpenTower/Office"},
+		{"condo",         "OpenTower/Condo"},
+		{"hotel_single",  "OpenTower/Hotel-Single"},
+		{"hotel_double",  "OpenTower/Hotel-Double"},
+		{"hotel_suite",   "OpenTower/Hotel-Suite"},
+		{"floor",         "OpenTower/Floor"},
+		{"stairs",        "OpenTower/Stairs"},
+		{"escalator",     "OpenTower/Escalator"},
+		{"parking",       "OpenTower/Parking"},
+		{"parking_ramp",  "OpenTower/Parking-Ramp"},
+		{"fastfood",      "OpenTower/FastFood"},
+		{"restaurant",    "OpenTower/Restaurant"},
+		{"security",      "OpenTower/Security"},
+		{"medicalcenter", "OpenTower/MedicalCenter"},
+		{"recycling",     "OpenTower/Recycling"},
+		{"partyhall",     "OpenTower/PartyHall"},
+		{"housekeeping",  "OpenTower/Housekeeping"},
+		{"shops",         "OpenTower/Shops"},
+		{"shop",          "OpenTower/Shops"},
+		{"elevator_standard", "OpenTower/Elevator-Standard"},
+		{"elevator_service",  "OpenTower/Elevator-Service"},
+		{"elevator_express",  "OpenTower/Elevator-Express"},
+		{"elevator_narrow",   "OpenTower/Elevator-Shaft-Narrow"},
+		{"elevator_wide",     "OpenTower/Elevator-Shaft-Wide"},
+		{"lobby_normal",  "OpenTower/Lobby-Normal"},
+		{"lobby_sky",     "OpenTower/Lobby-Sky"},
+		{"lobby_high",    "OpenTower/Lobby-High"},
+	};
+	const char * editionPluginFor(const char * logical)
+	{
+		for (const EditionMapEntry & e : kEditionMap)
+			if (std::strcmp(e.logical, logical) == 0)
+				return e.plugin;
+		return nullptr;
+	}
+}
+
+bool BitmapManager::editionProvides(const char * logicalName) const
+{
+	const char * pluginName = editionPluginFor(logicalName);
+	return pluginName && app->pluginManager.has(pluginName);
+}
+
+bool BitmapManager::editionProvidesKey(const Path & name) const
+{
+	std::string key = name.str();
+	if (key.find(internal_path) == 0)
+		key = key.substr(internal_path.size());
+	return editionProvides(key.c_str());
+}
+
 bool BitmapManager::load(Path name, sf::Texture & dst)
 {
+	// Yoot skin drop-ins: data/bitmaps/yoottower/<stripped-name> wins when
+	// present (future drop-in directory; absent today so this falls
+	// through to the normal path list).
+	DataManager::Paths paths;
+	if (m_skin == Skin::Yoot) {
+		std::string key = name.str();
+		if (key.find(internal_path) == 0)
+			key = key.substr(internal_path.size());
+		DataManager::Paths yootPaths = app->data.paths(Path("bitmaps/yoottower") + key);
+		for (const Path & p : yootPaths)
+			paths.push_back(p);
+	}
 	// Fetch the possible locations for this bitmap. Dumped SimTower resources
 	// live without the leading "simtower/" prefix and with a .png extension.
-	DataManager::Paths paths = app->data.paths(Path("bitmaps") + name);
+	DataManager::Paths mainPaths = app->data.paths(Path("bitmaps") + name);
+	paths.insert(paths.end(), mainPaths.begin(), mainPaths.end());
 	if (name.str().find(internal_path) == 0) {
 		DataManager::Paths strippedPaths = app->data.paths(Path("bitmaps") + name.str().substr(internal_path.size()));
 		paths.insert(paths.end(), strippedPaths.begin(), strippedPaths.end());
@@ -174,58 +245,11 @@ bool BitmapManager::loadFromPlugin(const std::string & pluginName, int resourceI
 	return true;
 }
 
-namespace
-{
-	/// Maps a logical item id to the OpenTower folder-plugin that provides
-	/// its art. The folder plugin name is the edition/plugin path the
-	/// PluginManager catalogs (see PluginManager::addPluginDirectory).
-	struct EditionMap { const char * logical; const char * plugin; };
-	const EditionMap kEditionMap[] = {
-		{"office",        "OpenTower/Office"},
-		{"condo",         "OpenTower/Condo"},
-		{"hotel_single",  "OpenTower/Hotel-Single"},
-		{"hotel_double",  "OpenTower/Hotel-Double"},
-		{"hotel_suite",   "OpenTower/Hotel-Suite"},
-		{"floor",         "OpenTower/Floor"},
-		{"stairs",        "OpenTower/Stairs"},
-		{"escalator",     "OpenTower/Escalator"},
-		{"parking",       "OpenTower/Parking"},
-		{"parking_ramp",  "OpenTower/Parking-Ramp"},
-		{"fastfood",      "OpenTower/FastFood"},
-		{"restaurant",    "OpenTower/Restaurant"},
-		{"security",      "OpenTower/Security"},
-		{"medicalcenter", "OpenTower/MedicalCenter"},
-		{"recycling",     "OpenTower/Recycling"},
-		{"partyhall",     "OpenTower/PartyHall"},
-		{"housekeeping",  "OpenTower/Housekeeping"},
-		{"shops",         "OpenTower/Shops"},
-		{"elevator_standard", "OpenTower/Elevator-Standard"},
-		{"elevator_service",  "OpenTower/Elevator-Service"},
-		{"elevator_express",  "OpenTower/Elevator-Express"},
-		{"elevator_narrow",   "OpenTower/Elevator-Shaft-Narrow"},
-		{"elevator_wide",     "OpenTower/Elevator-Shaft-Wide"},
-		{"lobby_normal",  "OpenTower/Lobby-Normal"},
-		{"lobby_sky",     "OpenTower/Lobby-Sky"},
-		{"lobby_high",    "OpenTower/Lobby-High"},
-	};
-	const char * editionPluginFor(const char * logical)
-	{
-		for (const EditionMap & e : kEditionMap)
-			if (std::strcmp(e.logical, logical) == 0)
-				return e.plugin;
-		return nullptr;
-	}
-}
-
 sf::Texture & BitmapManager::editionTexture(const char * logicalName,
                                             const char * simtowerKey)
 {
-	// First-party OpenTower art is the product's look: whenever the item's
-	// folder plugin is cataloged, its RT_BITMAP 1000 wins, regardless of a
-	// located SIMTOWER executable. The executable edition fills whatever the
-	// plugins don't cover; load() then falls back to loose data/bitmaps
-	// files and finally generated placeholders. The result is cached under
-	// the simtower key so item classes keep their existing texture calls.
+	// Skin decides the provider. Cached results keep the item classes'
+	// existing texture keys working while the art source switches.
 	Resources & resources = getResources();
 	Resources::iterator existing = resources.find(Path(simtowerKey));
 	if (existing != resources.end() && existing->second.getSize().x != 0 &&
@@ -234,12 +258,27 @@ sf::Texture & BitmapManager::editionTexture(const char * logicalName,
 		return existing->second;  // cached plugin/EXE/file result
 	}
 	sf::Texture & dst = resources[Path(simtowerKey)];
-	const char * pluginName = editionPluginFor(logicalName);
-	if (pluginName && app->pluginManager.has(pluginName) &&
-	    loadFromPlugin(pluginName, 1000, dst))
+
+	// OpenTower plugin art only wins under the OpenSky skin; the Classic
+	// look is canonical EXE art end-to-end, and Yoot defers to t2p art.
+	if (m_skin == Skin::OpenSky) {
+		const char * pluginName = editionPluginFor(logicalName);
+		if (pluginName && app->pluginManager.has(pluginName) &&
+		    loadFromPlugin(pluginName, 1000, dst))
+		{
+			return dst;
+		}
+	}
+
+	// YootTower t2p art: the Condo.t2p plugin provides the empty-room
+	// sheet (RT_BITMAP 1000, dark-magenta keyed) for the condo logical
+	// name (same route as YootCondo.cpp).
+	if (m_skin == Skin::Yoot && std::strcmp(logicalName, "condo") == 0 &&
+	    loadFromPlugin("Condo.t2p", 1000, dst, sf::Color(105, 33, 104)))
 	{
 		return dst;
 	}
+
 	load(simtowerKey, dst);
 	return dst;
 }

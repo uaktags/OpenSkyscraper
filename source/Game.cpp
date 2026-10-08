@@ -11,6 +11,7 @@
 #include "Item/Lobby.h"
 #include "Item/Office.h"
 #include "Item/Hotel.h"
+#include "SimTowerLoader.h"
 #include "Item/Condo.h"
 #include "Item/Elevator/Elevator.h"
 #include "Item/Parking.h"
@@ -166,6 +167,16 @@ static bool allowsFloorSpan(const BuildRules & rules, int minX, int maxX)
 		rules.allowsHorizontalFootprint(minX, (int)width);
 }
 
+// Wave U row 51 (Fast Mode): speed index 4 tops the ladder. It bypasses
+// the one-sim-tick-per-frame throttle by running kFastTicksPerFrame full
+// sim ticks per rendered frame (each paced like a top-speed tick) and
+// skips Time's animation ramp (Game::advance / Game::setSpeedMode). The
+// EXE toolbox speed sheet holds only four 23x24 cells, so its button
+// reuses the top cell's art with a text label.
+static const int    kFastSpeedMode     = 4;
+static const double kFastSpeed         = 36.0; // 3x the paced top speed (12)
+static const int    kFastTicksPerFrame = 3;
+
 static bool canExtendFloor(const Game & game, int floor, int minX, int maxX)
 {
 	if (maxX <= minX) return false;
@@ -236,10 +247,74 @@ void Game::closeEventChoice()
 	}
 }
 
+// ------------------------------------------------------------- debug menu
+
+/// Hidden dev menu mirroring the EXE's debug actions 9000 (Terrorist),
+/// 9001 (Treasure), 9002 (Fire) and 9003 (Redraw). Both this window and
+/// its Ctrl+Shift+D keybind are unreachable unless the app was started
+/// with --debug-menu.
+void Game::toggleDebugMenu()
+{
+	if (!app.debugMenuEnabled()) return;
+
+	if (debugMenuWindow) {
+		app.gui.remove(debugMenuWindow);
+		debugMenuWindow.reset();
+		return;
+	}
+
+	tgui::ChildWindow::Ptr window = tgui::ChildWindow::create("Debug");
+	window->setClientSize({150 * app.uiScale, 160 * app.uiScale});
+	window->setPosition({(app.window.getSize().x - 150 * app.uiScale) / 2.f, 60 * app.uiScale});
+	window->setResizable(false);
+	window->setTitleButtons(tgui::ChildWindow::TitleButton::None);
+
+	tgui::Button::Ptr terrorist = tgui::Button::create("Terrorist");
+	terrorist->setSize({126 * app.uiScale, 28 * app.uiScale});
+	terrorist->setPosition({12 * app.uiScale, 12 * app.uiScale});
+	terrorist->onPress([this] { eventSystem.debugTriggerTerror(); });
+	window->add(terrorist);
+
+	tgui::Button::Ptr treasure = tgui::Button::create("Treasure");
+	treasure->setSize({126 * app.uiScale, 28 * app.uiScale});
+	treasure->setPosition({12 * app.uiScale, 48 * app.uiScale});
+	treasure->onPress([this] { eventSystem.debugTriggerTreasure(); });
+	window->add(treasure);
+
+	tgui::Button::Ptr fire = tgui::Button::create("Fire");
+	fire->setSize({126 * app.uiScale, 28 * app.uiScale});
+	fire->setPosition({12 * app.uiScale, 84 * app.uiScale});
+	fire->onPress([this] { eventSystem.debugTriggerFire(); });
+	window->add(fire);
+
+	tgui::Button::Ptr redraw = tgui::Button::create("Redraw");
+	redraw->setSize({126 * app.uiScale, 28 * app.uiScale});
+	redraw->setPosition({12 * app.uiScale, 120 * app.uiScale});
+	redraw->onPress([this] { debugRedraw(); });
+	window->add(redraw);
+
+	app.gui.add(window);
+	debugMenuWindow = window;
+}
+
+/// EXE debug action 9003: the original forced a full repaint of its
+/// dirty-rect GDI screen. Our loop already repaints every frame, so the
+/// cheapest faithful equivalent is clearing and pushing one complete
+/// frame right now.
+void Game::debugRedraw()
+{
+	glClearColor(0, 0, 0, 0);
+	glClear(GL_COLOR_BUFFER_BIT);
+	app.window.resetGLStates();
+	app.gui.draw();
+	app.window.display();
+}
+
 Game::Game(Application & app)
 :	State("game"),
 	app(app),
 	activeRules(app.selectedRuleset()),
+	skin(app.selectedSkin()),
 	itemFactory(this),
 	toolboxWindow(this),
 	timeWindow(this),
@@ -252,8 +327,32 @@ Game::Game(Application & app)
 	decorations(this),
 	vipSystem(this),
 	eventSystem(this),
-	levelUpDialog(this)
+	levelUpDialog(this),
+	reportDialog(this)
 {
+
+	// The EXE-sheet install at Application::init ran before any menu skin
+	// selection could apply (the default skin is OpenSky, so the install
+	// gate left first-party-covered keys empty). When this game runs the
+	// Classic skin, re-run the loader NOW — after the selection, before
+	// the first texture request (reloadGUI below). Idempotent: it only
+	// overwrites cache entries. BitmapManager must learn the skin first:
+	// the install gate reads it.
+	if (!app.hasSkinAssets(skin))
+	{
+		LOG(WARNING, "Skin '%s' assets are unavailable; falling back to OpenSky art", skinDisplayName(skin));
+		skin = Skin::OpenSky;
+	}
+	if (app.bitmaps.skin() != skin)
+	{
+		app.bitmaps.clear();
+		app.bitmaps.setSkin(skin);
+	}
+	if (skin == Skin::Classic && app.hasSkinAssets(Skin::Classic))
+	{
+		SimTowerLoader loader(&app);
+		loader.load();
+	}
 	//mapWindow     = NULL;
 
 	funds  = 2000000;
@@ -319,6 +418,7 @@ void Game::clearWorld()
 	closeEventChoice();
 	mapWindow.close();
 	financeWindow.close();
+	reportDialog.close();
 	routeBuildQueue.clear();
 	for (ItemSet::iterator i = items.begin(); i != items.end(); i++) {
 		delete *i;
@@ -372,16 +472,17 @@ void Game::deactivate()
 
 bool Game::handleEvent(sf::Event & event)
 {
-	if (handleViewportScrollbarEvent(event))
-		return true;
 
 	if (const auto *wheelEvent = event.getIf<sf::Event::MouseWheelScrolled>()) {
 		sf::Vector2i mousePosition = wheelEvent->position;
-		if (toolboxWindow.window && toolboxWindow.window->isMouseOnWidget(tgui::Vector2f(mousePosition.x, mousePosition.y)))
+		tgui::Vector2f mousePosF(mousePosition.x, mousePosition.y);
+		if (app.gui.getWidgetAtPos(mousePosF, true) != nullptr)
 			return false;
-		if (timeWindow.window && timeWindow.window->isMouseOnWidget(tgui::Vector2f(mousePosition.x, mousePosition.y)))
+		if (toolboxWindow.window && toolboxWindow.window->isMouseOnWidget(mousePosF))
 			return false;
-		if (app.menu && app.menu->isMouseOnWidget(tgui::Vector2f(mousePosition.x, mousePosition.y)))
+		if (timeWindow.window && timeWindow.window->isMouseOnWidget(mousePosF))
+			return false;
+		if (app.menu && app.menu->isMouseOnWidget(mousePosF))
 			return false;
 
 		bool isShiftPressed = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LShift) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RShift);
@@ -395,6 +496,7 @@ bool Game::handleEvent(sf::Event & event)
 		}
 		if (wheelEvent->wheel == sf::Mouse::Wheel::Horizontal || isShiftPressed) {
 			poi.x -= delta * 40.f * zoom;
+			poi.x = std::max(-512.0, std::min(512.0, poi.x));
 		} else {
 			poi.y += delta * 40.f * zoom;
 		}
@@ -414,10 +516,13 @@ bool Game::handleEvent(sf::Event & event)
 	sf::Keyboard::Key keyCode = sf::Keyboard::Key::Unknown;
 	char32_t textUnicode = 0;
 	sf::Vector2i mousePosition{};
+	bool keyControl = false, keyShift = false;
 
 	if (const auto * keyPressed = event.getIf<sf::Event::KeyPressed>()) {
 		eventType = EventType::KeyPressed;
 		keyCode = keyPressed->code;
+		keyControl = keyPressed->control;
+		keyShift = keyPressed->shift;
 	} else if (const auto * textEntered = event.getIf<sf::Event::TextEntered>()) {
 		eventType = EventType::TextEntered;
 		textUnicode = textEntered->unicode;
@@ -435,8 +540,8 @@ bool Game::handleEvent(sf::Event & event)
 	switch (eventType) {
 		case EventType::KeyPressed: {
 			switch (keyCode) {
-				case sf::Keyboard::Key::Left:  poi.x -= 20; return true;
-				case sf::Keyboard::Key::Right: poi.x += 20; return true;
+				case sf::Keyboard::Key::Left:  poi.x = std::max(-512.0, poi.x - 20); return true;
+				case sf::Keyboard::Key::Right: poi.x = std::min(512.0, poi.x + 20); return true;
 				case sf::Keyboard::Key::Up:    poi.y += 20; return true;
 				case sf::Keyboard::Key::Down:  poi.y -= 20; return true;
 				case sf::Keyboard::Key::F1:    reloadGUI(); return true;
@@ -453,10 +558,23 @@ bool Game::handleEvent(sf::Event & event)
 		case sf::Keyboard::Key::F:
 			financeWindow.setVisible(!financeWindow.isVisible());
 			return true;
+		case sf::Keyboard::Key::P:
+			showReport();
+			return true;
+		case sf::Keyboard::Key::D:
+			// Hidden debug menu (EXE actions 9000-9003): Ctrl+Shift+D,
+			// only when the app was started with --debug-menu.
+			if (keyControl && keyShift && app.debugMenuEnabled()) {
+				toggleDebugMenu();
+				return true;
+			}
+			break;
 		case sf::Keyboard::Key::Escape:
 			if (inspectorDialog.isVisible()) { inspectorDialog.close(); return true; }
 			if (elevatorDialog.isVisible())  { elevatorDialog.close();  return true; }
+			if (debugMenuWindow) { app.gui.remove(debugMenuWindow); debugMenuWindow.reset(); return true; }
 			if (financeWindow.isVisible())   { financeWindow.setVisible(false); return true; }
+			if (reportDialog.isVisible())    { reportDialog.setVisible(false); return true; }
 			if (mapWindow.isVisible())       { mapWindow.setVisible(false); return true; }
 			break;
 			default: break;
@@ -469,12 +587,16 @@ bool Game::handleEvent(sf::Event & event)
 				case '1': setSpeedMode(1); return true;
 				case '2': setSpeedMode(2); return true;
 				case '3': setSpeedMode(3); return true;
+				case '4': setSpeedMode(4); return true;
 				default: break;
 			} break;
 		} break;
 
 		case EventType::MouseButtonPressed: {
-			if (toolboxWindow.window && toolboxWindow.window->isMouseOnWidget(tgui::Vector2f(mousePosition.x, mousePosition.y)))
+			tgui::Vector2f mousePosF(mousePosition.x, mousePosition.y);
+			if (app.gui.getWidgetAtPos(mousePosF, true) != nullptr)
+				return false;
+			if (toolboxWindow.window && toolboxWindow.window->isMouseOnWidget(mousePosF))
 				return false;
 
 			// Emergency events take priority over all other click actions.
@@ -744,11 +866,12 @@ void Game::qaSetViewportScrollFractions(double horizontal, double vertical)
 	poi.y = 360 * 12 - vertical * (360 * 13);
 }
 
-void Game::advance(double dt)
+/// One simulation tick (Wave U row 51, Fast Mode): the sim core that used
+/// to be the head of Game::advance, split out so Fast can run several
+/// full ticks per rendered frame. `dt` is this tick's slice of the frame
+/// time; at one tick per frame it is the raw frame delta, exactly as before.
+void Game::advanceSimTick(double dt)
 {
-	sf::RenderWindow & win = app.window;
-	drawnSprites = 0;
-
 	// Rebuild a slice of the invalidated lobby routes (see updateRoutes).
 	pumpRouteBuilds();
 
@@ -766,28 +889,20 @@ void Game::advance(double dt)
 	const int financialCycle = (int)floor(time.absolute / 3.0);
 	const bool quarterlySettlementDue =
 		financialCycle > lastAccountingQuarter && time.hour >= 5.0;
-	timeWindow.updateTime();
 
-	// Quarterly accounting is committed after the item/person pass. Office and
-	// Condo use this boundary frame to remove unattractive tenants first, so
-	// leavers do not pay the rent that follows.
-
-	timeWindow.advance(dt);
-	sky.advance(dt);
-	lighting.advance(dt);
 	vipSystem.advance(dt);
 	eventSystem.advance(dt);
-	toolboxWindow.update();
 
 	for (ItemSet::iterator i = items.begin(); i != items.end(); i++) {
 		Item::Item * item = *i;
 		// Construction timer: clear the flag once elapsed and let the
 		// item start ticking. Items still under construction are skipped
-		// entirely - no people, no schedules, no rent.
+		// entirely - no people, no schedules, no rent. Wave U row 53: the
+		// EXE plays no completion chime here (only the jackhammer while
+		// building), so completion ends silently.
 		if (item->underConstruction) {
 			if (time.absolute >= item->constructionEndTime) {
 				item->underConstruction = false;
-				playOnce("simtower/construction/normal");
 			} else {
 				continue;
 			}
@@ -798,10 +913,16 @@ void Game::advance(double dt)
 	for (PersonSet::iterator p = people.begin(); p != people.end(); p++) {
 		(*p)->advance(dt);
 	}
+	// Quarterly accounting is committed after the item/person pass. Office and
+	// Condo use this boundary frame to remove unattractive tenants first, so
+	// leavers do not pay the rent that follows.
 	if (quarterlySettlementDue)
 	{
 		settleQuarterlyAccounting(this);
 		lastAccountingQuarter = financialCycle;
+		// The original pops its financial report right after the
+		// quarterly settlement commits (Wave U row 49).
+		showReport();
 	}
 
 	if (populationNeedsUpdate) {
@@ -813,15 +934,48 @@ void Game::advance(double dt)
 		setPopulation(p);
 	}
 
-	// Keep the inspector popup live if it's on screen.
-	inspectorDialog.refresh();
-	elevatorDialog.refresh();
+	//Play sounds. checkHour reads the clock transition of the last
+	// Time::set, so hour-boundary events belong to the sim tick: a Fast
+	// frame crosses up to three of them.
+	if (time.checkHour(5))  cockSound.Play(this);
+	if (time.checkHour(6))  morningSound.Play(this);
+	if (time.checkHour(9))  bellsSound.Play(this);
+	if (time.checkHour(18)) eveningSound.Play(this);
+
+	// Promotion landing window (LevelUp): 3->4 and 4->5 only land 5PM-7AM on
+	// weekdays. Population/item events already re-evaluate; this catches a
+	// tower that became eligible while the window was shut (e.g. a good VIP
+	// review at 4PM) so it is crowned the moment 5PM opens.
+	if (time.checkHour(LevelUp::kPromotionWindowStartHour)) ratingMayIncrease();
+}
+
+void Game::advance(double dt)
+{
+	sf::RenderWindow & win = app.window;
+	drawnSprites = 0;
+
+	// Advance the sim. Fast (speed 4) bypasses the one-sim-tick-per-frame
+	// throttle: several full sim ticks run per rendered frame, each paced
+	// like a top-speed tick (see advanceSimTick / setSpeedMode). Every
+	// other speed keeps the single tick per frame.
+	const double absoluteAtFrameStart = time.absolute;
+	const int simTicks = (speedMode == kFastSpeedMode) ? kFastTicksPerFrame : 1;
+	for (int tick = 0; tick < simTicks; tick++)
+		advanceSimTick(dt / simTicks);
+
+	timeWindow.updateTime();
+	timeWindow.advance(dt);
+	sky.advance(dt);
+	lighting.advance(dt);
+	toolboxWindow.update();
 
 	// Refresh the minimap every ~1 second of game time (cheaper than every
 	// frame, plenty for an overview that mostly changes on construction).
+	// Compared against the frame-start clock so a Fast frame that crosses
+	// several boundaries still refreshes exactly once.
 	if (mapWindow.isVisible() &&
 	    floor(time.absolute / (0.25 * Time::kBaseSpeed)) !=
-	    floor((time.absolute - time.dta) / (0.25 * Time::kBaseSpeed)))
+	    floor(absoluteAtFrameStart / (0.25 * Time::kBaseSpeed)))
 	{
 		mapWindow.renderMap();
 	}
@@ -830,27 +984,17 @@ void Game::advance(double dt)
 	// change when money moves, so a ~1s throttle is plenty.
 	if (financeWindow.isVisible() &&
 	    floor(time.absolute / (0.25 * Time::kBaseSpeed)) !=
-	    floor((time.absolute - time.dta) / (0.25 * Time::kBaseSpeed)))
+	    floor(absoluteAtFrameStart / (0.25 * Time::kBaseSpeed)))
 	{
 		financeWindow.refresh();
 	}
 
-	//Play sounds.
-	if (time.checkHour(5))  cockSound.Play(this);
-	if (time.checkHour(6))  morningSound.Play(this);
-	if (time.checkHour(9))  bellsSound.Play(this);
-	if (time.checkHour(18)) eveningSound.Play(this);
 	morningSound.setLooping(time.hour < 8);
-
-	// Promotion landing window (LevelUp): 3->4 and 4->5 only land 5PM-7AM on
-	// weekdays. Population/item events already re-evaluate; this catches a
-	// tower that became eligible while the window was shut (e.g. a good VIP
-	// review at 4PM) so it is crowned the moment 5PM opens.
-	if (time.checkHour(LevelUp::kPromotionWindowStartHour)) ratingMayIncrease();
 
 	//Constrain the POI.
 	double2 halfsize((win.getView().getSize().x)*0.5*zoom, (win.getView().getSize().y)*0.5*zoom);
 	poi.y = std::max<double>(std::min<double>(poi.y, 360*12 - halfsize.y), -360 + halfsize.y);
+	poi.x = std::max<double>(std::min<double>(poi.x, 512.0), -512.0);
 
 	//Adust the camera.
 	sf::FloatRect view(
@@ -1114,6 +1258,15 @@ void Game::reloadGUI()
 	timeWindow.reload();
 	mapWindow.reload();
 	financeWindow.reload();
+	reportDialog.reload();
+}
+
+void Game::showReport()
+{
+	// Rebuild on every open so the rows reflect the quarterly ledger
+	// as of right now (settlement time or mid-quarter 'P' press).
+	reportDialog.setVisible(true);
+	reportDialog.reload();
 }
 
 void Game::addItem(Item::Item * item)
@@ -1414,6 +1567,7 @@ void Game::encodeXML(tinyxml2::XMLPrinter & xml)
 	xml.PushAttribute("rainy", sky.rainyDay);
 	xml.PushAttribute("tool", selectedTool.c_str());
 	xml.PushAttribute("ruleset", activeRules.identifier());
+	xml.PushAttribute("skin", skinIdentifier(skin));
 
 
 	xml.PushAttribute("x", (int)poi.x);
@@ -1493,6 +1647,22 @@ void Game::decodeXML(tinyxml2::XMLDocument & xml)
 		}
 	}
 
+
+	// Saved skin. An explicit --skin wins; otherwise the persisted
+	// identifier re-selects the art set (setSkin no-ops when unchanged,
+	// so the setSkin round-trip does not recurse here).
+	if (!app.hasSkinOverride()) {
+		const char * savedSkin = root->Attribute("skin");
+		if (savedSkin) {
+			Skin parsed = Skin::OpenSky;
+			if (parseSkinIdentifier(savedSkin, parsed)) {
+				if (parsed != skin)
+					setSkin(parsed);
+			} else {
+				LOG(WARNING, "invalid saved skin '%s'; keeping current", savedSkin);
+			}
+		}
+	}
 
 	clearWorld();
 
@@ -1704,7 +1874,10 @@ void Game::ratingMayIncrease()
 
 void Game::setSpeedMode(int sm)
 {
-	assert(sm >= 0 && sm <= 3);
+	// Clamp instead of asserting: saves may carry a speed written by a
+	// different version (Wave U added 4 = Fast; legacy saves are 0..3).
+	if (sm < 0) sm = 0;
+	if (sm > kFastSpeedMode) sm = kFastSpeedMode;
 	if (speedMode != sm) {
 		speedMode = sm;
 		double speed = 0;
@@ -1713,8 +1886,12 @@ void Game::setSpeedMode(int sm)
 				case 1: speed = 1; break;
 				case 2: speed = 4; break;
 				case 3: speed = 12; break;
+				case 4: speed = kFastSpeed; break;
 			}
 		time.speed = speed;
+		// Fast skips the animation ramp: full pace from the first frame
+		// (Wave U row 51: no per-frame animation pacing).
+		if (speedMode == kFastSpeedMode) time.speed_animated = speed;
 		toolboxWindow.updateSpeed();
 	}
 }
@@ -1725,6 +1902,69 @@ void Game::cycleStatusMode()
 	statusMode = next;
 	const char *names[] = { "Normal view", "Evaluation view", "Pricing view", "Hotel view" };
 	timeWindow.showMessage(names[static_cast<int>(next)]);
+}
+
+/// Live art-set switch. The cache purge forces every texture request
+/// through the new skin's provider chain; items are rebuilt through the
+/// encode→decode round-trip so their init()-time sprite setup re-runs
+/// against the new art while all persisted state survives.
+void Game::setSkin(Skin newSkin)
+{
+	if (newSkin == skin)
+		return;
+
+	if (!app.hasSkinAssets(newSkin)) {
+		LOG(WARNING, "Skin '%s' assets are unavailable; staying on %s art",
+		    skinDisplayName(newSkin), skinDisplayName(skin));
+		return;
+	}
+
+	// Drop every cached texture BEFORE re-installing EXE sheets, so the
+	// previous skin's provider results are gone and the new gate decides
+	// what gets installed. The skin must be active BEFORE the loader runs:
+	// the EXE-sheet install gate reads BitmapManager's skin.
+	app.bitmaps.clear();
+	app.bitmaps.setSkin(newSkin);
+
+	if (newSkin == Skin::Classic) {
+		SimTowerLoader loader(&app);
+		if (!loader.load()) {
+			LOG(WARNING, "Classic skin requires SIMTOWER.EXE; staying on OpenSky art");
+			newSkin = Skin::OpenSky;
+			app.bitmaps.clear();
+			app.bitmaps.setSkin(newSkin);
+		}
+	}
+	skin = newSkin;
+
+	// Rebuild items in place: serialize the world, clear it, reload. The
+	// item decode path re-runs init() with the same state, so sprites are
+	// recreated against the new textures.
+	tinyxml2::XMLPrinter printer;
+	encodeXML(printer);
+	tinyxml2::XMLDocument doc;
+	if (doc.Parse(printer.CStr(), printer.CStrSize() - 1) == tinyxml2::XML_SUCCESS) {
+		decodeXML(doc);
+	} else {
+		LOG(ERROR, "setSkin: XML round-trip failed (%s)", doc.ErrorStr());
+	}
+
+	reloadGUI();
+	decorations.reloadTextures();
+	timeWindow.showMessage(std::string("Skin: ") + skinDisplayName(skin));
+}
+
+void Game::cycleSkin()
+{
+	// Cycle within the mode's sanctioned edition set (review matrix;
+	// OpenSky mode is unrestricted and offers all three).
+	const std::size_t count = sanctionedSkinCount(activeRules.ruleset());
+	std::size_t next = 0;
+	for (std::size_t i = 0; i < count; i++) {
+		if (sanctionedSkin(activeRules.ruleset(), i) == skin)
+			next = (i + 1) % count;
+	}
+	setSkin(sanctionedSkin(activeRules.ruleset(), next));
 }
 
 void Game::centerViewportOnTile(double tileX, double tileY)

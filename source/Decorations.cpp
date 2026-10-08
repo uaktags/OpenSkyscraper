@@ -21,6 +21,13 @@ Decorations::Decorations(Game * game)
 	tracksVisible = false;
 }
 
+
+/// Re-resolve the cached decoration sprites after a live skin switch.
+void Decorations::reloadTextures()
+{
+	crane.SetImage(App->bitmaps["simtower/deco/crane"]);
+	track.SetImage(App->bitmaps["simtower/metro/tracks"]);
+}
 void Decorations::reset()
 {
 	fireStairs.clear();

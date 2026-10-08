@@ -1,6 +1,7 @@
 /* Copyright (c) 2012-2015 Fabian Schuiki */
 #include <TGUI/Widgets/MenuBar.hpp>
 #include <TGUI/Widgets/ChildWindow.hpp>
+#include "Skin.h"
 #include <TGUI/Widgets/EditBox.hpp>
 #include <TGUI/Widgets/Button.hpp>
 #include <TGUI/Widgets/CheckBox.hpp>
@@ -46,7 +47,11 @@ Application::Application(int argc, char *argv[])
       bitmaps(this),
       sounds(this),
       m_ruleset(BuildRules::Ruleset::OpenSky),
-      m_rulesetExplicit(false)
+      m_rulesetExplicit(false),
+      m_skin(Skin::OpenSky),
+      m_skinExplicit(false),
+      m_loadedSimTowerResources(false),
+      m_debugMenu(false)
 {
     assert(App == NULL && "Application initialized multiple times");
     App = this;
@@ -65,6 +70,7 @@ Application::Application(int argc, char *argv[])
     captureFrameAtStartup = false;
     setMouseAtStartup = false;
     setViewportScrollAtStartup = false;
+    m_debugMenu = false;
     startupViewportScrollHorizontal = 0.0;
     startupViewportScrollVertical = 0.0;
 
@@ -147,6 +153,26 @@ Application::Application(int argc, char *argv[])
                 LOG(ERROR, "invalid ruleset '%s'; expected simtower, opensky, or yoottower", identifier);
             }
         }
+        if (strcmp(argv[i], "--skin") == 0)
+        {
+            assert(i + 1 < argc && "--skin is missing value");
+            const char * identifier = argv[++i];
+            Skin parsed;
+            if (parseSkinIdentifier(identifier, parsed))
+            {
+                m_skin = parsed;
+                m_skinExplicit = true;
+                LOG(INFO, "skin override set to %s", identifier);
+            }
+            else
+            {
+                LOG(ERROR, "invalid skin '%s'; expected classic, opensky, or yoottower", identifier);
+            }
+        }
+        if (strcmp(argv[i], "--debug-menu") == 0)
+        {
+            m_debugMenu = true;
+        }
         if (strcmp(argv[i], "--new-game") == 0)
         {
             startNewGame = true;
@@ -201,6 +227,17 @@ Application::Application(int argc, char *argv[])
             startupViewportScrollHorizontal = atof(argv[++i]);
             startupViewportScrollVertical = atof(argv[++i]);
         }
+    }
+
+    // The skin defaults to the ruleset's own era unless --skin was given.
+    if (!m_skinExplicit)
+        m_skin = defaultSkinForRuleset(m_ruleset);
+    else if (!isSkinSanctioned(m_ruleset, m_skin))
+    {
+        LOG(WARNING, "Skin '%s' is not supported in ruleset '%s'; switching to %s",
+            skinDisplayName(m_skin), BuildRules(m_ruleset).displayName(),
+            skinDisplayName(defaultSkinForRuleset(m_ruleset)));
+        m_skin = defaultSkinForRuleset(m_ruleset);
     }
 
     if (!uiScaleExplicit)
@@ -585,11 +622,7 @@ void Application::makeMenu()
                 window.close();
             }
             else if (items.back() == "New") {
-                // Start a new game (same as MainMenu New Tower)
-                Game* game = new Game(*this);
-                game->seedNewTower();
-                popState();
-                pushState(game);
+                showNewTowerDialog();
             }
             else if (items.back() == "Save") {
                 saveGame();
@@ -682,23 +715,28 @@ void Application::init()
         return;
     }
 
+
     // Acquire optional legacy game resources in order of preference:
     //   1. Extract from SIMTOWER.EXE / SIMTOWER.EX_
     //   2. Pre-dumped bitmaps/sounds under data/bitmaps and data/sounds
     //   3. Any independently discovered plugins under data/Plugins
     // None of these are startup requirements: first-party resources and
     // safe placeholders allow a clean standalone installation to launch.
-    bool loadedSimTowerResources = false;
+    m_loadedSimTowerResources = false;
+    // The skin must be active BEFORE the loader runs: the EXE-sheet
+    // install gate reads BitmapManager's skin to decide which extracted
+    // sheets get installed.
+    bitmaps.setSkin(selectedSkin());
     {
         SimTowerLoader simtower(this);
-        loadedSimTowerResources = simtower.load();
+        m_loadedSimTowerResources = simtower.load();
     }
 
     // Detect pre-dumped resources by real file presence. Note that
     // BitmapManager/SoundManager always "succeed" by synthesising placeholder
     // assets, so we can't use their return value to gate startup.
     bool usingDumpedResources = false;
-    if (!loadedSimTowerResources)
+    if (!m_loadedSimTowerResources)
     {
         usingDumpedResources =
             data.exists("bitmaps/sky.png") &&
@@ -706,6 +744,26 @@ void Application::init()
             data.exists("sounds/cock.wav");
     }
 
+    // The Classic skin is canonical EXE art and needs SIMTOWER.EXE. Without
+    // it there is nothing classic to show: fall back to OpenSky art rather
+    // than launching with placeholders everywhere.
+    if (selectedSkin() == Skin::Classic && !m_loadedSimTowerResources)
+    {
+        LOG(WARNING, "Classic skin requires SIMTOWER.EXE; falling back to OpenSky art");
+        m_skin = Skin::OpenSky;
+        bitmaps.setSkin(m_skin);
+    }
+    if (selectedSkin() == Skin::Yoot && !hasSkinAssets(Skin::Yoot))
+    {
+        LOG(WARNING, "YootTower skin assets not found in data/bitmaps/yoottower; falling back to OpenSky art");
+        m_skin = Skin::OpenSky;
+        bitmaps.setSkin(m_skin);
+    }
+    // A user-selected YootTower plugin folder (Settings dialog) is
+    // cataloged alongside the automatic search-path Plugins/ dirs, so
+    // SIMTOWER.EXE and YootTower media can both be provided at once.
+    if (!yootPluginsPath.empty())
+        pluginManager.addPluginDirectory(Path(yootPluginsPath));
     // Build the plugin catalog from every search dir's Plugins/ subfolder.
     // Plugins are optional and lazily loaded when a resource or item asks for
     // one. This includes both YootTower .t2p files and OpenTower directories.
@@ -719,8 +777,12 @@ void Application::init()
     LOG(INFO, "cataloged %zu first-party and %zu optional external plugin(s)",
         openTowerPluginCount, externalPluginCount);
 
+    // Activate the selected skin once every art provider is cataloged, so
+    // BitmapManager knows which provider wins for each texture key.
+    bitmaps.setSkin(selectedSkin());
+
     // Report which resource path we ended up on.
-    if (loadedSimTowerResources)
+    if (m_loadedSimTowerResources)
     {
         LOG(INFO, "loaded resources from SIMTOWER.EXE");
     }
@@ -1046,8 +1108,10 @@ bool Application::loadSettings()
             if (root->QueryFloatAttribute("uiScale", &valScale) == tinyxml2::XML_SUCCESS) {
                 uiScale = std::max(1.0f, std::min(2.0f, valScale));
             }
-            const char *exe = root->Attribute("simTowerExecutable");
-            simTowerExecutable = exe ? exe : "";
+			const char *exe = root->Attribute("simTowerExecutable");
+			simTowerExecutable = exe ? exe : "";
+			const char *yoot = root->Attribute("yootPluginsPath");
+			yootPluginsPath = yoot ? yoot : "";
             LOG(INFO, "Loaded settings: volume=%f, muted=%d, fullscreen=%d, uiScale=%f",
                 audioVolume, audioMuted, fullscreen, uiScale);
             return true;
@@ -1078,6 +1142,7 @@ void Application::saveSettings()
     xml.PushAttribute("fullscreen", fullscreen);
     xml.PushAttribute("uiScale", uiScale);
     xml.PushAttribute("simTowerExecutable", simTowerExecutable.c_str());
+    xml.PushAttribute("yootPluginsPath", yootPluginsPath.c_str());
     xml.CloseElement();
     fclose(f);
     LOG(INFO, "Saved settings: volume=%f, muted=%d, fullscreen=%d, uiScale=%f",
@@ -1133,7 +1198,7 @@ void Application::showSettingsDialog()
 
     auto dialog = tgui::ChildWindow::create("Settings");
     dialog->setWidgetName("SettingsDialog");
-    dialog->setClientSize({500 * uiScale, 390 * uiScale});
+    dialog->setClientSize({500 * uiScale, 445 * uiScale});
     dialog->getRenderer()->setTitleBarHeight(24 * uiScale);
     dialog->setTitleTextSize(14 * uiScale);
     dialog->getRenderer()->setTitleColor(sf::Color(220, 220, 220));
@@ -1232,8 +1297,8 @@ void Application::showSettingsDialog()
     dialog->add(cmbScale);
     currentY += 45.f * uiScale;
 
-    // --- GAME RESOURCES SECTION ---
-    auto lblResources = tgui::Label::create("GAME RESOURCES");
+    // --- SIMTOWER RESOURCES ---
+    auto lblResources = tgui::Label::create("SIMTOWER RESOURCES");
     lblResources->setTextSize(14 * uiScale);
     lblResources->getRenderer()->setTextColor(sf::Color(0, 150, 255));
     lblResources->setPosition(padding, currentY);
@@ -1272,11 +1337,55 @@ void Application::showSettingsDialog()
     });
     currentY += 28.f * uiScale;
 
-    auto lblRestart = tgui::Label::create("The selected resource source is used after restarting OpenSkyscraper.");
+    // --- YOOTTOWER RESOURCES ---
+    auto lblYoot = tgui::Label::create("YOOTTOWER RESOURCES");
+    lblYoot->setTextSize(14 * uiScale);
+    lblYoot->getRenderer()->setTextColor(sf::Color(0, 150, 255));
+    lblYoot->setPosition(padding, currentY);
+    dialog->add(lblYoot);
+    currentY += 25.f * uiScale;
+
+    // Folder containing the official YootTower .t2p plugins. Independent
+    // of the SIMTOWER.EXE pick so both editions' media can be provided at
+    // once; the skin selector decides per tower which set is used.
+    auto pendingYoot = std::make_shared<std::string>(yootPluginsPath);
+    auto yootPath = tgui::EditBox::create();
+    yootPath->setSize(310 * uiScale, 24 * uiScale);
+    yootPath->setPosition(padding + 10.f * uiScale, currentY);
+    yootPath->setText(yootPluginsPath.empty() ? "Automatic" : yootPluginsPath);
+    yootPath->setReadOnly(true);
+    dialog->add(yootPath);
+
+    auto btnBrowseYoot = tgui::Button::create("Browse...");
+    btnBrowseYoot->setSize(90 * uiScale, 24 * uiScale);
+    btnBrowseYoot->setPosition(padding + 330.f * uiScale, currentY);
+    dialog->add(btnBrowseYoot);
+    btnBrowseYoot->onPress([pendingYoot, yootPath]() {
+        std::string selected;
+        if (NativeFileDialog::openDirectory(
+                "Choose the folder containing YootTower .t2p plugins", selected) == NativeFileDialog::Result::Selected)
+        {
+            *pendingYoot = selected;
+            yootPath->setText(selected);
+        }
+    });
+
+    auto btnAutoYoot = tgui::Button::create("Auto");
+    btnAutoYoot->setSize(50 * uiScale, 24 * uiScale);
+    btnAutoYoot->setPosition(padding + 425.f * uiScale, currentY);
+    dialog->add(btnAutoYoot);
+    btnAutoYoot->onPress([pendingYoot, yootPath]() {
+        pendingYoot->clear();
+        yootPath->setText("Automatic");
+    });
+    currentY += 28.f * uiScale;
+
+    auto lblRestart = tgui::Label::create("Resource sources are used after restarting OpenSkyscraper.");
     lblRestart->setTextSize(11 * uiScale);
     lblRestart->getRenderer()->setTextColor(sf::Color(170, 170, 170));
     lblRestart->setPosition(padding + 10.f * uiScale, currentY);
     dialog->add(lblRestart);
+    currentY += 28.f * uiScale;
 
     // --- BUTTONS ---
     auto btnApply = tgui::Button::create("Apply");
@@ -1303,7 +1412,7 @@ void Application::showSettingsDialog()
         gui.remove(dialog);
     });
 
-    btnApply->onPress([this, dialog, chkMute, sldVolume, chkFullscreen, cmbScale, pendingExecutable]() {
+    btnApply->onPress([this, dialog, chkMute, sldVolume, chkFullscreen, cmbScale, pendingExecutable, pendingYoot]() {
         bool newMute = chkMute->isChecked();
         float newVolume = sldVolume->getValue();
         bool newFullscreen = chkFullscreen->isChecked();
@@ -1318,6 +1427,7 @@ void Application::showSettingsDialog()
         setAudioMuted(newMute);
         setAudioVolume(newVolume);
         simTowerExecutable = *pendingExecutable;
+        yootPluginsPath = *pendingYoot;
 
         bool needWindowRecreation = (newFullscreen != fullscreen) || (std::abs(newScale - uiScale) > 0.01f);
 
@@ -1352,6 +1462,271 @@ void Application::showSettingsDialog()
         }
 
         saveSettings();
+    });
+
+    gui.add(dialog);
+}
+
+bool Application::hasSkinAssets(Skin skin) const
+{
+    switch (skin)
+    {
+    case Skin::OpenSky:
+        return true;
+    case Skin::Classic:
+        return m_loadedSimTowerResources ||
+               !simTowerExecutable.empty() ||
+               data.exists("SIMTOWER.EXE") || data.exists("simtower.exe") ||
+               data.exists("SIMTOWER.EX_") || data.exists("simtower.ex_");
+    case Skin::Yoot:
+        // YootTower standalone skin requires base environmental art (sky, ground, lobby)
+        // which has not yet been produced. Until complete drop-ins exist (e.g. bitmaps/yoottower/sky.png),
+        // the skin is gated as incomplete.
+        return data.exists("bitmaps/yoottower/sky.png");
+    }
+    return true;
+}
+
+void Application::showMessageDialog(const std::string &title, const std::string &message)
+{
+    auto existing = gui.get<tgui::ChildWindow>("MessageDialog");
+    if (existing)
+    {
+        gui.remove(existing);
+    }
+
+    auto dialog = tgui::ChildWindow::create(title);
+    dialog->setWidgetName("MessageDialog");
+    dialog->setClientSize({380.f * uiScale, 175.f * uiScale});
+    dialog->getRenderer()->setTitleBarHeight(24.f * uiScale);
+    dialog->setTitleTextSize(14.f * uiScale);
+    dialog->getRenderer()->setTitleColor(sf::Color(220, 220, 220));
+    dialog->getRenderer()->setBackgroundColor(sf::Color(26, 30, 40));
+    dialog->getRenderer()->setTitleBarColor(sf::Color(40, 46, 58));
+    dialog->getRenderer()->setBorderColor(sf::Color(70, 80, 100));
+    dialog->getRenderer()->setBorders(2);
+    dialog->setPosition({(window.getSize().x - dialog->getSize().x) / 2.f,
+                         (window.getSize().y - dialog->getSize().y) / 2.f});
+    dialog->setResizable(false);
+
+    auto msgLabel = tgui::Label::create(message);
+    msgLabel->setTextSize(12.f * uiScale);
+    msgLabel->getRenderer()->setTextColor(sf::Color(220, 225, 235));
+    msgLabel->setPosition(20.f * uiScale, 18.f * uiScale);
+    msgLabel->setSize(340.f * uiScale, 85.f * uiScale);
+    dialog->add(msgLabel);
+
+    auto okBtn = tgui::Button::create("OK");
+    okBtn->setSize(90.f * uiScale, 28.f * uiScale);
+    okBtn->setTextSize(13.f * uiScale);
+    okBtn->setPosition((dialog->getClientSize().x - okBtn->getSize().x) / 2.f,
+                       dialog->getClientSize().y - 38.f * uiScale);
+    auto r = okBtn->getRenderer();
+    r->setBackgroundColor(sf::Color(28, 92, 168));
+    r->setTextColor(sf::Color::White);
+    r->setBackgroundColorHover(sf::Color(38, 110, 195));
+    r->setBorderColor(sf::Color(55, 125, 215));
+    r->setBorders(1);
+    r->setRoundedBorderRadius(4.f * uiScale);
+    okBtn->onPress([this, dialog]() {
+        gui.remove(dialog);
+    });
+    dialog->add(okBtn);
+
+    gui.add(dialog);
+    dialog->moveToFront();
+}
+
+void Application::showNewTowerDialog()
+{
+    auto existing = gui.get<tgui::ChildWindow>("NewTowerDialog");
+    if (existing)
+    {
+        existing->moveToFront();
+        return;
+    }
+
+    Game* currentGame = !states.empty() ? dynamic_cast<Game*>(states.top()) : nullptr;
+
+    auto dialog = tgui::ChildWindow::create("New Tower");
+    dialog->setWidgetName("NewTowerDialog");
+    const float dialogH = (currentGame ? 350.f : 300.f) * uiScale;
+    dialog->setClientSize({420 * uiScale, dialogH});
+    dialog->getRenderer()->setTitleBarHeight(24 * uiScale);
+    dialog->setTitleTextSize(14 * uiScale);
+    dialog->getRenderer()->setTitleColor(sf::Color(220, 220, 220));
+    dialog->getRenderer()->setBackgroundColor(sf::Color(24, 28, 36));
+    dialog->getRenderer()->setTitleBarColor(sf::Color(40, 46, 58));
+    dialog->getRenderer()->setBorderColor(sf::Color(70, 80, 100));
+    dialog->getRenderer()->setBorders(2);
+    dialog->setPosition({(window.getSize().x - dialog->getSize().x) / 2.f,
+                         (window.getSize().y - dialog->getSize().y) / 2.f});
+    dialog->setResizable(false);
+
+    float padding = 20.f * uiScale;
+    float currentY = 16.f * uiScale;
+
+    if (currentGame)
+    {
+        auto warnLabel = tgui::Label::create("Warning: Starting a new tower will discard all unsaved progress in the current game!");
+        warnLabel->setTextSize(11 * uiScale);
+        warnLabel->getRenderer()->setTextColor(sf::Color(255, 185, 75)); // Amber warning
+        warnLabel->setSize({dialog->getClientSize().x - 2 * padding, 36 * uiScale});
+        warnLabel->setPosition(padding, currentY);
+        dialog->add(warnLabel);
+        currentY += 44.f * uiScale;
+    }
+
+    if (!isSkinSanctioned(selectedRuleset(), selectedSkin()))
+    {
+        Skin def = defaultSkinForRuleset(selectedRuleset());
+        setSkinOverride(hasSkinAssets(def) ? def : Skin::OpenSky);
+    }
+
+    // Ruleset (Game Mode)
+    auto modeBtn = tgui::Button::create(std::string("Game Mode: ") + BuildRules(selectedRuleset()).displayName());
+    modeBtn->setSize(dialog->getClientSize().x - 2 * padding, 34 * uiScale);
+    modeBtn->setTextSize(13 * uiScale);
+    modeBtn->setPosition(padding, currentY);
+    auto modeR = modeBtn->getRenderer();
+    modeR->setBackgroundColor(sf::Color(42, 48, 62));
+    modeR->setTextColor(sf::Color(230, 235, 245));
+    modeR->setBackgroundColorHover(sf::Color(55, 64, 82));
+    modeR->setBorderColor(sf::Color(65, 76, 98));
+    modeR->setBorders(1);
+    modeR->setRoundedBorderRadius(4 * uiScale);
+    dialog->add(modeBtn);
+    currentY += 44.f * uiScale;
+
+    // Skin selector button
+    auto skinBtn = tgui::Button::create();
+    skinBtn->setSize(dialog->getClientSize().x - 2 * padding, 34 * uiScale);
+    skinBtn->setTextSize(13 * uiScale);
+    skinBtn->setPosition(padding, currentY);
+    auto skinR = skinBtn->getRenderer();
+    skinR->setBackgroundColor(sf::Color(42, 48, 62));
+    skinR->setTextColor(sf::Color(230, 235, 245));
+    skinR->setBackgroundColorHover(sf::Color(55, 64, 82));
+    skinR->setBorderColor(sf::Color(65, 76, 98));
+    skinR->setBorders(1);
+    skinR->setRoundedBorderRadius(4 * uiScale);
+    dialog->add(skinBtn);
+    currentY += 40.f * uiScale;
+
+    // Warning note for gated/incomplete skins
+    auto warnSkinLabel = tgui::Label::create();
+    warnSkinLabel->setTextSize(10 * uiScale);
+    warnSkinLabel->getRenderer()->setTextColor(sf::Color(255, 195, 80));
+    warnSkinLabel->setSize({dialog->getClientSize().x - 2 * padding, 30 * uiScale});
+    warnSkinLabel->setPosition(padding, currentY);
+    dialog->add(warnSkinLabel);
+
+    // Start New Tower Button
+    auto startBtn = tgui::Button::create("Start New Tower");
+    startBtn->setSize(160 * uiScale, 34 * uiScale);
+    startBtn->setTextSize(13 * uiScale);
+    startBtn->setPosition(padding, dialog->getClientSize().y - 46 * uiScale);
+    dialog->add(startBtn);
+
+    // Cancel Button
+    auto cancelBtn = tgui::Button::create("Cancel");
+    cancelBtn->setSize(100 * uiScale, 34 * uiScale);
+    cancelBtn->setTextSize(13 * uiScale);
+    cancelBtn->setPosition(dialog->getClientSize().x - padding - 100 * uiScale, dialog->getClientSize().y - 46 * uiScale);
+    auto cancelR = cancelBtn->getRenderer();
+    cancelR->setBackgroundColor(sf::Color(55, 60, 72));
+    cancelR->setTextColor(sf::Color::White);
+    cancelR->setBackgroundColorHover(sf::Color(70, 78, 92));
+    cancelR->setBorderColor(sf::Color(75, 84, 100));
+    cancelR->setBorders(1);
+    cancelR->setRoundedBorderRadius(4 * uiScale);
+    dialog->add(cancelBtn);
+
+    auto updateSkinState = [this, skinBtn, startBtn, warnSkinLabel]() {
+        bool available = hasSkinAssets(selectedSkin());
+        if (available) {
+            skinBtn->setText(std::string("Skin: ") + skinDisplayName(selectedSkin()));
+            skinBtn->getRenderer()->setBorderColor(sf::Color(65, 76, 98));
+            startBtn->setEnabled(true);
+            startBtn->setText("Start New Tower");
+            auto r = startBtn->getRenderer();
+            r->setBackgroundColor(sf::Color(28, 92, 168));
+            r->setTextColor(sf::Color::White);
+            r->setBackgroundColorHover(sf::Color(38, 110, 195));
+            r->setBorderColor(sf::Color(50, 120, 210));
+            r->setBorders(1);
+            r->setRoundedBorderRadius(4 * uiScale);
+            warnSkinLabel->setVisible(false);
+        } else {
+            skinBtn->setText(std::string("🔒 Skin: ") + skinDisplayName(selectedSkin()) + " (Locked)");
+            skinBtn->getRenderer()->setBorderColor(sf::Color(190, 110, 45));
+            startBtn->setEnabled(false);
+            startBtn->setText("Skin Incomplete (Locked)");
+            auto r = startBtn->getRenderer();
+            r->setBackgroundColor(sf::Color(48, 52, 60));
+            r->setTextColor(sf::Color(140, 145, 155));
+            r->setBackgroundColorHover(sf::Color(48, 52, 60));
+            r->setBorderColor(sf::Color(70, 75, 85));
+            r->setBorders(1);
+            r->setRoundedBorderRadius(4 * uiScale);
+            if (selectedSkin() == Skin::Yoot)
+                warnSkinLabel->setText("⚠️ YootTower base assets (sky/ground) in development. Select OpenSky.");
+            else
+                warnSkinLabel->setText("⚠️ SIMTOWER.EXE not found. Select OpenSky or provide in Settings.");
+            warnSkinLabel->setVisible(true);
+        }
+    };
+    updateSkinState();
+
+    modeBtn->onPress([this, modeBtn, updateSkinState] {
+        BuildRules::Ruleset next = static_cast<BuildRules::Ruleset>((static_cast<int>(selectedRuleset()) + 1) % 3);
+        setRulesetOverride(next);
+        modeBtn->setText(std::string("Game Mode: ") + BuildRules(next).displayName());
+        updateSkinState();
+    });
+
+    skinBtn->onPress([this, updateSkinState] {
+        std::size_t next = 0;
+        const std::size_t count = sanctionedSkinCount(selectedRuleset());
+        for (std::size_t i = 0; i < count; i++) {
+            if (sanctionedSkin(selectedRuleset(), i) == selectedSkin())
+                next = (i + 1) % count;
+        }
+        Skin s = sanctionedSkin(selectedRuleset(), next);
+        setSkinOverride(s);
+        updateSkinState();
+    });
+
+    startBtn->onPress([this, dialog]() {
+        if (!hasSkinAssets(selectedSkin()))
+        {
+            if (selectedSkin() == Skin::Yoot)
+            {
+                showMessageDialog("Skin Unavailable",
+                    "The YootTower skin is currently in development and lacks base environmental assets (sky, ground, and lobby).\n\nPlease select the OpenSky skin to play YootTower mode.");
+            }
+            else if (selectedSkin() == Skin::Classic)
+            {
+                showMessageDialog("SIMTOWER.EXE Required",
+                    "The Classic skin requires SIMTOWER.EXE to load original assets.\n\nPlease configure SIMTOWER.EXE in Settings or select the OpenSky skin.");
+            }
+            return;
+        }
+        gui.remove(dialog);
+        Game* newGame = new Game(*this);
+        newGame->seedNewTower();
+        newGame->saveFilename = "";
+        newGame->isDirty = false;
+        popState();
+        pushState(newGame);
+    });
+
+    cancelBtn->onPress([this, dialog]() {
+        gui.remove(dialog);
+    });
+
+    dialog->onClose([this, dialog]() {
+        gui.remove(dialog);
     });
 
     gui.add(dialog);

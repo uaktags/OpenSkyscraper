@@ -1,6 +1,7 @@
 #pragma once
 #include "../Sprite.h"
 #include "Item.h"
+#include "../Sound.h"
 #include <set>
 
 namespace OT {
@@ -57,6 +58,12 @@ namespace OT {
 			void addPerson(Person * p);
 			void removePerson(Person * p);
 
+			// Looping movie soundtrack: the EXE requests sound 9001+movie_id
+			// at screening start (films 3 and 6 ship silent) and silences it
+			// at the intermission and closing.
+			Sound soundtrack;
+			bool soundtrackPlaying;
+			void updateSoundtrack();
 			Path getRandomBackgroundSoundPath();
 		};
 	}

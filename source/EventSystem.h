@@ -81,6 +81,14 @@ namespace OT
 		/// once per promotion with the new star rating. Safe at star > 3 or
 		/// with no basement (sets the latch to false).
 		void armTreasureLatch(int star);
+		/// Hidden debug menu triggers (EXE actions 9002/9000/9001). They
+		/// run the calendar's own scheduling paths (startFire / offerBomb
+		/// / payTreasure), so the paths' own gating still applies; only
+		/// the calendar scheduling is skipped. Reachable only via the
+		/// --debug-menu dev menu in Game.
+		void debugTriggerFire();
+		void debugTriggerTerror();
+		void debugTriggerTreasure();
 
 	protected:
 		void draw(sf::RenderTarget & target, sf::RenderStates states) const;

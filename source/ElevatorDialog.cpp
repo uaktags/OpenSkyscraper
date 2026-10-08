@@ -90,35 +90,44 @@ void ElevatorDialog::buildWindow()
 	window = tgui::ChildWindow::create();
 	window->setTitle("Elevator");
 	auto renderer = window->getRenderer();
-	renderer->setTitleBarHeight(14 * app->uiScale);
-	renderer->setBackgroundColor(sf::Color(20, 24, 32, 235));
-	renderer->setTitleBarColor(sf::Color(45, 50, 60));
-	renderer->setBorderColor(sf::Color(90, 100, 120));
+	renderer->setTitleBarHeight(20 * app->uiScale);
+	renderer->setTitleColor(sf::Color(220, 226, 234));
+	renderer->setBackgroundColor(sf::Color(24, 28, 36, 245));
+	renderer->setTitleBarColor(sf::Color(40, 46, 58));
+	renderer->setBorderColor(sf::Color(70, 80, 100));
 	renderer->setBorders(1);
 
-	const float w = 180 * app->uiScale;
-	const float h = 390 * app->uiScale;
+	const float w = 210 * app->uiScale;
+	const float h = 420 * app->uiScale;
+	window->setSize({w, h});
 	window->setPosition({static_cast<float>(130 * app->uiScale),
 	                     static_cast<float>(40 * app->uiScale)});
 
 	header = tgui::Label::create();
-	header->setTextSize(11 * app->uiScale);
-	header->setPosition({6 * app->uiScale, 4 * app->uiScale});
+	header->setTextSize(12 * app->uiScale);
+	header->setPosition({10 * app->uiScale, 6 * app->uiScale});
 	header->getRenderer()->setTextColor(sf::Color(220, 226, 234));
 	header->getScrollbar()->setPolicy(tgui::Scrollbar::Policy::Never);
-	header->setSize({168 * app->uiScale, 36 * app->uiScale});
+	header->setSize({w - 20 * app->uiScale, 44 * app->uiScale});
 	window->add(header);
 
 	panel = tgui::ScrollablePanel::create();
-	panel->setPosition({6 * app->uiScale, 44 * app->uiScale});
-	panel->setSize({168 * app->uiScale, 310 * app->uiScale});
+	panel->setPosition({10 * app->uiScale, 54 * app->uiScale});
+	panel->setSize({w - 20 * app->uiScale, 325 * app->uiScale});
+	window->add(panel);
 
 	// "Show: Yes/No" toggle — flips the elevator's shaft visibility.
-	// When No, the shaft interior is transparent (only rails + cars +
-	// motors are drawn) so tenants behind show through.
 	showToggleBtn = tgui::Button::create("Show: Yes");
-	showToggleBtn->setSize(85 * app->uiScale, 18 * app->uiScale);
-	showToggleBtn->setPosition({6 * app->uiScale, 360 * app->uiScale});
+	showToggleBtn->setSize(95 * app->uiScale, 24 * app->uiScale);
+	showToggleBtn->setPosition({10 * app->uiScale, 386 * app->uiScale});
+	showToggleBtn->setTextSize(11 * app->uiScale);
+	auto showR = showToggleBtn->getRenderer();
+	showR->setBackgroundColor(sf::Color(45, 52, 65));
+	showR->setTextColor(sf::Color::White);
+	showR->setBackgroundColorHover(sf::Color(60, 70, 88));
+	showR->setBorderColor(sf::Color(75, 88, 110));
+	showR->setBorders(1);
+	showR->setRoundedBorderRadius(4 * app->uiScale);
 	showToggleBtn->onPress([this] {
 		if (!currentElevator) return;
 		currentElevator->showShaft = !currentElevator->showShaft;
@@ -127,9 +136,16 @@ void ElevatorDialog::buildWindow()
 	window->add(showToggleBtn);
 
 	auto closeBtn = tgui::Button::create("Close");
-	closeBtn->setSize(60 * app->uiScale, 18 * app->uiScale);
-	closeBtn->setPosition({96 * app->uiScale, 360 * app->uiScale});
+	closeBtn->setSize(80 * app->uiScale, 24 * app->uiScale);
+	closeBtn->setPosition({w - 90 * app->uiScale, 386 * app->uiScale});
 	closeBtn->setTextSize(11 * app->uiScale);
+	auto closeR = closeBtn->getRenderer();
+	closeR->setBackgroundColor(sf::Color(60, 65, 75));
+	closeR->setTextColor(sf::Color::White);
+	closeR->setBackgroundColorHover(sf::Color(78, 85, 98));
+	closeR->setBorderColor(sf::Color(85, 92, 105));
+	closeR->setBorders(1);
+	closeR->setRoundedBorderRadius(4 * app->uiScale);
 	closeBtn->onPress([this] { close(); });
 	window->add(closeBtn);
 
@@ -146,29 +162,45 @@ void ElevatorDialog::rebuildFloorButtons()
 	int minY = currentElevator->position.y;
 	int maxY = currentElevator->position.y + currentElevator->size.y;
 
-	const float btnH = 18 * app->uiScale;
-	const float btnW = 160 * app->uiScale;
+	const float btnH = 22 * app->uiScale;
+	const float btnW = panel->getSize().x - 18 * app->uiScale;
 	float y = 0;
 
 	for (int floor = minY; floor < maxY; ++floor)
 	{
+		bool serviced = currentElevator->connectsFloor(floor);
 		auto btn = tgui::Button::create(buttonLabel(floor));
 		btn->setSize(btnW, btnH);
 		btn->setPosition(0, y);
-		btn->setTextSize(10 * app->uiScale);
+		btn->setTextSize(11 * app->uiScale);
+
+		auto r = btn->getRenderer();
+		r->setRoundedBorderRadius(3 * app->uiScale);
+		r->setBorders(1);
+		if (serviced) {
+			r->setBackgroundColor(sf::Color(32, 64, 102));
+			r->setTextColor(sf::Color(230, 240, 255));
+			r->setBackgroundColorHover(sf::Color(44, 84, 132));
+			r->setTextColorHover(sf::Color::White);
+			r->setBorderColor(sf::Color(60, 95, 145));
+		} else {
+			r->setBackgroundColor(sf::Color(30, 33, 40));
+			r->setTextColor(sf::Color(140, 148, 160));
+			r->setBackgroundColorHover(sf::Color(42, 46, 56));
+			r->setTextColorHover(sf::Color(200, 205, 215));
+			r->setBorderColor(sf::Color(50, 56, 68));
+		}
+
 		btn->onPress([this, floor] {
 			game->toggleElevatorService(currentElevator, floor);
-			// Update just this button's label rather than rebuilding all.
-			std::map<int, tgui::Button::Ptr>::iterator it = floorButtons.find(floor);
-			if (it != floorButtons.end())
-				it->second->setText(buttonLabel(floor));
+			game->inspectorDialog.refresh();
+			refresh();
 		});
 		panel->add(btn);
 		floorButtons[floor] = btn;
-		y += btnH + 2;
+		y += btnH + 3;
 	}
 
-	// Make the scrollable panel's inner content size match the buttons.
 	panel->setContentSize({btnW, y});
 	rebuildScheduleButtons();
 }
@@ -176,9 +208,9 @@ void ElevatorDialog::rebuildFloorButtons()
 void ElevatorDialog::rebuildScheduleButtons()
 {
 	if (!panel || !currentElevator) return;
-	const float btnH = 18 * app->uiScale;
-	const float btnW = 160 * app->uiScale;
-	float y = (float)floorButtons.size() * (btnH + 2) + 4;
+	const float btnH = 22 * app->uiScale;
+	const float btnW = panel->getSize().x - 18 * app->uiScale;
+	float y = (float)floorButtons.size() * (btnH + 3) + 6;
 	scheduleButtons.clear();
 	for (int day = 0; day < Item::Elevator::Elevator::kScheduleDays; ++day)
 		for (int period = 0; period < Item::Elevator::Elevator::kSchedulePeriods; ++period)
@@ -187,14 +219,25 @@ void ElevatorDialog::rebuildScheduleButtons()
 			auto btn = tgui::Button::create(scheduleLabel(day, period));
 			btn->setSize(btnW, btnH);
 			btn->setPosition(0, y);
-			btn->setTextSize(9 * app->uiScale);
+			btn->setTextSize(10 * app->uiScale);
+
+			auto r = btn->getRenderer();
+			r->setBackgroundColor(sf::Color(38, 42, 52));
+			r->setTextColor(sf::Color(215, 222, 232));
+			r->setBackgroundColorHover(sf::Color(52, 58, 72));
+			r->setTextColorHover(sf::Color::White);
+			r->setBorderColor(sf::Color(62, 70, 86));
+			r->setBorders(1);
+			r->setRoundedBorderRadius(3 * app->uiScale);
+
 			btn->onPress([this, day, period] { editSchedule(day, period); });
 			panel->add(btn);
 			scheduleButtons[key] = btn;
-			y += btnH + 2;
+			y += btnH + 3;
 		}
 	panel->setContentSize({btnW, y});
 }
+
 void ElevatorDialog::showForElevator(Item::Elevator::Elevator * elevator)
 {
 	if (!elevator) { close(); return; }
@@ -214,12 +257,27 @@ void ElevatorDialog::showForElevator(Item::Elevator::Elevator * elevator)
 
 void ElevatorDialog::refresh()
 {
-	// Update button labels in case service state changed externally (finger tool).
+	// Update button labels and styles in case service state changed.
 	if (!window || !currentElevator) return;
 	for (std::map<int, tgui::Button::Ptr>::iterator it = floorButtons.begin();
 	     it != floorButtons.end(); ++it)
 	{
 		it->second->setText(buttonLabel(it->first));
+		bool serviced = currentElevator->connectsFloor(it->first);
+		auto r = it->second->getRenderer();
+		if (serviced) {
+			r->setBackgroundColor(sf::Color(32, 64, 102));
+			r->setTextColor(sf::Color(230, 240, 255));
+			r->setBackgroundColorHover(sf::Color(44, 84, 132));
+			r->setTextColorHover(sf::Color::White);
+			r->setBorderColor(sf::Color(60, 95, 145));
+		} else {
+			r->setBackgroundColor(sf::Color(30, 33, 40));
+			r->setTextColor(sf::Color(140, 148, 160));
+			r->setBackgroundColorHover(sf::Color(42, 46, 56));
+			r->setTextColorHover(sf::Color(200, 205, 215));
+			r->setBorderColor(sf::Color(50, 56, 68));
+		}
 	}
 	for (std::map<int, tgui::Button::Ptr>::iterator it = scheduleButtons.begin();
 	     it != scheduleButtons.end(); ++it)

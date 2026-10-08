@@ -57,18 +57,37 @@ void Car::reposition()
 
 void Car::updateSprite()
 {
-	// Load-frame thresholds spread across the car's capacity so riders see
-	// genuine intermediate states (empty / light / half / busy / full)
-	// instead of jumping straight from empty to the 4+-passenger frame
-	// (the web used 0/1/3/rest which read as "always full or empty").
-	int index = 3;
-	const int pc = (int)passengers.size();
-	const int cap = (int)elevator->maxCarCapacity;
-	if (pc == 0) index = 0;
-	else if (pc <= cap / 4) index = 1;
-	else if (pc <= cap / 2) index = 2;
-	else if (pc <= cap * 3 / 4) index = 3;
-	else index = 4;
+	// The 5 texture frames represent door animation phases:
+	// 0: fully closed doors
+	// 1: 25% open
+	// 2: 50% open
+	// 3: 75% open
+	// 4: 100% open (showing cabin interior)
+	int index = 0;
+	if (state == kMoving || state == kIdle)
+	{
+		// Elevators must always keep doors closed while traveling or waiting idle
+		index = 0;
+	}
+	else if (state == kHauling)
+	{
+		if (doorTicks >= 5)
+			index = 2; // Opening doors
+		else if (doorTicks == 1)
+			index = 2; // Closing doors
+		else if (doorTicks == 0)
+			index = 0; // Closed
+		else
+			index = 4; // Fully open while passengers transfer
+	}
+	else if (state == kOpeningDoors)
+	{
+		index = 2;
+	}
+	else if (state == kClosingDoors)
+	{
+		index = 2;
+	}
 
 	int w = sprite.getTexture().getSize().x / 5;
 	int h = sprite.getTexture().getSize().y;
@@ -167,6 +186,7 @@ void Car::setState(State s)
 			direction = Elevator::kNone;
 			elevator->respondToCalls();
 		}
+		updateSprite();
 	}
 }
 
@@ -189,6 +209,8 @@ int Car::CalcMoveSpeed(bool express, int distanceToTarget,
 void Car::advance(double dt)
 {
 	const int passengersBefore = (int)passengers.size();
+	const int doorTicksBefore = doorTicks;
+	const State stateBefore = state;
 	const double frameDelta = game->time.dta / Time::kBaseSpeed;
 	journeyTime += frameDelta;
 	if (journeyTime < 1.0) return;
@@ -292,7 +314,8 @@ void Car::advance(double dt)
 		}
 	}
 
-	if (passengersBefore != (int)passengers.size()) updateSprite();
+	if (passengersBefore != (int)passengers.size() || doorTicksBefore != doorTicks || stateBefore != state)
+		updateSprite();
 }
 
 bool Car::isFull()

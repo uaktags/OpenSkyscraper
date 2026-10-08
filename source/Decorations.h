@@ -17,6 +17,7 @@ namespace OT {
 		void updateFloor(int y);
 		void updateCrane();
 		void updateTracks();
+		void reloadTextures();
 
 		void draw(sf::RenderTarget & target, sf::RenderStates states) const;
 		virtual void render(sf::RenderTarget & target) const;

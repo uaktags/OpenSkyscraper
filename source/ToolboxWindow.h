@@ -52,6 +52,7 @@ namespace OT {
             tgui::Button::Ptr mapButton    = nullptr; ///< minimap toggle (mirrors the M keybind)
             tgui::Button::Ptr statusButton = nullptr; ///< cycles status overlay mode (mirrors the O keybind)
             tgui::Button::Ptr financeButton = nullptr; ///< finance window toggle (mirrors the F keybind)
+            tgui::Button::Ptr skinButton = nullptr; ///< cycles the art-set skin (mirrors the K keybind)
 
             std::map<tgui::Button::Ptr, ButtonState> buttonStates;
 

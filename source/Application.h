@@ -16,7 +16,7 @@
 #include "State.h"
 #include "SoundManager.h"
 
-#include "BuildRules.h"
+#include "Skin.h"
 
 #include <TGUI/TGUI.hpp>
 #include <TGUI/Backend/SFML-Graphics.hpp>
@@ -59,11 +59,34 @@ namespace OT
 		bool loadSettings();
 		void saveSettings();
 		void showSettingsDialog();
+		void showNewTowerDialog();
+		void showMessageDialog(const std::string & title, const std::string & message);
+		bool hasSkinAssets(Skin skin) const;
 		const std::string & simTowerExecutablePath() const { return simTowerExecutable; }
 		BuildRules::Ruleset selectedRuleset() const { return m_ruleset; }
 		bool hasRulesetOverride() const { return m_rulesetExplicit; }
+		Skin selectedSkin() const { return m_skin; }
+		bool hasSkinOverride() const { return m_skinExplicit; }
+		bool debugMenuEnabled() const { return m_debugMenu; }
 
 
+		/// Menu-chosen skin (New Tower screen). Same precedence as the
+		/// CLI flag: an explicit user selection wins over saved attrs.
+		void setSkinOverride(Skin s) { m_skin = s; m_skinExplicit = true; }
+		/// Menu-chosen game mode. If the skin wasn't explicitly chosen
+		/// (CLI or menu), or if the current skin is not sanctioned for
+		/// the new ruleset, it follows the new mode's era default so
+		/// e.g. YootTower mode doesn't end up with SimTower Classic art.
+		void setRulesetOverride(BuildRules::Ruleset r)
+		{
+			m_ruleset = r;
+			m_rulesetExplicit = true;
+			if (!m_skinExplicit || !isSkinSanctioned(r, m_skin))
+			{
+				Skin def = defaultSkinForRuleset(r);
+				m_skin = hasSkinAssets(def) ? def : Skin::OpenSky;
+			}
+		}
 		void setAudioVolume(float volume);
 		void setAudioMuted(bool mute);
 
@@ -115,8 +138,16 @@ namespace OT
 		double startupViewportScrollVertical;
 		bool fullscreen;
 		std::string simTowerExecutable;
+		/// User-selected folder containing YootTower .t2p plugins
+		/// (Settings dialog, "YOOTTOWER RESOURCES"). Empty = automatic
+		/// discovery through the data search path.
+		std::string yootPluginsPath;
 		BuildRules::Ruleset m_ruleset;
 		bool m_rulesetExplicit;
+		Skin m_skin;
+		bool m_skinExplicit;
+		bool m_loadedSimTowerResources;
+		bool m_debugMenu;
 	};
 
 	extern Application * App;

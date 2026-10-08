@@ -29,11 +29,13 @@
 #include "LevelUpDialog.h"
 #include "MapWindow.h"
 #include "FinanceWindow.h"
+#include "ReportDialog.h"
 #include "JudgeSystem.h"
 #include "LevelUp.h"
 #include "VipSystem.h"
 #include "EventSystem.h"
 #include "BuildRules.h"
+#include "Skin.h"
 
 
 namespace OT {
@@ -124,6 +126,17 @@ namespace OT {
 	StatusMode statusMode;
 	void cycleStatusMode();
 
+		/// Active art set (Skin selector). Independent of the ruleset;
+		/// cycled live with K or the toolbox "Skin" button.
+		Skin skin = Skin::OpenSky;
+		void setSkin(Skin newSkin);
+		void cycleSkin();
+
+		/// Open the quarterly financial report dialog (Wave U row 49).
+		/// Called automatically once a 4:59AM quarterly settlement
+		/// commits, and bound to the 'P' key.
+		void showReport();
+
 	ToolboxWindow toolboxWindow;
 		TimeWindow    timeWindow;
 		InspectorDialog inspectorDialog;
@@ -131,6 +144,7 @@ namespace OT {
 		LevelUpDialog   levelUpDialog;
 		MapWindow     mapWindow;
 		FinanceWindow financeWindow;
+		ReportDialog  reportDialog;
 
 		Time time;
 
@@ -239,6 +253,10 @@ namespace OT {
 
 	private:
 		void clearWorld();
+		/// One simulation tick: the sim core of advance() (clock,
+		/// accounting, items, people, hour boundaries). Fast mode runs
+		/// several of these per rendered frame.
+		void advanceSimTick(double dt);
 		void settleDailyAccounting();
 		int calculateDailyMaintenanceCost() const;
 		int lastAccountingDay;
@@ -268,6 +286,13 @@ bool validateBatchCell(Item::AbstractPrototype * proto, int x, int y, std::strin
 		tgui::ChildWindow::Ptr eventChoiceWindow;
 		std::function<void(bool)> eventChoiceCallback;
 		int eventChoiceSavedSpeed = -1;
+		// --- Hidden debug menu (EXE actions 9000-9003) ---
+		// The window only exists when the app was started with
+		// --debug-menu; Ctrl+Shift+D toggles it.
+		tgui::ChildWindow::Ptr debugMenuWindow;
+		void toggleDebugMenu();
+		/// EXE action 9003: force a complete repaint right now.
+		void debugRedraw();
 		/// Quarter value at the last settleDailyAccounting. When the live
 		/// time.quarter advances past this, we call Money::finalizeQuarter
 		/// so the finance window's quarterly accumulators reset.

@@ -30,6 +30,7 @@
 #include "../source/TdtLoader.h"
 
 #include "../source/BuildRules.h"
+#include "../source/Skin.h"
 
 static int g_failures = 0;
 
@@ -118,6 +119,54 @@ static void testBuildRules()
 	EXPECT(!yootTower.allowsHorizontalFootprint(INT_MAX, 1));
 	EXPECT(!openSky.allowsHorizontalFootprint(INT_MAX, 1));
 	EXPECT(!simTower.allowsHorizontalFootprint(1, INT_MAX));
+}
+
+static void testSkin()
+{
+	using OT::Skin;
+	using OT::parseSkinIdentifier;
+	using OT::defaultSkinForRuleset;
+
+	Skin parsed = Skin::OpenSky;
+	EXPECT(parseSkinIdentifier("classic", parsed));
+	EXPECT(parsed == Skin::Classic);
+	EXPECT(parseSkinIdentifier("opensky", parsed));
+	EXPECT(parsed == Skin::OpenSky);
+	EXPECT(parseSkinIdentifier("yoottower", parsed));
+	EXPECT(parsed == Skin::Yoot);
+	EXPECT(!parseSkinIdentifier("Classic", parsed));
+	EXPECT(!parseSkinIdentifier("", parsed));
+	EXPECT(!parseSkinIdentifier("simtower", parsed));
+
+	EXPECT(std::string(OT::skinIdentifier(Skin::Classic)) == "classic");
+	EXPECT(std::string(OT::skinDisplayName(Skin::Classic)) == "Classic");
+	EXPECT(std::string(OT::skinIdentifier(Skin::Yoot)) == "yoottower");
+
+	EXPECT(defaultSkinForRuleset(OT::BuildRules::Ruleset::SimTower) == Skin::Classic);
+	EXPECT(defaultSkinForRuleset(OT::BuildRules::Ruleset::YootTower) == Skin::Yoot);
+	EXPECT(defaultSkinForRuleset(OT::BuildRules::Ruleset::OpenSky) == Skin::OpenSky);
+
+	EXPECT(OT::sanctionedSkinCount(OT::BuildRules::Ruleset::SimTower) == 2);
+	EXPECT(OT::sanctionedSkinCount(OT::BuildRules::Ruleset::OpenSky) == 3);
+	EXPECT(OT::sanctionedSkinCount(OT::BuildRules::Ruleset::YootTower) == 2);
+	EXPECT(OT::sanctionedSkin(OT::BuildRules::Ruleset::SimTower, 0) == Skin::Classic);
+	EXPECT(OT::sanctionedSkin(OT::BuildRules::Ruleset::SimTower, 1) == Skin::OpenSky);
+	EXPECT(OT::sanctionedSkin(OT::BuildRules::Ruleset::OpenSky, 0) == Skin::OpenSky);
+	EXPECT(OT::sanctionedSkin(OT::BuildRules::Ruleset::OpenSky, 1) == Skin::Yoot);
+	EXPECT(OT::sanctionedSkin(OT::BuildRules::Ruleset::YootTower, 0) == Skin::Yoot);
+	EXPECT(OT::sanctionedSkin(OT::BuildRules::Ruleset::YootTower, 1) == Skin::OpenSky);
+
+	EXPECT(OT::isSkinSanctioned(OT::BuildRules::Ruleset::SimTower, Skin::Classic));
+	EXPECT(OT::isSkinSanctioned(OT::BuildRules::Ruleset::SimTower, Skin::OpenSky));
+	EXPECT(!OT::isSkinSanctioned(OT::BuildRules::Ruleset::SimTower, Skin::Yoot));
+
+	EXPECT(OT::isSkinSanctioned(OT::BuildRules::Ruleset::OpenSky, Skin::OpenSky));
+	EXPECT(OT::isSkinSanctioned(OT::BuildRules::Ruleset::OpenSky, Skin::Yoot));
+	EXPECT(OT::isSkinSanctioned(OT::BuildRules::Ruleset::OpenSky, Skin::Classic));
+
+	EXPECT(OT::isSkinSanctioned(OT::BuildRules::Ruleset::YootTower, Skin::Yoot));
+	EXPECT(OT::isSkinSanctioned(OT::BuildRules::Ruleset::YootTower, Skin::OpenSky));
+	EXPECT(!OT::isSkinSanctioned(OT::BuildRules::Ruleset::YootTower, Skin::Classic));
 }
 
 // Time seam: hourToAbsolute / absoluteToHour are pure static conversions.
@@ -424,6 +473,9 @@ static void testLevelUpRules()
 	EXPECT(!LevelUp::meetsRequirements(*r3to4, ctx)); // missing VIP
 
 	// minRatingToBuild: authentic toolbox mapping, the rest 0.
+	// Retail shops gate at 3 stars (SimTower wiki star-rating table;
+	// YootTower ATTR mGameLevel: the coin/mart item ships at level 3).
+	EXPECT(LevelUp::minRatingToBuild("shop")             == 2);
 	EXPECT(LevelUp::minRatingToBuild("elevator-service") == 1);
 	EXPECT(LevelUp::minRatingToBuild("hotel_single")     == 1);
 	EXPECT(LevelUp::minRatingToBuild("security")         == 1);
@@ -1885,6 +1937,7 @@ int main()
 	testTdtLoaderTruncated();
 	testSmoke();
 	testBuildRules();
+	testSkin();
 	testTimeConversion();
 	testNightSpeedMultiplier();
 	testRouteClear();

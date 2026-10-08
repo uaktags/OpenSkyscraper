@@ -303,7 +303,7 @@ void ToolboxWindow::reload()
     }
 
     // STEP 3: SPEED CONTROLS AT THE BOTTOM (horizontally centered)
-    const int kSpeedW = 92;
+    const int kSpeedW = 5 * 23; // the EXE's four cells + the Fast button
     const int kSpeedH = 24;
     auto speedLayout = tgui::HorizontalLayout::create();
     window->add(speedLayout);
@@ -317,10 +317,17 @@ void ToolboxWindow::reload()
     sf::Texture speedTexture = app->bitmaps["simtower/ui/toolbox/speed"];
     if (speedTexture.getSize() == sf::Vector2u(256, 32))
         loadGeneratedSpeedTexture(speedTexture);
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < 5; i++)
     {
         ButtonState state;
-        auto button = makeButton(23, 24, speedTexture, i, state);
+        // The EXE speed sheet holds only four 23x24 cells; Fast (speed 4)
+        // has no cell of its own and reuses the top speed cell's art with
+        // a text label (plan-approved contingency).
+        auto button = makeButton(23, 24, speedTexture, (i == 4 ? 3 : i), state);
+        if (i == 4) {
+            button->setText("F»");
+            button->setTextSize(10 * app->uiScale);
+        }
         speedLayout->add(button);
         speedButtons[i] = button;
         buttonStates[button] = state;
@@ -350,7 +357,7 @@ void ToolboxWindow::reload()
     };
     {
         int windowW = kPadX * 2 + kCellW * kCols;
-        int totalW = kViewBtnW * 3 + kViewBtnGap * 2;  // 3 buttons with gaps
+        int totalW = kViewBtnW * 4 + kViewBtnGap * 3;  // 4 buttons with gaps
         int startX = (windowW - totalW) / 2;
         mapButton = makeViewButton("Map", startX, [this] {
             game->mapWindow.setVisible(!game->mapWindow.isVisible());
@@ -360,6 +367,9 @@ void ToolboxWindow::reload()
         });
         statusButton = makeViewButton("View", startX + (kViewBtnW + kViewBtnGap) * 2, [this] {
             game->cycleStatusMode();
+        });
+        skinButton = makeViewButton("Skin", startX + (kViewBtnW + kViewBtnGap) * 3, [this] {
+            game->cycleSkin();
         });
     }
 

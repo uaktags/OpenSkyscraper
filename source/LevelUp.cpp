@@ -54,6 +54,7 @@ namespace
 		{ "hotel_single",     1 },
 		{ "security",         1 },
 		// 3 stars (rating >= 2)
+		{ "shop",            2 },
 		{ "escalator",       2 },
 		{ "elevator-express",2 },
 		{ "restaurant",      2 },

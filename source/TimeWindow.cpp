@@ -286,6 +286,7 @@ void TimeWindow::updateTooltip() {
 		case 1: str << "Speed 1x"; break;
 		case 2: str << "Speed 2x"; break;
 		case 3: str << "Speed 4x"; break;
+		case 4: str << "Fast"; break;
 		default: break;
 	}
     lblTooltip->setText(str.str());

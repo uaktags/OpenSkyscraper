@@ -49,5 +49,7 @@ namespace OT
 		std::string scheduleLabel(int day, int period) const;
 		std::string showToggleLabel() const;
 		void updateShowToggle();
+
+		friend class Game;
 	};
 }
