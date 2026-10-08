@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -103,5 +104,34 @@ namespace OT
 		/// errata's "$200k/$300k/$500k bonus" was the buried-treasure payout
 		/// misfiled (Phase 1a adjudication, 2026-09-14). API kept for callers.
 		static std::string starRewardMessage(int newStars);
+
+		// --- YootTower grade rules (game-parity.md R1-R4) ---
+
+		/// CheckGameLevel 0x10073290 for one grade row: the tower's VIP bits
+		/// must cover the row's flag and population must reach the row's
+		/// threshold. Nothing else gates a YootTower promotion.
+		static bool yootPromotionReady(uint32_t rowVipFlag, int rowPopulation,
+		                               uint32_t towerVipFlags, int population);
+
+		/// T2VisitVIP::Start 0x1006cd90 gate: the VIP's grade is the current
+		/// grade (and within the table), its flag is part of that grade row's
+		/// flag, still unset on the tower, and population > row population / 2.
+		static bool yootVipMayStart(int vipGrade, int currentGrade, int numGrades,
+		                            uint32_t vipFlag, uint32_t rowVipFlag, int rowPopulation,
+		                            uint32_t towerVipFlags, int population);
+
+		/// T2People::VIPEstimation 0x10049990: favourable when the estimate
+		/// (1..300 scale) is above 200.
+		static bool yootVipSucceeds(int estimate);
+
+		/// Estimate proxy until per-person estimates exist (P2): OpenSky's
+		/// 0..100 tenant evaluation scaled onto the 1..300 estimate scale.
+		static int yootEstimateFromEvaluation(double evaluation);
+
+		/// T2.exe FUN_00422670 (doc vtable +0x188, the final-item event):
+		/// only at grade == numGrades, OR that grade's flag into the tower
+		/// bits. Returns false (bits untouched) at any other grade.
+		static bool yootGrantFinalGrade(int grade, int numGrades, uint32_t rowVipFlag,
+		                                uint32_t & towerVipFlags);
 	};
 }

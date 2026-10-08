@@ -189,6 +189,7 @@ endif()
 add_executable(OpenSkyTests
   tests/test_main.cpp
   source/BuildRules.cpp
+  source/YootWorld.cpp
   source/Skin.cpp
   source/Time.cpp
   source/Route.cpp

@@ -31,6 +31,7 @@
 
 #include "../source/BuildRules.h"
 #include "../source/Skin.h"
+#include "../source/YootWorld.h"
 
 static int g_failures = 0;
 
@@ -101,7 +102,8 @@ static void testBuildRules()
 
 	EXPECT(simTower.hasFixedHorizontalBoundary());
 	EXPECT(!openSky.hasFixedHorizontalBoundary());
-	EXPECT(!yootTower.hasFixedHorizontalBoundary());
+	// BuildRules(YootTower) without a world is the built-in Tokyo stub.
+	EXPECT(yootTower.hasFixedHorizontalBoundary());
 
 	// SimTower's 375-cell lot is exactly [-187, 188).
 	EXPECT(simTower.allowsHorizontalFootprint(-187, 375));
@@ -110,9 +112,10 @@ static void testBuildRules()
 	EXPECT(!simTower.allowsHorizontalFootprint(-188, 1));
 	EXPECT(!simTower.allowsHorizontalFootprint(187, 2));
 
-	// The other rulesets have no generic fixed horizontal boundary.
+	// OpenSky has no generic fixed horizontal boundary; the YootTower stub
+	// is bounded by Tokyo's build area.
 	EXPECT(openSky.allowsHorizontalFootprint(-500000, 1000000));
-	EXPECT(yootTower.allowsHorizontalFootprint(-500000, 1000000));
+	EXPECT(!yootTower.allowsHorizontalFootprint(-500000, 1000000));
 
 	EXPECT(!simTower.allowsHorizontalFootprint(0, 0));
 	EXPECT(!openSky.allowsHorizontalFootprint(0, -1));
@@ -1931,6 +1934,400 @@ static void testTdtLoaderTruncated()
 }
 
 
+// ---------------------------------------------------------------------------
+// YootTower game rules (doc/yoottower/game-parity.md §4 steps 0-3, 5, 6).
+// ---------------------------------------------------------------------------
+
+static const OT::PluginManager & yootTestPlugins()
+{
+	static OT::PluginManager pm;
+	static bool scanned = false;
+	if (!scanned)
+	{
+		pm.addPluginDirectory("../data/Plugins");
+		scanned = true;
+	}
+	return pm;
+}
+
+// Step 0: the rules-profile seam keeps SimTower/OpenSky constants.
+static void testRulesProfileSeam()
+{
+	using OT::BuildRules;
+	using OT::RulesProfile;
+
+	const BuildRules rulesets[] = {BuildRules(BuildRules::Ruleset::SimTower),
+	                               BuildRules(BuildRules::Ruleset::OpenSky)};
+	for (const BuildRules & r : rulesets)
+	{
+		const RulesProfile & p = r.profile();
+		EXPECT(p.startFunds == 2000000);
+		EXPECT(p.startRating == 0);
+		EXPECT(p.startDay == 0);
+		EXPECT(p.lobbyHeight == 1);
+		EXPECT(p.lowestFloor == -9);
+		EXPECT(!p.hasBuildArea);
+		EXPECT(!p.yootWorld);
+		EXPECT(!p.linearClock);
+		EXPECT(p.calendar == RulesProfile::Calendar::SimTower);
+		EXPECT(p.rain == RulesProfile::Rain::Random);
+		EXPECT(p.grades.empty());
+		EXPECT(p.unlocks.empty());
+		// Footprint checks reduce to the existing horizontal policy.
+		EXPECT(r.allowsFootprint(0, -50, 10, 3) == r.allowsHorizontalFootprint(0, 10));
+		// Lock table falls back to LevelUp.
+		EXPECT(r.minRatingToBuild("metro") == OT::LevelUp::minRatingToBuild("metro"));
+	}
+
+	// YootTower without a loaded world: the built-in Tokyo stub.
+	BuildRules stub(BuildRules::Ruleset::YootTower);
+	EXPECT(stub.profile().yootWorld);
+	EXPECT(stub.profile().worldId == "tokyo");
+	EXPECT(stub.profile().startFunds == 10000000);
+	EXPECT(stub.profile().grades.size() == 4u);
+	EXPECT(stub.profile().lobbyHeight == 3);
+	EXPECT(stub.profile().linearClock);
+}
+
+// Step 1: WORLDDEF / WATR / T2EV / FINF parsed from the shipped plugins.
+static void testYootWorldLoader()
+{
+	using namespace OT;
+	const PluginManager & pm = yootTestPlugins();
+
+	YootWorld::Id id = YootWorld::Id::Tokyo;
+	EXPECT(parseYootWorldIdentifier("hawaii", id) && id == YootWorld::Id::Hawaii);
+	EXPECT(parseYootWorldIdentifier("kegon", id) && id == YootWorld::Id::Kegon);
+	EXPECT(!parseYootWorldIdentifier("Tokyo", id));
+	EXPECT(std::string(yootWorldPluginFile(YootWorld::Id::Hawaii)) == "Hawai.t2p");
+
+	std::string err;
+	const YootWorld tokyo = loadYootWorld(pm, YootWorld::Id::Tokyo, &err);
+	EXPECT(tokyo.fromPlugin);
+	EXPECT(tokyo.initialFundsDollars() == 10000000);
+	EXPECT(tokyo.initialFunds == 100000);
+	EXPECT(tokyo.height == 122 && tokyo.width == 368 && tokyo.groundLine == 110);
+	EXPECT(tokyo.buildArea.left == 36 && tokyo.buildArea.top == 6);
+	EXPECT(tokyo.buildArea.right == 332 && tokyo.buildArea.bottom == 120);
+	EXPECT(tokyo.entranceX == 160 && tokyo.entranceY == 106);
+	EXPECT(tokyo.topFloorLine == 10 && tokyo.bottomFloorLine == 119);
+	EXPECT(tokyo.lobbyHeight == 3);
+	EXPECT(tokyo.startGrade == 1 && tokyo.startMonth == 0);
+	EXPECT(tokyo.grades.size() == 4u);
+	if (tokyo.grades.size() == 4u)
+	{
+		EXPECT(tokyo.grades[0].population == 1000);
+		EXPECT(tokyo.grades[1].population == 2000);
+		EXPECT(tokyo.grades[2].population == 5000);
+		EXPECT(tokyo.grades[3].population == 12000);
+		EXPECT(tokyo.grades[0].vipFlag == 1u && tokyo.grades[3].vipFlag == 4096u);
+		EXPECT(tokyo.grades[3].animId == 1210);
+	}
+	EXPECT(tokyo.discarded10.size() == 10u && tokyo.discarded10[0] == 200);
+	EXPECT(tokyo.cashAmounts.size() == 8u && tokyo.cashAmounts[7] == 200000);
+	EXPECT(tokyo.watrInts.size() == 6u && tokyo.watrInts[3] == 100 && tokyo.watrInts[4] == 10);
+	EXPECT(tokyo.worldMask == 0x7u);
+	EXPECT(tokyo.unbuildable.empty());
+	EXPECT(tokyo.highestFloor() == 99);
+	EXPECT(tokyo.events.size() == 11u);
+	bool allFound = true;
+	for (const YootEvent & e : tokyo.events) allFound = allFound && e.found;
+	EXPECT(allFound);
+	const YootEvent * baseball = tokyo.findEvent("BBEV");
+	EXPECT(baseball && baseball->header.levelBit == 8 && baseball->header.beginMin == 1200);
+	const YootEvent * fire = tokyo.findEvent("FBEV");
+	EXPECT(fire && fire->header.levelBit == 12 && fire->header.cycleDay == 60 &&
+	       fire->header.beginMin == 720 && fire->header.endMin == 1080);
+	const YootEvent * viev = tokyo.findEvent("VIEV");
+	EXPECT(viev && viev->vips.size() == 3u);
+	if (viev && viev->vips.size() == 3u)
+	{
+		EXPECT(viev->header.cycleDay == 9 && viev->header.beginMin == 600);
+		EXPECT(viev->vips[0].vipFlag == 1u && viev->vips[1].vipFlag == 16u && viev->vips[2].vipFlag == 256u);
+		EXPECT(viev->vips[2].arrivalMin == 900);
+		EXPECT(viev->vips[0].destPluginId == 1380142916u); // Record store
+	}
+
+	const YootWorld hawaii = loadYootWorld(pm, YootWorld::Id::Hawaii, &err);
+	EXPECT(hawaii.fromPlugin);
+	EXPECT(hawaii.initialFundsDollars() == 5000000);
+	EXPECT(hawaii.startGrade == 2 && hawaii.lobbyHeight == 2);
+	EXPECT(hawaii.worldMask == 0xF01u);
+	EXPECT(hawaii.highestFloor() == 44 && hawaii.lowestFloor() == -6);
+	EXPECT(hawaii.grades.size() == 4u && hawaii.grades[1].population == 500 && hawaii.grades[3].population == 8000);
+
+	const YootWorld kegon = loadYootWorld(pm, YootWorld::Id::Kegon, &err);
+	EXPECT(kegon.fromPlugin);
+	EXPECT(kegon.initialFundsDollars() == 2000000);
+	EXPECT(kegon.startGrade == 3 && kegon.startMonth == 2 && kegon.lobbyHeight == 1);
+	EXPECT(kegon.worldMask == 0xF0u);
+	EXPECT(kegon.highestFloor() == 1 && kegon.lowestFloor() == -32);
+	EXPECT(kegon.finfHeight == 44 && kegon.finfWidth == 192);
+	EXPECT(kegon.finfHeader.size() == 7u);
+	EXPECT(kegon.unbuildable.size() == 44u * 192u);
+	const long blocked = std::accumulate(kegon.unbuildable.begin(), kegon.unbuildable.end(), 0L);
+	EXPECT(blocked == 5849);
+	EXPECT(kegon.isUnitBuildable(150, 5));    // cliff rock
+	EXPECT(!kegon.isUnitBuildable(40, 5));    // waterfall gorge
+	EXPECT(!kegon.isUnitBuildable(150, 42));  // rows 42-43 fully blocked
+
+	// Built-in fallback agrees with the plugins on the rule constants.
+	const YootWorld worlds[] = {tokyo, hawaii, kegon};
+	for (const YootWorld & w : worlds)
+	{
+		const YootWorld b = builtinYootWorld(w.id);
+		EXPECT(!b.fromPlugin);
+		EXPECT(b.initialFundsDollars() == w.initialFundsDollars());
+		EXPECT(b.groundLine == w.groundLine && b.width == w.width);
+		EXPECT(b.buildArea.left == w.buildArea.left && b.buildArea.right == w.buildArea.right);
+		EXPECT(b.topFloorLine == w.topFloorLine && b.bottomFloorLine == w.bottomFloorLine);
+		EXPECT(b.startGrade == w.startGrade && b.startMonth == w.startMonth);
+		EXPECT(b.lobbyHeight == w.lobbyHeight && b.worldMask == w.worldMask);
+		bool sameGrades = b.grades.size() == w.grades.size();
+		for (size_t i = 0; sameGrades && i < b.grades.size(); ++i)
+			sameGrades = b.grades[i].population == w.grades[i].population && b.grades[i].vipFlag == w.grades[i].vipFlag;
+		EXPECT(sameGrades);
+	}
+
+	// Garbage / truncated input is rejected without touching the output.
+	YootWorld t;
+	const char bad[] = {0x01, 0x00, 0x00};
+	EXPECT(!parseYootWorldDef(bad, sizeof(bad), t));
+	EXPECT(!parseYootWatr("text", 4, t));
+	EXPECT(!parseYootFinf("2\r\n2\r\n", 6, t));
+
+	// Missing plugin falls back to the built-in world.
+	PluginManager empty;
+	const YootWorld fallback = loadYootWorld(empty, YootWorld::Id::Kegon, &err);
+	EXPECT(!fallback.fromPlugin && fallback.startGrade == 3);
+}
+
+// Step 2: start funds, build area, floor limits, FINF and lobby height.
+static void testYootPlacement()
+{
+	using namespace OT;
+	const PluginManager & pm = yootTestPlugins();
+	const RulesProfile tokyoProfile = RulesProfile::yootTower(loadYootWorld(pm, YootWorld::Id::Tokyo));
+	const RulesProfile hawaiiProfile = RulesProfile::yootTower(loadYootWorld(pm, YootWorld::Id::Hawaii));
+	const RulesProfile kegonProfile = RulesProfile::yootTower(loadYootWorld(pm, YootWorld::Id::Kegon));
+	const BuildRules tokyo(BuildRules::Ruleset::YootTower, tokyoProfile);
+	const BuildRules hawaii(BuildRules::Ruleset::YootTower, hawaiiProfile);
+	const BuildRules kegon(BuildRules::Ruleset::YootTower, kegonProfile);
+
+	EXPECT(tokyoProfile.startFunds == 10000000);
+	EXPECT(hawaiiProfile.startFunds == 5000000);
+	EXPECT(kegonProfile.startFunds == 2000000);
+	EXPECT(tokyoProfile.lobbyHeight == 3 && hawaiiProfile.lobbyHeight == 2 && kegonProfile.lobbyHeight == 1);
+	EXPECT(tokyoProfile.startRating == 0 && hawaiiProfile.startRating == 1 && kegonProfile.startRating == 2);
+	EXPECT(kegonProfile.startDay == 2);
+
+	// Tokyo: units [36, 332) at origin width/2 = 184.
+	EXPECT(tokyoProfile.unitOriginX == 184);
+	EXPECT(tokyo.allowsFootprint(36 - 184, 0, 1));
+	EXPECT(!tokyo.allowsFootprint(35 - 184, 0, 1));  // x < 36 rejected
+	EXPECT(tokyo.allowsFootprint(331 - 184, 0, 1));
+	EXPECT(!tokyo.allowsFootprint(331 - 184, 0, 2));
+	EXPECT(!tokyo.allowsHorizontalFootprint(35 - 184, 4));
+	EXPECT(tokyo.allowsFootprint(0, 99, 4));    // 100F
+	EXPECT(!tokyo.allowsFootprint(0, 100, 4));  // 101F
+	EXPECT(!tokyo.allowsFootprint(0, 98, 4, 3));
+	EXPECT(tokyo.allowsFootprint(0, -9, 4));    // B9
+	EXPECT(!tokyo.allowsFootprint(0, -10, 4));
+
+	// Hawaii: 45 floors above ground, 6 basements.
+	EXPECT(hawaii.allowsFootprint(0, 44, 4));   // 45F
+	EXPECT(!hawaii.allowsFootprint(0, 45, 4));  // 46F
+	EXPECT(!hawaii.allowsFootprint(0, 46, 4));
+	EXPECT(hawaii.allowsFootprint(0, -6, 4));
+	EXPECT(!hawaii.allowsFootprint(0, -7, 4));
+	EXPECT(!hawaii.allowsFootprint(56 - 200 - 1, 0, 1));
+
+	// Kegon: FINF mask; the cliff (units ~131-184 near ground) is buildable,
+	// the gorge is not; 2 floors above, 32 below.
+	EXPECT(kegonProfile.unitOriginX == 96);
+	EXPECT(kegon.allowsFootprint(150 - 96, 0, 4));
+	EXPECT(!kegon.allowsFootprint(100 - 96, 0, 4));
+	EXPECT(kegon.allowsFootprint(170 - 96, -20, 4));
+	EXPECT(kegon.allowsFootprint(150 - 96, 1, 4));
+	EXPECT(!kegon.allowsFootprint(150 - 96, 2, 4));
+	EXPECT(!kegon.allowsFootprint(150 - 96, -33, 4));
+	EXPECT(kegonProfile.lowestFloor == -32);
+}
+
+// Step 3: holiday / rain tables vs a direct port of the world plugin code.
+static bool portedIsHoliday(uint32_t year, uint32_t month)
+{
+	// Tokyo.dll FUN_10014c10 (identical in Hawai/Kegon), verbatim.
+	const int iVar2 = (int)month;
+	if (iVar2 != 7 && iVar2 != 0xb)
+	{
+		const uint32_t uVar1 = (uint32_t)(iVar2 - 0x17) + year * 0xc;
+		if (uVar1 < 2 || (uVar1 - 2) % 5 != 0)
+			return false;
+	}
+	return true;
+}
+
+static bool portedTokyoRainy(uint32_t month)
+{
+	// Tokyo.dll FUN_10014c50, verbatim.
+	return month / 3 != 3 && ((uint8_t)month + 1U & 3) == 0;
+}
+
+static void testYootCalendar()
+{
+	using OT::Time;
+	bool same = true;
+	std::vector<int> holidays[4];
+	for (unsigned y = 1; y <= 3; ++y)
+		for (unsigned m = 0; m < 12; ++m)
+		{
+			if (Time::yootIsHoliday(y, m) != portedIsHoliday(y, m)) same = false;
+			if (Time::yootTokyoIsRainy(m) != portedTokyoRainy(m)) same = false;
+			if (Time::yootIsHoliday(y, m)) holidays[y].push_back((int)m + 1);
+		}
+	EXPECT(same);
+	// 1-based days of each 12-day year (year 1 wraps in unsigned arithmetic).
+	EXPECT(holidays[1] == std::vector<int>({3, 8, 12}));
+	EXPECT(holidays[2] == std::vector<int>({2, 7, 8, 12}));
+	EXPECT(holidays[3] == std::vector<int>({5, 8, 10, 12}));
+	std::vector<int> rain;
+	for (unsigned m = 0; m < 12; ++m)
+		if (Time::yootTokyoIsRainy(m)) rain.push_back((int)m + 1);
+	EXPECT(rain == std::vector<int>({4, 8}));
+
+	struct TestTime : public Time { using Time::set; };
+	TestTime t;
+	t.set(2.5); // day index 2: SimTower weekend
+	EXPECT(t.isHoliday());
+	t.calendar = Time::Calendar::YootTower;
+	EXPECT(t.dayOfYear() == 2 && t.year == 1);
+	EXPECT(t.isHoliday() == Time::yootIsHoliday(1, 2));
+	t.set(13.5); // year 2, day index 1
+	EXPECT(t.dayOfYear() == 1 && t.year == 2 && t.isHoliday());
+	t.calendar = Time::Calendar::SimTower;
+	EXPECT(!t.isHoliday()); // day % 3 == 1
+
+	// Minute-linear clock (T1), process-wide; restore the SimTower table.
+	Time::setLinearClock(true);
+	EXPECT_NEAR(Time::hourToAbsolute(12.0), 0.5, 1e-12);
+	EXPECT_NEAR(Time::hourToAbsolute(7.0), 7.0 / 24.0, 1e-12);
+	EXPECT_NEAR(Time::absoluteToHour(0.25), 6.0, 1e-12);
+	EXPECT_NEAR(Time::absoluteToHour(3.75), 18.0, 1e-12);
+	Time::setLinearClock(false);
+	EXPECT_NEAR(Time::hourToAbsolute(12.0), 7.0 / 26.0, 1e-9);
+	EXPECT(!Time::linearClock());
+}
+
+// Step 5: unlocks from ATTR mGameLevel + world mask.
+static void testYootUnlocks()
+{
+	using namespace OT;
+	const PluginManager & pm = yootTestPlugins();
+
+	YootPluginIdentity coin, bcd, cathedral;
+	AbstractPlugin * coinPlugin = pm.get("Coin.t2p");
+	AbstractPlugin * bcdPlugin = pm.get("BCDMart.t2p");
+	AbstractPlugin * cathedralPlugin = pm.get("Cathedral.t2p");
+	EXPECT(coinPlugin && readYootPluginIdentity(*coinPlugin, coin));
+	EXPECT(bcdPlugin && readYootPluginIdentity(*bcdPlugin, bcd));
+	EXPECT(cathedralPlugin && readYootPluginIdentity(*cathedralPlugin, cathedral));
+	EXPECT(coin.attrib == 0x10u && coin.gameLevel == 3 && coin.name == "Coin Press Machine");
+	EXPECT(coin.itemType == 1683);
+	// Coin is Kegon-only: hidden in Tokyo at every grade.
+	EXPECT(!yootPluginAvailable(coin, 0x7, 5));
+	EXPECT(yootPluginAvailable(coin, 0xF0, 3));
+	EXPECT(!yootPluginAvailable(coin, 0xF0, 2));
+	// BCD-Mart (Hawaii) unlocks at grade 3.
+	EXPECT(!yootPluginAvailable(bcd, 0xF01, 2));
+	EXPECT(yootPluginAvailable(bcd, 0xF01, 3));
+	EXPECT(!yootPluginAvailable(bcd, 0x7, 5));
+	// Secret items stay hidden unless secret mode is on.
+	YootPluginIdentity secret = bcd;
+	secret.secretItem = 1;
+	EXPECT(!yootPluginAvailable(secret, 0xF01, 5));
+	EXPECT(yootPluginAvailable(secret, 0xF01, 5, true));
+
+	const std::map<std::string, YootUnlock> tokyo = resolveYootUnlocks(pm, 0x7);
+	const std::map<std::string, YootUnlock> hawaii = resolveYootUnlocks(pm, 0xF01);
+	const std::map<std::string, YootUnlock> kegon = resolveYootUnlocks(pm, 0xF0);
+	EXPECT(tokyo.count("office") && tokyo.at("office").available && tokyo.at("office").minGrade == 1);
+	EXPECT(tokyo.count("cathedral") && !tokyo.at("cathedral").available);
+	EXPECT(hawaii.count("cathedral") && hawaii.at("cathedral").available && hawaii.at("cathedral").minGrade == 4);
+	EXPECT(tokyo.count("elevator-express") && tokyo.at("elevator-express").minGrade == 3);
+	EXPECT(tokyo.count("security") && tokyo.at("security").minGrade == 2);
+	EXPECT(kegon.count("stairs") && !kegon.at("stairs").available);
+	EXPECT(kegon.count("elevator-standard") && kegon.at("elevator-standard").available);
+	EXPECT(!hawaii.at("office").available);
+	EXPECT(tokyo.count("secom") == 0u); // no YootTower counterpart
+
+	RulesProfile profile = RulesProfile::yootTower(loadYootWorld(pm, YootWorld::Id::Tokyo));
+	for (std::map<std::string, YootUnlock>::const_iterator u = tokyo.begin(); u != tokyo.end(); ++u)
+	{
+		RulesProfile::Unlock unlock;
+		unlock.available = u->second.available;
+		unlock.minRating = u->second.minGrade - 1;
+		profile.unlocks[u->first] = unlock;
+	}
+	const BuildRules rules(BuildRules::Ruleset::YootTower, profile);
+	EXPECT(rules.minRatingToBuild("cathedral") == BuildRules::kUnavailable);
+	EXPECT(rules.minRatingToBuild("office") == 0);
+	EXPECT(rules.minRatingToBuild("elevator-express") == 2);
+	EXPECT(rules.minRatingToBuild("secom") == LevelUp::minRatingToBuild("secom"));
+
+	// VIEV destinations map to OpenSky prototypes by plugin id.
+	EXPECT(yootPrototypesForPluginId(pm, 1213420873u) == std::vector<std::string>({"hotel_suite"}));
+	EXPECT(yootPrototypesForPluginId(pm, 1380142916u) == std::vector<std::string>({"shop"}));
+	EXPECT(yootPrototypesForPluginId(pm, 0x12345678u).empty());
+}
+
+// Step 6: grade table, VIP gate, VIP verdict and the final-grade hook.
+static void testYootGrades()
+{
+	using OT::LevelUp;
+	// Tokyo 1->2: population 1000 and VIP flag 1.
+	EXPECT(!LevelUp::yootPromotionReady(1, 1000, 0, 999));
+	EXPECT(!LevelUp::yootPromotionReady(1, 1000, 0, 1000));
+	EXPECT(!LevelUp::yootPromotionReady(1, 1000, 1, 999));
+	EXPECT(LevelUp::yootPromotionReady(1, 1000, 1, 1000));
+	EXPECT(LevelUp::yootPromotionReady(16, 2000, 0x11, 2000));
+	EXPECT(!LevelUp::yootPromotionReady(16, 2000, 0x01, 5000));
+
+	// VIP arrives once population exceeds half the threshold.
+	EXPECT(!LevelUp::yootVipMayStart(1, 1, 4, 1, 1, 1000, 0, 500));
+	EXPECT(LevelUp::yootVipMayStart(1, 1, 4, 1, 1, 1000, 0, 501));
+	EXPECT(!LevelUp::yootVipMayStart(1, 1, 4, 1, 1, 1000, 1, 900)); // already visited
+	EXPECT(!LevelUp::yootVipMayStart(1, 2, 4, 1, 1, 1000, 0, 900)); // wrong grade
+	EXPECT(!LevelUp::yootVipMayStart(5, 5, 4, 1, 1, 1000, 0, 900)); // beyond the table
+
+	EXPECT(!LevelUp::yootVipSucceeds(200));
+	EXPECT(LevelUp::yootVipSucceeds(201));
+	EXPECT(LevelUp::yootEstimateFromEvaluation(67.0) == 201);
+	EXPECT(LevelUp::yootEstimateFromEvaluation(66.6) == 200);
+	EXPECT(LevelUp::yootEstimateFromEvaluation(-5.0) == 1);
+	EXPECT(LevelUp::yootEstimateFromEvaluation(500.0) == 300);
+
+	// Final-item hook only at grade == numGrades.
+	uint32_t flags = 0x111;
+	EXPECT(!LevelUp::yootGrantFinalGrade(3, 4, 4096, flags));
+	EXPECT(flags == 0x111u);
+	EXPECT(LevelUp::yootGrantFinalGrade(4, 4, 4096, flags));
+	EXPECT(flags == 0x1111u);
+	EXPECT(LevelUp::yootPromotionReady(4096, 12000, flags, 12000));
+
+	// Shared-accumulator VIP flags (T2VisitVIP::Init).
+	std::vector<OT::YootVipDef> vips(4);
+	vips[0].grade = 1; vips[1].grade = 2; vips[2].grade = 2; vips[3].grade = 3;
+	OT::assignYootVipFlags(vips);
+	EXPECT(vips[0].vipFlag == 1u && vips[1].vipFlag == 16u && vips[2].vipFlag == 32u && vips[3].vipFlag == 256u);
+
+	// Profiles carry the per-world start star and VIP list.
+	const OT::RulesProfile kegon = OT::RulesProfile::yootTower(OT::loadYootWorld(yootTestPlugins(), OT::YootWorld::Id::Kegon));
+	EXPECT(kegon.startRating + 1 == 3);
+	EXPECT(kegon.grades.size() == 4u && kegon.grades[2].population == 200);
+	EXPECT(kegon.vips.size() == 3u && kegon.vips[2].vipFlag == 256u && kegon.vips[2].beginMinute == 600);
+}
+
 int main()
 {
 	testTdtLoader();
@@ -1969,6 +2366,12 @@ int main()
 	testOspShippedOpenTower();
 	testOspNumericRoundTrip();
 	testOspCanonicalSheetNames();
+	testRulesProfileSeam();
+	testYootWorldLoader();
+	testYootPlacement();
+	testYootCalendar();
+	testYootUnlocks();
+	testYootGrades();
     if (g_failures > 0)
     {
         std::cerr << g_failures << " test(s) failed\n";

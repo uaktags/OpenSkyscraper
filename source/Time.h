@@ -40,9 +40,29 @@ namespace OT {
 		friend class Game;
 		
 	public:
+		/// Which day-kind rules the calendar follows. SimTower: every third
+		/// day (day % 3 == 2) is the weekend. YootTower: the world plugins'
+		/// IsHoliday (game-parity.md T4).
+		enum class Calendar { SimTower, YootTower };
+
 		const static double kBaseSpeed;
 		static double absoluteToHour(double a);
 		static double hourToAbsolute(double a);
+
+		/// YootTower minute-linear clock (T2DateTime, game-parity.md T1):
+		/// when enabled, absolute day fractions map linearly to hours instead
+		/// of SimTower's 2600-frame table. Process-wide because the
+		/// conversions are static; Game sets it from the active ruleset.
+		static void setLinearClock(bool linear);
+		static bool linearClock();
+
+		/// Tokyo.t2p 0x10014c10 / Hawai.t2p 0x10017770 / Kegon.t2p
+		/// WorldDef::IsHoliday 0x10014e70 (identical): `month` is the
+		/// internal day index 0..11 within the year, `year` is 1-based.
+		static bool yootIsHoliday(unsigned year, unsigned month);
+		/// Tokyo.t2p IsRainyDay 0x10014c50: days 4 and 8 of each year.
+		/// Hawaii and Kegon keep the base T2WorldDef::IsRainyDay (never).
+		static bool yootTokyoIsRainy(unsigned month);
 		
 		Time();
 		
@@ -53,6 +73,13 @@ namespace OT {
 		int quarter;
 		int year;
 		
+		Calendar calendar;
+
+		/// Day index within the year (0..11); one YootTower "month".
+		int dayOfYear() const;
+		/// Weekend/holiday for the active calendar. SimTower: day == 2.
+		bool isHoliday() const;
+
 		double getHour();
 		bool check(double a);
 		bool checkTick(double p);

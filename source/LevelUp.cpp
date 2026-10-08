@@ -167,3 +167,40 @@ std::string LevelUp::starRewardMessage(int newStars)
 	(void)newStars;
 	return std::string();
 }
+
+bool LevelUp::yootPromotionReady(uint32_t rowVipFlag, int rowPopulation,
+                                 uint32_t towerVipFlags, int population)
+{
+	return (towerVipFlags & rowVipFlag) == rowVipFlag && population >= rowPopulation;
+}
+
+bool LevelUp::yootVipMayStart(int vipGrade, int currentGrade, int numGrades,
+                              uint32_t vipFlag, uint32_t rowVipFlag, int rowPopulation,
+                              uint32_t towerVipFlags, int population)
+{
+	if (vipGrade < 1 || vipGrade > numGrades || vipGrade != currentGrade) return false;
+	if ((vipFlag & rowVipFlag) == 0) return false;
+	if ((towerVipFlags & vipFlag) != 0) return false;
+	return rowPopulation / 2 < population;
+}
+
+bool LevelUp::yootVipSucceeds(int estimate)
+{
+	return estimate > 200;
+}
+
+int LevelUp::yootEstimateFromEvaluation(double evaluation)
+{
+	int e = (int)(evaluation * 3.0 + 0.5);
+	if (e < 1) e = 1;
+	if (e > 300) e = 300;
+	return e;
+}
+
+bool LevelUp::yootGrantFinalGrade(int grade, int numGrades, uint32_t rowVipFlag,
+                                  uint32_t & towerVipFlags)
+{
+	if (numGrades <= 0 || grade != numGrades) return false;
+	towerVipFlags |= rowVipFlag;
+	return true;
+}

@@ -11,11 +11,44 @@ const double Time::kBaseSpeed    = 1.0 / 60 / kDayDuration; // game days / secon
 // eliminating the rubberbanding the old dt-weighted blend produced.
 const static double kSpeedRampTau = 0.25;
 
+static bool s_linearClock = false;
+
+void Time::setLinearClock(bool linear)
+{
+	s_linearClock = linear;
+}
+
+bool Time::linearClock()
+{
+	return s_linearClock;
+}
+
+bool Time::yootIsHoliday(unsigned year, unsigned month)
+{
+	// Direct port: unsigned arithmetic, so n wraps for early year-1 days.
+	if (month == 7 || month == 11)
+		return true;
+	const unsigned n = month - 23u + year * 12u;
+	return n >= 2 && (n - 2) % 5 == 0;
+}
+
+bool Time::yootTokyoIsRainy(unsigned month)
+{
+	return month / 3 != 3 && ((month + 1) & 3) == 0;
+}
+
 
 double Time::absoluteToHour(double a)
 {
 	if (a == 1.0)
 		return 24.0;
+
+	if (s_linearClock)
+	{
+		double frac = fmod(a, 1.0);
+		if (frac < 0) frac += 1.0;
+		return frac * 24.0;
+	}
 
 	//jcranmer did some research on how time progresses in SimTower (doc/simtower/TDT_format.txt).
 	//We scale the time up to the 2600 frames/day he proposed, and derive the hour by applying
@@ -40,6 +73,8 @@ double Time::hourToAbsolute(double h)
 		return 1.0;
 	if (h <= 0.0)
 		return 0.0;
+	if (s_linearClock)
+		return h / 24.0;
 
 	double a;
 	if      (h < 1)  a = (h -  0) /  1 *  100 +    0;
@@ -67,6 +102,20 @@ Time::Time()
 	prev_year = 1;
 	speed = 1;
 	speed_animated = speed;
+	calendar = Calendar::SimTower;
+}
+
+int Time::dayOfYear() const
+{
+	const int d = (int)floor(absolute) % 12;
+	return d < 0 ? d + 12 : d;
+}
+
+bool Time::isHoliday() const
+{
+	if (calendar == Calendar::YootTower)
+		return yootIsHoliday((unsigned)year, (unsigned)dayOfYear());
+	return day == 2;
 }
 
 void Time::set(double t)
