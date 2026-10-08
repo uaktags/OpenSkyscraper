@@ -227,6 +227,52 @@ bool BitmapManager::load(Path name, sf::Texture & dst)
 	return success;
 }
 
+const sf::Texture * BitmapManager::hiresFor(const sf::Texture * base, unsigned & scale)
+{
+	const unsigned kScale = 4;
+	if (!base || base->getSize().x == 0)
+		return nullptr;
+	Resources & resources = getResources();
+	auto it = hires.find(base);
+	if (it != hires.end()) {
+		Resources::iterator r = resources.find(it->second.key);
+		if (r != resources.end() && &r->second == base && it->second.baseSize == base->getSize()) {
+			scale = kScale;
+			return it->second.texture.get();
+		}
+		hires.erase(it); // stale: texture reloaded or cache cleared
+	}
+	// Reverse lookup of the cache key (once per texture).
+	const Path * key = nullptr;
+	for (Resources::iterator r = resources.begin(); r != resources.end(); ++r)
+		if (&r->second == base) { key = &r->first; break; }
+	if (!key)
+		return nullptr;
+
+	Hires entry{*key, base->getSize(), nullptr};
+	std::string stripped = key->str();
+	if (stripped.find(internal_path) == 0)
+		stripped = stripped.substr(internal_path.size());
+	for (const Path & p : app->data.paths(Path("bitmaps@4x") + stripped)) {
+		auto tex = std::make_unique<sf::Texture>();
+		bool ok = tex->loadFromFile(p.c_str());
+		if (!ok && p.name().find('.') == std::string::npos)
+			ok = tex->loadFromFile((p.str() + ".png").c_str());
+		if (ok && tex->getSize() == base->getSize() * kScale) {
+			tex->setSmooth(true);          // minified on screen: filter...
+			(void)tex->generateMipmap();   // ...with mipmaps for clean detail
+			entry.texture = std::move(tex);
+			LOG(DEBUG, "loaded 4x twin for '%s'", key->c_str());
+			break;
+		}
+	}
+	const sf::Texture * out = entry.texture.get();
+	hires.emplace(base, std::move(entry));
+	if (out)
+		scale = kScale;
+	return out;
+}
+
 bool BitmapManager::loadFromPlugin(const std::string & pluginName, int resourceId,
                                    sf::Texture & dst,
                                    const sf::Color & maskColor)

@@ -1,5 +1,7 @@
 #pragma once
+#include <memory>
 #include <string>
+#include <unordered_map>
 #include "ResourceManager.h"
 #include "Skin.h"
 
@@ -67,8 +69,21 @@ namespace OT
 		/// EXE sheet so the file edition is what loads.
 		bool hasFirstPartyArt(const Path & name) const;
 
+		/// High-resolution twin of a cached texture: data/bitmaps@4x/<key>
+		/// with the same layout at `scale`x pixels. Returns nullptr unless
+		/// the twin is exactly scale x the cached 1x texture and the cache
+		/// still maps its key to `base` (so skin switches never mix art).
+		/// Loaded lazily on first request and cached (misses too).
+		const sf::Texture * hiresFor(const sf::Texture * base, unsigned & scale);
+
 		bool usedFallback;
 	private:
+		struct Hires {
+			Path key;
+			sf::Vector2u baseSize;
+			std::unique_ptr<sf::Texture> texture; // null = no twin
+		};
+		std::unordered_map<const sf::Texture *, Hires> hires;
 		std::string internal_path;
 		Skin m_skin = Skin::OpenSky;
 	};

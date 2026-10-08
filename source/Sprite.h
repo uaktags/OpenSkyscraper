@@ -32,6 +32,11 @@ namespace OT
 		}
 
 	protected:
+		/// Draws the 4x twin of the texture (BitmapManager::hiresFor) into
+		/// the same world rect when the target shows more than one pixel
+		/// per world unit; otherwise draws exactly like sf::Sprite.
+		void draw(sf::RenderTarget & target, sf::RenderStates states) const override;
+
 		sf::Texture texture;
 	};
 }
