@@ -189,6 +189,7 @@ endif()
 add_executable(OpenSkyTests
   tests/test_main.cpp
   source/BuildRules.cpp
+  source/YootPool.cpp
   source/YootWorld.cpp
   source/YootEvents.cpp
   source/YootCatalog.cpp
@@ -240,6 +241,7 @@ add_test(NAME OpenSkyTests COMMAND OpenSkyTests)
 # export over the same pure seam (tools/yoottower/bldtool.cpp).
 add_executable(BldTool
   tools/yoottower/bldtool.cpp
+  source/YootPool.cpp
   source/BldLoader.cpp
   source/BldExport.cpp
   source/YootWorld.cpp

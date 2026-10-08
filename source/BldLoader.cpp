@@ -2,6 +2,7 @@
 #include "BldLoader.h"
 
 #include "ItemTypeCatalog.h"
+#include "YootPool.h"
 #include "YootTenants.h"
 #include "YootWorld.h"
 
@@ -1261,6 +1262,47 @@ namespace Bld {
 				}
 				if (any) xml.insert(xml.size() - 2, " yootTraffic=\"" + tr + "\"");
 			}
+		}
+		if (!in.pool.timeZones.empty())
+		{
+			// T2Pool (bld §6) -> the OpenSky pool, so a .bld keeps its visitor
+			// demand. The people out of the pool are dropped with the crowd.
+			Yoot::Pool pool;
+			pool.gameLevel = in.pool.gameLevel;
+			pool.population = pool.shownPopulation = in.pool.population;
+			pool.shrinkCount = in.pool.f18;
+			for (const TimeZone & z : in.pool.timeZones)
+			{
+				Yoot::PeopleTimeZoneList l;
+				l.fixed = z.fixed != 0;
+				l.hoursPerZone = z.f28;
+				l.current = z.currentItem;
+				l.hourInZone = z.f30;
+				for (const TypeArray & a : z.typeArrays)
+				{
+					Yoot::PeopleTypeArray t;
+					t.fixed = a.f24 != 0;
+					t.start = a.f28;
+					t.limit = a.f2c;
+					for (const PeopleType & pt : a.types)
+					{
+						Yoot::PeopleType y;
+						y.demand = pt.f0 & 7;
+						y.timeZone = (uint8_t(pt.f0) >> 3) & 0x1f;
+						y.silhouette = pt.silhouetteType;
+						y.econo = pt.econoType;
+						y.transport = pt.transportType;
+						y.life = pt.life;
+						t.types.push_back(y);
+					}
+					l.zones.push_back(t);
+				}
+				pool.demands.push_back(l);
+			}
+			std::string encoded;
+			pool.encode(encoded);
+			const size_t at = xml.find(" x=\"");
+			if (at != std::string::npos) xml.insert(at, " yootPool=\"" + encoded + "\"");
 		}
 		// Finances: previousFunds is the balance at the start of the period;
 		// the per-category totals have unconfirmed meanings, so only the net

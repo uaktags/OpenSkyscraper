@@ -53,6 +53,7 @@
 #include "../source/YootPlacement.h"
 #include "../source/YootVenues.h"
 #include "../source/YootMovie.h"
+#include "../source/YootPool.h"
 #include "../source/YootTenants.h"
 #include "../source/YootSpecials.h"
 
@@ -4220,6 +4221,15 @@ static void testBldShippedSaves()
 		const size_t at = expected.find(iceStatus + "12\"");
 		EXPECT(at != std::string::npos);
 		if (at != std::string::npos) expected.replace(at, iceStatus.size() + 3, iceStatus + "9\"");
+		// The visitor pool comes back with the exporter's population 0.
+		auto stripPool = [](std::string x) {
+			const size_t p = x.find(" yootPool=\"");
+			if (p != std::string::npos) x.erase(p, x.find('"', p + 11) + 1 - p);
+			return x;
+		};
+		EXPECT(again.find(" yootPool=\"1 1 ") != std::string::npos);
+		again = stripPool(again);
+		expected = stripPool(expected);
 		EXPECT(again == expected);
 		if (again != expected) std::cerr << "re-import differs:\n" << again << "\nvs\n" << expected << "\n";
 
@@ -4289,6 +4299,121 @@ static void testBldShippedSaves()
 // Step 12: trash, restrooms, colds and doctors (I2, I3, P5, P6, R6).
 // Plugin-backed tenants (shops, restaurants, vending, service): catalog,
 // plugin data, the family state machines and the toolbox grouping.
+// Plan step 15 (P4): the T2Pool visitor pool, ported from T2DLL.
+static void testYootPool()
+{
+	using namespace OT;
+	const PluginManager & pm = yootTestPlugins();
+	Yoot::PoolDef tokyo, kegon;
+	const AbstractPlugin * tp = pm.get("Tokyo.t2p");
+	const AbstractPlugin * kp = pm.get("Kegon.t2p");
+	EXPECT(tp && tp->ensureLoaded() && Yoot::loadPoolDef(*tp, tokyo));
+	EXPECT(kp && kp->ensureLoaded() && Yoot::loadPoolDef(*kp, kegon));
+	if (!tokyo.valid || !kegon.valid) return;
+
+	// PODF: per-grade PGDF ids, five demands (4/12/12/6/1 time zones; the
+	// last is fixed), the special flag 0x83.
+	EXPECT(tokyo.gradePoolId(1) == 128 && tokyo.gradePoolId(5) == 132 && tokyo.gradePoolId(6) == 0);
+	EXPECT(kegon.gradePoolId(1) == 0 && kegon.gradePoolId(2) == 0 && kegon.gradePoolId(3) == 128);
+	EXPECT(tokyo.demands.size() == 5 && tokyo.demands[0].numZones == 4 && tokyo.demands[1].numZones == 12 &&
+	       tokyo.demands[3].numZones == 6 && tokyo.demands[4].numZones == 1 && tokyo.demands[4].fixed == 1);
+	EXPECT(tokyo.specialFlag == 0x83 && tokyo.grades.size() == 5);
+	// PZDF 1000: 8 types, counts raw x 20 / 100 (15 -> 3, 20 -> 4).
+	EXPECT(tokyo.zones.count(1000) && tokyo.zones[1000].elems.size() == 8 &&
+	       tokyo.zones[1000].elems[0].silhouette == 8 && tokyo.zones[1000].elems[0].count == 3 &&
+	       tokyo.zones[1000].elems[4].count == 4);
+
+	// Pool selection per grade: grade 1 gives demand 0 zone 1 (06:00-12:00)
+	// PZDF 1000 x 10 = 200 types; grades 2 and 3 add 1000 x 5 and 1010 x 5.
+	Yoot::Pool g1, g3, k1, k3;
+	g1.create(tokyo, 1, 0);
+	g3.create(tokyo, 3, 0);
+	k1.create(kegon, 1, 0);
+	k3.create(kegon, 3, 0);
+	EXPECT(g1.gameLevel == 1 && g1.demands.size() == 5 && g1.demands[0].hoursPerZone == 6 && g1.demands[1].hoursPerZone == 2);
+	EXPECT(g1.demands[0].zones[1].count() == 200 && g3.demands[0].zones[1].count() == 400);
+	EXPECT(k1.totalTypes() == 0 && k3.totalTypes() > 0);
+	// A new tower: Init with no season table opens no window (factor 0)
+	// except the fixed demand's.
+	EXPECT(g1.available(0) == 0 && g1.available(4) == 4);
+	for (int h = 1; h <= 6; ++h) g1.incHour(h);
+	EXPECT(g1.demands[0].current == 1 && g1.available(0) == 200 && g1.demands[1].current == 3);
+
+	// T2PeopleDemandList::Call: the first type of the window that passes
+	// T2PeopleType::Check; types are inserted in front, so PZDF order is
+	// reversed (silhouette 36 first). The called type leaves the array.
+	MemberDef any;
+	any.demandType = 0;
+	any.startSilhouetteType = -1;
+	auto rng = []() { return 7; };
+	Yoot::PeopleType t;
+	EXPECT(g1.call(any, -1, Yoot::kRouteLobby, t, rng) && t.silhouette == 36 && t.econo == 1 && t.immortal());
+	EXPECT(g1.population == 1 && g1.available(0) == 199 && g1.demands[0].zones[1].count() == 199);
+	// Transport bits (CheckRouteFromPool mask): a lobby walker needs bit 0.
+	EXPECT(!g1.call(any, -1, Yoot::kRouteParking | Yoot::kRouteSubway, t, rng));
+	// Econo: [econo, econo + 2] unless econo < 0; Tokyo grade 1 zone 1 is all econo 1.
+	EXPECT(!g1.call(any, 2, Yoot::kRouteLobby, t, rng) && g1.call(any, 0, Yoot::kRouteLobby, t, rng));
+	// Demand -1 picks a random non-fixed list but never list 0 (engine quirk).
+	MemberDef anyDemand = any;
+	anyDemand.demandType = -1;
+	Yoot::Pool only0 = g1;
+	for (size_t d = 1; d < only0.demands.size(); ++d)
+		for (Yoot::PeopleTypeArray & z : only0.demands[d].zones) { z.types.clear(); z.limit = 0; }
+	EXPECT(!only0.call(anyDemand, -1, 0xff, t, rng));
+
+	// T2PeopleType::Check rules.
+	Yoot::PeopleType child, woman;
+	child.silhouette = 9; child.econo = 2; child.transport = Yoot::kTransportSubway;
+	woman.silhouette = 31; woman.econo = 3; woman.transport = Yoot::kTransportLobbyLeft;
+	MemberDef kids = any; kids.startSilhouetteType = -3;            // ages 8..15
+	MemberDef band = any; band.startSilhouetteType = 30; band.endSilhouetteType = 40;
+	MemberDef men = any; men.optionType = 1;
+	EXPECT(Yoot::checkPeopleType(child, kids, -1, Yoot::kRouteSubway) && !Yoot::checkPeopleType(child, kids, -1, Yoot::kRouteLobby));
+	EXPECT(!Yoot::checkPeopleType(woman, kids, -1, 0xff) && Yoot::checkPeopleType(woman, band, 1, 0xff) && !Yoot::checkPeopleType(woman, band, 4, 0xff));
+	MemberDef other = any; other.demandType = 2;
+	EXPECT(!Yoot::checkPeopleType(woman, men, -1, 0xff) && Yoot::checkPeopleType(child, any, 0, 0xff));
+	EXPECT(Yoot::checkWithDemand(woman, any, -1) && !Yoot::checkWithDemand(woman, other, -1));
+	Yoot::PeopleType dup = Yoot::duplicateType(woman, 5); // 5 % 3 - 1 = +1
+	EXPECT(dup.life == 1 && dup.econo == 4 && Yoot::duplicateType(child, 3).econo == 1);
+
+	// T2Tenant::CheckRouteFromPool.
+	Yoot::RouteFromPoolInputs ri;
+	EXPECT(Yoot::checkRouteFromPool(ri) == 0);
+	ri.lobby = true; ri.subway = true; ri.ship = true; ri.cruiseAvailable = true;
+	EXPECT(Yoot::checkRouteFromPool(ri) == (Yoot::kRouteLobby | Yoot::kRouteShip));
+	ri.trainAvailable = true; ri.parking = true;
+	EXPECT(Yoot::checkRouteFromPool(ri) == 0x1f);
+
+	// T2Pool::Enter: back in front of the window (callable from the next
+	// zone change); an estimate above 200 also adds a mortal duplicate
+	// behind it; 71..200 duplicates every 5th time; mortals at <= 70 vanish.
+	Yoot::Pool e = g1;
+	const int before = e.demands[0].zones[1].count();
+	Yoot::PeopleType back = t;
+	e.enter(back, 250, rng);
+	EXPECT(e.shrinkCount == 1 && e.demands[0].zones[1].count() == before + 2 && e.demands[0].zones[1].start == 2);
+	EXPECT(e.demands[0].zones[1].types.back().life == 1);
+	Yoot::PeopleType mortal = back; mortal.life = 3;
+	e.enter(mortal, 50, rng);
+	EXPECT(e.demands[0].zones[1].count() == before + 2);
+	for (int k = 0; k < 5; ++k) e.enter(back, 100, rng);
+	EXPECT(e.demands[0].zones[1].count() == before + 2 + 5 + 1);
+	// Midnight: the people who went home leave the population.
+	const int pop = e.population;
+	for (int h = 7; h <= 24; ++h) e.incHour(h % 24);
+	EXPECT(e.population == pop - 7);
+	EXPECT(e.shrinkCount == 0);
+
+	// Save / load.
+	std::string a, b;
+	g3.encode(a);
+	Yoot::Pool r;
+	EXPECT(r.decode(a));
+	r.encode(b);
+	EXPECT(a == b && r.totalTypes() == g3.totalTypes());
+	EXPECT(!r.decode("2 0"));
+}
+
 static void testYootTenants()
 {
 	using namespace OT;
@@ -5291,6 +5416,7 @@ int main()
 	testYootStress();
 	testYootFacilities();
 	testYootTenants();
+	testYootPool();
 	testYootPlacementRules();
 	testYootVenues();
 	testYootSpecials();
