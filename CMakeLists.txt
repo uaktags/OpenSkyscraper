@@ -214,6 +214,8 @@ add_executable(OpenSkyTests
   source/OspPlugin.cpp
   source/ResourceJson.cpp
   source/WorldResourceCodec.cpp
+  source/PluginResourceJson.cpp
+  source/PluginT2pExport.cpp
   source/AbstractPlugin.cpp
   source/DecompiledPlugin.cpp
 )
@@ -247,6 +249,8 @@ add_executable(PluginEditor
   source/OspPlugin.cpp
   source/ResourceJson.cpp
   source/WorldResourceCodec.cpp
+  source/PluginResourceJson.cpp
+  source/PluginT2pExport.cpp
   source/AbstractPlugin.cpp
   source/DecompiledPlugin.cpp
   source/NativeFileDialog.cpp
