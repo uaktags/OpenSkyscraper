@@ -624,16 +624,23 @@ void VenueSystem::baseballTick()
 	Item::Stadium * s = firstBuilt<Item::Stadium>(game, "stadium");
 	// Exec 0x10011c40 state 1: stop when the stadium is not open.
 	if (!s || !s->isOpen()) { baseball = WorldEvent(); return; }
-	if (s->visitorsToday < Yoot::kBaseballVisitors) return;
-	// States 2..9: the team is formed and named ("Towers" by default), the
-	// memorial game starts with fireworks, then doc vt+0x188.
-	if (s->teamName.empty()) s->teamName = "Towers";
-	game->timeWindow.showMessage("Your very own professional baseball team has been formed to play in the newly constructed baseball stadium. "
-		"The memorial baseball game of " + s->teamName + " will be starting at the stadium.");
-	LOG(IMPORTANT, "Baseball: the memorial game of %s (%d visitors)", s->teamName.c_str(), s->visitorsToday);
-	game->grantFinalGrade();
-	baseballDone = true;
-	baseball = WorldEvent();
+	if (s->visitorsToday < Yoot::kBaseballVisitors || baseball.state != 1) return;
+	// States 2..6: the team is formed (dialog 8000) and named in dialog
+	// 12006 (default "Towers"; DialogHook refuses an empty name), then the
+	// memorial game is announced; state 9 calls doc vt+0x188. The sim
+	// holds while the dialog is open. No fireworks.
+	baseball.state = 6;
+	game->timeWindow.showMessage("Your very own professional baseball team has been formed to play in the newly constructed baseball stadium.");
+	game->askEventText("Baseball", "Please name your baseball team.",
+		s->teamName.empty() ? "Towers" : s->teamName, [this](const std::string & name) {
+			Item::Stadium * st = firstBuilt<Item::Stadium>(game, "stadium");
+			if (st) st->teamName = name;
+			game->timeWindow.showMessage("The memorial baseball game of " + name + " will be starting at the stadium.");
+			LOG(IMPORTANT, "Baseball: the memorial game of %s", name.c_str());
+			game->grantFinalGrade();
+			baseballDone = true;
+			baseball = WorldEvent();
+		});
 }
 
 void VenueSystem::beginWedding()

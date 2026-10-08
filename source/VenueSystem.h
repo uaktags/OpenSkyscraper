@@ -29,7 +29,7 @@ namespace OT
 	 * - venue visitors are counted (Yoot::venueArrivals from the plugin's
 	 *   DPDF) and do not walk; subway riders become Metro visitors;
 	 * - the Event Center keeps one booking instead of the 12-day ring;
-	 * - the baseball team name defaults to "Towers" (no naming dialog). */
+	 * - the baseball naming dialog has no fireworks after it. */
 	class VenueSystem : public GameObject
 	{
 	public:

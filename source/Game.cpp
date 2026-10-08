@@ -4,6 +4,7 @@
 #include <chrono>
 #include <TGUI/Widgets/Label.hpp>
 #include <TGUI/Widgets/Button.hpp>
+#include <TGUI/Widgets/EditBox.hpp>
 #include "Application.h"
 #include "Game.h"
 #include "SaveHash.h"
@@ -285,6 +286,30 @@ void Game::askEventChoice(const std::string & title, const std::string & text,
 	app.gui.add(window);
 	eventChoiceWindow = window;
 	eventChoiceCallback = onChoice;
+}
+
+void Game::askEventText(const std::string & title, const std::string & text,
+                        const std::string & defaultText,
+                        const std::function<void(const std::string &)> & onText)
+{
+	askEventChoice(title, text, "OK", "", nullptr);
+	tgui::Container::Ptr window = eventChoiceWindow;
+	window->removeAllWidgets();
+	tgui::Label::Ptr label = tgui::Label::create(text);
+	label->setPosition({14 * app.uiScale, 12 * app.uiScale});
+	label->setTextSize(13 * app.uiScale);
+	window->add(label);
+	tgui::EditBox::Ptr edit = tgui::EditBox::create();
+	edit->setText(defaultText);
+	edit->setSize({330 * app.uiScale, 26 * app.uiScale});
+	edit->setPosition({14 * app.uiScale, 44 * app.uiScale});
+	window->add(edit);
+	tgui::Button::Ptr ok = tgui::Button::create("OK");
+	ok->setSize({160 * app.uiScale, 30 * app.uiScale});
+	ok->setPosition({100 * app.uiScale, 85 * app.uiScale});
+	ok->onPress([this, edit]() { if (!edit->getText().empty()) answerEventChoice(true); });
+	window->add(ok);
+	eventChoiceCallback = [edit, onText](bool) { onText(edit->getText().toStdString()); };
 }
 
 void Game::answerEventChoice(bool yes)

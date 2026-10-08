@@ -241,6 +241,12 @@ namespace OT {
 		void askEventChoice(const std::string & title, const std::string & text,
 		                    const std::string & yesLabel, const std::string & noLabel,
 		                    const std::function<void(bool)> & onChoice);
+		/// Modal text entry with one OK button (YootTower T2Baseball dialog
+		/// 12006). OK with an empty text keeps the dialog open (DialogHook
+		/// refuses ""); headless runs accept `defaultText`.
+		void askEventText(const std::string & title, const std::string & text,
+		                  const std::string & defaultText,
+		                  const std::function<void(const std::string &)> & onText);
 		/// Close any open event choice without answering it.
 		void closeEventChoice();
 
