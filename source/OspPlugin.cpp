@@ -843,32 +843,7 @@ namespace OT
 
 		/// The DIB shapes we turn into PNG: BITMAPINFOHEADER, 1 plane,
 		/// uncompressed, 4 or 8 bpp, palette right after the header.
-		struct DibLayout
-		{
-			int32_t width = 0, height = 0;   // height < 0 = top-down
-			uint16_t bpp = 0;
-			uint32_t colors = 0;
-			size_t pixels = 0;               // offset of the pixel rows
-			size_t stride = 0;
-			uint32_t rows() const { return uint32_t(height < 0 ? -height : height); }
-		};
-
-		bool parseDib(const std::string & d, DibLayout & L)
-		{
-			if (d.size() < 40 || le32(d, 0) != 40) return false;
-			L.width = int32_t(le32(d, 4));
-			L.height = int32_t(le32(d, 8));
-			if (le16(d, 12) != 1 || le32(d, 16) != 0) return false;
-			L.bpp = le16(d, 14);
-			if (L.bpp != 4 && L.bpp != 8) return false;
-			const uint32_t used = le32(d, 32);
-			L.colors = used ? used : (1u << L.bpp);
-			if (L.colors > (1u << L.bpp) || L.width <= 0 || L.height == 0 || L.width > 65535 || L.rows() > 65535)
-				return false;
-			L.pixels = 40 + 4 * size_t(L.colors);
-			L.stride = ((size_t(L.width) * L.bpp + 31) / 32) * 4;
-			return d.size() >= L.pixels + L.stride * L.rows();
-		}
+		/// (DibLayout itself and parseDib are declared in OspPlugin.h.)
 
 		uint8_t dibIndex(const std::string & d, const DibLayout & L, size_t rowStart, uint32_t x)
 		{
@@ -928,6 +903,26 @@ namespace OT
 	}
 
 	// ---- DIB <-> PNG ----
+	bool parseDib(const std::string & d, DibLayout & L)
+	{
+		if (d.size() < 40 || le32(d, 0) != 40) return false;
+		L.width = int32_t(le32(d, 4));
+		L.height = int32_t(le32(d, 8));
+		// rows() negates the height for top-down bitmaps; INT32_MIN
+		// would be signed overflow UB there, so refuse it outright.
+		if (L.height == INT32_MIN) return false;
+		if (le16(d, 12) != 1 || le32(d, 16) != 0) return false;
+		L.bpp = le16(d, 14);
+		if (L.bpp != 4 && L.bpp != 8) return false;
+		const uint32_t used = le32(d, 32);
+		L.colors = used ? used : (1u << L.bpp);
+		if (L.colors > (1u << L.bpp) || L.width <= 0 || L.height == 0 || L.width > 65535 || L.rows() > 65535)
+			return false;
+		L.pixels = 40 + 4 * size_t(L.colors);
+		L.stride = ((size_t(L.width) * L.bpp + 31) / 32) * 4;
+		return d.size() >= L.pixels + L.stride * L.rows();
+	}
+
 	bool dibToPng(const std::string & d, sf::Image & image, Json & side)
 	{
 		DibLayout L;

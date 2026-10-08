@@ -152,6 +152,22 @@ namespace OT
 	/// manifest records their real class.)
 	OspResult convertT2pToOsp(Plugin & plugin, OspPlugin & out);
 
+	/// Uncompressed 4/8-bpp DIB (BITMAPINFOHEADER + palette + rows) layout,
+	/// as written into OSP bitmap resources. Exposed for validation tests.
+	struct DibLayout
+	{
+		int32_t width = 0, height = 0;   // height < 0 = top-down
+		uint16_t bpp = 0;
+		uint32_t colors = 0;
+		size_t pixels = 0;               // offset of the pixel rows
+		size_t stride = 0;
+		/// Row count; callers must reject INT32_MIN first (negating it is UB).
+		uint32_t rows() const { return uint32_t(height < 0 ? -height : height); }
+	};
+	/// Parses and validates the DIB header in d. False on malformed input,
+	/// including a height of INT32_MIN (rows() would be signed overflow).
+	bool parseDib(const std::string & d, DibLayout & L);
+
 	/// Reads the "attr" object of an OSP manifest (v1 or v2) into `out`.
 	/// v2 keys: pluginId (Mac-order 4cc, "BURG"), itemType (number), name,
 	/// gameLevel, attrib, dependPluginId (Mac-order 4cc, "****" = none),
