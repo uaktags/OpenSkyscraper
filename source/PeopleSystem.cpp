@@ -491,7 +491,7 @@ int PeopleSystem::callFromFloor(Item::Item * tenant, const YootTenantDef & def, 
 	const int left = tenant->position.x, right = tenant->position.x + tenant->size.x;
 	std::vector<YootVisitor *> passing;
 	for (YootVisitor * v : visitorList)
-		if (v->walking && v->curV == floor && Yoot::passesTenant(v->curH, left, right, score) && !sameKind(v->dest, tenant))
+		if (v->walking && !v->vip && v->curV == floor && Yoot::passesTenant(v->curH, left, right, score) && !sameKind(v->dest, tenant))
 			passing.push_back(v);
 	if (passing.empty()) return 0;
 	const int econo = Yoot::customerEconoType(def);
