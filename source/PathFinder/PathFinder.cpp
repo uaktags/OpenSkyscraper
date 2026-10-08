@@ -57,7 +57,11 @@ void PathFinder::buildRoute(Route &r, Item::Item *start_item, Item::Item *end_it
 	MapSearchNode *end_node = astarsearch.GetSolutionEnd();
 	MapSearchNode *start_node = astarsearch.GetSolutionStart();
 
-	if(start_node->IsSameState(*end_node)) {
+	// IsGoal() matches on the map node alone, so a search whose start node
+	// already sits on the goal's map node succeeds with a one-node solution
+	// even though IsSameState() differs (the start carries parent_item).
+	// That solution has no child links; walking it would dereference null.
+	if(start_node->IsSameState(*end_node) || start_node->mapNode == end_node->mapNode) {
 		r.add(start_item, start_node->mapNode->position.y);
 		r.add(end_item, end_node->mapNode->position.y);
 	}
@@ -67,8 +71,9 @@ void PathFinder::buildRoute(Route &r, Item::Item *start_item, Item::Item *end_it
 		MapSearchNode *n_child;
 		r.add(start_item, n->mapNode->position.y);
 		n = astarsearch.GetSolutionNext();
-		while(n != end_node) {
+		while(n && n != end_node) {
 			n_child = astarsearch.GetSolutionNext();
+			if(!n_child) break;
 			Item::Item *i = n_child->parent_item;
 			if(i) {
 				int toFloor;
@@ -88,7 +93,7 @@ void PathFinder::buildRoute(Route &r, Item::Item *start_item, Item::Item *end_it
 
 			n = n_child;
 		};
-		r.add(end_item, n->mapNode->position.y);
+		r.add(end_item, end_node->mapNode->position.y);
 	}
 
 	r.updateScore((int)std::abs(end_node->g + end_node->h));
