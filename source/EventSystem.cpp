@@ -79,6 +79,7 @@ EventSystem::EventSystem(Game * game)
 , power(game)
 , facilities(game)
 , venues(game)
+, specials(game)
 , yoot(false)
 {
 	reset();
@@ -119,6 +120,7 @@ void EventSystem::reset()
 	power.configure(nullptr);
 	facilities.reset();
 	venues.reset();
+	specials.reset();
 	prevHour = game ? game->time.hour : 0.0;
 	lastDispatchDay = -1;
 	santaActive = false;
@@ -325,11 +327,18 @@ void EventSystem::deployFireGuards()
 	// SetAllGuards(8): guards 0-2 take the office floor, 3-5 the floor
 	// below, each repolling a floor-index-mod-6 partition (GuardT).
 	guardOffices.clear();
+	// YootTower T2FireBurning::CallFireman 0x10031ed0: six people in total
+	// from the registry-5 tenants (Security Rooms, then Fire Departments).
+	std::vector<std::pair<Item::Item *, int> > sources;
+	if (yoot) sources = specials.firemen();
 	Game::ItemSetByString::const_iterator it = game->itemsByType.find("security");
-	if (it == game->itemsByType.end()) { fireGuardsActive = false; return; }
-	for (Game::ItemSet::const_iterator i = it->second.begin(); i != it->second.end(); ++i) {
+	if (!yoot && it != game->itemsByType.end())
+		for (Game::ItemSet::const_iterator i = it->second.begin(); i != it->second.end(); ++i)
+			sources.push_back(std::make_pair(*i, kGuardsPerOffice));
+	if (sources.empty()) { fireGuardsActive = false; return; }
+	for (const std::pair<Item::Item *, int> & src : sources) {
 		GuardOffice office;
-		office.floor = (*i)->position.y;
+		office.floor = src.first->position.y;
 		office.up = office.floor;
 		office.down = office.floor - 1;
 		for (int gi = 0; gi < kGuardsPerOffice; gi++) {
@@ -340,7 +349,7 @@ void EventSystem::deployFireGuards()
 			g.transit = 0;
 			g.pause = 0;
 			g.douse = false;
-			g.retired = false;
+			g.retired = gi >= src.second;
 		}
 		guardOffices.push_back(office);
 	}
@@ -436,6 +445,7 @@ void EventSystem::stepFireGuards()
 		GuardOffice & office = guardOffices[oi];
 		for (int gi = 0; gi < kGuardsPerOffice; gi++) {
 			Guard & g = office.g[gi];
+			if (g.retired) continue; // YootTower: beyond the six CallFireman sends
 			if (g.transit > 0) { g.transit--; continue; }
 			if (g.pause > 0) {
 				if (--g.pause == 0 && g.douse) {

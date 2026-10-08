@@ -30,7 +30,8 @@ static const std::map<std::string, std::vector<std::string>> CATEGORIES = {
     {"stairs",            {"escalator"}},
     {"lobby",             {"floor"}},
     {"elevator-standard", {"elevator-express", "elevator-service"}},
-    {"hotel_single",      {"hotel_double", "hotel_suite"}},
+    {"hotel_single",      {"hotel_double", "hotel_suite", "frontdesk", "housekeeping"}},
+    {"parkinggate",       {"parkinglot"}},
     {"condo",             {"yoot_condo"}}
 };
 
@@ -450,14 +451,10 @@ tgui::Button::Ptr ToolboxWindow::makeItemButton(Item::AbstractPrototype* proto, 
     }
     if (BuildRules::isYootOnlyPrototype(proto->id))
     {
-        // PowerRoom/TrashFacility/Restroom/Doctor's.t2p RT_BITMAP 100 is a
-        // vertical 26x130 icon strip; OBJMAP 100 names the item's pattern 0
-        // at Rect 0,78,26,104 in all four.
+        // The YootTower-only items' RT_BITMAP 100 is a vertical 26x130 icon
+        // strip; OBJMAP 100 names the item's pattern 0 at Rect 0,78,26,104.
         const std::string plugin = proto->yoot ? proto->yoot->plugin
-            : proto->id == "trashfacility" ? "TrashFacility.t2p"
-            : proto->id == "restroom" ? "Restroom.t2p"
-            : proto->id == "doctor" ? "Doctor's.t2p"
-            : proto->id == "billboard" ? "Billboard.t2p" : "PowerRoom.t2p";
+            : BuildRules::yootOnlyPlugin(proto->id);
         sf::Texture sheet;
         if (app->bitmaps.loadFromPlugin(plugin, 100, sheet)) {
             sf::Image full = sheet.copyToImage();

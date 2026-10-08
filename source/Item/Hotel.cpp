@@ -227,13 +227,17 @@ void Hotel::clearAll()
 void Hotel::advance(double dt)
 {
 	// Open at 17:00 — clean up yesterday's leftovers and spawn new guests.
-	if (game->time.checkHour(17))
+	// YootTower: a dirty room waits for a Housekeeping maid, and a room that
+	// depends on the Front Desk gets guests only while a desk links it (W4).
+	const bool yoot = prototype->yoot && game->eventSystem.specials.enabled();
+	if (game->time.checkHour(17) && !(yoot && roomState == kDirty))
 	{
 		clearAll();
 		roomState = kClean;
 		spriteNeedsUpdate = true;
+		yootStayBooked = false;
 
-		if (!lobbyRoute.empty())
+		if (!lobbyRoute.empty() && (!yoot || game->eventSystem.specials.roomMayTakeGuests(this)))
 		{
 			int n = capacity();
 			for (int i = 0; i < n; i++)
@@ -257,6 +261,7 @@ void Hotel::advance(double dt)
 			// Drive in: claim a reachable parking slot for the car.
 			if (!g->parkingUsed)
 				g->parkingUsed = claimReachableParking(game, this);
+			game->eventSystem.specials.driveIn(g, this); // YootTower lots (I6)
 		}
 		else
 			break;
@@ -335,10 +340,8 @@ void Hotel::advance(double dt)
 		else if (g->checkoutTime >= 0 && t >= g->checkoutTime)
 		{
 			if (prototype->yoot) {
-				// YootTower E7 (T2GuestroomTable::CalcInMoney 0x10037a00):
-				// the room's inMoney at its price selection.
-				game->yootBook(Yoot::hotelRoomIncome(*prototype->yoot, game->yootPriceSelection(this)),
-				               "hotel_income", "Hotel room checkout");
+				// YootTower E7: the room's inMoney was booked on its Front Desk
+				// at check-in and is paid at 12:00 (Front.t2p FUN_10015540).
 			} else {
 				const int stay = openSkyQuarterlyRent(prototype->id, 0);
 				game->transferFunds(stay, "hotel_income", "Hotel room checkout");
@@ -355,6 +358,7 @@ void Hotel::advance(double dt)
 				g->journey.set(r);
 			releaseParking(g->parkingUsed);
 			g->parkingUsed = NULL;
+			game->eventSystem.specials.driveOut(g);
 			roomState = kDirty;
 			dirtySince = t;
 			spriteNeedsUpdate = true;
@@ -375,7 +379,7 @@ void Hotel::advance(double dt)
 
 	// Housekeepers are service staff: they must use service elevators and
 	// stairs-only paths rather than the passenger lobby route.
-	if (roomState == kDirty && housekeeper == NULL && !lobbyRoute.empty())
+	if (roomState == kDirty && housekeeper == NULL && !lobbyRoute.empty() && !yoot)
 	{
 		Route serviceRoute = game->findRoute(game->mainLobby, this, true);
 		if (!serviceRoute.empty())
@@ -394,6 +398,7 @@ void Hotel::advance(double dt)
 			roomState = kClean;
 			spriteNeedsUpdate = true;
 			Route r = game->findRoute(this, game->mainLobby, true);
+			if (r.empty() && yoot) r = game->findRoute(this, game->mainLobby); // YootTower staff
 			if (!r.empty())
 			{
 				Item::removePerson(housekeeper);
@@ -424,6 +429,12 @@ void Hotel::addPerson(Person *p)
 		g->eval = 50;
 		roomState = kOccupied;
 		spriteNeedsUpdate = true;
+		if (prototype->yoot && !yootStayBooked)
+		{
+			// E7: checked in; the desk books the room's inMoney.
+			yootStayBooked = true;
+			game->eventSystem.specials.onCheckIn(this);
+		}
 		return;
 	}
 
@@ -464,6 +475,7 @@ void Hotel::encodeXML(tinyxml2::XMLPrinter &xml)
 	xml.PushAttribute("subVariant", subVariant);
 	xml.PushAttribute("roomState", roomState);
 	xml.PushAttribute("dirtySince", dirtySince);
+	if (yootStayBooked) xml.PushAttribute("yootStayBooked", true);
 
 	for (std::set<Guest *, SimLess>::iterator it = guests.begin(); it != guests.end(); ++it)
 	{
@@ -509,6 +521,7 @@ void Hotel::decodeXML(tinyxml2::XMLElement &xml)
 	subVariant = xml.IntAttribute("subVariant", rand() % 2);
 	roomState = xml.IntAttribute("roomState", kClean);
 	dirtySince = xml.DoubleAttribute("dirtySince", 0.0);
+	yootStayBooked = xml.BoolAttribute("yootStayBooked", false);
 	clearAll();
 	applyVariant();
 
@@ -567,6 +580,21 @@ void Hotel::decodeXML(tinyxml2::XMLElement &xml)
 	}
 
 	updateSprite();
+}
+
+bool Hotel::yootSendHousekeeper(Item * from)
+{
+	// RMaintenance FUN_1000bf70: the room goes 0x23 -> 0x24 and a maid
+	// walks over (CheckRoute with the staff flag: service movers allowed).
+	if (housekeeper || roomState != kDirty || !from) return false;
+	Route serviceRoute = game->findRoute(from, this);
+	if (serviceRoute.empty()) serviceRoute = game->findRoute(from, this, true);
+	if (serviceRoute.empty()) return false;
+	Housekeeper *h = new Housekeeper(this);
+	h->from = from->prototype->name;
+	housekeeper = h;
+	h->journey.set(serviceRoute);
+	return true;
 }
 
 Path Hotel::getRandomBackgroundSoundPath()

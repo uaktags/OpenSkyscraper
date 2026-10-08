@@ -4,6 +4,7 @@
 #include "FacilitySystem.h"
 #include "PowerSystem.h"
 #include "VenueSystem.h"
+#include "SpecialSystem.h"
 #include "Sprite.h"
 #include "YootEvents.h"
 #include "Math/Vector2D.h"
@@ -107,6 +108,8 @@ namespace OT
 		FacilitySystem facilities;
 		/// YootTower venues, final items and the subway (plan step 14 B). Inert elsewhere.
 		VenueSystem venues;
+		/// YootTower front desk, housekeeping, parking, fire dept (step 14).
+		SpecialSystem specials;
 		/// True while the YootTower T2EV scheduler drives the calendar.
 		bool yootMode() const { return yoot; }
 		const YootEventScheduler & yootScheduler() const { return scheduler; }

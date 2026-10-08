@@ -258,6 +258,7 @@ std::string InspectorDialog::describeItem(Item::Item * item)
 
 	s << game->eventSystem.facilities.describe(item);
 	s << game->eventSystem.venues.describe(item);
+	s << game->eventSystem.specials.describe(item);
 
 	if (!item->people.empty())
 	{

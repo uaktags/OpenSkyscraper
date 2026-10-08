@@ -29,6 +29,7 @@
 #include "YootFacilityItems.h"
 #include "YootVenueItems.h"
 #include "YootTenant.h"
+#include "YootSpecialItems.h"
 
 using namespace OT;
 using namespace Item;
@@ -88,6 +89,12 @@ void Factory::loadPrototypes()
 	register_item(GatheringArea);
 	register_item(BoatDeck);
 	register_item(Subway);
+	register_item(FrontDesk); // YootTower-only special items (plan step 14)
+	register_item(Housekeeping);
+	register_item(ParkingGate);
+	register_item(ParkingLot);
+	register_item(FireDepartment);
+	register_item(Apartment);
 	#undef register_item
 	// YootTower-only: one prototype per shop / restaurant / vending /
 	// service tenant plugin found in the catalog (YootTenants.h).

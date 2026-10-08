@@ -2,49 +2,69 @@
 #include "../BitmapManager.h"
 #include "../Game.h"
 #include "../Math/Rand.h"
+#include "../YootCatalog.h"
+
+#include <map>
+#include <memory>
 
 using namespace OT;
 using namespace OT::Item;
 
-sf::Texture YootCondo::emptyCondoTexture;
-sf::Texture YootCondo::residentTexture;
-bool YootCondo::texturesLoaded = false;
+namespace
+{
+	struct CondoArt
+	{
+		bool loaded = false;
+		sf::Texture empty;
+		sf::Texture resident;
+	};
+}
 
 YootCondo::~YootCondo()
 {
 	removeOccupants();
 }
 
-bool YootCondo::loadTextures(Game *game)
+const char * YootCondo::condoPlugin() const
 {
-	if (texturesLoaded)
-		return true;
+	// Condo.t2p in Tokyo, HawaianCondo.t2p in Hawaii (catalog link).
+	if (prototype->yoot && !prototype->yoot->plugin.empty())
+		return prototype->yoot->plugin.c_str();
+	return "Condo.t2p";
+}
 
+int YootCondo::residentsToCreate() const
+{
+	return Math::randi(1, 4);
+}
+
+bool YootCondo::loadTextures()
+{
 	// BitmapManager::loadFromPlugin is the canonical PE-bitmap loader
 	// (used to live here as YootCondo::loadPEBitmap). The plugin is
-	// resolved through PluginManager's catalog, so we no longer need to
-	// walk data search paths manually.
-	const std::string pluginName = "Condo.t2p";
-	LOG(INFO, "Loading YootTower Condo textures from plugin %s", pluginName.c_str());
-
-	if (!game->app.bitmaps.loadFromPlugin(pluginName, 1000, emptyCondoTexture, sf::Color(105, 33, 104))) {
-		LOG(ERROR, "Failed to load empty condo texture (1000) from %s", pluginName.c_str());
-		return false;
+	// resolved through PluginManager's catalog; art is cached per plugin.
+	static std::map<std::string, std::unique_ptr<CondoArt> > cache;
+	const std::string pluginName = condoPlugin();
+	std::unique_ptr<CondoArt> & slot = cache[pluginName];
+	if (!slot) {
+		slot.reset(new CondoArt);
+		LOG(INFO, "Loading YootTower residential textures from plugin %s", pluginName.c_str());
+		slot->loaded = game->app.bitmaps.loadFromPlugin(pluginName, 1000, slot->empty, sf::Color(105, 33, 104));
+		if (!slot->loaded)
+			LOG(ERROR, "Failed to load empty condo texture (1000) from %s", pluginName.c_str());
+		if (!game->app.bitmaps.loadFromPlugin(pluginName, 1100, slot->resident, sf::Color(255, 255, 255)))
+			LOG(ERROR, "Failed to load resident texture (1100) from %s", pluginName.c_str());
 	}
-	if (!game->app.bitmaps.loadFromPlugin(pluginName, 1100, residentTexture, sf::Color(255, 255, 255))) {
-		LOG(ERROR, "Failed to load resident texture (1100) from %s", pluginName.c_str());
-		return false;
-	}
-
-	texturesLoaded = true;
-	return true;
+	emptyCondoTexture = &slot->empty;
+	residentTexture = &slot->resident;
+	return slot->loaded;
 }
 
 void YootCondo::init()
 {
 	Item::init();
 
-	loadTextures(game);
+	loadTextures();
 
 	variant = rand() % 3;
 	occupied = false;
@@ -52,11 +72,11 @@ void YootCondo::init()
 	rent = 5000;
 	rentDeposit = rent;
 
-	baseSprite.setTexture(emptyCondoTexture);
+	baseSprite.setTexture(*emptyCondoTexture);
 	baseSprite.setOrigin({0.f, 24.f});
 	baseSprite.setPosition({static_cast<float>(position.x * 8), static_cast<float>(-position.y * 36)});
 
-	residentSprite.setTexture(residentTexture);
+	residentSprite.setTexture(*residentTexture);
 	residentSprite.setOrigin({8.f, 24.f});
 
 	updateSprite();
@@ -124,7 +144,7 @@ void YootCondo::updateSprite()
 	}
 
 	int frameIndex = variant * 5 + stateIndex;
-	baseSprite.setTextureRect(sf::IntRect({0, frameIndex * 24}, {128, 24}));
+	baseSprite.setTextureRect(sf::IntRect({0, frameIndex * 24}, {size.x * 8, 24}));
 }
 
 void YootCondo::render(sf::RenderTarget &target) const
@@ -162,8 +182,7 @@ void YootCondo::advance(double dt)
 			occupied = true;
 			variant = rand() % 3;
 			spriteNeedsUpdate = true;
-			rentDeposit = prototype->price * 2;
-			game->transferFunds(rentDeposit, "condo_sale", "Income from Yoot Condo sale");
+			moveIn();
 			createOccupants();
 		}
 	}
@@ -177,7 +196,7 @@ void YootCondo::advance(double dt)
 			spriteNeedsUpdate = true;
 			population = 0;
 			game->populationNeedsUpdate = true;
-			game->transferFunds(-prototype->price, "condo_buyback", "Repurchased vacated Yoot Condo");
+			moveOut();
 		}
 	}
 
@@ -279,9 +298,23 @@ void YootCondo::addPerson(Person *p)
 	spriteNeedsUpdate = true;
 }
 
+void YootCondo::moveIn()
+{
+	// YootTower: the condo is sold for its inMoney[selection] (Condo.t2p
+	// $100,000..$200,000), like an office's occupancy payment (E4).
+	rentDeposit = prototype->yoot ? prototype->yoot->inMoneyFor(game->yootPriceSelection(this)) : 0;
+	if (rentDeposit <= 0) rentDeposit = prototype->price * 2;
+	game->transferFunds(rentDeposit, "condo_sale", "Income from Yoot Condo sale");
+}
+
+void YootCondo::moveOut()
+{
+	game->transferFunds(-prototype->price, "condo_buyback", "Repurchased vacated Yoot Condo");
+}
+
 void YootCondo::createOccupants()
 {
-	unsigned numAdults = Math::randi(1, 4);
+	unsigned numAdults = (unsigned)std::max(1, residentsToCreate());
 	Person::Type adults[] = {
 		Person::kMan,
 		Person::kWoman1,
@@ -296,7 +329,7 @@ void YootCondo::createOccupants()
 		occupants.insert(new YootCondoOccupant(this, adults[gender], leavingTime, returnTime));
 	}
 
-	unsigned numKids = Math::randi(0, std::min(numAdults * 2, 6u));
+	unsigned numKids = hasFamilies() ? Math::randi(0, std::min(numAdults * 2, 6u)) : 0;
 	Person::Type kids[] = {
 		Person::kChild,
 		Person::kWomanWithChild1,

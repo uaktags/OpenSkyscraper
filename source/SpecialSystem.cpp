@@ -1,0 +1,407 @@
+/* Copyright (c) 2026 OpenSkyscraper Project */
+/* YootTower Front Desk (Front.t2p / RFront.t2p), Housekeeping
+ * (Maintenance.t2p / RMaintenance.t2p), Parking (Parking.t2p) and the Fire
+ * Department (FireDepartment.t2p). game-parity.md W4, E7, I4-I6. */
+#include "SpecialSystem.h"
+
+#include "Application.h"
+#include "Game.h"
+#include "Item/Hotel.h"
+#include "Item/Item.h"
+#include "Item/YootSpecialItems.h"
+#include "Logger.h"
+#include "Person.h"
+#include "YootCatalog.h"
+#include "YootRules.h"
+
+#include <algorithm>
+#include <cmath>
+#include <sstream>
+
+using namespace OT;
+
+namespace
+{
+	const Game::ItemSet & itemsOf(Game * game, const char * id)
+	{
+		static const Game::ItemSet none;
+		Game::ItemSetByString::const_iterator it = game->itemsByType.find(id);
+		return it == game->itemsByType.end() ? none : it->second;
+	}
+
+	const char * const kRoomKinds[] = {"hotel_single", "hotel_double", "hotel_suite"};
+
+	bool built(const Item::Item * item) { return item && !item->underConstruction; }
+
+	bool needsDesk(const Item::Item * room)
+	{
+		return room->prototype->yoot && Yoot::roomNeedsFrontDesk(room->prototype->yoot->dependId);
+	}
+
+	int roomType(const Item::Hotel * room)
+	{
+		if (room->prototype->yoot) {
+			const int t = Yoot::guestroomType(room->prototype->yoot->toolType);
+			if (t >= 0) return t;
+		}
+		return std::max(0, std::min(2, room->variant));
+	}
+}
+
+SpecialSystem::SpecialSystem(Game * game)
+: GameObject(game)
+{
+	reset();
+}
+
+void SpecialSystem::reset()
+{
+	lastMinute = prevMinute = -1;
+	lastAbsMinute = -1;
+	lastItemCount = 0;
+	frontWarned = parkingWarned = false;
+	roomDesk.clear();
+	parked.clear();
+	trips.clear();
+	beingCleaned.clear();
+	routeCache.clear();
+	hotelIncomePaid = 0;
+}
+
+bool SpecialSystem::enabled() const
+{
+	return game && game->activeRules.profile().yootWorld;
+}
+
+void SpecialSystem::advance()
+{
+	if (!enabled()) return;
+	const int minute = std::max(0, std::min(1439, (int)std::floor(game->time.hour * 60.0)));
+	if (minute == lastMinute) return;
+	prevMinute = lastMinute;
+	lastMinute = minute;
+	minuteTick(minute);
+	lastAbsMinute = Yoot::absoluteMinute(game->time.absolute);
+}
+
+bool SpecialSystem::crossed(int first) const
+{
+	if (prevMinute < 0) return lastMinute == first;
+	if (prevMinute < lastMinute) return prevMinute < first && first <= lastMinute;
+	return first > prevMinute || first <= lastMinute; // across midnight
+}
+
+bool SpecialSystem::exists(Item::Item * item, const char * kind) const
+{
+	const Game::ItemSet & set = itemsOf(game, kind);
+	return set.find(item) != set.end();
+}
+
+bool SpecialSystem::reachable(Item::Item * from, Item::Item * to, bool service)
+{
+	if (!from || !to) return false;
+	if (from->position.y == to->position.y) return true;
+	const std::pair<std::pair<Item::Item *, Item::Item *>, bool> key(std::make_pair(from, to), service);
+	std::map<std::pair<std::pair<Item::Item *, Item::Item *>, bool>, bool>::const_iterator c = routeCache.find(key);
+	if (c != routeCache.end()) return c->second;
+	// T2RouteNavigator::CheckRoute within the customer search score (the
+	// score cap is not modelled; OpenSky routes are A*-bounded).
+	const bool ok = !game->findRoute(from, to, service).empty();
+	routeCache[key] = ok;
+	return ok;
+}
+
+void SpecialSystem::purge()
+{
+	// Drop links to demolished rooms and desks (Front.t2p DestructFinish
+	// FUN_10013360 releases the table; the rooms keep +0x94 = 0).
+	for (std::map<Item::Item *, Item::FrontDesk *>::iterator it = roomDesk.begin(); it != roomDesk.end();) {
+		bool room = false;
+		for (const char * kind : kRoomKinds) room = room || exists(it->first, kind);
+		if (!room || !exists(it->second, "frontdesk")) roomDesk.erase(it++);
+		else ++it;
+	}
+	for (std::map<Person *, Item::ParkingLot *>::iterator it = parked.begin(); it != parked.end();) {
+		if (!exists(it->second, "parkinglot")) parked.erase(it++);
+		else ++it;
+	}
+	for (size_t t = 0; t < trips.size();) {
+		Trip & trip = trips[t];
+		const bool fromAlive = exists(trip.from, "housekeeping");
+		trip.rooms.erase(std::remove_if(trip.rooms.begin(), trip.rooms.end(), [&](Item::Hotel * h) {
+			bool alive = false;
+			for (const char * kind : kRoomKinds) alive = alive || exists(h, kind);
+			const bool done = !alive || h->roomState != Item::Hotel::kDirty;
+			if (done) beingCleaned.erase(h);
+			if (done && alive && fromAlive) ++trip.from->roomsCleaned;
+			return done;
+		}), trip.rooms.end());
+		if (trip.rooms.empty() || !fromAlive) {
+			if (fromAlive) trip.from->maidsOut = std::max(0, trip.from->maidsOut - 1);
+			for (Item::Hotel * h : trip.rooms) beingCleaned.erase(h);
+			trips.erase(trips.begin() + t);
+		} else ++t;
+	}
+}
+
+void SpecialSystem::minuteTick(int minute)
+{
+	if (game->items.size() != lastItemCount || minute % 60 == 0) {
+		routeCache.clear();
+		const bool changed = game->items.size() != lastItemCount;
+		lastItemCount = game->items.size();
+		purge();
+		if (changed || minute % 60 == 0) linkRooms();
+	} else {
+		purge();
+	}
+	deskTick(minute);
+	housekeepingTick(minute);
+	if (minute % 60 == 0 || prevMinute < 0 || minute / 60 != prevMinute / 60) parkingTick();
+	warnings(minute);
+}
+
+void SpecialSystem::linkRooms()
+{
+	// FUN_10013b70 per desk, in list order: unlinked rooms in route range.
+	const Game::ItemSet & desks = itemsOf(game, "frontdesk");
+	for (Game::ItemSet::const_iterator d = desks.begin(); d != desks.end(); ++d) {
+		Item::FrontDesk * desk = dynamic_cast<Item::FrontDesk *>(*d);
+		if (!desk || !built(desk)) continue;
+		std::vector<Item::Item *> rooms;
+		std::vector<Yoot::RoomLink> links;
+		for (const char * kind : kRoomKinds) {
+			const Game::ItemSet & set = itemsOf(game, kind);
+			for (Game::ItemSet::const_iterator r = set.begin(); r != set.end(); ++r) {
+				if (!built(*r)) continue;
+				Yoot::RoomLink l;
+				l.linkedDesk = roomDesk.count(*r) ? 1 : 0;
+				l.reachable = l.linkedDesk == 0 && reachable(desk, *r);
+				rooms.push_back(*r);
+				links.push_back(l);
+			}
+		}
+		Yoot::linkRooms(2, links);
+		for (size_t k = 0; k < rooms.size(); ++k)
+			if (links[k].linkedDesk == 2) roomDesk[rooms[k]] = desk;
+	}
+	for (Game::ItemSet::const_iterator d = desks.begin(); d != desks.end(); ++d)
+		if (Item::FrontDesk * desk = dynamic_cast<Item::FrontDesk *>(*d)) desk->linkedRooms = 0;
+	for (std::map<Item::Item *, Item::FrontDesk *>::const_iterator it = roomDesk.begin(); it != roomDesk.end(); ++it)
+		++it->second->linkedRooms;
+	LOG(DEBUG, "front desks link %zu hotel rooms", roomDesk.size());
+}
+
+void SpecialSystem::deskTick(int minute)
+{
+	const Game::ItemSet & desks = itemsOf(game, "frontdesk");
+	for (Game::ItemSet::const_iterator d = desks.begin(); d != desks.end(); ++d) {
+		Item::FrontDesk * desk = dynamic_cast<Item::FrontDesk *>(*d);
+		if (!desk || !built(desk)) continue;
+		desk->setPattern(desk->isOpen(minute) ? 1 : 0);
+		// FUN_10015540 at 12:00 (once: the tenant idles every 8 minutes).
+		if (crossed(Yoot::kHotelPayMinute)) {
+			for (int type = 0; type < 3; ++type) {
+				const int amount = desk->ledger.accrued[type];
+				if (amount == 0) continue;
+				hotelIncomePaid += amount;
+				game->yootBook(amount, "hotel_income", Yoot::kHotelIncomeMessage);
+			}
+		}
+		// FUN_10015450 at 17:00.
+		if (crossed(Yoot::kHotelLedgerResetMinute)) desk->ledger.reset17();
+	}
+}
+
+bool SpecialSystem::roomMayTakeGuests(Item::Hotel * room)
+{
+	if (!enabled() || !room) return true;
+	if (!needsDesk(room)) return true;
+	if (roomDesk.empty() && !itemsOf(game, "frontdesk").empty()) linkRooms();
+	return deskOf(room) != nullptr;
+}
+
+Item::FrontDesk * SpecialSystem::deskOf(Item::Item * room) const
+{
+	std::map<Item::Item *, Item::FrontDesk *>::const_iterator it = roomDesk.find(room);
+	return it == roomDesk.end() ? nullptr : it->second;
+}
+
+void SpecialSystem::onCheckIn(Item::Hotel * room)
+{
+	if (!enabled() || !room || !room->prototype->yoot) return;
+	const int income = Yoot::hotelRoomIncome(*room->prototype->yoot, game->yootPriceSelection(room));
+	LOG(DEBUG, "%s checked in: $%d booked", room->prototype->name.c_str(), income);
+	if (Item::FrontDesk * desk = deskOf(room)) {
+		desk->ledger.checkIn(roomType(room), income);
+		return;
+	}
+	// A room that needs no desk (Kegon Small/Large Room) and has none:
+	// paid at once (unconfirmed; the original's unlinked flow is untraced).
+	hotelIncomePaid += income;
+	game->yootBook(income, "hotel_income", "");
+}
+
+void SpecialSystem::housekeepingTick(int minute)
+{
+	const Game::ItemSet & offices = itemsOf(game, "housekeeping");
+	for (Game::ItemSet::const_iterator h = offices.begin(); h != offices.end(); ++h) {
+		Item::Housekeeping * hk = dynamic_cast<Item::Housekeeping *>(*h);
+		if (!hk || !built(hk)) continue;
+		const bool working = Yoot::housekeepingDispatchMinute(minute, hk->openMinute(), hk->closeMinute());
+		const bool open = minute >= hk->openMinute() && minute < hk->closeMinute();
+		hk->setPattern(open ? 1 : 0);
+		if (!working) continue;
+		// FUN_1000bf70: one idle maid per tenant idle (every 8 minutes).
+		const bool idleTick = prevMinute < 0 || minute / Yoot::kTenantIdleMinutes != prevMinute / Yoot::kTenantIdleMinutes;
+		if (!idleTick || hk->maidsOut >= hk->maids()) continue;
+		std::vector<Item::Hotel *> rooms;
+		std::vector<bool> candidates;
+		for (const char * kind : kRoomKinds) {
+			const Game::ItemSet & set = itemsOf(game, kind);
+			for (Game::ItemSet::const_iterator r = set.begin(); r != set.end(); ++r) {
+				Item::Hotel * room = dynamic_cast<Item::Hotel *>(*r);
+				if (!room || !built(room)) continue;
+				rooms.push_back(room);
+				candidates.push_back(room->roomState == Item::Hotel::kDirty && !beingCleaned.count(room) &&
+				                     !room->housekeeper && (reachable(hk, room) || reachable(hk, room, true)));
+			}
+		}
+		const std::vector<int> pick = Yoot::maidTrip(candidates);
+		if (pick.empty()) continue;
+		Trip trip;
+		trip.from = hk;
+		for (int k : pick)
+			if (rooms[k]->yootSendHousekeeper(hk)) {
+				trip.rooms.push_back(rooms[k]);
+				beingCleaned.insert(rooms[k]);
+			}
+		if (trip.rooms.empty()) continue;
+		++hk->maidsOut;
+		trips.push_back(trip);
+	}
+}
+
+bool SpecialSystem::driveIn(Person * driver, Item::Item * destination)
+{
+	if (!enabled() || !driver || !destination) return false;
+	if (parked.count(driver)) return true;
+	const Game::ItemSet & lots = itemsOf(game, "parkinglot");
+	if (lots.empty()) return false; // no parking yet: in through the lobby
+	// FindHisParking / FindEmptyParking: the first lot with a free slot
+	// (here also reachable from the destination, CheckRouteFromPool bit 4).
+	for (Game::ItemSet::const_iterator l = lots.begin(); l != lots.end(); ++l) {
+		Item::ParkingLot * lot = dynamic_cast<Item::ParkingLot *>(*l);
+		if (!lot || !built(lot) || !lot->model.hasSpace()) continue;
+		if (!reachable(lot, destination)) continue;
+		if (!lot->park(driver)) continue;
+		parked[driver] = lot;
+		return true;
+	}
+	// MoveToTowerEntrance: no parking -> lobby, -100 estimate.
+	driver->yootEstimate = Yoot::incEstimate(driver->yootEstimate, -Yoot::kNoParkingEstimate);
+	return false;
+}
+
+void SpecialSystem::driveOut(Person * driver)
+{
+	std::map<Person *, Item::ParkingLot *>::iterator it = parked.find(driver);
+	if (it == parked.end()) return;
+	if (exists(it->second, "parkinglot")) it->second->leave(driver);
+	parked.erase(it);
+}
+
+void SpecialSystem::parkingTick()
+{
+	// Parking.t2p idle FUN_1000bd20: gate patterns by position in the stack.
+	const int b1 = -1; // a first-floor gate has its bottom row on B1
+	const Game::ItemSet & gates = itemsOf(game, "parkinggate");
+	for (Game::ItemSet::const_iterator g = gates.begin(); g != gates.end(); ++g) {
+		Item::ParkingGate * gate = dynamic_cast<Item::ParkingGate *>(*g);
+		if (!gate || !built(gate)) continue;
+		bool below = false;
+		for (Game::ItemSet::const_iterator o = gates.begin(); o != gates.end(); ++o)
+			if (*o != gate && (*o)->position.x == gate->position.x &&
+			    (*o)->position.y + (*o)->size.y == gate->position.y) below = true;
+		gate->setGatePattern(Yoot::gatePattern(gate->position.y == b1, below));
+	}
+	// Everyone has driven home by 03:00; clear slots of people deleted in
+	// the meantime (drivers are transient).
+	if (crossed(180)) {
+		const Game::ItemSet & lots = itemsOf(game, "parkinglot");
+		for (Game::ItemSet::const_iterator l = lots.begin(); l != lots.end(); ++l)
+			if (Item::ParkingLot * lot = dynamic_cast<Item::ParkingLot *>(*l)) {
+				lot->model = Yoot::ParkingLotModel();
+				lot->drivers.clear();
+				lot->setPattern(0);
+			}
+		parked.clear();
+	}
+}
+
+void SpecialSystem::warnings(int minute)
+{
+	// Front.t2p DefIdleProc 0x10013970 and Parking.t2p 0x1000cb60 run once
+	// the plugin is loaded (its grade) and none of the item is built.
+	auto unlocked = [&](const char * id) {
+		const int r = game->activeRules.minRatingToBuild(id);
+		return r != BuildRules::kUnavailable && r <= game->rating;
+	};
+	if (Yoot::frontDeskWarningMinute(minute)) {
+		bool rooms = false;
+		for (const char * kind : kRoomKinds) rooms = rooms || !itemsOf(game, kind).empty();
+		if (!frontWarned && rooms && unlocked("frontdesk") && itemsOf(game, "frontdesk").empty()) {
+			frontWarned = true;
+			game->timeWindow.showMessage(Yoot::kFrontDeskWarning);
+			LOG(IMPORTANT, "%s (%02d:%02d)", Yoot::kFrontDeskWarning, minute / 60, minute % 60);
+		}
+	} else frontWarned = false;
+	if (Yoot::parkingWarningMinute(minute)) {
+		if (!parkingWarned && unlocked("parkinggate") &&
+		    itemsOf(game, "parkinggate").empty() && itemsOf(game, "parkinglot").empty()) {
+			parkingWarned = true;
+			game->timeWindow.showMessage(Yoot::kParkingWarning);
+			LOG(IMPORTANT, "%s (%02d:%02d)", Yoot::kParkingWarning, minute / 60, minute % 60);
+		}
+	} else parkingWarned = false;
+}
+
+std::vector<std::pair<Item::Item *, int> > SpecialSystem::firemen()
+{
+	std::vector<std::pair<Item::Item *, int> > out;
+	std::vector<Item::Item *> sources;
+	std::vector<int> present;
+	for (const char * kind : {"security", "firedept"}) {
+		const Game::ItemSet & set = itemsOf(game, kind);
+		for (Game::ItemSet::const_iterator i = set.begin(); i != set.end(); ++i) {
+			if (!built(*i)) continue;
+			sources.push_back(*i);
+			const Item::FireDepartment * fd = dynamic_cast<const Item::FireDepartment *>(*i);
+			present.push_back(fd ? fd->firemen() : Yoot::kMaxFiremen);
+		}
+	}
+	const std::vector<int> sent = Yoot::callFiremen(present);
+	for (size_t k = 0; k < sources.size(); ++k)
+		if (sent[k] > 0) out.push_back(std::make_pair(sources[k], sent[k]));
+	return out;
+}
+
+std::string SpecialSystem::describe(Item::Item * item)
+{
+	if (!enabled() || !item) return std::string();
+	std::ostringstream s;
+	if (Item::FrontDesk * desk = dynamic_cast<Item::FrontDesk *>(item)) {
+		s << "\nLinked rooms: " << desk->linkedRooms << "\n";
+		s << "Since 17:00:  $" << desk->ledger.noonIncome() << " (paid at 12:00)\n";
+	} else if (Item::Housekeeping * hk = dynamic_cast<Item::Housekeeping *>(item)) {
+		s << "\nMaids out:   " << hk->maidsOut << "/" << hk->maids() << "\n";
+		s << "Rooms made:  " << hk->roomsCleaned << "\n";
+	} else if (Item::ParkingLot * lot = dynamic_cast<Item::ParkingLot *>(item)) {
+		s << "\nCars:        " << lot->model.cars() << "/" << Yoot::ParkingLotModel::kSlots << "\n";
+	} else if (Item::Hotel * room = dynamic_cast<Item::Hotel *>(item)) {
+		if (needsDesk(room) && !deskOf(room)) s << "\n" << Yoot::kNoFrontDesk << "\n";
+		if (room->roomState == Item::Hotel::kDirty) s << "\n" << Yoot::kBedsNotMade << "\n";
+		if (room->roomState == Item::Hotel::kInfested) s << "\n" << Yoot::kRoomTooDirty << "\n";
+	}
+	return s.str();
+}

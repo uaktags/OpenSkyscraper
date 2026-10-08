@@ -82,6 +82,11 @@ namespace OT
 			virtual void addPerson(Person *p) override;
 			virtual void removePerson(Person *p) override;
 
+			/// YootTower (plan step 14): the stay's check-in is booked on the
+			/// linked Front Desk once; dirty rooms wait for a Housekeeping maid.
+			bool yootStayBooked = false;
+			bool yootSendHousekeeper(Item * from);
+
 			Sprite sprite;
 			bool spriteNeedsUpdate;
 			// Last frame column updateSprite() selected (detects the

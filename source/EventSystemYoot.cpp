@@ -112,6 +112,7 @@ void EventSystem::yootDispatch()
 	power.advance();
 	facilities.advance();
 	venues.advance();
+	specials.advance();
 	if (reggae.active) stepReggae(minute);
 	yootSyncRunning();
 }

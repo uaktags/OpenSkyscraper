@@ -206,6 +206,7 @@ void Office::advance(double dt)
 				// Drive in: claim a reachable parking slot for the car.
 				if (!c->parkingUsed)
 					c->parkingUsed = claimReachableParking(game, this);
+				game->eventSystem.specials.driveIn(c, this); // YootTower lots (I6)
 			}
 			else
 				break;
@@ -232,6 +233,7 @@ void Office::advance(double dt)
 					// Drive home: free the parking slot.
 					releaseParking(c->parkingUsed);
 					c->parkingUsed = NULL;
+					game->eventSystem.specials.driveOut(c);
 				}
 			}
 			else
