@@ -327,8 +327,17 @@ int PeopleSystem::callFromFloor(Item::YootTenant * tenant, const YootTenantDef &
 	for (YootVisitor * v : visitorList)
 	{
 		if ((v->phase != YootVisitor::kWalking && v->phase != YootVisitor::kLeaving) || !v->at) continue;
-		const bool onFloor = v->at->isElevator() ? v->journey.fromFloor == floor && v->journey.item == v->at
-			: v->at->position.y <= floor && floor < v->at->position.y + v->at->size.y;
+		// People waiting in a mover queue on the floor (not riding a car).
+		bool onFloor;
+		if (v->at->isElevator())
+		{
+			onFloor = false;
+			if (v->journey.fromFloor == floor)
+				for (Item::Elevator::Queue * q : static_cast<Item::Elevator::Elevator *>(v->at)->queues)
+					if (std::find(q->people.begin(), q->people.end(), v) != q->people.end()) onFloor = true;
+		}
+		else
+			onFloor = v->at->position.y <= floor && floor < v->at->position.y + v->at->size.y;
 		if (!onFloor) continue;
 		const int x = centerX(v->at);
 		if (left - score < x && x < score + right) passing.push_back(v);
