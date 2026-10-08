@@ -126,9 +126,11 @@ namespace OT {
 			virtual bool isStairlike() const { return false; }
 			virtual bool isElevator()  const { return false; }
 			virtual bool isLobby()     const { return false; }
-			/// Skin::Yoot: the item paints its whole unit rect, so the floor
-			/// draws no roof or strips under it.
-			virtual bool yootCoversFloor() const { return false; }
+			/// Skin::Yoot: how much of the floor under the item stays bare
+			/// (the backdrop shows through transparent art). 0: roof and
+			/// strips as usual; 1: none (the art fills the unit rect);
+			/// 2: none but the bottom row's floor strip.
+			virtual int yootFloorCover() const { return 0; }
 
 			virtual Path getRandomBackgroundSoundPath() { return ""; }
 		};

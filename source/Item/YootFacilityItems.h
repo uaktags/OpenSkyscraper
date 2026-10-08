@@ -39,7 +39,14 @@ namespace OT {
 			/// The plugin's DrawProc paints the whole unit rect, not the
 			/// interior (Stadium.t2p).
 			virtual bool yootFullRect() const { return false; }
-			virtual bool yootCoversFloor() const { return yootFullRect() && game->skin == Skin::Yoot; }
+			/// The View part is `Transparent` (Cathedral, Attraction,
+			/// Observatory): no roof or floor shows through it.
+			virtual bool yootTransparentView() const { return false; }
+			virtual int yootFloorCover() const
+			{
+				if (game->skin != Skin::Yoot) return 0;
+				return yootFullRect() ? 1 : yootTransparentView() ? 2 : 0;
+			}
 
 		protected:
 			/// Plugin file when no catalog entry is loaded.

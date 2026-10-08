@@ -204,11 +204,17 @@ void Floor::render(sf::RenderTarget &target) const
 		// Tenants that paint their whole unit rect (Stadium.t2p DrawProc)
 		// own those cells: no roof or strips there, the backdrop shows
 		// through their transparent parts.
-		std::vector<Span> covered;
+		// Transparent interiors (Cathedral) keep only their bottom strip.
+		std::vector<Span> covered, keepStrip;
 		if (floorItems != game->itemsByFloor.end())
 			for (Game::ItemSet::const_iterator it = floorItems->second.begin(); it != floorItems->second.end(); ++it)
-				if ((*it)->yootCoversFloor())
-					covered.push_back({(*it)->getRect().minX(), (*it)->getRect().maxX()});
+			{
+				const int cover = (*it)->yootFloorCover();
+				if (cover == 0) continue;
+				covered.push_back({(*it)->getRect().minX(), (*it)->getRect().maxX()});
+				if (cover == 2 && (*it)->getPosition().y == position.y)
+					keepStrip.push_back(covered.back());
+			}
 		auto bare = [&](int left, int right, const std::function<void(float, float)> & draw) {
 			for (const Span & c : covered) {
 				if (c.right <= left || c.left >= right) continue;
@@ -234,6 +240,8 @@ void Floor::render(sf::RenderTarget &target) const
 			});
 			from = std::max(from, it->right);
 		}
+		for (const Span & k : keepStrip)
+			yoot->drawFloorStrip(target, k.left * 8.0f, k.right * 8.0f, top + 32.0f, yootTint);
 		emptySpan(from, floorRight);
 		game->drawnSprites += 2 + static_cast<int>(merged.size());
 		continue;

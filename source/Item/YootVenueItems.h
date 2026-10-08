@@ -163,6 +163,7 @@ namespace OT {
 				p->size = int2(28, 8);
 				p->icon = 18;
 			}
+			bool yootTransparentView() const { return true; }
 		protected:
 			const char * defaultPlugin() const { return "Cathedral.t2p"; }
 			int defaultOpen() const { return 660; }
@@ -188,6 +189,7 @@ namespace OT {
 			/// keeps this flag in the def and does not save it; OpenSky saves it.
 			bool renovated = false;
 			void renovate();
+			bool yootTransparentView() const { return true; }
 		protected:
 			const char * defaultPlugin() const { return "Attraction.t2p"; }
 			int defaultOpen() const { return 600; }
@@ -209,6 +211,7 @@ namespace OT {
 				p->size = int2(17, 2);
 				p->icon = 18;
 			}
+			bool yootTransparentView() const { return true; }
 		protected:
 			const char * defaultPlugin() const { return "Observatory.t2p"; }
 			int defaultOpen() const { return 480; }
