@@ -40,6 +40,20 @@ static bool writeFile(const char * path, const void * data, size_t n)
 	return out.good();
 }
 
+/// Plugin catalog for the plugin-backed tenants: $OPENSKY_PLUGINS or ./data/Plugins.
+static const OT::PluginManager & toolPlugins()
+{
+	static OT::PluginManager plugins;
+	static bool scanned = false;
+	if (!scanned)
+	{
+		const char * dir = std::getenv("OPENSKY_PLUGINS");
+		plugins.addPluginDirectory(OT::Path(dir ? dir : "data/Plugins"));
+		scanned = true;
+	}
+	return plugins;
+}
+
 /// Footprints of the OpenSky prototypes the importer can emit.
 static bool prototypeSize(const std::string & id, int & w, int & h)
 {
@@ -55,19 +69,10 @@ static bool prototypeSize(const std::string & id, int & w, int & h)
 	auto i = sizes.find(id);
 	if (i == sizes.end())
 	{
-		// Plugin-backed tenants ("yt_*"): the TNDF footprint, read from
-		// $OPENSKY_PLUGINS or ./data/Plugins.
+		// Plugin-backed tenants ("yt_*"): the TNDF footprint.
 		const OT::YootTenantPlugin * t = OT::isYootTenantPrototypeId(id) ? OT::findYootTenantPlugin(id) : nullptr;
 		if (!t) return false;
-		static OT::PluginManager plugins;
-		static bool scanned = false;
-		if (!scanned)
-		{
-			const char * dir = std::getenv("OPENSKY_PLUGINS");
-			plugins.addPluginDirectory(OT::Path(dir ? dir : "data/Plugins"));
-			scanned = true;
-		}
-		OT::AbstractPlugin * p = plugins.get(t->plugin);
+		OT::AbstractPlugin * p = toolPlugins().get(t->plugin);
 		OT::TemplateDef def;
 		if (!p || !p->ensureLoaded() || !p->getTemplateDef(def)) return false;
 		w = def.tool.width;
@@ -150,7 +155,7 @@ int main(int argc, char ** argv)
 		BldData templ, out;
 		if (!loadFile(argv[3], templ, error)) { fprintf(stderr, "template: %s\n", error.c_str()); return 1; }
 		ImportReport report;
-		if (!exportTower(tower, templ, out, report, error, prototypeSize)) { fprintf(stderr, "%s\n", error.c_str()); return 1; }
+		if (!exportTower(tower, templ, out, report, error, &toolPlugins())) { fprintf(stderr, "%s\n", error.c_str()); return 1; }
 		printReport(report);
 		std::vector<uint8_t> bytes;
 		if (!writeBytes(out, bytes, error)) { fprintf(stderr, "%s\n", error.c_str()); return 1; }

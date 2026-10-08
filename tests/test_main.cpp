@@ -4181,7 +4181,7 @@ static void testBldShippedSaves()
 		EXPECT(state.world == "tokyo" && state.funds == 7877000 && state.items.size() == 26);
 		BldData exported;
 		ImportReport exportReport;
-		EXPECT(exportTower(state, tokyo, exported, exportReport, error, bldTestPrototypes));
+		EXPECT(exportTower(state, tokyo, exported, exportReport, error, &yootTestPlugins()));
 		EXPECT(exportReport.dropped.empty());
 		EXPECT(writeBytes(exported, rebuilt, error));
 		BldData reread;
@@ -4206,8 +4206,15 @@ static void testBldShippedSaves()
 		std::string again;
 		ImportReport againReport;
 		EXPECT(toTowerXml(reread, bldTestPrototypes, again, againReport, error));
-		EXPECT(again == xml);
-		if (again != xml) std::cerr << "re-import differs:\n" << again << "\nvs\n" << xml << "\n";
+		// Plugin tenants come back just built (status 9): no staff people
+		// are exported, so the game hires them again.
+		std::string expected = xml;
+		const std::string iceStatus = "type=\"yt_icecream\" x=\"-37\" y=\"3\" evaluation=\"50.0\" tenantStatus=\"";
+		const size_t at = expected.find(iceStatus + "12\"");
+		EXPECT(at != std::string::npos);
+		if (at != std::string::npos) expected.replace(at, iceStatus.size() + 3, iceStatus + "9\"");
+		EXPECT(again == expected);
+		if (again != expected) std::cerr << "re-import differs:\n" << again << "\nvs\n" << expected << "\n";
 
 		// An OpenSky-authored Hawaii tower against the empty-lot template.
 		const std::string authored =
@@ -4218,7 +4225,7 @@ static void testBldShippedSaves()
 			"<item type=\"elevator-standard\" x=\"10\" y=\"0\" height=\"3\"><car altitude=\"2.0\" homeFloor=\"0\"/></item>"
 			"<item type=\"cinema\" x=\"-20\" y=\"3\"/></tower>";
 		EXPECT(parseTowerXml(authored, state, error));
-		EXPECT(exportTower(state, hawaii, exported, exportReport, error, bldTestPrototypes));
+		EXPECT(exportTower(state, hawaii, exported, exportReport, error, &yootTestPlugins()));
 		EXPECT(exportReport.dropped["cinema (no YootTower counterpart in the exporter)"] == 1);
 		EXPECT(exportReport.imported["lobby"] == 1 && exportReport.imported["elevator-standard"] == 1);
 		EXPECT(exported.year == 2 && exported.month0 == 1 && exported.minutes == 720 && exported.level == 2);
@@ -4226,7 +4233,7 @@ static void testBldShippedSaves()
 		EXPECT(toTowerXml(reread, bldTestPrototypes, again, againReport, error));
 		EXPECT(again.find("type=\"elevator-standard\" x=\"10\" y=\"0\" evaluation=\"50.0\" height=\"3\" showShaft=\"1\"><car altitude=\"2.0\" homeFloor=\"0\"/></item>") != std::string::npos);
 		// The generic shop exports as Ice Cream and comes back as yt_icecream.
-		EXPECT(again.find("type=\"yt_icecream\" x=\"-20\" y=\"1\" evaluation=\"50.0\" tenantStatus=\"12\"") != std::string::npos);
+		EXPECT(again.find("type=\"yt_icecream\" x=\"-20\" y=\"1\" evaluation=\"50.0\" tenantStatus=\"9\"") != std::string::npos);
 		// Unit map: the shaft column carries mover 1 from machine row to pit.
 		const size_t pitCell = ((size_t)(55 + 1 - 1) * 400 + 210) * 4;
 		EXPECT(reread.unitMap[pitCell] == 1 && reread.unitMap[pitCell + 1] == 0);

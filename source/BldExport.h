@@ -7,6 +7,7 @@
 #include <vector>
 
 namespace OT {
+	class PluginManager;
 namespace Bld {
 
 	/**
@@ -62,12 +63,13 @@ namespace Bld {
 
 	/// Builds a .bld from the tower using `templ` (same world) for the
 	/// world-wide sections. Items without a YootTower counterpart are
-	/// counted in report.dropped. `prototypes` gives the footprint of the
-	/// plugin-backed tenants ("yt_*", YootTenants.h); without it they are
-	/// dropped.
+	/// counted in report.dropped. `plugins` supplies the TNDF footprint and
+	/// staff places of the plugin-backed tenants ("yt_*", YootTenants.h);
+	/// without it they are dropped. They are written as just built (status
+	/// 9, empty staff places) because no people are exported: the game
+	/// hires their staff again.
 	bool exportTower(const TowerState & tower, const BldData & templ, BldData & out,
-		ImportReport & report, std::string & error,
-		const PrototypeLookup & prototypes = PrototypeLookup());
+		ImportReport & report, std::string & error, const PluginManager * plugins = nullptr);
 
 }
 }

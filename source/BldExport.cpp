@@ -1,6 +1,8 @@
 /* Copyright (c) 2026 OpenSkyscraper Project */
 #include "BldExport.h"
 
+#include "AbstractPlugin.h"
+#include "PluginManager.h"
 #include "YootTenants.h"
 #include "YootWorld.h"
 #include "tinyxml2.h"
@@ -101,7 +103,7 @@ namespace Bld {
 	}
 
 	bool exportTower(const TowerState & tower, const BldData & templ, BldData & out,
-		ImportReport & report, std::string & error, const PrototypeLookup & prototypes)
+		ImportReport & report, std::string & error, const PluginManager * plugins)
 	{
 		YootWorld::Id worldId;
 		if (!parseYootWorldIdentifier(tower.world, worldId))
@@ -240,7 +242,7 @@ namespace Bld {
 		for (const TowerItem & it : tower.items)
 		{
 			const PluginInfo * p = nullptr;
-			int w = 0, h = 1;
+			int w = 0, h = 1, staff = 0;
 			const YootTenantPlugin * tenant = isYootTenantPrototypeId(it.type) ? findYootTenantPlugin(it.type) : nullptr;
 			if (it.type == "office") { p = officePlugin; w = 9; }
 			else if (it.type == "shop") { p = shopPlugin; w = 12; }
@@ -248,11 +250,16 @@ namespace Bld {
 			else if (tenant)
 			{
 				p = pluginForStem(tenant->plugin);
-				if (p && (!prototypes || !prototypes(it.type, w, h) || w <= 0 || h <= 0))
+				const AbstractPlugin * source = plugins ? plugins->get(tenant->plugin) : nullptr;
+				YootTenantDef def;
+				if (p && (!source || !source->ensureLoaded() || !loadYootTenantDef(*source, *tenant, def)))
 				{
-					drop(it.type, "footprint unknown");
+					drop(it.type, "plugin data unavailable");
 					continue;
 				}
+				w = def.width;
+				h = def.height;
+				staff = def.belongCapacity;
 			}
 			else continue;
 			if (!p) { drop(it.type, "plugin missing from the template"); continue; }
@@ -284,17 +291,20 @@ namespace Bld {
 			}
 			else if (tenant)
 			{
-				// The family machine restarts from its saved status; a
-				// fresh one starts as built (9).
-				t.hdr.status = (int16_t)(it.tenantStatus >= 9 ? it.tenantStatus : 9);
+				// Just built: a saved status past hiring without staff
+				// people would wait for them forever (oracle: an exported
+				// status-12 Ice Cream never opened).
+				t.hdr.status = 9;
 				t.estimate = (int16_t)std::max(0, it.yootEstimate);
 				t.inMoneyIndex = 0;                     // single price
-				t.hasBelongList = 1;                    // empty staff places
-				t.belongList.assign(2, 0);
+				t.hasBelongList = staff > 0 ? 1 : 0;    // one empty place per staff member
+				t.belongList.assign(staff, 0);
 			}
 			else
 			{
-				t.hdr.status = it.occupied ? 12 : 8;
+				// Ice Cream, just built like the plugin tenants above: a
+				// status-12 record without staff people never opens.
+				t.hdr.status = 9;
 				t.estimate = (int16_t)std::max(0, it.yootEstimate);
 				t.inMoneyIndex = 0;                     // Ice Cream has a single price
 				t.hasBelongList = 1;                    // two empty staff places
