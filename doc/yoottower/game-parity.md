@@ -59,7 +59,7 @@ Related documents. This audit cites them and does not repeat them:
 | # | YootTower rule | Evidence | OpenSky | Status | Conf |
 |---|---|---|---|---|---|
 | T1 | **The clock is minute-linear.** `T2DateTime` holds year, "month" (0–11), minute (0–1439) and sub-tick (0–3). There are 4 sub-ticks per game minute, so a day is 5760 linear ticks. | `IsIncDateTime` 0x1001ca90; `CalcTotalCount` 0x10001d60 (`((m+12y)*1440+min)*4+sub`) | Uses SimTower's non-linear 2600-frame day (`Time.cpp:19-33`). **Implemented:** YootTower mode switches `Time::absoluteToHour/hourToAbsolute` to a linear 24-hour day (`Time::setLinearClock`, set by `Game::setRules`). The real-time day length and the 4-sub-tick/speed mapping are unchanged; `Item/Metro.cpp` caches SimTower durations at static init. | PARTIAL | H |
-| T2 | **Calendar.** Each internal "month" is one game day. A quarter is 3 days and a year is 4 quarters (12 days). Quarter = m/3+1, day-of-quarter = m%3+1, and years start at 1. | `GetQuarter`/`GetDay` 0x10001c30/0x10001c50, `CalcTotalDays` 0x10001cc0 | Uses the same 3/4/12 structure (`Time.cpp:93-95`). | MATCH | H |
+| T2 | **Calendar.** Each internal "month" is one game day. A quarter is 3 days and a year is 4 quarters (12 days). Quarter = m/3+1, day-of-quarter = m%3+1, and years start at 1. | `GetQuarter`/`GetDay` 0x10001c30/0x10001c50, `CalcTotalDays` 0x10001cc0 | Uses the same 3/4/12 structure (`Time.cpp:93-95`). **Implemented (gap closers):** the YootTower date line is T2WorldDef::DrawCalendar's "YEAR %d %s." with the month name of the day (Jan..Dec) and "WD" / red "HD" on holidays (`yootCalendarText`); the oracle shows "YEAR 1 Mar. HD" on day index 2. | MATCH | H |
 | T3 | **Daytime and time zones.** "Day" runs 06:00–18:00 (`IsDay`: 360 ≤ min < 1080). There are 10 people time zones with boundaries at 2, 6, 9, 10, 12, 13, 15, 18 and 22 h, and they drive the PZDF demand tables. | `IsDay` 0x10001cf0, `GetTimeZone` 0x1001c9a0 | Has no time-zone model; spawns are hardcoded per item. | MISSING | H |
 | T4 | **Holidays (weekends) are the same rule in all three worlds.** Let `d` = month index 0–11 and `Y` = year. A day is a holiday if `d==7` or `d==11`, or if `n=12Y+d-23` satisfies `n≥2 && (n-2)%5==0` (unsigned arithmetic, so it wraps in year 1). That gives fixed days 8 and 12 of each year plus every 5th day. | Tokyo.t2p 0x10014c10; Hawai.t2p 0x10017770; Kegon.t2p `WorldDef::IsHoliday` 0x10014e70. Dispatch: `T2DateTime::IsHoliday` 0x1001cc50 → world vtable +0x24. | Weekend is `day%3==2` (`Time.cpp`, `LevelUp.cpp:104-105`). **Implemented:** `Time::yootIsHoliday` is a verbatim unsigned port (year 1-based = `Time::year`, month = `Time::dayOfYear()`); all item weekend checks go through `Time::isHoliday()`, which keeps `day == 2` for SimTower/OpenSky. Test: years 1-3 vs a direct port. | MATCH | H |
 | T5 | **Rain is deterministic and per world.** Tokyo rains when `(d+1)%4==0 && d/3 != 3`, which is days 4 and 8 of each year. Hawaii and Kegon never rain: they do not override `IsRainyDay`, and the base returns 0. | Tokyo.t2p 0x10014c50; base `T2WorldDef::IsRainyDay` 0x1000a6a0; override list in `overrides.py` output | Rolls `rand()%3==0` at 05:00 (`Sky.cpp:32`). **Implemented:** `Sky.cpp` uses `RulesProfile::rain`: Random (SimTower/OpenSky, unchanged), Tokyo days 4 and 8 (`Time::yootTokyoIsRainy`), never in Hawaii/Kegon. | MATCH | H |
@@ -319,9 +319,9 @@ overlaid with the plugin's catalog data (`yootPrototypeLinks()`); **missing** = 
 | Status | Plugins |
 |---|---|
 | plugin-backed family | 56 (shop 29 incl. Spa, restaurant 22, vending 5) |
-| native | 22 (18 items, 3 worlds, the tool palette) |
+| native | 24 (20 items, 3 worlds, the tool palette) |
 | mapped OpenSky | 19 |
-| missing | 8 |
+| missing | 6 |
 
 Plugin-backed families (decompiled with Ghidra, `~/yoottower-decomp/{plugins,tenants}-agent/pout/`):
 
@@ -433,16 +433,16 @@ staff place per TNDF staff member.
 | Restroom | Facility/structure | native | restroom |
 | RFront | Hotel | missing | hotel/residential agent |
 | RMaintenance | Facility/structure | missing | hotel/residential agent (Housekeeping) |
-| School | Facility/structure | missing | unassigned (registry 6, 60 students) |
+| School | Facility/structure | native | school (Item::School, YootExtrasSystem) |
 | SeaFood | Restaurant | plugin-backed family (restaurant) | yt_seafood |
 | Securityroom | Facility/structure | mapped OpenSky | security |
 | ServElev | Mover | mapped OpenSky | elevator-service |
 | Singleroom | Facility/structure | mapped OpenSky | hotel_single |
-| SkyBrdge | Facility/structure | missing | venues agent (Sky Bridge) |
+| SkyBrdge | Facility/structure | native | skybridge (Item::SkyBridge, Yoot::constructSkyBridge) |
 | Smallroom | Facility/structure | mapped OpenSky | hotel_single / hotel_double |
 | SobaNoodle | Restaurant | plugin-backed family (restaurant) | yt_sobanoodle |
 | Souvenirs | Shop | plugin-backed family (shop) | yt_souvenirs |
-| Spa | Facility/structure | plugin-backed family (shop) | yt_spa |
+| Spa | Facility/structure | plugin-backed family (shop) | yt_spa (locked until the Kegon hot spring, W5) |
 | Sportsshop | Shop | plugin-backed family (shop) | yt_sportsshop |
 | Stadium | Venue | native | stadium |
 | Stair | Mover | mapped OpenSky | stairs |
