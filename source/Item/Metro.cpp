@@ -31,7 +31,9 @@ Metro::~Metro()
 void Metro::init()
 {
 	Item::init();
-	open = true;
+	// MakeMetroStation seeds the state with the day phase: built from 17:00
+	// until 07:00 the station starts on the closed frame.
+	open = game->time.hour >= 7.0 && game->time.hour < 17.0;
 	trainPresent = false;
 	trainSound.setBuffer(App->sounds["simtower/metro"]);
 	visitorsToday = 0;
@@ -201,7 +203,8 @@ void Metro::advance(double dt)
 		}
 	}
 	if (open) {
-		if (game->time.hour >= kTrainFirstHour) {
+		// The toggle's first gate is the fire/bomb flag: no trains during an emergency.
+		if (game->time.hour >= kTrainFirstHour && !game->eventSystem.isActive()) {
 			const long frames = game->time.ticksCrossed(1.0 / kFramesPerDay);
 			for (long i = 0; i < frames; ++i) {
 				if (rand() % kTrainToggleOdds != 0) continue;
