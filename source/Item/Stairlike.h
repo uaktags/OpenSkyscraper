@@ -1,5 +1,6 @@
 #pragma once
 #include "Item.h"
+#include "../YootItemArt.h"
 
 namespace OT {
 	namespace Item {
@@ -14,6 +15,10 @@ namespace OT {
 Sprite sprite;
 int frame;
 			int frameCount;
+			/// Skin::Yoot: Stair.t2p / Escalator.t2p View by span (2..4
+			/// storeys); the escalator's 2-storey view has 3 step patterns.
+			const YootPluginView * yootView = nullptr;
+			int yootPattern = 0;
 			
 			void updateSprite();
 			virtual void advance(double dt);

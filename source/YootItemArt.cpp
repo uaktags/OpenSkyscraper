@@ -5,6 +5,8 @@
 #include "PluginObjmap.h"
 
 #include <algorithm>
+#include <cmath>
+#include <SFML/Graphics/Sprite.hpp>
 #include <map>
 #include <memory>
 #include <tuple>
@@ -55,6 +57,18 @@ namespace OT
 		return bands[std::max(0, std::min((int)bands.size() - 1, index))];
 	}
 
+	int YootPluginView::findSpan(int span, int pattern) const
+	{
+		int first = -1;
+		for (size_t i = 0; i < bands.size(); ++i)
+		{
+			if (spans[i] != span) continue;
+			if (patterns[i] == pattern || pattern < 0) return (int)i;
+			if (first < 0) first = (int)i;
+		}
+		return first;
+	}
+
 	const YootPluginView * yootPluginView(Application & app, const std::string & plugin,
 		const sf::Color & mask, int bitmapId, int objmapId, const std::string & part)
 	{
@@ -74,18 +88,23 @@ namespace OT
 		AbstractPlugin * p = app.pluginManager.get(plugin);
 		const WindowsPEExecutable::Resource * om = (p && p->ensureLoaded()) ? p->getResource("OBJMAP", objmapId) : nullptr;
 		std::vector<ObjmapBlock> blocks;
+		bool transparent = false;
 		if (om && parsePluginObjmap(om->data, om->length, blocks))
 		{
-			std::vector<std::pair<int, sf::IntRect> > parts;
+			std::vector<const ObjmapBlock *> parts;
 			for (const ObjmapBlock & b : blocks)
 				if (b.name == part && b.rect.width() > 0 && b.rect.height() > 0)
-					parts.push_back(std::make_pair(b.pattern, sf::IntRect({b.rect.left, b.rect.top}, {b.rect.width(), b.rect.height()})));
+				{
+					parts.push_back(&b);
+					transparent = transparent || std::find(b.flags.begin(), b.flags.end(), "Transparent") != b.flags.end();
+				}
 			std::stable_sort(parts.begin(), parts.end(),
-				[](const std::pair<int, sf::IntRect> & a, const std::pair<int, sf::IntRect> & b) { return a.first < b.first; });
-			for (const auto & q : parts)
+				[](const ObjmapBlock * a, const ObjmapBlock * b) { return a->pattern < b->pattern; });
+			for (const ObjmapBlock * b : parts)
 			{
-				v->patterns.push_back(q.first);
-				v->bands.push_back(q.second);
+				v->patterns.push_back(b->pattern);
+				v->spans.push_back(b->span);
+				v->bands.push_back(sf::IntRect({b->rect.left, b->rect.top}, {b->rect.width(), b->rect.height()}));
 			}
 		}
 
@@ -98,6 +117,12 @@ namespace OT
 			const sf::Image base = v->texture.copyToImage();
 			v->baseRgba.assign(base.getPixelsPtr(), base.getPixelsPtr() + img.pixels.size() * 4);
 			v->indices = img.pixels;
+			if (transparent)
+			{
+				for (size_t i = 0; i < img.pixels.size(); ++i)
+					if (img.pixels[i] == 0) v->baseRgba[i * 4 + 3] = 0;
+				v->texture.update(v->baseRgba.data());
+			}
 			bool used[256] = {false};
 			for (uint8_t i : img.pixels) used[i] = true;
 			for (int i = 0; i < 256; ++i)
@@ -108,6 +133,21 @@ namespace OT
 		YootPluginView * out = v.get();
 		cache[key] = std::move(v);
 		return out;
+	}
+
+	void yootDrawLoop(sf::RenderTarget & target, const YootPluginView & view, const sf::IntRect & band,
+		float x, float y, float width, sf::Color color)
+	{
+		if (band.size.x <= 0 || band.size.y <= 0) return;
+		sf::Sprite s(view.texture);
+		s.setColor(color);
+		for (float dx = 0; dx < width; dx += band.size.x)
+		{
+			const int w = std::min(band.size.x, (int)std::ceil(width - dx));
+			s.setTextureRect(sf::IntRect(band.position, {w, band.size.y}));
+			s.setPosition({x + dx, y});
+			target.draw(s);
+		}
 	}
 
 	void yootRecolourPluginViews(const std::vector<YootRgb> & palette, int start, int count)
