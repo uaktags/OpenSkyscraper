@@ -150,5 +150,13 @@ namespace OT
 		RoomLook roomLook(bool occupied, bool dirty, int guestsIn, int asleep, int awakeAfterSleep);
 		/// View band of a room: kinds clamp to the plugin's mNumOfKind.
 		int roomPatternIndex(RoomLook look, int kind, int numKinds);
+		/// The room's kind is T2Tenant::SetKind (T2DLL 0x1005fc90, kind =
+		/// rand() % mNumOfKind), called once when the room finishes building
+		/// (status 9 in the room plugins' DoProc, Singleroom.dll 0x100136b0)
+		/// and kept for the room's life (.bld tenant u8 kindIndex). Rooms keep
+		/// the rand() draw reduced mod 60 (lcm 1..6; mNumOfKind <= 6), so
+		/// roll % mNumOfKind is the original kind for every plugin.
+		const int kRoomKindRolls = 60;
+		int roomKindRoll(int draw);
 	}
 }

@@ -27,6 +27,7 @@ namespace OT
 
 			int variant;
 			int subVariant;
+			int yootKind = 0; ///< Skin::Yoot View kind roll (Yoot::roomKindRoll)
 			int roomState;
 			double dirtySince;
 			int capacity() const;

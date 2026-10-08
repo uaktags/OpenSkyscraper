@@ -4755,6 +4755,12 @@ static void testYootItemArt()
 	EXPECT(Yoot::roomPatternIndex(RoomLook::Dirty, 5, 4) == 9);
 	EXPECT(Yoot::roomPatternIndex(RoomLook::Lit, 7, 1) == 1);
 	EXPECT(Yoot::roomPatternIndex(RoomLook::Vacant, -1, 2) == 5);
+	// SetKind: kind = rand() % mNumOfKind once at BuildFinish; the stored
+	// roll gives the same kind for every plugin kind count 1..6.
+	for (int draw : {0, 7, 59, 60, 12345, 32767, 2147483647})
+		for (int k = 1; k <= 6; ++k)
+			EXPECT(Yoot::roomPatternIndex(RoomLook::Lit, Yoot::roomKindRoll(draw), k) == 5 * (draw % k) + 1);
+	EXPECT(Yoot::roomKindRoll(-1) == 59);
 
 	// Only indices inside the animated range take the palette colour.
 	std::vector<YootRgb> pal(256);

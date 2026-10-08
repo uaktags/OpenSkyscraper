@@ -137,7 +137,11 @@ void Hotel::init()
 	Item::init();
 
 	variant = prototype->variant;
-	subVariant = rand() % 2;
+	// One draw feeds both looks, so the rand() sequence is unchanged:
+	// Skin::Yoot's View kind is SetKind's rand() % mNumOfKind at BuildFinish.
+	const int draw = rand();
+	subVariant = draw % 2;
+	yootKind = Yoot::roomKindRoll(draw);
 	roomState = kClean;
 	dirtySince = 0;
 	housekeeper = NULL;
@@ -181,7 +185,7 @@ int Hotel::currentFrame() const
 	}
 	const Yoot::RoomLook look = Yoot::roomLook(roomState == kOccupied, roomState == kDirty || roomState == kInfested, in, asleep, up);
 	const int kinds = std::max(1, (int)yootView->bands.size() / 5);
-	return Yoot::roomPatternIndex(look, subVariant + position.x, kinds);
+	return Yoot::roomPatternIndex(look, yootKind, kinds);
 }
 
 void Hotel::updateSprite()
@@ -513,6 +517,7 @@ void Hotel::encodeXML(tinyxml2::XMLPrinter &xml)
 	Item::encodeXML(xml);
 	xml.PushAttribute("variant", variant);
 	xml.PushAttribute("subVariant", subVariant);
+	xml.PushAttribute("yootKind", yootKind);
 	xml.PushAttribute("roomState", roomState);
 	xml.PushAttribute("dirtySince", dirtySince);
 	if (yootStayBooked) xml.PushAttribute("yootStayBooked", true);
@@ -559,6 +564,7 @@ void Hotel::decodeXML(tinyxml2::XMLElement &xml)
 	Item::decodeXML(xml);
 	variant = xml.IntAttribute("variant", prototype->variant);
 	subVariant = xml.IntAttribute("subVariant", rand() % 2);
+	yootKind = Yoot::roomKindRoll(xml.IntAttribute("yootKind", subVariant));
 	roomState = xml.IntAttribute("roomState", kClean);
 	dirtySince = xml.DoubleAttribute("dirtySince", 0.0);
 	yootStayBooked = xml.BoolAttribute("yootStayBooked", false);

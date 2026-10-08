@@ -168,5 +168,10 @@ namespace OT
 			kind = ((kind % numKinds) + numKinds) % numKinds;
 			return 5 * kind + static_cast<int>(look);
 		}
+
+		int roomKindRoll(int draw)
+		{
+			return ((draw % kRoomKindRolls) + kRoomKindRolls) % kRoomKindRolls;
+		}
 	}
 }

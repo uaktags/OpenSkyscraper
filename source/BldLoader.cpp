@@ -1058,6 +1058,13 @@ namespace Bld {
 				snprintf(buf, sizeof(buf), " tenantStatus=\"%d\"", (int)t.hdr.status);
 				attrs += buf;
 			}
+			else if (proto.compare(0, 6, "hotel_") == 0)
+			{
+				// Guest room interior: SetKind's kind (< mNumOfKind) kept as is.
+				snprintf(buf, sizeof(buf), " yootKind=\"%d\"", (int)t.kindIndex);
+				attrs += buf;
+				if (t.inMoneyIndex != 0 && t.inMoneyIndex != 2) nonDefaultRent++;
+			}
 			else if (t.inMoneyIndex != 0 && t.inMoneyIndex != 2)
 			{
 				nonDefaultRent++;
