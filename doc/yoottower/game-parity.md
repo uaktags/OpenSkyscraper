@@ -942,3 +942,34 @@ Measured on the lab (tree hkE, TAGs hkE-repro and hkE-fix):
 - Not measured: the pre-fix run (hkE-repro) was stopped before its report, so the before numbers for funds, population and the Gathering Area's customers are not available; the before evidence is the Plugin Check Error dialog only.
 
 Open: the star level change is a deliberate departure from the source rating (the tower is three stars in OpenSky); the alternative, dropping the Gathering Area, loses the building. The lead should choose. Lab note: an earlier oracle process for hkE-repro did not exit on `parity.sh stop`; it was left running and should be checked.
+
+#### 7.6.A Elevators
+
+The worktree was fast-forwarded to `feature/yoottower-parity` (f660c88) before work started. Lab tree: `hkA`.
+
+**1. Large Elevator top gear: no discrepancy in OpenSky. The "3 floors" premise is stale.**
+
+- Original gear table: BigElev.t2p MVDF speed `[1, 3, 12]` (`rules-agent/out/item_rules.txt`; ServElev is the same, StdElev is `[1, 3, 0]`). `T2MoverDef::GetSpeed` (0x10004990) reads `+0x178 + 4*gear`. A car position is in units of 36 per floor (0x24). Each mover idle adds `speed[gear] * 6` (StdElev FUN_1000c200 / c3b0 / c590, with `speed[0..2]` at offsets 0x178 / 0x17c / 0x180).
+- Gear 0 takes 6 idles a floor. Gear 1 takes 2 idles a floor. Gear 2 adds 72 units an idle, so it moves 2 floors an idle (`pos / 0x24` in FUN_1000c590). Shift thresholds are `T(n) = sum over i<n of (speed[i] + 5) / 6` (FUN_1000cad0), giving T(2) = 2 and T(3) = 4 floors.
+- OpenSky (`Car::yootDrive` in `source/Item/Elevator/Car.cpp`, reached from `Car::advance` when `prototype->yoot` is set) implements exactly this: `yootOffset += max(1, speed[gear]) * 6`, `floors = min(left, yootOffset / 36)`, and the same threshold function for gear shifts (commit 524d97b). The 3-floor stride exists only in the non-YootTower `CalcMoveSpeed` express turbo (`stride = 3`), which runs only when `prototype->yoot == nullptr`. YootTower prototypes never reach it.
+- So at top gear OpenSky steps 2 floors per mover idle, as the decomp does. No constant was changed.
+- Not measured against the original. `BldExport` exports only the Simple Elevator (`elevPlugin = StdE`, `source/BldExport.cpp:207`, `:728`), so a tower with a Large Elevator cannot be loaded into the original. The oracle comparison needs a BigElev mover export (EgiB equipType, 8 cars of 40, its own mover data) first. That export is not done here.
+
+**2. Per-car rider counts: the 38 / 53 / 39 figure was a mislabel.**
+
+- Source: the `yoot_people` run `s7` (`~/yoottower-decomp/parity-agent/runs/s7/yoot_people/report.md`). Its "Mean people at the movers" line reads "waiting orig / OpenSky, riding orig / OpenSky", but `compare.py` `mover_load` returns `(orig waiting, orig riding, OpenSky waiting, OpenSky riding)` and the print put the slots in the wrong order. The 38 / 53 / 39 values were OpenSky **waiting** means. The original's riders were 13 / 16 / 12. Fixed in `tools/yoottower/remote/parity/compare.py` (report print only; the numbers are unchanged).
+- Fixture: `tests/sim/yoot_people.tower` (Tokyo grade 1, 2 Simple Elevator cars, offices and shops). The original's snapshots from `s7/yoot_people/oracle` were copied to `hkA/yoot_people` and OpenSky was rerun with `pipeline.py --skip-oracle --exe-tree /lab/src/hkA` (current branch code, 3 days). Output: `/lab/out/parity/hkA/yoot_people`.
+
+| Day | Original waiting | OpenSky waiting | Original riding | OpenSky riding | Riders per car (orig / OpenSky) |
+|---|---|---|---|---|---|
+| 0 | 9 | 12 | 13 | 14 | 6.5 / 7.0 |
+| 1 | 34 | 16 | 16 | 14 | 8.0 / 7.0 |
+| 2 (holiday) | 34 | 20 | 12 | 19 | 6.0 / 9.5 |
+
+- Days 0 and 1 are within about 12 percent. Day 2 is 58 percent high on OpenSky (19 against 12 total riders, 9.5 against 6.0 per car). Each mean uses about 16 samples, so the riding noise is a few riders.
+- Waiting diverges more (34 against 16 on day 1; 34 against 20 on day 2). That looks like queue size rather than car loading.
+- The day 2 gap is above the 15 percent threshold. I did not find its cause in this pass and did not change the dispatch or boarding code. Candidates: the holiday population and appointed-queue sweeps (StdElev FUN_1000cf90 / cda0 / d070). A fix needs a per-trip boarding timeline from the original, which the snapshots do not record.
+
+**Build and goldens:** no goldens touched. The worktree lacked `thirdparty/astar-search` (an uninitialised submodule); copying it from `/lab/src/glmp2` made `hkA` build. `lab.sh build` exits 0 even when `OpenSkyscraper` fails on the missing `stlastar.h`, so check the log for `fatal error`. `lab.sh test hkA`: 9/9 pass.
+
+**Open:** Large Elevator oracle measurement (needs BigElev export); per-car rider gap on day 2 of `yoot_people`.

@@ -192,7 +192,8 @@ def report(orc, osk, summary, title):
     load = mover_load(orc, summary)
     if any(v[0] is not None for v in load.values()):
         lines += ['Mean people at the movers, 08:00-20:00 (orig / OpenSky): ' + '; '.join(
-            'day %d waiting %s / %s, riding %s / %s' % ((d,) + tuple(fmt(x) for x in load[d]))
+            # mover_load returns (orig waiting, orig riding, OpenSky waiting, OpenSky riding)
+            'day %d waiting %s / %s, riding %s / %s' % ((d,) + tuple(fmt(x) for x in (load[d][0], load[d][2], load[d][1], load[d][3])))
             for d in days if d in load), '']
     keys = sorted(set(do[days[0]]['estimate']) | set(ds[days[0]]['estimate'])) if days else []
     only_o = [k for k in keys if k not in ds[days[0]]['estimate']]
