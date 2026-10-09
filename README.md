@@ -154,27 +154,26 @@ Known gaps
 OpenSky approximates Yoot Tower closely but not exactly, and several subsystems remain
 approximate or missing (see `doc/yoottower/game-parity.md` for the full audit):
 
-- **Elevator mechanics:** the Large Elevator's top gear has never been run against the original (it
-  strides 3 floors per frame, the original stepped 2); per-car rider counts have not been re-measured
-  since the appointed-queue dispatch.
+- **Elevator mechanics:** the Large Elevator now exports to `.bld` and matches the original's stops and
+  riders per car, but car travel times have not been compared at fine time resolution; on the people tower,
+  holiday (day 2) riders per car run high (9.5 vs 6.0).
 - **Routing & transit:** People walk along floors and ride movers, but pathing uses OpenSky's A* PathFinder
   rather than original routing score tables; floor underneath Sky Bridges remains walkable in OpenSky routing.
 - **Facilities & services:** Restroom and doctor visits update tenant satisfaction and health, but people
   do not visually walk to restrooms/clinics and back; clinic failure dialogs lack custom popups.
-- **Hotel stays across saves:** Hotel desk queues and check-in workflows are modelled, but active room stays
-  are not preserved across save/reload (reloaded occupied rooms check out).
-- **Disaster handling:** Power blackouts follow the 11:00–14:00 demand checks, but per-transformer individual
-  breaker toggles are omitted; fires use SimTower's 2-button response dialog rather than YootTower's 3-way
-  response and burn spread model.
+- **Disaster handling:** Power blackouts follow the original (the tower stays dark until supply is restored;
+  tenants and movers freeze), but per-transformer individual breaker toggles are omitted; fires use SimTower's
+  2-button response dialog rather than YootTower's 3-way response and burn spread model.
 - **Media & cosmetics:** Movie theaters play soundtrack audio from `Movie/*.MOV` when present, but Cinepak
   video decoding is not supported (video stills remain static); vehicles (subway trains, parking gate cars)
   lack animated sprites.
-- **Unverified against the original:** Event Center evening events, the end of the 11:00-14:00 blackout,
-  hotel income at 12:00, Mr. Maru's walk back, rubble, and the clouds / kite / dolphins / Billboard visuals.
-- **Population detail:** hotel guests and venue audiences are inactive in the parity fixtures; Hawaii condo
-  residents and some facility staff counts are below the original's.
-- **Export:** a Tokyo visitors tower with a Gathering Area is rejected by the original game
-  ("Plugin Check Error") when exported to `.bld`.
+- **Visuals checked only at the logic level:** Mr. Maru turning back at the row end, rubble tiling (drawn per
+  cell, not per tenant), the kite in Kegon, and the Billboard countdown differ from or are not confirmed
+  against the original; clouds, kite and dolphins have not been compared pixel for pixel.
+- **Hotels:** OpenSky fills about half of the eligible rooms per day against the original's ~80% (funds stay
+  within tolerance); room estimates run higher than the original's.
+- **Population detail:** Hawaii has one condo resident more than the original (55 vs 54) and a few more
+  daytime visitors; a coffee shop's pre-blackout demand is below the original's.
 
 What is being tested?
 ---------------------
