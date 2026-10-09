@@ -513,7 +513,7 @@ void VenueSystem::eventCenterTick(Item::EventCenter * e, int minute, int day)
 		if (e->status >= 30 && reachable(e) && Yoot::hallEventCollects(minute, tOpen, tClose, stayOf(e, 0)) &&
 		    minute % Yoot::kTenantIdleMinutes == e->idlePhase && std::min(cap, e->target) - e->users() - e->walking > 0)
 			if (const YootTenantDef * d = game->eventSystem.people.venueDef(e, e->today, def.customerTableID))
-				e->walking += game->eventSystem.people.collectVenue(e, *d, cap - e->users() - e->walking,
+				e->walking += game->eventSystem.people.collectVenue(e, *d, std::min(cap, e->target) - e->users() - e->walking,
 					Yoot::absoluteMinute(game->time.absolute));
 	}
 	else if (e->status >= 30)
