@@ -205,12 +205,14 @@ def tokyo_g3_reggae():
 
 def tokyo_g5_large_elevator():
     """Tokyo, 4 stars: one tall Large Elevator (elevator-express, BigElev) on the lobby, with
-    offices on six floors 6 rows apart (3..33). Seven served stops, under the Large Elevator's
-    cap of 8, so the distant-floor trips measure the car, not the stop limit."""
+    offices on six floors 6 rows apart (3..33). Seven served stops (lobby + six office floors),
+    under the Large Elevator's cap of 8. Shops on the lobby row (visitor demand: an office-only
+    tower never sends anyone to a mover in either game)."""
     t = Tower('tokyo', 3)
     t.set_lobby(-64, 56, 3)
     t.floors([3, 9, 15, 21, 27, 33], -140, 140)
     t.lift(-4, 0, 34, 8, kind='elevator-express')
+    t.row(0, -60, ['yt_coffee', 'yt_burger', 'yt_flower'])
     for y in (3, 9, 15, 21, 27, 33):
         offices(t, y, -120, 4)
     return t

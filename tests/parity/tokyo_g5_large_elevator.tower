@@ -7,6 +7,9 @@
 <item type="floor" x="-140" y="21" evaluation="50.0" width="280"/>
 <item type="floor" x="-140" y="27" evaluation="50.0" width="280"/>
 <item type="floor" x="-140" y="33" evaluation="50.0" width="280"/>
+<item type="yt_coffee" x="-60" y="0" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_burger" x="-48" y="0" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_flower" x="-32" y="0" evaluation="50.0" tenantStatus="9"/>
 <item type="office" x="-120" y="3" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
 <item type="office" x="-111" y="3" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
 <item type="office" x="-102" y="3" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
