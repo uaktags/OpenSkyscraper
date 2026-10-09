@@ -55,7 +55,7 @@ Key behavioural differences:
   `yoottower` starts with world-specific funds ($10M in Tokyo, $5M in Hawaii, $2M in Kegon) and
   star ratings (1★ Tokyo, 2★ Hawaii, 3★ Kegon).
 - **Clock and calendar:** `simtower` and `opensky` run a nonlinear 2,600-frame day with weekend every
-  third day; `yoottower` runs a minute-linear 24-hour clock (12 one-day months/year, 3-day quarters),
+  third day; `yoottower` runs a minute-linear 24-hour clock with
   world-specific holidays, and deterministic rain (Tokyo days 4 and 8; Hawaii and Kegon never rain).
 - **Economy & maintenance:** `simtower` and `opensky` settle finances around 05:00; `yoottower` charges
   maintenance at midnight on day 1 of each quarter, collects office rent quarterly at 04:52 (with an
@@ -85,8 +85,8 @@ Launch YootTower mode using `--ruleset yoottower` (or in the New Game dialog). P
   - **Kegon:** Cliffside tower building downwards (2 floors above, 32 basements); $2,000,000 start;
     1-row lobby; final goal is the Attraction renovation.
 - **Original resources (.t2p plugins):** Original YootTower game files are **not included** and must
-  come from your own copy of Yoot Tower. OpenSky searches for `.t2p` files in `data/Plugins/`,
-  `~/.openskyscraper/Plugins/`, or any folder set under **YOOTTOWER RESOURCES** in the in-game Settings
+  come from your own copy of Yoot Tower. OpenSky searches for `.t2p` files in `data/Plugins/`
+  or in the folder set under **YOOTTOWER RESOURCES** in the in-game Settings
   dialog (saved as `yootPluginsPath` in `~/.openskyscraper/settings.xml`).
 - **Loading & exporting saves:**
   - Load original YootTower `.bld` saves directly: `./OpenSkyscraper --ruleset yoottower --load-game file.bld`.
@@ -107,12 +107,12 @@ and OpenSky `.osp-plugin` packages.
   condos), Movers (elevators, stairs, escalators), OuterObj (billboards), ToolPalette, World plugins,
   and SP sub-plugins (Movies `MV_*`, Hall Events `Pl*`, and Advertisements `lPdA`).
 - **Running the editor:**
-  - Interactive GUI: `./build/tools/PluginEditor/PluginEditor [path/to/plugin.t2p|plugin.osp-plugin]`
+  - Interactive GUI: `./build/PluginEditor [path/to/plugin.t2p|plugin.osp-plugin]`
   - CLI inspection & batch editing:
     ```sh
-    ./build/tools/PluginEditor/PluginEditor plugin.t2p --select TNDF:1
-    ./build/tools/PluginEditor/PluginEditor plugin.t2p --set ATTR:128:name="New Name" --export-t2p modified.t2p
-    ./build/tools/PluginEditor/PluginEditor plugin.t2p --save-osp unpacked.osp-plugin
+    ./build/PluginEditor plugin.t2p --select TNDF:1
+    ./build/PluginEditor plugin.t2p --set ATTR:128:name="New Name" --export-t2p modified.t2p
+    ./build/PluginEditor plugin.t2p --save-osp unpacked.osp-plugin
     ```
 - **Storage formats:**
   - `.osp-plugin`: OpenSkyscraper native directory bundle featuring human-readable JSON manifests,
@@ -151,7 +151,7 @@ cd build
 
 Known gaps
 ----------
-While OpenSky achieves comprehensive gameplay parity with Yoot Tower, several subsystems remain
+OpenSky approximates Yoot Tower closely but not exactly, and several subsystems remain
 approximate or missing (see `doc/yoottower/game-parity.md` for the full audit):
 
 - **Elevator mechanics:** Large Elevator express movement strides 3 floors per frame (original stepped
