@@ -1053,6 +1053,44 @@ to the upper rooms. The other goldens are unchanged.
 
 **Tests.** Lab `test hkB`: 9/9. The `thirdparty/astar-search` submodule is not checked out in this
 worktree; it was copied into the lab tree `hkB` only (`lab.sh sync` does not carry it).
+
+**5. Call stage (second pass, on the merged code).** The per-room table is in
+`~/yoottower-decomp/closeout/hkB/perroom.py` (original snapshots vs OpenSky series). Hawaii, day 1, seed
+1, clean rooms with estimate above 200: the original fills 9 of about 11; OpenSky fills 8 of about 15. Day
+1 estimates are 248-276 for several original rooms and 280-300 in OpenSky. `hotel_double@14,5` and
+`hotel_suite@-10,5` are 150 in the original on day 1 (and day 2 for 14,5; -10,5 is 150 on day 2 in both)
+and 284-288 in OpenSky on day 1. So OpenSky has one or two extra eligible rooms, and it fills a smaller
+share of its eligible rooms.
+
+Guest-call path, traced in T2DLL (same path as belong people): room idle, FUN_10012d50 (Singleroom
+plugin, desk link and floor status 30..9999 checks) -> `T2Tenant::CollectEmployee` 0x1005f5a0 ->
+`T2TenantMemberTableDef::IsCollectFromPool` 0x10063430 (deterministic: a PLDF percent or DPDF holiday
+rate of 0 refuses) -> `CollectEmployeeFromPool` 0x10060a50 -> `T2Pool::Find` 0x10050500 (relaxes econo
+from member 1 on, onlyFirst) -> `T2Pool::Call` 0x10050580 (one econo for every member; the last argument
+is the special flag, not onlyFirst) -> `T2PeopleDemandList::Call`. The econo adjustment is `econo - 3 +
+priceIndex`, clamped to 1..5 (same as `callGuests`).
+
+**Fix (committed).** `callGuests` passed -1 to `Call` for members after the first. It now passes the
+room's econo to every member, as `callBelong` does. Five seeds, Hawaii, OpenSky only (oracle copy):
+
+| | Original | seed 1 | seed 2 | seed 3 | seed 4 | seed 5 |
+|---|---|---|---|---|---|---|
+| Funds change day 1 | 37,100 | 40,400 | 47,800 | 36,800 | 37,300 | 27,100 |
+| Funds change day 2 | 53,300 | 51,300 | 53,500 | 47,600 | 44,900 | 70,800 |
+| Check-ins day 0 | 9 | 9 | 12 | 9 | 9 | 7 |
+| Check-ins day 1 | 11 | 8 | 10 | 8 | 8 | 12 |
+
+`funds_delta` is 4/4 within tolerance on every seed (before this fix, seed 1 was 26,800 / 27,600 and
+day 2 was out of tolerance). The regenerated golden is `tests/sim/sim_visitors_yoottower.json`.
+
+**Not verified (open).** Two OpenSky gates have no counterpart I could find in the decompile I traced:
+the 1-in-30 call roll per idle tick and the estimate above 200 gate. `FUN_10012d50` has no estimate
+test and no random roll, and the Singleroom room's status function (vtable slot 0x38, ChangeStatusOnIdle)
+was not recoverable from the dumps (the vtable scan of `Singleroom.dll` found no pointers). These are the
+prime suspects for the remaining fill gap (about 53% of eligible rooms filled in OpenSky against about 80%
+in the original on day 1). The room estimate (J2) also differs: the original's day-1 values are 150 for
+14,5, while OpenSky's are 284-288. I did not change either gate, since no evidence was found for a
+replacement. Check-in counts are noisy across seeds (day 1: 8 to 12) and the original is a single run.
 #### 7.6.G Hawaii night population
 
 Tower `hawaii_g3_boatdeck`, 3 game days, `pipeline.py --skip-oracle` on the original oracle
