@@ -626,6 +626,10 @@ each day in the oracle's snapshots), so its row is not evidence yet.
    are 1.5 to 4 times the original in both builds (customers within tolerance 8/29 and 19/64).
    The hotel's day-2 peak fell from 2165 to 1826, but it is still far off. The cause is not
    yet isolated (visitor pool sizes or the venue arrival rates are the likely places).
+   **Update:** the appointed-queue dispatch (StdElev FUN_1000cf90 / cda0 / d070: pickup sets, sweep cost,
+   end-of-window unappoint) restores the people tower's peaks to 510 / 480 / 608 against the original's
+   434 / 509 / 559 (all four days within tolerance, estimate 42/69 against 37/69 before the campaign).
+   Not yet compared with the original on the other towers; the rider counts per car are not re-measured.
 6. **Holiday population (item 3):** the original's day-2 peak is 559, OpenSky's is 596 before
    and 419 after the elevator change. The 663-versus-559 gap of the earlier calibration is gone
    from the peak, but the regression above now puts the holiday under the original.

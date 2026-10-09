@@ -119,18 +119,27 @@ namespace OT {
 				virtual void addPerson(Person * p);
 				virtual void removePerson(Person * p);
 
-				typedef std::set<Queue *, SimLess> Queues;
-				Queues queues;
-				Queue * getQueue(int floor, Direction dir);
-				void cleanQueues();
+			typedef std::set<Queue *, SimLess> Queues;
+			Queues queues;
+			Queue * getQueue(int floor, Direction dir);
+			/// Lookup without creating (getQueue creates on miss).
+			Queue * findQueue(int floor, Direction dir) const;
+			void cleanQueues();
 
-				void called(Queue * queue);
-				void respondToCalls();
-				Queue * getMostUrgentQueue();
-				Car * getIdleCar(int floor);
+			void called(Queue * queue);
+			void respondToCalls();
+			Queue * getMostUrgentQueue();
+			Car * getIdleCar(int floor);
 
-				void decideCarDestination(Car * car);
-			};
+			void decideCarDestination(Car * car);
+
+			/// YootTower appointment dispatch (StdElev FUN_1000cf90 ->
+			/// FUN_1000cda0): every waiting, unappointed call is given to
+			/// the car with the least sweep cost, scanning the cars from a
+			/// rotating index so equal cars share the load.
+			void yootAppoint();
+			int yootDispatchCursor = 0;
+		};
 		}
 	}
 }

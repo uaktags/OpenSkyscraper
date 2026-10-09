@@ -102,7 +102,7 @@ def bld_record(d, frame):
                                'inside': t.get('customerCount')}
     rec['partial'] = d.get('partial', False)
     for e in d['towerEvent'].get('events', []):
-        rec['events']['%s#%d' % (e['type'], e['id'])] = '%d:%s' % (e['standby'], e['data'])
+        rec['events']['%s#%d' % (e['type'], e['id'])] = '%d:%s' % (e['standby'], e.get('data'))
     # T2People status (+8, T2People::Idle 0x10048570): 1 in the pool, 5 walking to a
     # mover, 6 waiting at it, 8 riding, 10 walking to a tenant, 11 inside, 12 leaving.
     people = {}

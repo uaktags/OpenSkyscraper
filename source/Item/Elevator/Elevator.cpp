@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <iterator>
 #include <vector>
 #include "../../Game.h"
 #include "../../Sprite.h"
@@ -385,6 +386,11 @@ void Elevator::render(sf::RenderTarget &target) const
 
 void Elevator::advance(double dt)
 {
+	// YootTower: appoint waiting calls before the cars advance, so a car
+	// that becomes free this tick can be sent straight out (StdElev's
+	// request check runs before the module idles).
+	if (prototype->yoot) yootAppoint();
+
 	bool carsMoving = false;
 	for (Cars::iterator ic = cars.begin(); ic != cars.end(); ic++)
 	{
@@ -574,6 +580,8 @@ bool Elevator::repositionMotor(int motor, int y)
 
 void Elevator::clearCars()
 {
+	for (Queues::iterator iq = queues.begin(); iq != queues.end(); ++iq)
+		(*iq)->appointed = NULL;
 	for (Cars::iterator c = cars.begin(); c != cars.end(); ++c)
 		delete *c;
 	cars.clear();
@@ -635,6 +643,16 @@ Queue *Elevator::getQueue(int floor, Direction dir)
 	return q;
 }
 
+Queue *Elevator::findQueue(int floor, Direction dir) const
+{
+	for (Queues::const_iterator iq = queues.begin(); iq != queues.end(); ++iq)
+	{
+		if ((*iq)->floor == floor && (*iq)->direction == dir)
+			return *iq;
+	}
+	return NULL;
+}
+
 /// Removes all queues on floors that the elevator doesn't connect to anymore. This is necessary
 /// after the elevator motors are repositioned or certain floors deactivated.
 void Elevator::cleanQueues()
@@ -661,11 +679,13 @@ void Elevator::called(Queue *queue)
 	// permitted period.
 	if (!queue || queue->people.empty()) return;
 	if (!scheduleAllows(queue->direction)) return;
+	if (prototype->yoot) { yootAppoint(); return; }
 	respondToCalls();
 }
 
 void Elevator::respondToCalls()
 {
+	if (prototype->yoot) { yootAppoint(); return; }
 	Queue *q;
 	while ((q = getMostUrgentQueue()))
 	{
@@ -766,5 +786,53 @@ void Elevator::decideCarDestination(Car *car)
 	else
 	{
 		car->setState(Car::kIdle);
+	}
+}
+
+/**
+ * YootTower: appoint every waiting, unappointed call to a car, as StdElev's
+ * request check does (FUN_1000cf90 -> FUN_1000cda0). Each call (T2Request
+ * with +0x24 == -1 and waiters) is given to the car with the least sweep
+ * cost (FUN_1000d070) among the cars with room; the scan starts at a
+ * rotating index (the list iterator start of FUN_1000cda0) so equal cars
+ * share the load, and the pickup floor becomes a stop of that car
+ * (T2ElevatorModule::SetOnStop, which also points a stopped car at the
+ * call's direction).
+ */
+void Elevator::yootAppoint()
+{
+	if (cars.empty()) return;
+	const int n = (int)cars.size();
+	for (Queues::iterator iq = queues.begin(); iq != queues.end(); ++iq)
+	{
+		Queue *q = *iq;
+		if (q->people.empty() || q->appointed || !scheduleAllows(q->direction)) continue;
+		Car *best = NULL;
+		int bestCost = 0, bestIndex = 0;
+		std::vector<Car *> order;
+		{
+			Cars::iterator ic = cars.begin();
+			std::advance(ic, yootDispatchCursor % n);
+			for (int k = 0; k < n; ++k)
+			{
+				order.push_back(*ic);
+				if (++ic == cars.end()) ic = cars.begin();
+			}
+		}
+		for (int k = 0; k < n; ++k)
+		{
+			Car *c = order[k];
+			if ((int)c->passengers.size() >= maxCarCapacity) continue; // riders < capacity (FUN_1000cda0)
+			const int cost = c->yootSweepCost(q->floor, q->direction);
+			if (!best || cost < bestCost) { best = c; bestCost = cost; bestIndex = k; }
+		}
+		if (best)
+		{
+			q->appointed = best;
+			best->yootPickups.insert(q->floor);
+			if (best->direction == Elevator::kNone) best->direction = q->direction; // SetOnStop
+			yootDispatchCursor = (yootDispatchCursor + bestIndex + 1) % n;
+			if (best->state == Car::kIdle) best->yootDecide();
+		}
 	}
 }

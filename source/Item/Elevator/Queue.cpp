@@ -25,6 +25,7 @@ Queue::Queue(Elevator *e)
 	  called(false),
 	  callTime(0),
 	  answered(false),
+	  appointed(nullptr),
 	  steppingInside(false),
 	  fullRetryFrame(0),
 	  waitStartFrame(0)

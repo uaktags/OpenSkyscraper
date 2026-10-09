@@ -199,7 +199,10 @@ void Car::setState(State s)
 		state = s;
 		journeyTime = 0;
 		if (state == kIdle) {
-			direction = Elevator::kNone;
+			// YootTower keeps the sweep direction: the module's direction
+			// only clears when it parks at home (FUN_1000c770 ->
+			// StartToHomePos at the home floor), not on every idle.
+			if (!elevator->prototype->yoot) direction = Elevator::kNone;
 			elevator->respondToCalls();
 		}
 		updateSprite();
@@ -258,7 +261,8 @@ void Car::advance(double dt)
 			}
 			if (doorTicks & 1)
 			{
-				Queue *q = elevator->getQueue(destinationFloor, direction);
+				Queue *q = yoot ? yootServedQueue()
+				                : elevator->getQueue(destinationFloor, direction);
 				if (doorTicks == 1)
 				{
 					while (!isFull() && q && !q->people.empty()) passengers.insert(q->popPerson());
@@ -277,15 +281,16 @@ void Car::advance(double dt)
 				doorTicks = 0; holdTicks = 0;
 				if (!passengers.empty()) setState(kClosingDoors);
 				else setState(kIdle);
-				elevator->decideCarDestination(this);
+				if (yoot) { yootEndStop(); yootDecide(); }
+				else elevator->decideCarDestination(this);
 				continue;
 			}
 			if (yoot && doorTicks == 1 && holdTicks > 0)
 			{
 				// Hold (FUN_1000c1b0): someone new waiting reopens the
 				// boarding window (state 3, counter 6), then holds again.
-				Queue *q = elevator->getQueue(destinationFloor, direction);
-				if (q && !q->people.empty()) { doorTicks = 4; holdTicks = elevator->prototype->yoot->defaultWait; continue; }
+				Queue *q = yootServedQueue();
+				if (q && !q->people.empty()) { doorTicks = 5; holdTicks = elevator->prototype->yoot->defaultWait; continue; }
 				--holdTicks;
 				continue;
 			}
@@ -300,8 +305,17 @@ void Car::advance(double dt)
 			--doorTicks;
 			if (doorTicks == 0)
 			{
-				if (passengers.empty()) { setState(kIdle); continue; }
-				elevator->decideCarDestination(this);
+				if (yoot)
+				{
+					yootEndStop();
+					if (passengers.empty()) { setState(kIdle); continue; }
+					yootDecide();
+				}
+				else
+				{
+					if (passengers.empty()) { setState(kIdle); continue; }
+					elevator->decideCarDestination(this);
+				}
 			}
 			continue;
 		}
@@ -341,6 +355,18 @@ void Car::advance(double dt)
 
 		if (state == kIdle)
 		{
+			if (yoot)
+			{
+				// FUN_1000bd50/FUN_1000c770: a stopped car with stops
+				// sweeps to them; an empty one goes home.
+				if (!yootPickups.empty() || !passengers.empty()) { yootDecide(); continue; }
+				if (std::abs((int)std::lround(altitude) - homeFloor) > 0)
+				{
+					direction = homeFloor > altitude ? Elevator::kUp : Elevator::kDown;
+					moveTo(homeFloor);
+				}
+				continue;
+			}
 			Queue *up = elevator->getQueue((int)std::lround(altitude), Elevator::kUp);
 			Queue *down = elevator->getQueue((int)std::lround(altitude), Elevator::kDown);
 			if ((up && up->called && elevator->scheduleAllows(Elevator::kUp)) ||
@@ -439,4 +465,108 @@ void Car::moveTo(int floor)
 void Car::removePassenger(Person *p)
 {
 	passengers.erase(p);
+}
+
+/**
+ * YootTower: the queue this car is serving at its current stop — the
+ * request appointed to it (GetAppointRequest 0x1002e100), matched by
+ * appointment rather than by the car's direction so a car that was sent
+ * home or just closed its doors still boards the call that owns it.
+ */
+Queue *Car::yootServedQueue()
+{
+	Queue *q = NULL;
+	if (direction == Elevator::kUp || direction == Elevator::kDown)
+		if ((q = elevator->findQueue(destinationFloor, direction)) && q->appointed == this) return q;
+	if ((q = elevator->findQueue(destinationFloor, Elevator::kUp)) && q->appointed == this) return q;
+	if ((q = elevator->findQueue(destinationFloor, Elevator::kDown)) && q->appointed == this) return q;
+	return NULL;
+}
+
+/**
+ * YootTower: the cost for this car to serve a call at `floor` going `dir`
+ * (StdElev FUN_1000d070). A stopped car pays the plain distance. A moving
+ * car pays the plain distance only when the call continues its sweep past
+ * the current destination; otherwise it pays the full turnaround through
+ * the destination, which keeps idle cars competitive and spreads the cars
+ * over the calls (the original's formulas scale the non-ahead cases by
+ * the sweep extent, making them strictly larger).
+ */
+int Car::yootSweepCost(int floor, Elevator::Direction dir) const
+{
+	const int cur = (int)std::lround(altitude);
+	if (state != kMoving || direction == Elevator::kNone)
+		return std::abs(floor - cur);
+	const int s = direction == Elevator::kUp ? 1 : -1;
+	if (dir == direction && (floor - destinationFloor) * s >= 0)
+		return std::abs(floor - destinationFloor);
+	return std::abs(destinationFloor - cur) + std::abs(floor - destinationFloor);
+}
+
+/**
+ * YootTower: pick the next stop of the sweep (T2ElevatorModule::
+ * SetNextStop 0x1002df50 + FUN_1000c770): the nearest floor with an
+ * appointed pickup or a rider's destination in the current direction,
+ * turning around when the sweep only has floors behind, and going home
+ * (StartToHomePos 0x1002e0b0) when nothing is left.
+ */
+void Car::yootDecide()
+{
+	std::set<int> stops = yootPickups;
+	for (Item::People::iterator ip = passengers.begin(); ip != passengers.end(); ++ip)
+		stops.insert((*ip)->journey.toFloor);
+	const int cur = (int)std::lround(altitude);
+	int next = INT_MAX;
+	if (direction == Elevator::kNone)
+	{
+		for (std::set<int>::iterator it = stops.begin(); it != stops.end(); ++it)
+			if (next == INT_MAX || std::abs(*it - cur) < std::abs(next - cur)) next = *it;
+	}
+	else
+	{
+		const int s = direction == Elevator::kUp ? 1 : -1;
+		for (std::set<int>::iterator it = stops.begin(); it != stops.end(); ++it)
+			if ((*it - cur) * s > 0 && (next == INT_MAX || std::abs(*it - cur) < std::abs(next - cur))) next = *it;
+		if (next == INT_MAX && !stops.empty())
+		{
+			// ChangeTurnPos: the sweep reverses at its extent.
+			direction = direction == Elevator::kUp ? Elevator::kDown : Elevator::kUp;
+			const int s2 = direction == Elevator::kUp ? 1 : -1;
+			for (std::set<int>::iterator it = stops.begin(); it != stops.end(); ++it)
+				if ((*it - cur) * s2 > 0 && (next == INT_MAX || std::abs(*it - cur) < std::abs(next - cur))) next = *it;
+		}
+	}
+	if (next != INT_MAX)
+	{
+		LOG(DEBUG, "car %p decide: floor %d dir %d -> stop %d (pickups %zu, pax %zu)", (void*)this, cur, (int)direction, next, yootPickups.size(), passengers.size());
+		moveTo(next);
+		return;
+	}
+	if (cur != homeFloor)
+	{
+		direction = homeFloor > cur ? Elevator::kUp : Elevator::kDown;
+		moveTo(homeFloor);
+	}
+	else
+	{
+		direction = Elevator::kNone;
+		setState(kIdle);
+	}
+}
+
+/**
+ * YootTower: the boarding window at this floor is over (ClearOnStop
+ * 0x1002dee0): the served queue loses its appointment (T2Request +0x24
+ * back to -1) so the remaining waiters are re-appointed to the best car
+ * on the next dispatch pass.
+ */
+void Car::yootEndStop()
+{
+	yootPickups.erase(destinationFloor);
+	const Elevator::Direction dirs[2] = { Elevator::kUp, Elevator::kDown };
+	for (int d = 0; d < 2; ++d)
+	{
+		Queue *q = elevator->findQueue(destinationFloor, dirs[d]);
+		if (q && q->appointed == this) q->appointed = NULL;
+	}
 }

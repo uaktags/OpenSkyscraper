@@ -11,6 +11,7 @@ namespace OT {
 	namespace Item {
 		namespace Elevator {
 			class Elevator;
+			class Car;
 			class Queue : public GameObject, public sf::Drawable
 			{
 			public:
@@ -31,6 +32,9 @@ namespace OT {
 				bool called;
 				double callTime;
 				bool answered;
+				/// YootTower: the car this call is appointed to (T2Request
+				/// +0x24; StdElev FUN_1000cf90 appoints one car per call).
+				Car *appointed;
 				double getWaitDuration();
 
 				typedef std::list<Person *> People;
