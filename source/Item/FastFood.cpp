@@ -1,5 +1,6 @@
 /* Copyright © 2013 Fabian Schuiki */
 #include "../Game.h"
+#include "../XmlUtil.h"
 #include "../Math/Rand.h"
 #include "FastFood.h"
 #include "Office.h"
@@ -108,7 +109,7 @@ void FastFood::decodeXML(tinyxml2::XMLElement &xml)
 	customersToday = std::max(0, xml.IntAttribute("customersToday", 0));
 	lastDemandDay = xml.IntAttribute("lastDemandDay", -1);
 	revenueSettled = xml.BoolAttribute("revenueSettled", false);
-    std::string slots=xml.Attribute("dispatched", "");
+    std::string slots=xmlAttrOr(xml, "dispatched", "");
     for (int k=0;k<40;++k) dispatched[k]=k<int(slots.size()) && slots[k]=='1';
 	for (int i = 0; i < 3; ++i) {
 		char key[32];
@@ -128,11 +129,11 @@ void FastFood::decodeXML(tinyxml2::XMLElement &xml)
         c->bankCount=e->IntAttribute("bankCount",0); c->bankTotal=e->IntAttribute("bankTotal",0);
         c->poolSlot=e->IntAttribute("poolSlot",-1);
 		c->eval = e->DoubleAttribute("eval", 0.0);
-		c->name = e->Attribute("name", "");
-		c->from = e->Attribute("from", "");
-		c->goingTo = e->Attribute("goingTo", "");
+		c->name = xmlAttrOr(*e, "name", "");
+		c->from = xmlAttrOr(*e, "from", "");
+		c->goingTo = xmlAttrOr(*e, "goingTo", "");
 		customers.insert(c);
-		if (std::string(e->Attribute("phase", "arriving")) == "eating") {
+		if (std::string(xmlAttrOr(*e, "phase", "arriving")) == "eating") {
 			addPerson(c);
 			customerMetadata[c].arrivalTime = e->DoubleAttribute("itemArrival");
 		} else arrivingCustomers.push(c);

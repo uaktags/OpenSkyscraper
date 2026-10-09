@@ -349,6 +349,11 @@ void Condo::moveIn()
 	game->addPopulation(TenantRules::kCountCondo, 3);
 }
 
+int Condo::demolitionBuyout() const
+{
+	return occupied ? openSkyQuarterlyRent("condo", tenant.rentClass) : 0;
+}
+
 void Condo::vacate()
 {
 	if (!occupied) return;

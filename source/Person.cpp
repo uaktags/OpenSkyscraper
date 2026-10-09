@@ -1,4 +1,5 @@
 #include <algorithm>
+#include "XmlUtil.h"
 #include <cassert>
 #include <cmath>
 #include <cstdio>
@@ -151,7 +152,7 @@ void Person::recordNoRoute(int from, int to)
 	{
 		char message[128];
 		std::snprintf(message, sizeof(message),
-			"People on Floor %d need a path to Floor %d", from, to);
+			"People on Floor %d need path to Floor %d", from, to);
 		game->timeWindow.showMessage(message);
 	}
 }
@@ -185,13 +186,13 @@ void Person::decodeXML(tinyxml2::XMLElement &xml)
 	stress  = std::max(0.0, std::min(kMaxStress, stress));
 	eval    = xml.DoubleAttribute("eval", 0.0);
 	pendingJourneyStress = 0.0;
-	name    = xml.Attribute("name", "");
+	name    = xmlAttrOr(xml, "name", "");
 	// Older saves stored generated "Man #3" style names; those are not custom.
 	if (name.find(" #") != std::string::npos) name.clear();
 	bankCount = (int8_t)xml.IntAttribute("bankCount", 0);
 	bankTotal = (int16_t)xml.IntAttribute("bankTotal", 0);
-	from    = xml.Attribute("from", "");
-	goingTo = xml.Attribute("goingTo", "");
+	from    = xmlAttrOr(xml, "from", "");
+	goingTo = xmlAttrOr(xml, "goingTo", "");
 }
 
 Person::Journey::Journey(Person * p)

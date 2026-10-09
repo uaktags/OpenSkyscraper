@@ -307,6 +307,17 @@ namespace OT {
 		/// Lobby height for a placement: Ctrl = 2, Ctrl+Shift = 3, otherwise
 		/// the profile default (1, or the YootTower world's lobby height).
 		int lobbyToolHeight() const;
+		/// Grand-lobby height locked by the first ground-lobby build click
+		/// (0 = still open). Saved with the tower.
+		int lobbyHeightLock = 0;
+		/// Modifier-key choice: Ctrl = 2, Ctrl+Shift = 3, otherwise the profile default.
+		int lobbyHeightFromKeys() const;
+		/// Tower-wide placement rules shared by click and batch paths
+		/// (ceiling/depth, cathedral, above/below-ground, metro, caps,
+		/// recycling adjacency, parking and ramps). Does not mutate.
+		bool placementRuleBlock(Item::AbstractPrototype * proto, int x, int y, std::string & reason) const;
+		/// Bulldozer rules + owner buyout; returns true when the item was removed.
+		bool bulldozeItem(Item::Item * item);
 		/// One simulation tick: the sim core of advance() (clock,
 		/// accounting, items, people, hour boundaries). Fast mode runs
 		/// several of these per rendered frame.

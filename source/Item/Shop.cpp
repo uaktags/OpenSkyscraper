@@ -1,5 +1,6 @@
 /* Copyright © 2013 Fabian Schuiki */
 #include "../Game.h"
+#include "../XmlUtil.h"
 #include "../Math/Rand.h"
 #include "Shop.h"
 #include <string>
@@ -136,7 +137,7 @@ void Shop::decodeXML(tinyxml2::XMLElement &xml)
 		c->member = (int8_t)e->IntAttribute("member", 0);
 		c->stress = e->DoubleAttribute("stress", 0.0);
 		c->eval = e->DoubleAttribute("eval", 0.0);
-		c->name = e->Attribute("name", "");
+		c->name = xmlAttrOr(*e, "name", "");
 		c->bankCount = (int8_t)e->IntAttribute("bankCount", 0);
 		c->bankTotal = (int16_t)e->IntAttribute("bankTotal", 0);
 		c->visited = true;

@@ -22,6 +22,7 @@ namespace OT
 			}
 			virtual ~YootCondo();
 			virtual int disasterSaleReversal() const override { return occupied ? rentDeposit : 0; }
+			virtual int demolitionBuyout() const override { return occupied ? rentDeposit : 0; }
 			virtual void evacuateForDisaster() override;
 
 			enum LightingConditions

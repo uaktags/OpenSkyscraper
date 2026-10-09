@@ -64,7 +64,7 @@ struct RulesProfile
 	int startRating = 0;          ///< zero-based (displayed stars - 1)
 	int startDay = 0;             ///< absolute day index of a new tower's clock
 	int lobbyHeight = 1;          ///< default lobby height (no modifier keys)
-	int lowestFloor = -9;         ///< inclusive (B9 in SimTower/OpenSky)
+	int lowestFloor = -10;        ///< inclusive (B10 in SimTower/OpenSky; shafts stop at B9)
 	int highestFloor = INT_MAX;   ///< inclusive
 
 	bool hasBuildArea = false;    ///< YootTower WORLDDEF build-area RECT

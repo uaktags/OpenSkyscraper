@@ -29,7 +29,6 @@ namespace OT {
 			static const int kMaxElevatorShafts = kMaxShafts;
 			static const int kNonExpressMaxSpan = 30;
 			static const int kShaftClearanceCells = 8;
-			static const int kMetroClearanceFloors = 1;
 			static const int kScheduleDays = 2;
 			static const int kSchedulePeriods = 6;
 			static const int kSchedulePeriodCount = 7; // sixth editable + hidden night slot

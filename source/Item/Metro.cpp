@@ -1,4 +1,5 @@
 #include "../Game.h"
+#include "../XmlUtil.h"
 #include "../Math/Rand.h"
 #include "../NameManager.h"
 #include "../Time.h"
@@ -93,7 +94,7 @@ void Metro::decodeXML(tinyxml2::XMLElement &xml)
 	lastVisitorDay = xml.IntAttribute("lastVisitorDay", static_cast<int>(std::floor(game->time.absolute)));
 	clearAllVisitors();
 	{
-		std::string slots = xml.Attribute("slots", "");
+		std::string slots = xmlAttrOr(xml, "slots", "");
 		for (int k = 0; k < kPoolSize; ++k) slotUsed[k] = k < int(slots.size()) && slots[k] == '1';
 	}
 	for (tinyxml2::XMLElement *e = xml.FirstChildElement("visitor"); e; e = e->NextSiblingElement("visitor")) {
@@ -109,9 +110,9 @@ void Metro::decodeXML(tinyxml2::XMLElement &xml)
 		v->slot = e->IntAttribute("slot", -1);
 		v->member = v->slot;
 		v->eval = e->DoubleAttribute("eval", 0.0);
-		v->name = e->Attribute("name", "");
-		v->from = e->Attribute("from", "");
-		v->goingTo = e->Attribute("goingTo", "");
+		v->name = xmlAttrOr(*e, "name", "");
+		v->from = xmlAttrOr(*e, "from", "");
+		v->goingTo = xmlAttrOr(*e, "goingTo", "");
 		visitors.insert(v);
 	}
 	updateSprite();

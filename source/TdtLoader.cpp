@@ -81,7 +81,9 @@ namespace Tdt {
 			case 11: *id = "parking";       return true;
 			case 13: *id = "medicalcenter"; return true;
 			case 14: *id = "security";      return true;
+			case 10: *id = "shop";          return true;
 			case 17: *id = "secom";         return true; // cut 1994 feature; closest match
+			case 44: *id = "parkingramp";   return true; // parking ramp (not the metro tunnel; 45 stays skipped)
 			default: return false;
 		}
 	}
@@ -391,6 +393,8 @@ namespace Tdt {
 		std::vector<PartRef> parts;
 		std::vector<std::pair<int,int> > skippedTypes; // (tdt type, count)
 		int constructionSites = 0;
+		std::vector<std::pair<int,int> > burnedRows; // (our floor, ...) paired with burnedSpan below
+		std::vector<std::pair<int,int> > burnedSpan; // [left, right) in our x, parallel to burnedRows
 
 		auto noteSkipped = [&](int type)
 		{
@@ -463,10 +467,14 @@ namespace Tdt {
 					continue;
 				}
 
-				if (type == 10) { noteSkipped(10); continue; }  // retail shop: no item in our catalog yet
 				if (type == 15) { noteSkipped(15); continue; }  // housekeeping room: cleaning is automatic here
-				if (type == 44 || type == 45) { noteSkipped(type); continue; } // parking ramp / metro tunnel
-				if (type == 48) { noteSkipped(48); continue; }  // burned area
+				if (type == 45) { noteSkipped(type); continue; } // ground strips / metro tunnel
+				if (type == 48) // burned area: becomes a burned span (rubble) the player bulldozes
+				{
+					burnedRows.push_back(std::make_pair(y, 0));
+					burnedSpan.push_back(std::make_pair(tn.left - X_ORIGIN, tn.right - X_ORIGIN));
+					continue;
+				}
 				noteSkipped(type);
 			}
 		}
@@ -558,6 +566,32 @@ namespace Tdt {
 					xml += buf; xml += "\n"; emittedItems++;
 				}
 			}
+		}
+
+		// Burned areas -> EventSystem rubble tiles + recorded spans, stored as
+		// root attributes (key = (floor + 1000) * 100000 + x + 1000, as
+		// EventSystem::encodeTile).
+		if (!burnedRows.empty())
+		{
+			std::string rubble, spans;
+			for (size_t i = 0; i < burnedRows.size(); i++)
+			{
+				const int floor = burnedRows[i].first;
+				const int left = burnedSpan[i].first, right = burnedSpan[i].second;
+				if (right <= left) continue;
+				snprintf(buf, sizeof(buf), "%d %d %d ", floor, left, right);
+				spans += buf;
+				for (int cx = left; cx < right; cx++)
+				{
+					snprintf(buf, sizeof(buf), "%ld ", (long)(floor + 1000) * 100000L + (cx + 1000));
+					rubble += buf;
+				}
+			}
+			const size_t gt = xml.find('>');
+			if (gt != std::string::npos && !spans.empty())
+				xml.insert(gt, " eventRubble=\"" + rubble + "\" eventBurnedSpans=\"" + spans + "\"");
+			snprintf(buf, sizeof(buf), "%d burned area(s) were imported as rubble.", (int)burnedRows.size());
+			report.push_back(buf);
 		}
 
 		// Aggregated fidelity report.

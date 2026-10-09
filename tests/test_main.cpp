@@ -2472,6 +2472,14 @@ static std::vector<uint8_t> buildTdtFixture()
 			putTenant(tenants, 170, 175, 15, 0);
 			putTenant(tenants, 120, 129, 6, 4);
 		}
+		else if (f == 14) // parking ramp + burned area
+		{
+			putTenant(tenants, 40, 56, 44, 0);
+			putTenant(tenants, 20, 30, 48, 0);
+		}
+		else if (f == 16) putTenant(tenants, 80, 105, 20, 0); // recycling part 1
+		else if (f == 17) putTenant(tenants, 80, 105, 21, 0); // recycling part 2
+		else if (f == 18) putTenant(tenants, 90, 100, 45, 0); // ground strips (stay skipped)
 		else if (f == 12) putTenant(tenants, 60, 91, 18, 0); // cinema top half
 		else if (f == 13) putTenant(tenants, 60, 91, 19, 0); // cinema bottom half
 		else if (f == 20) putTenant(tenants, 50, 79, 31, 0); // metro part 1
@@ -2595,16 +2603,28 @@ static void testTdtLoader()
 		if (report[i].find("Steak House") != std::string::npos) sawSteak = true;
 	EXPECT(sawSteak);
 
-	// Fidelity report: construction site imported finished, shop + housekeeping skipped.
-	bool sawConstruction = false, sawShop = false, sawHousekeeping = false;
+	// Batch 6: shop (10), ramp (44), recycling (20/21) import; burned area (48)
+	// becomes a burned span plus rubble tiles; type 45 (ground strips) stays skipped.
+	EXPECT(xml.find("type=\"shop\" x=\"-37\" y=\"1\"") != std::string::npos);
+	EXPECT(xml.find("type=\"parkingramp\" x=\"-147\" y=\"4\"") != std::string::npos);
+	EXPECT(xml.find("type=\"recycling\" x=\"-107\" y=\"6\"") != std::string::npos);
+	EXPECT(xml.find("eventBurnedSpans=\"4 -167 -157 \"") != std::string::npos);
+	EXPECT(xml.find("eventRubble=\"100400833 ") != std::string::npos);
+	EXPECT(xml.find("type=\"office\" x=\"-167\" y=\"4\"") == std::string::npos);
+
+	// Fidelity report: construction site imported finished, housekeeping and ground strips skipped.
+	bool sawConstruction = false, sawShop = false, sawHousekeeping = false, saw45 = false, sawBurned = false;
 	for (size_t i = 0; i < report.size(); i++)
 	{
 		if (report[i].find("under construction") != std::string::npos) sawConstruction = true;
-		if (report[i].find("kind 10") != std::string::npos) sawShop = true;
+		if (report[i].find("kind 10") != std::string::npos || report[i].find("kind 44") != std::string::npos ||
+		    report[i].find("kind 48") != std::string::npos) sawShop = true;
 		if (report[i].find("kind 15") != std::string::npos) sawHousekeeping = true;
+		if (report[i].find("kind 45") != std::string::npos) saw45 = true;
+		if (report[i].find("burned area") != std::string::npos) sawBurned = true;
 	}
-	EXPECT(sawConstruction && sawShop && sawHousekeeping);
-	if (!(sawConstruction && sawShop && sawHousekeeping))
+	EXPECT(sawConstruction && !sawShop && sawHousekeeping && saw45 && sawBurned);
+	if (!(sawConstruction && !sawShop && sawHousekeeping && saw45 && sawBurned))
 	{
 		for (size_t i = 0; i < report.size(); i++)
 			std::cerr << "report: " << report[i] << "\n";
@@ -2684,7 +2704,7 @@ static void testRulesProfileSeam()
 		EXPECT(p.startRating == 0);
 		EXPECT(p.startDay == 0);
 		EXPECT(p.lobbyHeight == 1);
-		EXPECT(p.lowestFloor == -9);
+		EXPECT(p.lowestFloor == -10);
 		EXPECT(!p.hasBuildArea);
 		EXPECT(!p.yootWorld);
 		EXPECT(!p.linearClock);
@@ -3336,6 +3356,7 @@ static int testDisasterScenarios() {
 #undef private
 
 static void testBatch5Engine(OT::Game &g);
+static void testBatch6Placement(OT::Game &g);
 static void testElevatorDispatch()
 {
  if (!graphicsScenariosAvailable()) {
@@ -3641,6 +3662,7 @@ static void testElevatorDispatch()
  g.elevatorDialog.currentElevator=nullptr;
  riders.clear(); g.clearWorld();
  testBatch5Engine(g);
+ testBatch6Placement(g);
  std::cout<<"Batch 4 C++ transport scenarios completed\n";
 }
 #endif
@@ -4104,6 +4126,195 @@ static void testBatch5Engine(OT::Game &g)
  }
  g.clearWorld();
  std::cout<<"Batch 5 C++ engine scenarios completed\n";
+}
+
+// Batch 6: build/placement rules, demolish rules, grand-lobby height lock.
+static void testBatch6Placement(OT::Game &g)
+{
+ using namespace OT;
+ auto reset=[&]() {
+  g.clearWorld(); g.money.clear(20000000); g.funds=20000000; g.rating=5;
+  struct Clock : Time { using Time::set; };
+  Clock clock; clock.set(3.0+Time::hourToAbsolute(12)); g.time=clock;
+ };
+ auto make=[&](const char *id,int x,int y) {
+  auto *item=g.itemFactory.make(id,int2(x,y)); g.addItem(item); item->underConstruction=false; return item;
+ };
+ std::string msg;
+ auto place=[&](const char *id,int x,int y) {
+  g.toolPrototype=g.itemFactory.prototypesById.at(id); g.timeWindow.message.clear();
+  const bool ok=g.constructToolAt(int2(x,y)); msg=g.timeWindow.message; return ok;
+ };
+ auto rejects=[&](const char *id,int x,int y,const char *text) {
+  const bool ok=place(id,x,y);
+  const bool match=!ok && msg.find(text)!=std::string::npos;
+  if (!match) std::cerr<<"B6 reject mismatch: "<<id<<" at "<<x<<","<<y<<" ok="<<ok<<" msg='"<<msg<<"' want '"<<text<<"'\n";
+  return match;
+ };
+ auto accepts=[&](const char *id,int x,int y) {
+  const bool ok=place(id,x,y);
+  if (!ok) std::cerr<<"B6 accept failed: "<<id<<" at "<<x<<","<<y<<" msg='"<<msg<<"'\n";
+  return ok;
+ };
+
+ // B1: ceiling F100, basements to B10, shafts stop at B9.
+ reset(); g.extendFloor(99,-20,20);
+ EXPECT(accepts("office",0,100));
+ EXPECT(rejects("office",0,101,"Maximum height has been reached"));
+ reset(); g.extendFloor(-9,-20,20);
+ EXPECT(accepts("fastfood",0,-10));
+ reset(); g.extendFloor(-10,-20,20);
+ EXPECT(rejects("fastfood",0,-11,"Maximum height has been reached"));
+ EXPECT(rejects("elevator-standard",0,-10,"Elevators cannot go below B9"));
+
+ // B2: cathedral only on floor 100, only one.
+ reset(); g.extendFloor(99,-60,120);
+ EXPECT(rejects("cathedral",0,99,"Cathedral is available only on 100th floor"));
+ EXPECT(accepts("cathedral",0,100));
+ EXPECT(rejects("cathedral",60,100,"Only one Cathedral allowed"));
+
+ // B3: underground-only / not-underground classes; cinema now allowed above ground.
+ reset(); g.extendFloor(1,-40,40); g.extendFloor(-1,-60,60); g.extendFloor(0,-60,60);
+ EXPECT(rejects("parking",0,1,"Item unavailable above ground"));
+ EXPECT(rejects("recycling",0,1,"Item unavailable above ground"));
+ EXPECT(rejects("metro",0,1,"Item unavailable above ground"));
+ EXPECT(rejects("parkingramp",0,1,"Item unavailable above ground"));
+ EXPECT(rejects("office",0,-2,"Item not available underground"));
+ EXPECT(rejects("condo",0,-2,"Item not available underground"));
+ EXPECT(rejects("hotel_single",0,-2,"Item not available underground"));
+ EXPECT(accepts("cinema",0,2));
+ // Recycling after the first must sit within 25 cells (floors -2..+1) of an existing center.
+ reset(); g.extendFloor(-1,-100,100);
+ EXPECT(accepts("recycling",0,-3));
+ EXPECT(rejects("recycling",60,-3,"Must be placed near an existing Recycling Center")); // gap 36 > 25
+ EXPECT(accepts("recycling",45,-3)); // gap 21 is inside the envelope
+
+ // B4: metro on the bottom floor; nothing at or below it (no elevator exemption).
+ reset(); g.extendFloor(-4,-60,60); g.extendFloor(-1,-60,60);
+ make("fastfood",50,-6);
+ EXPECT(rejects("metro",0,-4,"Place Metro station on bottom floor"));
+ reset(); g.extendFloor(-7,-100,100); g.extendFloor(-8,-100,100);
+ EXPECT(accepts("metro",0,-10));
+ EXPECT(rejects("fastfood",50,-10,"Cannot place items under Metro"));
+ EXPECT(rejects("metro",60,-10,"Only one Metro Station allowed"));
+ EXPECT(g.metroStation && !static_cast<Item::Elevator::Elevator *>(make("elevator-standard",100,-9))->canResizeTo(-10,3));
+ EXPECT(g.metroStation && static_cast<Item::Elevator::Elevator *>(make("elevator-standard",120,-9))->canResizeTo(-9,3));
+
+ // B5: count caps.
+ reset(); g.extendFloor(2,-100,100);
+ for (int i=0;i<10;++i) make("cinema",i*40,10+i*3);
+ for (int i=0;i<6;++i) make("partyhall",i*30,60+i*3);
+ EXPECT(rejects("cinema",0,3,"Item no longer available"));
+ reset(); g.extendFloor(1,-100,100);
+ for (int i=0;i<10;++i) make("medicalcenter",i*40,30+i);
+ for (int i=0;i<10;++i) make("security",i*20,60+i);
+ EXPECT(rejects("medicalcenter",0,2,"Item no longer available"));
+ EXPECT(rejects("security",0,2,"Item no longer available"));
+ reset(); g.extendFloor(1,-100,100);
+ for (int i=0;i<300;++i) make("fastfood",0,2);
+ for (int i=0;i<212;++i) make("shop",0,2);
+ EXPECT(rejects("restaurant",0,2,"Item no longer available"));
+ EXPECT(rejects("shop",0,2,"Item no longer available"));
+ reset(); g.extendFloor(0,-100,100);
+ for (int i=0;i<64;++i) make(i%2?"stairs":"escalator",-300+i*10,2);
+ EXPECT(rejects("stairs",0,3,"No more stairs available"));
+ reset(); g.extendFloor(0,-100,100);
+ for (int i=0;i<512;++i) make("parking",0,-1);
+ EXPECT(rejects("parking",0,-1,"Item no longer available"));
+
+ // B6: bays need a ramp on their floor; ramps chain down from B1 at the same x.
+ reset(); g.extendFloor(0,-60,60); g.extendFloor(-1,-60,60);
+ EXPECT(rejects("parking",20,-1,"Parking Ramps must be placed on this level"));
+ EXPECT(rejects("parkingramp",0,-2,"Parking Ramps must connect to the 1st floor"));
+ EXPECT(accepts("parkingramp",0,-1));
+ EXPECT(rejects("parkingramp",0,-3,"Parking Ramps must connect to the 1st floor"));
+ EXPECT(rejects("parkingramp",16,-2,"Parking Ramps must be connected vertically"));
+ EXPECT(rejects("parkingramp",16,-1,"This floor already has a Parking Ramp"));
+ EXPECT(rejects("parkingramp",0,-1,"This floor already has a Parking Ramp"));
+ EXPECT(accepts("parkingramp",0,-2));
+ EXPECT(accepts("parking",20,-1));
+
+ // Downward ramp: B2 with only a B3 ramp is not on the chain from B1.
+ reset(); g.extendFloor(-2,-60,60); g.extendFloor(-3,-60,60); make("parkingramp",0,-3);
+ EXPECT(rejects("parkingramp",0,-2,"Parking Ramps must connect to the 1st floor"));
+
+ // Cap recovery: at the 16-venue cap, bulldozing one frees a slot.
+ reset(); g.extendFloor(2,-100,100);
+ Item::Item *venue=nullptr;
+ for (int i=0;i<16;++i) { auto *v=make("cinema",i*40,10+i*3); if(i==0) venue=v; }
+ EXPECT(rejects("cinema",0,3,"Item no longer available"));
+ EXPECT(g.bulldozeItem(venue));
+ EXPECT(accepts("cinema",0,3));
+
+ // B7: an express segment touching its own column is allowed off a sky-lobby floor.
+ reset(); g.extendFloor(13,-20,20);
+ EXPECT(accepts("elevator-express",0,14));
+ EXPECT(accepts("elevator-express",0,15));
+ EXPECT(rejects("elevator-express",40,16,"New express shafts anchor at lobby floors"));
+
+ // B8: indestructible items, items under construction, condo buyout.
+ reset();
+ const char *fixed[]={"lobby","security","housekeeping","cathedral","metro"};
+ for (const char *id : fixed) {
+  auto *it=make(id,0,id[0]=='m'?-10:(id[0]=='l'?0:1));
+  g.timeWindow.message.clear();
+  EXPECT(!g.bulldozeItem(it)); EXPECT(g.items.count(it)==1);
+  EXPECT(g.timeWindow.message=="Cannot destroy this item");
+ }
+ reset(); g.extendFloor(0,-20,20);
+ auto *site=make("office",0,1); site->underConstruction=true;
+ g.timeWindow.message.clear();
+ EXPECT(!g.bulldozeItem(site)); EXPECT(g.timeWindow.message=="Cannot destroy items under construction");
+ site->underConstruction=false;
+ EXPECT(g.bulldozeItem(site)); EXPECT(g.items.count(site)==0);
+ auto *condo=static_cast<Item::Condo *>(make("condo",0,2));
+ condo->tenant.rentClass=1; condo->occupied=true;
+ const int buyout=condo->demolitionBuyout(); const int before=g.money.balance;
+ EXPECT(buyout>0); EXPECT(g.bulldozeItem(condo));
+ EXPECT(g.money.balance==before-buyout);
+ auto *vacant=static_cast<Item::Condo *>(make("condo",20,2));
+ const int before2=g.money.balance; EXPECT(g.bulldozeItem(vacant)); EXPECT(g.money.balance==before2);
+
+ // B9: the first ground-lobby build click locks the grand-lobby height.
+ reset(); EXPECT(g.lobbyHeightLock==0);
+ g.money.clear(0); g.funds=0;
+ EXPECT(!place("lobby",0,0)); // unaffordable, but the choice is still made
+ EXPECT(g.lobbyHeightLock==g.activeRules.profile().lobbyHeight);
+ reset(); g.lobbyHeightLock=3;
+ EXPECT(g.lobbyToolHeight()==3);
+ EXPECT(accepts("lobby",0,0));
+ bool tall=false; for (auto *it : g.itemsByType["lobby"]) tall=it->size.y==3;
+ EXPECT(tall);
+ { tinyxml2::XMLPrinter pr; g.encodeXML(pr); EXPECT(std::string(pr.CStr()).find("lobbyHeightLock=\"3\"")!=std::string::npos); }
+ g.clearWorld(); EXPECT(g.lobbyHeightLock==0);
+ // Real-fixture TDT load (only where the Concilia fixture exists; never copied into the repo).
+ {
+  const std::string fixture="/tmp/concilia/repo/tests/fixtures/SCHMITT.TDT";
+  std::ifstream probe(fixture.c_str(), std::ios::binary);
+  if (!probe.good()) {
+   std::cout << "SKIP: real-fixture TDT load (" << fixture << " not present)\n";
+  } else {
+   Tdt::TdtData tdt; std::string err;
+   EXPECT(Tdt::loadFile(fixture, tdt, err));
+   int tdtFloors=0, tdtTenants=0;
+   for (const auto &fr : tdt.floors) for (const auto &tn : fr.tenants) { if (tn.type==0) ++tdtFloors; else ++tdtTenants; }
+   std::vector<std::string> report; const std::string xml=Tdt::toTowerXml(tdt, report);
+   auto occurrences=[&](const std::string &needle) { int n=0; for (size_t at=xml.find(needle); at!=std::string::npos; at=xml.find(needle,at+1)) ++n; return n; };
+   EXPECT(tdtFloors>0 && tdtTenants>0);
+   EXPECT(occurrences("type=\"floor\"")==tdtFloors);
+   EXPECT(occurrences("<item type=\"")>=tdtFloors+1);
+   const int ramps=occurrences("type=\"parkingramp\""), bays=occurrences("type=\"parking\"");
+   tinyxml2::XMLDocument doc; EXPECT(doc.Parse(xml.c_str(), xml.size())==tinyxml2::XML_SUCCESS);
+   reset(); g.decodeXML(doc);
+   EXPECT((int)g.itemsByType["parkingramp"].size()==ramps);
+   Item::Parking::recomputeAllChains(&g);
+   bool rampOnB1=false; for (auto *r : g.itemsByType["parkingramp"]) if (r->position.y==-1) rampOnB1=true;
+   int usable=0; for (auto *p : g.itemsByType["parking"]) usable+=static_cast<Item::Parking *>(p)->usableSpaces();
+   std::cout << "SCHMITT.TDT: floors=" << tdtFloors << " tenants=" << tdtTenants << " ramps=" << ramps << " bays=" << bays << " usable=" << usable << "\n";
+   if (ramps>0 && bays>0 && rampOnB1) EXPECT(usable>0);
+  }
+ }
+ std::cout << "Batch 6 C++ placement scenarios completed\n";
 }
 #endif
 

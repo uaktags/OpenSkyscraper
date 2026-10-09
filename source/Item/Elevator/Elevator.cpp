@@ -74,7 +74,7 @@ bool Elevator::canResizeTo(int bottom, int height) const
 	if (height < 1) return false;
 	if (!isExpress() && height > kNonExpressMaxSpan) return false;
 	if (bottom <= -10) return false;
-	if (game->metroStation && bottom < game->metroStation->position.y - kMetroClearanceFloors)
+	if (game->metroStation && bottom <= game->metroStation->position.y)
 		return false;
 
 	Game::ItemSetByString::const_iterator group = game->itemsByType.find("elevator");

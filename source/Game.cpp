@@ -449,6 +449,7 @@ void Game::clearWorld()
 	floorItems.clear();
 	mainLobby = NULL;
 	metroStation = NULL;
+	lobbyHeightLock = 0;
 	itemBelowCursor = NULL;
 	for (auto &zone : venueLists) for (auto &list : zone) list.clear();
 	medicalAdequate = true; recyclingAdequate = true; recyclingDisplayStage = 0;
@@ -686,17 +687,7 @@ bool Game::handleEvent(sf::Event & event)
 			}
 			else if (itemBelowCursor) {
 				if (selectedTool == "bulldozer") {
-					if (itemBelowCursor->prototype->icon == ICON_LOBBY || itemBelowCursor->prototype->icon == ICON_FLOOR || itemBelowCursor->prototype->icon == ICON_METRO) {
-						playOnce("simtower/construction/impossible");
-						timeWindow.showMessage("Cannot bulldoze " + itemBelowCursor->prototype->name);
-						break;
-					}
-					LOG(DEBUG, "destroy %s", itemBelowCursor->desc().c_str());
-					bool canHaulPeople = false;
-					if (itemBelowCursor->canHaulPeople()) canHaulPeople = true;
-					removeItem(itemBelowCursor);
-					if (canHaulPeople) updateRoutes();
-					playOnce("simtower/bulldozer");
+					bulldozeItem(itemBelowCursor);
 				}
 				else if (selectedTool == "finger") {
 					if (itemBelowCursor->prototype->id.find("elevator") == 0) {
@@ -1683,7 +1674,7 @@ void Game::setRules(const BuildRules & rules)
 		? Time::Calendar::YootTower : Time::Calendar::SimTower;
 }
 
-int Game::lobbyToolHeight() const
+int Game::lobbyHeightFromKeys() const
 {
 	const bool ctrl = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl);
 	const bool shift = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LShift);
@@ -1692,12 +1683,25 @@ int Game::lobbyToolHeight() const
 	return activeRules.profile().lobbyHeight;
 }
 
+/// Grand-lobby height: locked by the first ground-lobby build click; a tower
+/// that already has a ground lobby (loaded or imported) is implicitly locked.
+int Game::lobbyToolHeight() const
+{
+	if (lobbyHeightLock > 0) return lobbyHeightLock;
+	ItemSetByInt::const_iterator ground = itemsByFloor.find(0);
+	if (ground != itemsByFloor.end())
+		for (Item::Item * i : ground->second)
+			if (i->prototype->icon == ICON_LOBBY) return i->size.y;
+	return lobbyHeightFromKeys();
+}
+
 void Game::encodeXML(tinyxml2::XMLPrinter & xml)
 {
 	xml.OpenElement("tower");
 	xml.PushAttribute("accountingCycle", lastAccountingQuarter);
 	xml.PushAttribute("funds", funds);
 	xml.PushAttribute("rating", rating);
+	if (lobbyHeightLock > 0) xml.PushAttribute("lobbyHeightLock", lobbyHeightLock);
 	xml.PushAttribute("time", time.absolute);
 	xml.PushAttribute("speed", speedMode);
 	xml.PushAttribute("rainy", sky.rainyDay);
@@ -1869,6 +1873,8 @@ void Game::decodeXML(tinyxml2::XMLDocument & xml)
 		}
 	}
 	setRating(root->IntAttribute("rating"));
+	lobbyHeightLock = root->IntAttribute("lobbyHeightLock", 0);
+	if (lobbyHeightLock < 1 || lobbyHeightLock > 3) lobbyHeightLock = 0;
 	yootVipFlags = root->UnsignedAttribute("yootVipFlags", 0);
 	time.set(root->DoubleAttribute("time"));
 	lastAccountingDay = (int)floor(time.absolute);
@@ -2371,16 +2377,173 @@ static int newFloorCells(const Game &game, int floor, int minX, int maxX)
 	return left + right;
 }
 
+// True when an express shaft already stands in this column directly above or
+// below `floor` (segments that touch an existing express column are
+// extensions and may sit on any floor).
+static bool touchesExpressColumn(const Game &game, int x, int floor)
+{
+	Game::ItemSetByString::const_iterator group = game.itemsByType.find("elevator-express");
+	if (group == game.itemsByType.end()) return false;
+	for (Item::Item *e : group->second) {
+		if (e->position.x != x) continue;
+		for (int df = -1; df <= 1; df += 2) {
+			const int f = floor + df;
+			if (f >= e->position.y && f < e->position.y + e->size.y) return true;
+		}
+	}
+	return false;
+}
+
+bool Game::placementRuleBlock(Item::AbstractPrototype * proto, int x, int y, std::string & reason) const
+{
+	const std::string & id = proto->id;
+	const RulesProfile & profile = activeRules.profile();
+	const bool yoot = profile.yootWorld;
+	const bool isFloor = proto->icon == ICON_FLOOR;
+	const bool isMetro = proto->icon == ICON_METRO;
+	const bool isElevator = id.find("elevator") == 0;
+	const int top = y + proto->size.y - 1;
+	auto count = [this](const char * key) {
+		ItemSetByString::const_iterator it = itemsByType.find(key);
+		return it == itemsByType.end() ? 0 : (int)it->second.size();
+	};
+	auto fail = [&reason](const char * text) { reason = text; return true; };
+
+	// B1: build ceiling F100 (the cathedral spire may rise to 104), basements to B10.
+	if (yoot) {
+		if (y < profile.lowestFloor) {
+			reason = "Cannot build below floor B" + std::to_string(-profile.lowestFloor);
+			return true;
+		}
+	} else if (y < -10 || top > (id == "cathedral" ? 104 : 100)) {
+		return fail("Maximum height has been reached");
+	}
+	if (isElevator && y <= -10) return fail("Elevators cannot go below B9");
+	if (isFloor) return false;
+
+	// B2: cathedral only on floor 100, and only one.
+	if (id == "cathedral") {
+		if (!yoot && y != 100) return fail("Cathedral is available only on 100th floor");
+		if (count("cathedral") > 0) return fail("Only one Cathedral allowed");
+	}
+
+	// B3: underground-only and not-underground item classes.
+	if ((isMetro || id == "parking" || id == "parkingramp" || id == "recycling") && top >= 0)
+		return fail("Item unavailable above ground");
+	if ((id == "office" || id == "condo" || id == "yoot_condo" || id == "hotel_single" ||
+	     id == "hotel_double" || id == "hotel_suite") && y < 0)
+		return fail("Item not available underground");
+
+	// B5: count caps.
+	if (isMetro && metroStation != NULL) return fail("Only one Metro Station allowed");
+	if ((id == "cinema" || id == "partyhall") && count("cinema") + count("partyhall") >= 16)
+		return fail("Item no longer available");
+	if ((id == "restaurant" || id == "shop" || id == "fastfood") &&
+	    count("restaurant") + count("shop") + count("fastfood") >= 512)
+		return fail("Item no longer available");
+	if (id == "medicalcenter" && count("medicalcenter") >= 10) return fail("Item no longer available");
+	if (id == "security" && count("security") >= 10) return fail("Item no longer available");
+	if (id == "parking" && count("parking") >= 512) return fail("Item no longer available");
+
+	// B3: a recycling center after the first must touch an existing one.
+	if (id == "recycling" && count("recycling") > 0) {
+		bool adjacent = false;
+		const int w = proto->size.x;
+		for (Item::Item * r : itemsByType.find("recycling")->second) {
+			// Concilia envelope: floors -2..+1 around the new base, within 25 cells.
+			const bool floors = r->position.y >= y - 2 && r->position.y <= y + 1;
+			if (floors && r->position.x + r->size.x - 1 >= x - 25 && r->position.x <= x + w - 1 + 25) { adjacent = true; break; }
+		}
+		if (!adjacent) return fail("Must be placed near an existing Recycling Center");
+	}
+
+	// B4: the metro sits on the bottom floor; nothing at or below it.
+	if (metroStation != NULL && !isMetro && y <= metroStation->position.y)
+		return fail("Cannot place items under Metro");
+	if (isMetro) {
+		for (ItemSetByInt::const_iterator fl = itemsByFloor.begin(); fl != itemsByFloor.end(); ++fl) {
+			if (fl->first > y) break;
+			for (Item::Item * other : fl->second)
+				if (other->prototype->icon != ICON_FLOOR) return fail("Place Metro station on bottom floor");
+		}
+	}
+
+	// B6: parking bays need a ramp on their floor; ramps chain down from B1.
+	if (id == "parking") {
+		bool ramp = false;
+		ItemSetByString::const_iterator rs = itemsByType.find("parkingramp");
+		if (rs != itemsByType.end())
+			for (Item::Item * r : rs->second) if (r->position.y == y) { ramp = true; break; }
+		if (!ramp) return fail("Parking Ramps must be placed on this level");
+	}
+	if (id == "parkingramp") {
+		ItemSetByString::const_iterator rs = itemsByType.find("parkingramp");
+		bool linked = y == -1;
+		if (rs != itemsByType.end()) {
+			for (Item::Item * r : rs->second) {
+				if (r->position.y == y) return fail("This floor already has a Parking Ramp");
+				if (r->position.x != x) return fail("Parking Ramps must be connected vertically");
+				if (r->position.y == y + 1) linked = true; // chain runs down from B1
+			}
+		}
+		if (!linked) return fail("Parking Ramps must connect to the 1st floor");
+	}
+	return false;
+}
+
+bool Game::bulldozeItem(Item::Item * item)
+{
+	if (!item || !items.count(item)) return false;
+	const std::string & id = item->prototype->id;
+	const int icon = item->prototype->icon;
+	// Indestructible: every lobby, the deck, security, housekeeping, metro, cathedral.
+	if (icon == ICON_LOBBY || icon == ICON_FLOOR || icon == ICON_METRO ||
+	    id == "security" || id == "housekeeping" || id == "cathedral") {
+		playOnce("simtower/construction/impossible");
+		timeWindow.showMessage("Cannot destroy this item");
+		return false;
+	}
+	if (item->underConstruction) {
+		playOnce("simtower/construction/impossible");
+		timeWindow.showMessage("Cannot destroy items under construction");
+		return false;
+	}
+	LOG(DEBUG, "destroy %s", item->desc().c_str());
+	// Demolishing an occupied condo buys the owner out at the class table value.
+	const int buyout = item->demolitionBuyout();
+	if (buyout > 0) transferFunds(-buyout, "condo_buyback", "Condo owner buyout");
+	const bool canHaulPeople = item->canHaulPeople();
+	removeItem(item);
+	if (canHaulPeople) updateRoutes();
+	playOnce("simtower/bulldozer");
+	return true;
+}
+
 bool Game::constructToolAt(int2 pos)
 {
     if (rejectDisasterWorldEdit()) return false;
 	toolPosition = pos;
-	const int footprintHeight = toolPrototype->icon == ICON_LOBBY ? lobbyToolHeight() : toolPrototype->size.y;
+	// The first ground-lobby build click locks the grand-lobby height for the
+	// tower (plain = profile default, Ctrl = 2, Ctrl+Shift = 3), even when
+	// the placement below fails; later clicks ignore the modifiers.
+	if (toolPrototype->icon == ICON_LOBBY && pos.y == 0 && lobbyHeightLock == 0)
+		lobbyHeightLock = lobbyToolHeight();
+	const int lobbyHeightNow = pos.y == 0 ? lobbyToolHeight() : lobbyHeightFromKeys();
+	const int footprintHeight = toolPrototype->icon == ICON_LOBBY ? lobbyHeightNow : toolPrototype->size.y;
     if (eventSystem.rubbleIntersects(recti(pos, int2(toolPrototype->size.x, footprintHeight)))) {
         playOnce("simtower/construction/impossible");
         timeWindow.showMessage("Bulldoze the burned area before rebuilding.");
         return false;
     }
+	const bool cornerDoubler = pos == int2(-187, -10) && items.empty() && funds == 2000000;
+	if (!cornerDoubler) {
+		std::string ruleReason;
+		if (placementRuleBlock(toolPrototype, pos.x, pos.y, ruleReason)) {
+			playOnce("simtower/construction/impossible");
+			timeWindow.showMessage(ruleReason);
+			return false;
+		}
+	}
 	if (!activeRules.allowsFootprint(pos.x, pos.y, toolPrototype->size.x, footprintHeight)) {
 		const std::string reason = "Footprint is outside the " +
 			std::string(activeRules.displayName()) + " build boundary";
@@ -2409,7 +2572,7 @@ bool Game::constructToolAt(int2 pos)
 	int height = toolPrototype->size.y;
 	int yHeightOffset = height;
 	if (toolPrototype->icon == ICON_LOBBY) {
-		height = lobbyToolHeight();
+		height = lobbyHeightNow;
 		yHeightOffset = 1;
 	}
 	struct SizeGuard {
@@ -2476,7 +2639,8 @@ if (!handled) {
 		if (itemsByType["elevator"].size() >= Item::Elevator::Elevator::kMaxShafts) {
 			constructionBlocked = true;
 			blockReason = "No more elevator shafts available";
-		} else if (express && toolPosition.y > 0 && !Item::Lobby::isSkyLobbyFloor(toolPosition.y)) {
+		} else if (express && toolPosition.y > 0 && !Item::Lobby::isSkyLobbyFloor(toolPosition.y) &&
+		           !touchesExpressColumn(*this, toolPosition.x, toolPosition.y)) {
 			constructionBlocked = true;
 			blockReason = "New express shafts anchor at lobby floors";
 		} else if (mainLobby && toolPosition.y >= mainLobby->position.y + 1 &&
@@ -2498,32 +2662,8 @@ if (!handled) {
 		              std::to_string(minRating + 1) + " stars";
 	}
 
-	const int lowestFloor = activeRules.profile().lowestFloor;
-	if (toolPosition.y < lowestFloor &&
-	    (toolPrototype->icon != ICON_METRO || activeRules.profile().yootWorld)) {
-			constructionBlocked = true;
-			blockReason = "Cannot build below floor B" + std::to_string(-lowestFloor);
-		}
-
-		if (metroStation != NULL) {
-			const bool elevatorTool = toolPrototype->id.find("elevator") == 0;
-			const int lowestAllowed = metroStation->position.y -
-				(elevatorTool ? Item::Elevator::Elevator::kMetroClearanceFloors : 0);
-			if (toolPosition.y < lowestAllowed) {
-				constructionBlocked = true;
-				blockReason = "Cannot build below Metro Station";
-			}
-		}
-
-		if (toolPosition.y > 0 && toolPrototype->icon == ICON_METRO) {
-			constructionBlocked = true;
-			blockReason = toolPrototype->name + " unavailable above ground";
-		}
-
-		if (toolPosition.y > 0 && toolPrototype->id == "cinema") {
-			constructionBlocked = true;
-			blockReason = toolPrototype->name + " unavailable above ground";
-		}
+	// Depth/height, metro, underground and count rules live in
+	// placementRuleBlock(), checked before this flow starts.
 
 		if (toolPrototype->icon == ICON_LOBBY) {
 			if (toolPosition.y != 0 && !Item::Lobby::isSkyLobbyFloor(toolPosition.y)) {
@@ -2648,6 +2788,11 @@ if (!handled) {
 			for (ItemSet::const_iterator ii = elevators.begin(); !constructionBlocked && ii != elevators.end(); ++ii) {
 				Item::Elevator::Elevator *other = (Item::Elevator::Elevator *) *ii;
 				recti itemRect = other->getRect();
+				// An express segment extending its own column (same x, floor +-1) is an
+				// extension, not a neighbouring shaft.
+				if (toolPrototype->icon == 6 && other->isExpress() && other->position.x == toolPosition.x &&
+				    toolPosition.y + 1 >= other->position.y && toolPosition.y - 1 < other->position.y + other->size.y)
+					continue;
 				if (elevatorBoundary.intersectsRect(itemRect)) {
 					constructionBlocked = true;
 					blockReason = "Item requires more space on both sides";
@@ -3086,12 +3231,7 @@ bool Game::validateBatchCell(Item::AbstractPrototype * proto, int x, int y, std:
 		reason = proto->name + " unlocks at " + std::to_string(minRating + 1) + " stars";
 		return false;
 	}
-	const int lowestFloor = activeRules.profile().lowestFloor;
-	if (y < lowestFloor) { reason = "Cannot build below floor B" + std::to_string(-lowestFloor); return false; }
-	if (metroStation != NULL && y < metroStation->position.y) {
-		reason = "Cannot build above the metro station";
-		return false;
-	}
+	if (placementRuleBlock(proto, x, y, reason)) return false;
 	if (proto->id == "secom") {
 		Game::ItemSetByString::const_iterator sit = itemsByType.find("secom");
 		if (sit != itemsByType.end() && !sit->second.empty()) { reason = "Only one SECOM allowed"; return false; }

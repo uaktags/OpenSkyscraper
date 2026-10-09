@@ -78,6 +78,8 @@ namespace OT {
 		static int visitsThisTick(Game * game, int period = 16, int phase = 0);
 		virtual void evacuateForDisaster() {}
 		virtual int disasterSaleReversal() const { return 0; }
+		/// Owner buyout debited when the bulldozer demolishes this unit (occupied condos).
+		virtual int demolitionBuyout() const { return 0; }
 		bool survivesDisaster() const;
 
 		/// Satisfaction score in [0, 100] maintained by JudgeSystem. Defaults
