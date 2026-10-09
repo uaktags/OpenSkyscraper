@@ -215,6 +215,9 @@ def tokyo_g5_large_elevator():
     t.row(0, -60, ['yt_coffee', 'yt_burger', 'yt_flower'])
     for y in (3, 9, 15, 21, 27, 33):
         offices(t, y, -120, 4)
+    # Visitors ride only to floors with a shop (a lobby shop needs no mover).
+    for y in (9, 21, 33):
+        t.add('yt_coffee', -60, y)
     return t
 
 
