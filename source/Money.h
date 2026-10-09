@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <map>
 #include <string>
 #include <vector>
@@ -11,11 +12,11 @@ namespace OT {
 	public:
 		struct DaySummary
 		{
-			int income;
-			int expenses;
-			std::map<std::string, int> totalsByCategory;
+			int64_t income;
+			int64_t expenses;
+			std::map<std::string, int64_t> totalsByCategory;
 
-			int net() const { return income - expenses; }
+			int64_t net() const { return income - expenses; }
 		};
 
 		Money()
@@ -24,7 +25,7 @@ namespace OT {
 		{
 		}
 
-		void clear(int newBalance = 0)
+		void clear(int64_t newBalance = 0)
 		{
 			balance = newBalance;
 			todayIncome = 0;
@@ -41,12 +42,12 @@ namespace OT {
 			quarterTotalsByCategory.clear();
 		}
 
-		void setBalance(int newBalance)
+		void setBalance(int64_t newBalance)
 		{
 			balance = newBalance;
 		}
 
-		void record(int amount, const std::string & category)
+		void record(int64_t amount, const std::string & category)
 		{
 			balance += amount;
 			todayTotalsByCategory[category] += amount;
@@ -92,38 +93,38 @@ namespace OT {
 			quarterTotalsByCategory.clear();
 		}
 
-		int todayNet() const { return todayIncome - todayExpenses; }
-		int yesterdayNet() const { return yesterdayIncome - yesterdayExpenses; }
-		int quarterNet() const { return quarterIncome - quarterExpenses; }
+		int64_t todayNet() const { return todayIncome - todayExpenses; }
+		int64_t yesterdayNet() const { return yesterdayIncome - yesterdayExpenses; }
+		int64_t quarterNet() const { return quarterIncome - quarterExpenses; }
 
-		int recentIncome() const
+		int64_t recentIncome() const
 		{
-			int total = todayIncome;
+			int64_t total = todayIncome;
 			for (std::vector<DaySummary>::const_iterator i = recentDays.begin(); i != recentDays.end(); i++)
 				total += i->income;
 			return total;
 		}
 
-		int recentExpenses() const
+		int64_t recentExpenses() const
 		{
-			int total = todayExpenses;
+			int64_t total = todayExpenses;
 			for (std::vector<DaySummary>::const_iterator i = recentDays.begin(); i != recentDays.end(); i++)
 				total += i->expenses;
 			return total;
 		}
 
-		int recentNet() const { return recentIncome() - recentExpenses(); }
+		int64_t recentNet() const { return recentIncome() - recentExpenses(); }
 
 		static const unsigned int kRecentDayLimit = 7;
 
-		int balance;
-		int todayIncome;
-		int todayExpenses;
-		std::map<std::string, int> todayTotalsByCategory;
+		int64_t balance;
+		int64_t todayIncome;
+		int64_t todayExpenses;
+		std::map<std::string, int64_t> todayTotalsByCategory;
 
-		int yesterdayIncome;
-		int yesterdayExpenses;
-		std::map<std::string, int> yesterdayTotalsByCategory;
+		int64_t yesterdayIncome;
+		int64_t yesterdayExpenses;
+		std::map<std::string, int64_t> yesterdayTotalsByCategory;
 
 		std::vector<DaySummary> recentDays;
 
@@ -131,10 +132,10 @@ namespace OT {
 		/// Read by the Finance window; quarterStartBalance is the balance at
 		/// the moment the quarter began (i.e. lastQuarterBalance of the
 		/// previous quarter).
-		int quarterStartBalance;
-		int lastQuarterBalance;
-		int quarterIncome;
-		int quarterExpenses;
-		std::map<std::string, int> quarterTotalsByCategory;
+		int64_t quarterStartBalance;
+		int64_t lastQuarterBalance;
+		int64_t quarterIncome;
+		int64_t quarterExpenses;
+		std::map<std::string, int64_t> quarterTotalsByCategory;
 	};
 }

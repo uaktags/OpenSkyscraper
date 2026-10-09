@@ -122,12 +122,12 @@ void FinanceWindow::setVisible(bool visible)
 	}
 }
 
-std::string FinanceWindow::formatMoney(int amount) const
+std::string FinanceWindow::formatMoney(int64_t amount) const
 {
 	char c[32];
 	bool neg = amount < 0;
-	int absAmt = std::abs(amount);
-	snprintf(c, 32, "$%i", absAmt);
+	int64_t absAmt = std::abs(amount);
+	snprintf(c, 32, "$%lld", (long long)absAmt);
 	std::string fmt(c);
 	for (int i = (int)fmt.length() - 3; i > 1; i -= 3)
 		fmt.insert(i, ",");
@@ -135,11 +135,11 @@ std::string FinanceWindow::formatMoney(int amount) const
 	return fmt;
 }
 
-int FinanceWindow::incomeForType(const std::string & protoId, int population,
+int64_t FinanceWindow::incomeForType(const std::string & protoId, int population,
                                  const std::map<std::string, int> & sharedPop) const
 {
-	int total = 0;
-	const std::map<std::string, int> & cats = game->money.quarterTotalsByCategory;
+	int64_t total = 0;
+	const std::map<std::string, int64_t> & cats = game->money.quarterTotalsByCategory;
 
 	for (std::map<std::string, std::vector<std::string>>::const_iterator it = kCategoryTypes.begin();
 	     it != kCategoryTypes.end(); ++it)
@@ -153,9 +153,9 @@ int FinanceWindow::incomeForType(const std::string & protoId, int population,
 			if (types[i] == protoId) { applies = true; break; }
 		if (!applies) continue;
 
-		std::map<std::string, int>::const_iterator cit = cats.find(cat);
+		std::map<std::string, int64_t>::const_iterator cit = cats.find(cat);
 		if (cit == cats.end()) continue;
-		int catTotal = cit->second;
+		int64_t catTotal = cit->second;
 
 		if (types.size() == 1)
 		{
@@ -172,7 +172,7 @@ int FinanceWindow::incomeForType(const std::string & protoId, int population,
 				if (sp != sharedPop.end()) totalPop += sp->second;
 			}
 			if (totalPop > 0)
-				total += (int)((double)catTotal * population / totalPop);
+				total += (int64_t)((double)catTotal * population / totalPop);
 			else
 				total += catTotal / (int)types.size();
 		}
@@ -199,35 +199,35 @@ void FinanceWindow::refresh()
 	}
 
 	// --- Headline figures -------------------------------------------------
-	const std::map<std::string, int> & qc = game->money.quarterTotalsByCategory;
+	const std::map<std::string, int64_t> & qc = game->money.quarterTotalsByCategory;
 
-	int totalIncome = game->money.quarterIncome;
+	int64_t totalIncome = game->money.quarterIncome;
 
-	int totalMaintenance = 0;
+	int64_t totalMaintenance = 0;
 	{
-		std::map<std::string, int>::const_iterator m = qc.find("maintenance");
+		std::map<std::string, int64_t>::const_iterator m = qc.find("maintenance");
 		if (m != qc.end()) totalMaintenance = -(m->second); // stored negative
 	}
 
-	int constructionCosts = 0;
+	int64_t constructionCosts = 0;
 	{
-		std::map<std::string, int>::const_iterator c = qc.find("construction");
+		std::map<std::string, int64_t>::const_iterator c = qc.find("construction");
 		if (c != qc.end()) constructionCosts = -(c->second); // stored negative
 	}
 
 	// --- Per-type income & sum -------------------------------------------
-	int breakdownIncomeSum = 0;
-	std::map<std::string, int> incomeByType;
+	int64_t breakdownIncomeSum = 0;
+	std::map<std::string, int64_t> incomeByType;
 	for (std::map<std::string, int>::iterator di = count.begin(); di != count.end(); ++di)
 	{
 		const std::string & id = di->first;
-		int inc = incomeForType(id, pop[id], pop);
+		int64_t inc = incomeForType(id, pop[id], pop);
 		incomeByType[id] = inc;
 		breakdownIncomeSum += inc;
 	}
 
-	int otherIncome = totalIncome - breakdownIncomeSum;
-	int netRevenues = totalIncome - totalMaintenance;
+	int64_t otherIncome = totalIncome - breakdownIncomeSum;
+	int64_t netRevenues = totalIncome - totalMaintenance;
 
 	// --- Build the text --------------------------------------------------
 	std::ostringstream s;
@@ -256,7 +256,7 @@ void FinanceWindow::refresh()
 		if (ci == count.end() || ci->second == 0) continue;
 
 		int p = pop[id];
-		int inc = incomeByType[id];
+		int64_t inc = incomeByType[id];
 		s << "  " << dn->second << "\n";
 		s << "    pop: " << p << "   income: " << formatMoney(inc) << "\n";
 		any = true;

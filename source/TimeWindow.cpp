@@ -251,7 +251,7 @@ void TimeWindow::updateTime() {
     Time & t = game->time;
 		
 	std::string timestring;
-	timestring.append(t.day == 0 ? "1st WD" : "2nd WD");
+	timestring.append(t.day == 2 ? "WE" : t.day == 0 ? "1st WD" : "2nd WD");
 	//weekday->SetProperty("display", (t.day == 2 ? "none" : "inline"));
 	//weekend->SetProperty("display", (t.day != 2 ? "none" : "inline"));
 	
@@ -393,29 +393,29 @@ void TimeWindow::renderWatch() {
     watch->display();
 }
 
-std::string TimeWindow::formatMoney(int amount)
+std::string TimeWindow::formatMoney(int64_t amount)
 {
 	char c[32];
-	snprintf(c, 32, "$%i", amount);
+	snprintf(c, 32, "$%lld", (long long)amount);
 	string fmt(c);
 	for (int i = (int)fmt.length() - 3; i > 1; i -= 3) fmt.insert(i, "'");
 	return fmt;
 }
 
-std::string TimeWindow::formatCompactMoney(int amount)
+std::string TimeWindow::formatCompactMoney(int64_t amount)
 {
-	int absAmount = std::abs(amount);
+	int64_t absAmount = std::abs(amount);
 	char c[32];
 	if (absAmount >= 1000000)
-		snprintf(c, 32, "$%iM", absAmount / 1000000);
+		snprintf(c, 32, "$%lldM", (long long)(absAmount / 1000000));
 	else if (absAmount >= 1000)
-		snprintf(c, 32, "$%ik", absAmount / 1000);
+		snprintf(c, 32, "$%lldk", (long long)(absAmount / 1000));
 	else
-		snprintf(c, 32, "$%i", absAmount);
+		snprintf(c, 32, "$%lld", (long long)absAmount);
 	return std::string(c);
 }
 
-std::string TimeWindow::formatSignedCompactMoney(int amount)
+std::string TimeWindow::formatSignedCompactMoney(int64_t amount)
 {
 	if (amount < 0)
 		return "-" + formatCompactMoney(amount);

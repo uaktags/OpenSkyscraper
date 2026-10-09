@@ -50,6 +50,7 @@ namespace Tdt {
 		size_t remaining() const { return bytes.size() - std::min(pos, bytes.size()); }
 		bool canRead(size_t n) const { return remaining() >= n; }
 		void skip(size_t n) { pos = std::min(pos + n, bytes.size()); }
+		void seek(size_t offset) { pos = std::min(offset, bytes.size()); }
 
 		uint8_t u8() { if (!canRead(1)) return 0; return bytes[pos++]; }
 		int8_t i8() { return (int8_t)u8(); }
@@ -164,12 +165,13 @@ namespace Tdt {
 
 	// ---- Elevator table ----------------------------------------------------
 
-	static int stopCount(const std::vector<uint8_t> & serviced, int bottom, int top)
+	static int stopCount(const std::vector<uint8_t> &, int bottom, int top)
 	{
 		int stops = 0;
-		for (int f = std::max(0, bottom); f <= std::min((int)serviced.size() - 1, top); f++)
-			if (serviced[f] != 0) stops++;
-		return std::max(1, stops);
+		for (int f = std::max(0, bottom); f <= std::min(FLOOR_COUNT - 1, top); f++)
+			// 10a8:17ee: allocated express stop slots ignore the enabled-stop bitmap.
+			if ((f >= 1 && f <= 10) || (f - 10) % 15 == 14) stops++;
+		return stops;
 	}
 
 	static size_t payloadSize(bool expressByStops, int type, int bottom, int top, int stops)
@@ -290,7 +292,9 @@ namespace Tdt {
 		r.skip(RETAIL_SLOTS * RETAIL_RECORD);
 
 		// Elevator table: 24 slots; payload layout disambiguated by retry.
-		if (walkElevatorTable(r, true, out.elevators) || walkElevatorTable(r, false, out.elevators))
+		size_t elevatorStart = r.offset();
+		if (walkElevatorTable(r, true, out.elevators) ||
+			(r.seek(elevatorStart), walkElevatorTable(r, false, out.elevators)))
 		{
 			out.elevatorsValid = true;
 		}
@@ -301,10 +305,15 @@ namespace Tdt {
 			return;
 		}
 
-		// Finance + parking blocks: not imported, but walked past honestly.
+		// 10d8:0ac4 reads 0x58 bytes at c0ba, then 0x84 at c112.
+		// The first eleven signed longs are ten CountT categories and the HUD total.
 		size_t afterElevators = r.offset();
-		if (r.canRead(FINANCE_SIZE)) {
-			r.skip(FINANCE_SIZE);
+		if (r.canRead(0x58 + FINANCE_SIZE)) {
+			r.skip(0x58);
+			for (int c = 0; c < 10; ++c) out.countT[c] = r.i32();
+			out.population = r.i32();
+			out.populationValid = true;
+			r.skip(FINANCE_SIZE - 11 * 4);
 			if (r.canRead(PARKING_SIZE)) r.skip(PARKING_SIZE);
 		}
 
@@ -338,7 +347,7 @@ namespace Tdt {
 		r.skip(12); // otherIncome, constructionCosts, lastQuarterMoney (finance history not imported)
 		out.frameTime = r.u16();
 		out.currentDay = r.i32();
-		r.skip(0x26 - r.offset());
+		r.skip(0x2a - r.offset());
 		out.viewX = r.u16();
 		out.viewY = r.u16();
 		r.skip(HEADER_SIZE - r.offset());
@@ -360,8 +369,8 @@ namespace Tdt {
 
 	std::string toTowerXml(const TdtData & in, std::vector<std::string> & report)
 	{
-		// Money: the file stores funds x100; ours are display dollars.
-		int funds = in.balance / 100;
+		// EXE 1120:0143 displays signed long bc42 in $100 units.
+		int64_t funds = (int64_t)in.balance * 100;
 		int rating = clampInt(in.level - 1, 0, 5);
 		// Time: TDT frames run 0..2599 with 0 = 7:00 AM and the day rolling at
 		// frame 2300 (midnight). Our clock runs frame 0 = midnight, i.e. a
@@ -383,11 +392,19 @@ namespace Tdt {
 			poiY = (tdtFloor - Y_ORIGIN) * 36;
 		}
 
-		char head[320];
+		char head[512];
 		snprintf(head, sizeof(head),
-			"<tower funds=\"%d\" rating=\"%d\" time=\"%.6f\" speed=\"1\" rainy=\"0\" tool=\"inspector\" x=\"%d\" y=\"%d\">",
-			funds, rating, absolute, poiX, poiY);
+			"<tower funds=\"%lld\" rating=\"%d\" time=\"%.17g\" speed=\"1\" rainy=\"0\" tool=\"inspector\" x=\"%d\" y=\"%d\">",
+			(long long)funds, rating, absolute, poiX, poiY);
 		std::string xml = head;
+		if (in.populationValid) {
+			xml.pop_back();
+			char counts[256];
+			snprintf(counts, sizeof(counts), " countT=\"%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\" countPopulation=\"%d\">",
+				in.countT[0], in.countT[1], in.countT[2], in.countT[3], in.countT[4],
+				in.countT[5], in.countT[6], in.countT[7], in.countT[8], in.countT[9], in.population);
+			xml += counts;
+		}
 		xml += "\n";
 
 		std::vector<PartRef> parts;
@@ -451,7 +468,21 @@ namespace Tdt {
 					{
 						snprintf(buf, sizeof(buf), "<item type=\"%s\" x=\"%d\" y=\"%d\" evaluation=\"50.0\"/>", id, tn.left - X_ORIGIN, y);
 					}
-					xml += buf; xml += "\n"; emittedItems++;
+					std::string room = buf;
+					room.resize(room.size() - 2); // append state before />
+					if (type == 7 || type == 9) {
+						// EXE 1200:369d: office vacant band starts at 0x10, condo at 0x18.
+						const bool occupied = !underConstruction && tn.status < (type == 7 ? 16 : 24);
+						room += occupied ? " occupied=\"1\"" : " occupied=\"0\"";
+					}
+					if (type >= 3 && type <= 5) {
+						const int hosted = !underConstruction && tn.status < 24 ? (type == 3 ? 1 : 2) : 0;
+						const int state = hosted ? 1 : tn.status >= 56 ? 3 : tn.status >= 40 ? 2 : 0;
+						snprintf(buf, sizeof(buf), " hosted=\"%d\" roomState=\"%d\"", hosted, state);
+						room += buf;
+					}
+					room += "/>";
+					xml += room; xml += "\n"; emittedItems++;
 					continue;
 				}
 

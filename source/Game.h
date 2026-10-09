@@ -105,13 +105,13 @@ namespace OT {
 		/// Serialize the tower (with integrity hash) to the given path.
 		bool writeTowerFile(const std::string & path);
 
-		int funds;
+		int64_t funds;
 		Money money;
 		int rating;
 		int population;
 		bool populationNeedsUpdate;
-		void transferFunds(int f, std::string category = "misc", std::string message = std::string());
-		void setFunds(int f);
+		void transferFunds(int64_t f, std::string category = "misc", std::string message = std::string());
+		void setFunds(int64_t f);
 		void setRating(int r);
 		void setPopulation(int p);
 		void ratingMayIncrease();

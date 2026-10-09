@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 #include "GameObject.h"
 #include <TGUI/Rect.hpp>
 #include <TGUI/Widget.hpp>
@@ -37,9 +38,9 @@ namespace OT {
             tgui::ChildWindow::Ptr window = NULL;
 
         private:
-            static std::string formatMoney(int amount);
-            static std::string formatCompactMoney(int amount);
-            static std::string formatSignedCompactMoney(int amount);
+            static std::string formatMoney(int64_t amount);
+            static std::string formatCompactMoney(int64_t amount);
+            static std::string formatSignedCompactMoney(int64_t amount);
             tgui::Label::Ptr lblPopulation = NULL;
             tgui::Label::Ptr lblFunds = NULL;
             tgui::Label::Ptr lblMoneyStats = NULL;

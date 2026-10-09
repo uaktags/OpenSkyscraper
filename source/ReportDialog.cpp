@@ -142,7 +142,7 @@ void ReportDialog::populate()
 {
 	if (!window || !content) return;
 
-	const std::map<std::string, int> & ledger = game->money.quarterTotalsByCategory;
+	const std::map<std::string, int64_t> & ledger = game->money.quarterTotalsByCategory;
 
 	std::ostringstream s;
 	char buf[80];
@@ -156,7 +156,7 @@ void ReportDialog::populate()
 	std::set<std::string> listed;
 	for (size_t i = 0; i < sizeof(kKnownRows) / sizeof(kKnownRows[0]); i++)
 	{
-		std::map<std::string, int>::const_iterator it = ledger.find(kKnownRows[i].category);
+		std::map<std::string, int64_t>::const_iterator it = ledger.find(kKnownRows[i].category);
 		if (it == ledger.end() || it->second <= 0) continue;
 		// Hotel income shows from the checkout ledger even when the
 		// hotel population is zero - the original quirk: checkouts
@@ -166,7 +166,7 @@ void ReportDialog::populate()
 		s << "  " << kKnownRows[i].label << ":  " << formatMoney(it->second) << "\n";
 		listed.insert(kKnownRows[i].category);
 	}
-	for (std::map<std::string, int>::const_iterator it = ledger.begin();
+	for (std::map<std::string, int64_t>::const_iterator it = ledger.begin();
 	     it != ledger.end(); ++it)
 	{
 		if (it->second <= 0 || listed.count(it->first)) continue;
@@ -178,12 +178,12 @@ void ReportDialog::populate()
 	s << "Expenses:\n";
 	for (size_t i = 0; i < sizeof(kKnownRows) / sizeof(kKnownRows[0]); i++)
 	{
-		std::map<std::string, int>::const_iterator it = ledger.find(kKnownRows[i].category);
+		std::map<std::string, int64_t>::const_iterator it = ledger.find(kKnownRows[i].category);
 		if (it == ledger.end() || it->second >= 0) continue;
 		s << "  " << kKnownRows[i].label << ":  " << formatMoney(-(it->second)) << "\n";
 		listed.insert(kKnownRows[i].category);
 	}
-	for (std::map<std::string, int>::const_iterator it = ledger.begin();
+	for (std::map<std::string, int64_t>::const_iterator it = ledger.begin();
 	     it != ledger.end(); ++it)
 	{
 		if (it->second >= 0 || listed.count(it->first)) continue;
@@ -198,12 +198,12 @@ void ReportDialog::populate()
 	content->setText(s.str());
 }
 
-std::string ReportDialog::formatMoney(int amount) const
+std::string ReportDialog::formatMoney(int64_t amount) const
 {
 	char c[32];
 	bool neg = amount < 0;
-	int absAmt = std::abs(amount);
-	snprintf(c, 32, "$%i", absAmt);
+	int64_t absAmt = std::abs(amount);
+	snprintf(c, 32, "$%lld", (long long)absAmt);
 	std::string fmt(c);
 	for (int i = (int)fmt.length() - 3; i > 1; i -= 3)
 		fmt.insert(i, ",");
