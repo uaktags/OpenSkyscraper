@@ -33,7 +33,7 @@ status)
     tag=${1:?tag}
     $LAB exec "for d in /lab/out/parity/$tag/*/; do n=\$(basename \$d); \
         printf '%-28s %s | %s\n' \$n \"\$(tail -1 \$d/oracle/oracle.log 2>/dev/null)\" \
-        \"\$(test -f \$d/report.md && echo done || echo running)\"; done" ;;
+        \"\$(test -f \$d/report.md && echo done || { grep -q Traceback \$d/pipeline.log 2>/dev/null && echo 'FAILED (see pipeline.log)' || echo running; })\"; done" ;;
 pull)
     tag=${1:?tag}; dest=${2:-$HOME/yoottower-decomp/parity-agent/runs/$tag}
     mkdir -p "$dest"
