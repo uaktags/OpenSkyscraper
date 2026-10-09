@@ -540,6 +540,10 @@ students are not part of this tower; `tests/sim/yoot_visitors.tower` (golden
 
 ## 7. Parity campaign
 
+**Status summary:**
+- **Matched / within tolerance:** people tower peaks (510/480/608 vs 434/509/559 after the appointed-queue elevator dispatch), venues/hotel/Hawaii peaks within tolerance after the BldExport waiting-map fix (the old 288 oracle value was an invalid export, see §7.4 item 5), Uncle Reggae text/time, blackout start message 11:01.
+- **Open items:** Event Center evening events unevidenced, blackout 11:00-14:00 end and hotel income 12:00 unobserved, Large Elevator top gear unrun, Maru walk-back, hotel guests and venue audiences inactive in the fixtures, Hawaii condo residents and facility staff counts, per-car rider counts not re-measured, rubble/clouds/kite/dolphins/Billboard visuals not compared, Tokyo visitors Gathering Area export rejected by the original, hotel stays not saved across reload.
+
 Harness: `tools/yoottower/remote/parity/` (`parity.sh run TAG DAYS TOWER...`, then
 `report` / `recompare`). Each tower is exported once to a .bld save and both games start from
 it: the original through the Wine oracle (one save per game hour), OpenSky through `--sim`.
@@ -572,7 +576,8 @@ and `x` marks a difference beyond the tolerance (`compare.py` TOL).
 | | 2 | 977 | 923 | 819 |
 
 The venues tower's original peak reads 288 on every day. That is suspicious (the same value
-each day in the oracle's snapshots), so its row is not evidence yet.
+each day in the oracle's snapshots), so its row is not evidence yet (superseded by the
+corrected-map run in §7.4 item 5, where all peaks are within tolerance).
 
 ### 7.2 Within-tolerance counts (report.md, before / after)
 
@@ -602,7 +607,9 @@ each day in the oracle's snapshots), so its row is not evidence yet.
 
 ### 7.4 Findings and open mismatches
 
-1. **The elevator change lowered the people tower's population** (yoot_people: peak 596 -> 419
+1. **The elevator change lowered the people tower's population [superseded]:**
+   *(Superseded by appointed-queue dispatch; see update below).*
+   The elevator change lowered the people tower's population (yoot_people: peak 596 -> 419
    on the holiday). The mover means show 16 / 13 / 24 riders against the original's 38 / 53 /
    39, and the pool calls drop from 398 / 409 / 527 (before) to 282 / 263 / 365 after (original
    365 / 440 / 490; the elevator change alone gives 302 / 267 / 380).
@@ -613,6 +620,12 @@ each day in the oracle's snapshots), so its row is not evidence yet.
    the original's cars carry about twice the riders. The next step is the door and boarding
    timing (Car::advance door states against FUN_1000bf30's arrival branch), checked with the
    people timeline, not with the peak alone.
+
+   **Update (superseded by appointed-queue dispatch):** appointed-queue dispatch
+   (StdElev FUN_1000cf90 / cda0 / d070: pickup sets, sweep cost, end-of-window unappoint)
+   restores the people tower's peaks to 510 / 480 / 608 against the original's 434 / 509 / 559
+   (all four days within tolerance, estimate 42/69 against 37/69 before the campaign).
+   Rider counts per car were not re-measured in this population campaign.
 2. **Uncle Reggae matches in text and time.** Both games print "Uncle Reggae is noisy" at
    14:32 and "Uncle Reggae was caught by the security staff" at 14:47 on day 11. The Maru walk
    and reception are not compared step by step.
@@ -622,8 +635,9 @@ each day in the oracle's snapshots), so its row is not evidence yet.
 4. **Event Center evening events (item 2):** not evidenced. The Event Center stays in status 10
    (never opened) in both games in the venues run, so no evening event was drawn in either.
    The collect window change is evidenced by the decompile only.
-5. **Shop staff, Event Center leavers, venues and hotel:** the s8 venues/hotel
-   population comparison used an invalid exported elevator waiting map. The original's
+5. **Shop staff, Event Center leavers, venues and hotel [superseded]:**
+   *(Superseded by BldExport waiting-map fix; corrected three-day peaks are within tolerance, see below).*
+   The s8 venues/hotel population comparison used an invalid exported elevator waiting map (the old 288 oracle value was an invalid export). The original's
    constant 288 is real: every saved snapshot contains 264 office people, 24 staff,
    zero general visitors and zero deferred departures. People/tenant states still change;
    this is not a stale counter. The second shaft's queue overwrote the first shaft and
@@ -683,11 +697,12 @@ each day in the oracle's snapshots), so its row is not evidence yet.
    The paired-elevator export regression and all 9 ctest checks pass; SimTower/OpenSky
    and YootTower goldens are unchanged.
 
-   **Earlier elevator update:** appointed-queue dispatch (StdElev FUN_1000cf90 / cda0 /
+   **Earlier elevator update:** (see item 1 above) appointed-queue dispatch (StdElev FUN_1000cf90 / cda0 /
    d070: pickup sets, sweep cost, end-of-window unappoint) restores the people tower's
    peaks to 510 / 480 / 608 against 434 / 509 / 559 (all four days within tolerance,
    estimate 42/69 against 37/69 before the campaign). Rider counts per car were not
    re-measured in this population campaign.
-6. **Holiday population (item 3):** the original's day-2 peak is 559, OpenSky's is 596 before
+6. **Holiday population (item 3) [superseded]:** *(Superseded: appointed-queue dispatch restores
+   the holiday peak to 608 vs original 559, within tolerance; see item 1).* The original's day-2 peak is 559, OpenSky's is 596 before
    and 419 after the elevator change. The 663-versus-559 gap of the earlier calibration is gone
    from the peak, but the regression above now puts the holiday under the original.
