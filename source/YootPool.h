@@ -227,5 +227,15 @@ namespace OT
 			void dispatchAdd(const PeopleType & t);
 			void duplicate(const PeopleType & t, const PoolRng & rng);
 		};
+
+		/// Hotel stay party saved on a room (yootStayParty): one "demand
+		/// timeZone silhouette econo life transport" group per member, members
+		/// separated by ';'. The party is the room's pool people (they are
+		/// not in the saved pool), so a reload spawns them again.
+		std::string encodeStayParty(const std::vector<PeopleType> & party);
+		bool decodeStayParty(const std::string & in, std::vector<PeopleType> & out);
+		/// A saved stay restores only when it was in the room (status 32..34)
+		/// with a party; old saves (no attributes) and other states are checked out.
+		bool decodeStay(int status, const std::string & party, std::vector<PeopleType> & out);
 	}
 }

@@ -330,8 +330,9 @@ void SpecialSystem::housekeepingTick(int minute)
 				Item::Hotel * room = dynamic_cast<Item::Hotel *>(*r);
 				if (!room || !built(room)) continue;
 				rooms.push_back(room);
+				// Maid reach: service movers only (Maintenance FUN_1000c010, table 1).
 				candidates.push_back(room->roomState == Item::Hotel::kDirty && !beingCleaned.count(room) &&
-				                     !room->housekeeper && (reachable(hk, room) || reachable(hk, room, true)));
+				                     !room->housekeeper && reachable(hk, room, true));
 			}
 		}
 		const std::vector<int> pick = Yoot::maidTrip(candidates);

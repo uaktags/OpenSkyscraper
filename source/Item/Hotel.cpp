@@ -527,6 +527,18 @@ void Hotel::encodeXML(tinyxml2::XMLPrinter &xml)
 	{
 		xml.PushAttribute("yootKind", yootKind);
 		if (yootStayBooked) xml.PushAttribute("yootStayBooked", true);
+		// A stay in the rooms (status 32..34) keeps its guests across save and
+		// reload (yootStayStatus / yootStayParty); an unrestored saved stay is
+		// written back as it was read.
+		int stayStatus = pendingStayStatus;
+		std::vector<Yoot::PeopleType> party;
+		std::string stayParty = pendingStayParty;
+		if (game->eventSystem.people.liveStay(this, stayStatus, party)) stayParty = Yoot::encodeStayParty(party);
+		if (stayStatus >= 32 && stayStatus <= 34 && !stayParty.empty())
+		{
+			xml.PushAttribute("yootStayStatus", stayStatus);
+			xml.PushAttribute("yootStayParty", stayParty.c_str());
+		}
 	}
 	xml.PushAttribute("roomState", roomState);
 
@@ -576,6 +588,9 @@ void Hotel::decodeXML(tinyxml2::XMLElement &xml)
 	roomState = xml.IntAttribute("roomState", kClean);
 	dirtySince = xml.DoubleAttribute("dirtySince", 0.0);
 	yootStayBooked = xml.BoolAttribute("yootStayBooked", false);
+	// Old saves have no stay attributes: the room is checked out on reload.
+	pendingStayStatus = xml.IntAttribute("yootStayStatus", 0);
+	pendingStayParty = xmlAttributeOr(xml, "yootStayParty", "");
 	clearAll();
 	applyVariant();
 
@@ -639,10 +654,12 @@ void Hotel::decodeXML(tinyxml2::XMLElement &xml)
 bool Hotel::yootSendHousekeeper(Item * from)
 {
 	// RMaintenance FUN_1000bf70: the room goes 0x23 -> 0x24 and a maid
-	// walks over (CheckRoute with the staff flag: service movers allowed).
+	// walks over. FUN_1000c010 checks the route with routing table 1, whose
+	// mover mask is 0x2000000 (service movers only: Service Elevator, Stairs;
+	// the Simple Elevator is 0x1000000). Maids never ride passenger elevators,
+	// so a room on another floor without a service mover stays dirty.
 	if (housekeeper || roomState != kDirty || !from) return false;
-	Route serviceRoute = game->findRoute(from, this);
-	if (serviceRoute.empty()) serviceRoute = game->findRoute(from, this, true);
+	Route serviceRoute = game->findRoute(from, this, true);
 	if (serviceRoute.empty()) return false;
 	Housekeeper *h = new Housekeeper(this);
 	h->from = from->prototype->name;

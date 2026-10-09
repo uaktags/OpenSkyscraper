@@ -552,5 +552,37 @@ namespace OT
 			*this = p;
 			return true;
 		}
+
+		std::string encodeStayParty(const std::vector<PeopleType> & party)
+		{
+			std::ostringstream o;
+			for (size_t i = 0; i < party.size(); ++i)
+			{
+				const PeopleType & t = party[i];
+				if (i) o << ';';
+				o << t.demand << ' ' << t.timeZone << ' ' << t.silhouette << ' ' << t.econo << ' ' << t.life << ' ' << t.transport;
+			}
+			return o.str();
+		}
+
+		bool decodeStayParty(const std::string & in, std::vector<PeopleType> & out)
+		{
+			out.clear();
+			std::istringstream all(in);
+			std::string group;
+			while (std::getline(all, group, ';'))
+			{
+				std::istringstream s(group);
+				PeopleType t;
+				if (!(s >> t.demand >> t.timeZone >> t.silhouette >> t.econo >> t.life >> t.transport)) return false;
+				out.push_back(t);
+			}
+			return !out.empty();
+		}
+
+		bool decodeStay(int status, const std::string & party, std::vector<PeopleType> & out)
+		{
+			return status >= 32 && status <= 34 && decodeStayParty(party, out);
+		}
 	}
 }

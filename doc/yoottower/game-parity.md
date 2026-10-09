@@ -973,3 +973,83 @@ The worktree was fast-forwarded to `feature/yoottower-parity` (f660c88) before w
 **Build and goldens:** no goldens touched. The worktree lacked `thirdparty/astar-search` (an uninitialised submodule); copying it from `/lab/src/glmp2` made `hkA` build. `lab.sh build` exits 0 even when `OpenSkyscraper` fails on the missing `stlastar.h`, so check the log for `fatal error`. `lab.sh test hkA`: 9/9 pass.
 
 **Open:** Large Elevator oracle measurement (needs BigElev export); per-car rider gap on day 2 of `yoot_people`.
+
+#### 7.6.B Hotels
+
+**Status:** the maid-reach divergence behind the room-night gap is found, fixed and matches the
+original's cleaning pattern. The headline room-night count is **not** closed (see the residual
+below). Stays now survive save and reload. Lab: `hkB`, TAG prefix `hkB-`. Analysis scripts live in
+`~/yoottower-decomp/closeout/hkB/` (roomtl.py, checkins.py, cleans.py, elig.py, osrooms.py,
+checkins_os.py, maidpl.py).
+
+**Setup.** The original output `gp2-hotel-hawaii` was copied to `hkB-hotel-hawaii` (not modified) and
+OpenSky was rerun with `pipeline.py --skip-oracle` (3 days; extra seeds 2-4 in `hkB-seed{2,3,4}`).
+
+**1. What the original does, per room (oracle snaps).** Check-ins are booked on the evening of day N
+and paid at 12:00 on day N+1 in both games. Original check-ins are 9 on day 0 (8 Twin, 1 Suite; paid
+$45,000 on day 1) and 11 on day 1 (10 Twin, 1 Suite; paid $54,000 on day 2). A room cycles 30 (clean)
+→ 31 (called) → 32 (in) → 33 (asleep) → 34 (up) → 35 (checked out, dirty) → 36/37 → 30 (cleaned by a
+Housekeeping maid). Only the y=5 rooms, which share the Housekeeping's floor, are ever cleaned: 4 on
+day 1 and 5 on day 2. The 10 y=6 rooms that took guests stay at 35 for the rest of the run, so each is
+used at most once. Mechanism: the maid's route check is RMaintenance FUN_1000c010, which calls
+`T2RouteNavigator::CheckRoute(..., 1)` (routing table 1). `T2RoutingTable` 0x10055350 gives table k the
+mover mask `0x1000000 << k`, so table 1 is `0x2000000`, the service movers. Only the service movers carry
+that ATTR bit (ServElev 0x2008902, KServ 0x2008902, Stair 0x3002902). The Simple and Standard elevators
+(StdElev / KElev 0x1008902) do not. The Hawaii fixture has one `elevator-standard` and no service elevator
+or stairs, so maids cannot reach floor 6. Same-floor rooms need only horizontal distance within the
+Maintenance customer score (PLDF EPlace 1 = 300, not binding here).
+
+**2. What OpenSky did.** `Hotel::yootSendHousekeeper` and the candidate check in
+`SpecialSystem::housekeepingTick` tried the passenger route first. Maids rode the Simple Elevator, so
+every dirty room was cleaned: 6 y=6 rooms on day 1, 4 on day 2. Rooms were reusable the next evening,
+so OpenSky booked 14 (12 Twin, 2 Suite) on day 1 and 7 on day 2, paid $49,500 and $72,000.
+
+**3. Fix.** Maids route with the service flag only (`Hotel::yootSendHousekeeper`,
+`SpecialSystem::housekeepingTick`; YootTower only, the housekeeping item is a YootFacility). Result on
+`hkB-hotel-hawaii`:
+
+| | Original | OpenSky before | OpenSky after (seed 1; seeds 2 / 3 / 4) |
+|---|---|---|---|
+| Check-ins day 0 | 9 | 10 | 10 (11 / 13 / 11) |
+| Check-ins day 1 | 11 | 14 | 7 (8 / 5 / 7) |
+| y=6 rooms cleaned d1 / d2 | 0 / 0 | 6 / 4 | 0 / 0 (seed 1) |
+| y=5 rooms cleaned d1 / d2 | 4 / 5 | 4 / 2 | 4 / 3 (seed 1) |
+| Hotel income paid day 1 | $45,000 | $49,500 | $49,500 (seed 1) |
+| Hotel income paid day 2 | $54,000 | $72,000 | $36,000 (seed 1; $36,000 / $22,500 / $31,500 for seeds 2-4) |
+
+The cleaning pattern now matches the original exactly (no y=6 room is ever cleaned). The room-call
+counts do not. After the fix, OpenSky under-fills day 1 (5-8 check-ins against 11) and day 2 income
+falls below the original. Before the fix it was above. The fix is kept because it reproduces the
+original's maid reach; the headline gap is therefore not closed by it.
+
+**Residual (unresolved).** The count is set at the call stage, not by housekeeping. A clean room is
+called with probability 1/30 per idle tick while its estimate is above 200 (`YootHotelGuests.cpp`,
+`roomIdle`). The estimate gate separates the games: the original's room estimates on day 1 are 248 to
+276 for several rooms and 150 for `hotel_double@14,5`, which is therefore ineligible in the original and
+eligible in OpenSky (287). Day 0 has no OpenSky estimate yet (`yootEstimate` 0 is treated as
+unevaluated). The next step is tenant-estimate parity (J2) and a multi-seed oracle comparison.
+The original's day-0 fill is 9 of 17 rooms that were eligible at some sample in 17:00-22:00 (sampling
+is coarse, about 40 minutes). The single-run counts are noisy, so this is not a fully explained
+room-night difference.
+
+**4. Stays across save and reload.** A room whose guests are in (status 32..34) saves
+`yootStayStatus` and `yootStayParty` (a `PeopleType` per member: demand, time zone, silhouette, econo,
+life, transport). Written in the YootTower branch of `Hotel::encodeXML` only. `Hotel::decodeXML` reads
+them into `pendingStayStatus` / `pendingStayParty`. `PeopleSystem::roomIdle` consumes them on the first
+idle tick (`PeopleSystem::restoreStay`): the party is spawned inside the occupied room and the stay
+runs on to the normal checkout (11:00 PushOutAll, then dirty). Statuses 31 (queued at the desk) and 35
+(checked out, dirty) are not restored. Old saves, with no attributes, keep the old check-out on reload.
+Party members are spawned again, so the pool save (which already excludes visitors) is not duplicated.
+Codec and gating: `Yoot::encodeStayParty`, `decodeStayParty`, `decodeStay` (YootPool.cpp).
+
+**Test.** `testYootHotelStaySaveReload` (tests/test_main.cpp) round-trips the room element through
+tinyxml2: a status-33 stay with two members restores both, status 31/35/0 and an empty party are
+refused, and an old save checks out. `test_main.cpp` has no Game-level harness, so `restoreStay` is
+covered by build only, not by a reload test. This is the main limit of the save check.
+
+**Goldens.** `tests/sim/sim_visitors_yoottower.json` was regenerated (`UPDATE_GOLDEN=ON`, TICKS 2000).
+Its fixture has hotel rooms on floors 12 and 14 with one `elevator-standard`, so maids no longer ride
+to the upper rooms. The other goldens are unchanged.
+
+**Tests.** Lab `test hkB`: 9/9. The `thirdparty/astar-search` submodule is not checked out in this
+worktree; it was copied into the lab tree `hkB` only (`lab.sh sync` does not carry it).

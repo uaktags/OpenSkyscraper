@@ -16,6 +16,7 @@
 
 #include <climits>
 #include <cstring>
+#include <tinyxml2.h>
 
 #include "../source/Time.h"
 #include "../source/Route.h"
@@ -5857,6 +5858,64 @@ static void testYootOnlyPrototypeGate()
     EXPECT(OT::BuildRules::isYootOnlyPrototype("elevator-standard") == false);
 }
 
+// YootTower hotel stays across save and reload (Hotel::encodeXML/decodeXML,
+// yootStayStatus / yootStayParty). A room whose guests are in (status 32..34)
+// saves its party with its occupied state; the reload restores the stay, so
+// the room is still occupied, and an old save (no stay attributes) still
+// checks the room out.
+static void testYootHotelStaySaveReload()
+{
+    OT::Yoot::PeopleType a, b;
+    a.demand = 3; a.timeZone = 2; a.silhouette = 17; a.econo = 1; a.life = 40; a.transport = 0;
+    b = a; b.silhouette = 24; b.life = 0x7f;
+    const std::vector<OT::Yoot::PeopleType> party = {a, b};
+
+    // Save: the room element as Hotel::encodeXML writes it (roomState 1 = occupied).
+    tinyxml2::XMLPrinter printer;
+    printer.OpenElement("item");
+    printer.PushAttribute("roomState", 1);
+    printer.PushAttribute("yootStayStatus", 33);
+    printer.PushAttribute("yootStayParty", OT::Yoot::encodeStayParty(party).c_str());
+    printer.CloseElement();
+
+    // Reload: decodeXML reads the attributes back and PeopleSystem restores them.
+    tinyxml2::XMLDocument doc;
+    EXPECT(doc.Parse(printer.CStr()) == tinyxml2::XML_SUCCESS);
+    const tinyxml2::XMLElement * e = doc.FirstChildElement("item");
+    EXPECT(e != nullptr);
+    if (!e) return;
+    EXPECT(e->IntAttribute("roomState", 0) == 1);
+    std::vector<OT::Yoot::PeopleType> back;
+    const int status = e->IntAttribute("yootStayStatus", 0);
+    EXPECT(status == 33);
+    EXPECT(OT::Yoot::decodeStay(status, e->Attribute("yootStayParty") ? e->Attribute("yootStayParty") : "", back));
+    EXPECT(back.size() == 2 && back[0] == a && back[1] == b);
+    EXPECT(back.size() == 2 && back[1].immortal());
+
+    // Every stay state the room can be in, and a stay with nobody in it.
+    std::vector<OT::Yoot::PeopleType> none;
+    EXPECT(!OT::Yoot::decodeStay(31, OT::Yoot::encodeStayParty(party), none));  // queued at the desk
+    EXPECT(!OT::Yoot::decodeStay(35, OT::Yoot::encodeStayParty(party), none));  // checked out, dirty
+    EXPECT(!OT::Yoot::decodeStay(34 + 1, OT::Yoot::encodeStayParty(party), none));
+    EXPECT(OT::Yoot::decodeStay(32, OT::Yoot::encodeStayParty(party), none) && none.size() == 2);
+    EXPECT(!OT::Yoot::decodeStay(33, "", none));
+    EXPECT(OT::Yoot::encodeStayParty({}).empty());
+
+    // Old save: occupied room with no stay attributes is checked out on reload.
+    tinyxml2::XMLPrinter old;
+    old.OpenElement("item");
+    old.PushAttribute("roomState", 1);
+    old.CloseElement();
+    tinyxml2::XMLDocument oldDoc;
+    EXPECT(oldDoc.Parse(old.CStr()) == tinyxml2::XML_SUCCESS);
+    const tinyxml2::XMLElement * oe = oldDoc.FirstChildElement("item");
+    EXPECT(oe != nullptr);
+    if (!oe) return;
+    const int oldStatus = oe->IntAttribute("yootStayStatus", 0);
+    EXPECT(oldStatus == 0);
+    EXPECT(!OT::Yoot::decodeStay(oldStatus, oe->Attribute("yootStayParty") ? oe->Attribute("yootStayParty") : "", none));
+}
+
 // DIB validation: a height of INT32_MIN must be rejected before rows()
 // negates it (signed overflow UB otherwise).
 static void testOspDibValidation()
@@ -5966,6 +6025,7 @@ int main()
 	testT2pExportEdited();
 	testSimLessContainers();
 	testYootOnlyPrototypeGate();
+	testYootHotelStaySaveReload();
 	testOspDibValidation();
     if (g_failures > 0)
     {

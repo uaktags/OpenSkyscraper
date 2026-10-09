@@ -147,6 +147,11 @@ namespace OT
 		// --- hotel guests (YootHotelGuests.cpp; game-parity.md W4, E7) ---
 		/// The rooms' guests are pool people (true when the pool runs).
 		bool hotelGuests() const;
+		/// YootTower stay save/reload (Hotel encodeXML/decodeXML): the live
+		/// stay of a room in states 32..34 (guests inside), if any.
+		bool liveStay(const Item::Hotel * room, int & status, std::vector<Yoot::PeopleType> & party) const;
+		/// Puts a saved stay back: the party is spawned inside the occupied room.
+		void restoreStay(Item::Hotel * room, int status, const std::vector<Yoot::PeopleType> & party, long long now);
 		/// A guest reaches its room / the Front Desk queue.
 		void roomEnter(Item::Hotel * room, YootVisitor * v);
 		void deskEnter(Item::FrontDesk * desk, YootVisitor * v);

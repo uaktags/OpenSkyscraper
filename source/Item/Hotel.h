@@ -87,6 +87,10 @@ namespace OT
 			/// YootTower (plan step 14): the stay's check-in is booked on the
 			/// linked Front Desk once; dirty rooms wait for a Housekeeping maid.
 			bool yootStayBooked = false;
+			/// A saved stay (yootStayStatus / yootStayParty) read by decodeXML and
+			/// restored by PeopleSystem::roomIdle on the first idle tick after load.
+			int pendingStayStatus = 0;
+			std::string pendingStayParty;
 			bool yootSendHousekeeper(Item * from);
 
 			Sprite sprite;

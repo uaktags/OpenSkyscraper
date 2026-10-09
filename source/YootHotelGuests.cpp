@@ -146,9 +146,21 @@ void PeopleSystem::roomIdle(Item::Hotel * room, int minute, long long now)
 	const int open = room->prototype->yoot && room->prototype->yoot->openMinute > 0 ? room->prototype->yoot->openMinute : 1020;
 	if (it == stays.end())
 	{
-		// Status 30. A reloaded room that was let is checked out.
+		// The saved stay of a reloaded room is consumed here, once.
+		const int saved = room->pendingStayStatus;
+		const std::string savedParty = room->pendingStayParty;
+		room->pendingStayStatus = 0;
+		room->pendingStayParty.clear();
+		// Status 30. A reloaded room that was let is checked out, unless its
+		// stay was saved (yootStayStatus 32..34): the guests stay until checkout.
 		if (room->roomState == Item::Hotel::kOccupied)
 		{
+			std::vector<Yoot::PeopleType> party;
+			if (Yoot::decodeStay(saved, savedParty, party))
+			{
+				restoreStay(room, saved, party, now);
+				return;
+			}
 			room->roomState = Item::Hotel::kDirty;
 			room->dirtySince = game->time.absolute;
 			room->spriteNeedsUpdate = true;
@@ -355,4 +367,36 @@ void PeopleSystem::roomLook(const Item::Hotel * room, int & in, int & asleep, in
 	in += n;
 	if (it->second.status == 33) asleep += n;
 	else if (it->second.status == 34) up += n;
+}
+
+bool PeopleSystem::liveStay(const Item::Hotel * room, int & status, std::vector<Yoot::PeopleType> & party) const
+{
+	std::map<Item::Item *, HotelStay>::const_iterator it = stays.find(const_cast<Item::Hotel *>(room));
+	if (it == stays.end() || it->second.status < 32 || it->second.status > 34) return false;
+	party.clear();
+	for (const YootVisitor * v : it->second.party)
+		if (alive(v)) party.push_back(v->peopleType);
+	if (party.empty()) return false;
+	status = it->second.status;
+	return true;
+}
+
+void PeopleSystem::restoreStay(Item::Hotel * room, int status, const std::vector<Yoot::PeopleType> & party, long long now)
+{
+	// The saved party is back inside the room, as roomEnter leaves it: the
+	// stay runs on from its saved status to the normal checkout (PushOutAll).
+	HotelStay s;
+	s.status = status;
+	s.desk = game->eventSystem.specials.deskOf(room);
+	for (const Yoot::PeopleType & t : party)
+	{
+		YootVisitor * v = spawn(t, room, now, 0);
+		arrived(v, room, true, kNoLeave);
+		v->stayEnd = -1;
+		v->state = Person::kHome;
+		s.party.push_back(v);
+	}
+	stays[room] = s;
+	room->roomState = Item::Hotel::kOccupied;
+	room->spriteNeedsUpdate = true;
 }
