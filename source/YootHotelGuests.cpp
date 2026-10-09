@@ -94,7 +94,9 @@ bool PeopleSystem::callGuests(Item::Hotel * room, HotelStay & s, Item::FrontDesk
 		for (int n = 0; n < std::max(1, (int)m.numOfPeople); ++n)
 		{
 			Yoot::PeopleType type;
-			if (!pool.call(m, onlyFirst && i > 0 ? -1 : econo, mask, type, [] { return std::rand(); })) break;
+			// CollectEmployeeFromPool 0x10060a50: T2Pool::Call gets the same econo for every
+			// member; only T2Pool::Find (0x10050500) relaxes it from member 1 on.
+			if (!pool.call(m, econo, mask, type, [] { return std::rand(); })) break;
 			// SetDestination(desk, 0): they set off at once.
 			YootVisitor * v = spawn(type, desk, now, 0);
 			v->state = Person::kCommuting;
