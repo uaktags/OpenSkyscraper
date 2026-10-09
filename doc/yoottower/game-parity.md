@@ -759,6 +759,81 @@ No goldens were regenerated.
 
 ### 7.6 Close-out campaign
 
+#### 7.6.D Blackout tenant effects
+
+**Mechanism (decompile).** The lasting blackout is the exclusive BOEV event.
+`T2BlackOut::Exec` (0x1001b750) returns the event's exclusive flag (1) in states 1-3,
+and state 3 persists while consumption is not below supply (`tokyo_g4_blackout`:
+5,833 against 5,000). `T2TowerEvent::Idle` (0x10069970) returns 1 while such an
+exclusive event is executing; `T2WorldDef::IdleProc` (0x100700d0) is that call. The
+main idle `FUN_0041dc40` (T2.exe, rules-agent/out/exe3/T2.exe.decomp.c) runs
+`T2TenantArrayList::DispatchIdle` (0x10061c70) and the OutObj and template dispatch
+only when that world idle returns 0. People, movers and requests are dispatched
+regardless, and the day-change `T2Settlement::Update` and `CalcMentenanceCost` run
+before the block, so quarterly maintenance is still charged. `T2Tenant::Draw`
+(0x1005e4d0) only darkens tenants (`DrawColorMesh` when `T2WorldDef::IsBlackOut`);
+it does not change status or money. The earlier note that the blackout check sits
+in `T2Tenant::Idle` was wrong: `T2Tenant::Idle` (0x1005e670) has no blackout test.
+
+**Oracle evidence (`gp2-blackout4/oracle/series.jsonl`).** From 11:00 on day 0 to the
+end of day 3, no tenant changes status, customers, estimate or staff. Office status 13
+and estimate 300 (one 270 snapshot at 11:00), shop status 30 with estimate 17, and the
+Event Center, theaters and schools stay status 10. Funds change only by the day-3
+quarterly maintenance. Day 0 income ends at 36,000 (the last change is at 10:08); days 1
+and 2 have 0.
+
+**OpenSky before (`gp2-blackout4/codex-escape`).** The extra charges are all tenant
+settlements after 11:00, and they are the only differences in the money:
+
+| Day | Entry (message, time) | Source |
+|---|---|---|
+| 0 | Event Center expenses $-10,000 @18:01 | `VenueSystem::eventCenterTick`, `pay(e, dollars)` on an unopened hall (outMoney) |
+| 0 | shop $-600 @20:01; restaurants $-500 @22:01, $-800 @22:05 | `commercialIdle` close `pay` (`YootTenant::advance`) |
+| 1 | Event Center -10,000 @18:01; shop -600 @20:01; restaurants -800 @22:01, -900 @22:05 | the same paths; total -12,300 |
+| 2 | Event Center -10,000 @18:01 | the Event Center path only; total -10,000 |
+
+Estimates also fell during the dark: offices from 300 to 1 at 00:10 on day 1, and the
+"tenants are unhappy" and "has been unhappy" messages on days 1-3. These come from
+`JudgeSystem::evaluateAll`, called by `Game::settleDailyAccounting`. Coffee also dropped to 1
+at 00:01 on day 1 (the original keeps 7 after its 10:08 change).
+
+**Change.** `EventSystem::tenantIdleFrozen()` (yoot and `power.isBlackOut()`) gates the
+tenant idles. `YootTenant::advance` (and `Office`, `YootCondo` advance) return early,
+and `VenueSystem::advance` and `FacilitySystem::advance` skip their minute ticks while
+still advancing `lastMinute`, so skipped minutes are not replayed after recovery.
+`settleDailyAccounting` skips `evaluateAll` while frozen. Commit `c57e564`. SimTower and
+OpenSky are unaffected (`yoot` gate). The elevator freeze already present in `Game.cpp`
+is unchanged. Tests: 9/9.
+
+**Measured (tokyo_g4_blackout, 3 days, reused oracle, `--skip-oracle`).**
+
+| | Before (codex-escape) | After (`hkD-bo2`) | Original |
+|---|---|---|---|
+| Funds delta day 0 / 1 / 2 / 3 | 24,100 / -12,300 / -10,000 / -2,505,000 | 36,000 / 0 / 0 / -2,505,000 | 36,000 / 0 / 0 / -2,505,000 |
+| Tenant estimates within tolerance | 24 / 60 | 56 / 56 | |
+| Customers within tolerance | 3 / 3 | 2 / 3 | |
+| Population peaks | 136 / 79 / 79 | 136 / 79 / 79 | 140 / 79 / 79 |
+| Day-1/2 events | 2 shop/restaurant + EC charges, unhappy messages | none beyond weather | none |
+
+The customers column drops from 3/3 to 2/3 because the coffee count stops at 20 when
+the tenants freeze at 11:00. Before, the same tenant still gained three arrivals during
+11:00-11:10 (23), which is why it looked close. The original's count stops at 31 at 10:08.
+
+Report: `/lab/out/parity/hkD-bo2/tokyo_g4_blackout/report.md` (`opensky/series.jsonl`
+alongside). Run with the same `input.bld` and oracle as `gp2-blackout4`.
+
+**Schools (item 3).** All 45 schools stay status 10 with zero customers, staff and
+income on every day in both games (`report.md`). OpenSky's school is a YootVenue that
+never reaches an opening route, so no change was needed.
+
+**Residuals (not blackout effects).** Office staff: the original reports 0 workers
+through the dark period while OpenSky keeps 6 per office (a pre-blackout staffing
+difference; the freeze holds it, it does not create it). Coffee: OpenSky's estimate is
+1 from 07:10 on day 0 and never reaches the original's 7 (the original changes 1 to 7
+at 10:08), and its customers are 20 at 11:00 against the original's 31 at 10:08, so the
+pre-blackout demand is still short (`customers 2/3`). The original's customer count stops
+rising at 10:08, before the blackout, which OpenSky does not reproduce. The Event Center evening events are still unobserved.
+
 #### 7.6.F Visuals
 
 Scope: Mr. Maru's walk back, rubble, clouds, the black kite and dolphins, and the
