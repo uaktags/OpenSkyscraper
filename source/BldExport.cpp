@@ -173,7 +173,10 @@ namespace Bld {
 		for (int i = 0; i < 4; i++) u16(0);    // good / medium / visitors / target: zero when booked
 		u16(0);                                // k: no hall-event table entries
 		u16(12);
-		for (int i = 0; i < 12; i++) u32(0);   // month slots
+		// month slots: FUN_1000dcb0 (00:00-00:08 each day) resets the booked plugin from the
+		// slot of the coming month, so a booking with empty slots is dropped at the first
+		// midnight. Book the event in every month.
+		for (int i = 0; i < 12; i++) u32(id);
 		return out;
 	}
 
