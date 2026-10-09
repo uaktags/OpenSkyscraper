@@ -3,6 +3,7 @@
 
 #include "AbstractPlugin.h"
 #include "ItemTypeCatalog.h"
+#include "PluginDefs.h"
 #include "PluginManager.h"
 #include "YootCatalog.h"
 #include "YootPool.h"
@@ -906,6 +907,48 @@ namespace Bld {
 		for (size_t i = 0; i < movers.size(); i++) out.movers[i] = movers[i].rec;
 		sizeBlocks(out.requests, requests.size(), 64);
 		for (size_t i = 0; i < requests.size(); i++) out.requests[i] = requests[i];
+		// The blackout counters are saved state, not derived: the engine only
+		// moves them through T2TowerEvent::SetLatestBuild (0x100692a0) when
+		// an equip is built or demolished, so a loaded game trusts the .bld's
+		// {status, consumption, supply} (T2BlackOut::Read 0x1001ba90). The
+		// template's counters describe the template tower; rewrite the
+		// consumption with what this tower would have accumulated (every
+		// exported tenant and mover's ToolDef +0xf0), or the original never
+		// sees the demand OpenSky recomputes (tokyo_g4_blackout: demand 5213,
+		// no blackout at 11:00 in the original with the template's 94).
+		if (plugins)
+		{
+			auto powerOfStem = [&](const std::string & stem) -> int
+			{
+				AbstractPlugin * source = plugins->get(stem + ".t2p");
+				if (!source)
+				{
+					std::string lower = stem;
+					for (char & c : lower) c = (char)tolower((unsigned char)c);
+					source = plugins->get(lower + ".t2p");
+				}
+				if (!source || !source->ensureLoaded()) return 0;
+				TemplateDef def;
+				if (!source->getTemplateDef(def) || def.tool.variations.empty()) return 0;
+				return def.tool.variations[0].consumptionPower;
+			};
+			long long demand = 0;
+			for (const Tenant & t : out.tenants)
+			{
+				if (!t.hdr.used) continue;
+				for (const PluginInfo & p : out.plugins)
+					if (p.itemType == t.equipType) { demand += powerOfStem(pluginStem(p)); break; }
+			}
+			// Only the standard elevator is exported as a mover (StdElev.t2p).
+			demand += (long long)out.movers.size() * powerOfStem("StdElev");
+			for (TowerEventRec & e : out.events)
+			{
+				if (e.type != "vEOB" || e.data.size() < 6) continue;
+				const int16_t c = (int16_t)std::min<long long>(demand, 0x7fff);
+				e.data[2] = (uint8_t)(c & 0xff);
+				e.data[3] = (uint8_t)((c >> 8) & 0xff);
+			}
+		}
 		return true;
 	}
 

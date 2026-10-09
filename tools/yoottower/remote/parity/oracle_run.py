@@ -85,8 +85,12 @@ def clear_dialogs(tag):
         elif title == 'Event' or again:
             # Event choices (terrorist: "Accept offer" / "Look for"; fire: helicopter /
             # staff) have no default button: take the first, as OpenSky's --sim answers
-            # yes (it pays the ransom, sends the helicopter).
-            R('click', x + w // 2, y + h - 46)
+            # yes (it pays the ransom, sends the helicopter). Single-OK dialogs (the
+            # blackout warning) place OK ~14 px above the bottom, so a retry clicks
+            # lower and falls back to Return.
+            R('click', x + w // 2, y + h - (24 if again else 46))
+            if again:
+                R('key', 'Return', check=False)
         else:
             R('key', 'Return', check=False)
         time.sleep(1.0)
