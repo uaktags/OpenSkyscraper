@@ -4578,6 +4578,25 @@ static void testBldShippedSaves()
 			EXPECT(clamped.level == 2 && clamped.pool.gameLevel == 2);
 		}
 		{
+			// A Gathering Area (ATTR lvl 4) is refused by the original at three stars
+			// ("Plugin Check Error" at load): the export raises the star level to the
+			// highest grade of the plugins it writes.
+			const std::string gathering =
+				"<tower funds=\"4321000\" rating=\"2\" time=\"13.5\" ruleset=\"yoottower\" world=\"hawaii\">"
+				"<item type=\"lobby\" x=\"-40\" y=\"0\" width=\"80\" height=\"1\"/>"
+				"<item type=\"floor\" x=\"-40\" y=\"1\" width=\"80\"/>"
+				"<item type=\"gatheringarea\" x=\"-20\" y=\"1\"/></tower>";
+			TowerState gatheringState;
+			BldData gatheringOut;
+			ImportReport gatheringReport;
+			EXPECT(parseTowerXml(gathering, gatheringState, error));
+			EXPECT(exportTower(gatheringState, hawaii, gatheringOut, gatheringReport, error, &yootTestPlugins()));
+			EXPECT(gatheringReport.imported["gatheringarea"] == 1);
+			EXPECT(gatheringOut.level == 4 && gatheringOut.pool.gameLevel == 4);
+			EXPECT(gatheringOut.pluginForItemType(1741) != nullptr);
+			EXPECT(std::any_of(gatheringReport.notes.begin(), gatheringReport.notes.end(), [](const std::string & n) { return n.find("Star level 3 raised to 4") == 0; }));
+		}
+		{
 			// The plugin table is per save: plugins the template lacks are
 			// added (in id order) when the world can install them; Kegon's
 			// Attraction is refused by Hawaii and dropped.

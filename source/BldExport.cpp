@@ -440,6 +440,7 @@ namespace Bld {
 		};
 		// Plugin-backed tenants name their plugin; find it in the template.
 		std::deque<PluginInfo> added;
+		int addedGameLevel = 0;                 // highest ATTR lvl among the added plugins
 		auto pluginStemLower = [](const PluginInfo & p)
 		{
 			std::string stem = pluginStem(p);
@@ -485,6 +486,7 @@ namespace Bld {
 				for (char & c : upper) c = (char)toupper((unsigned char)c);
 				info.fileName = "C:\\YOOT\\PLUGINS\\" + upper + ".T2P";
 				added.push_back(info);
+				addedGameLevel = std::max(addedGameLevel, ident.gameLevel);
 				return &added.back();
 			}
 			return nullptr;
@@ -701,6 +703,21 @@ namespace Bld {
 			if (!listed) { DefCost c; c.itemType = 2000; out.settlement.outObjCosts.push_back(c); }
 		}
 
+		// The original lists a save plugin as "installed at saving" only when its
+		// game level (ATTR lvl) is at most the star level: FUN_00421f70 keeps the
+		// plugins whose CFilePlugin+0x54 <= the header's +0x8c, and FUN_0041ca80
+		// gates the same way. A Gathering Area (lvl 4) in a three-star save shows
+		// "Plugin Check Error" at load, so the star level rises to the highest
+		// grade of the plugins written (BldLoader reads rating = level - 1).
+		if (addedGameLevel > out.level && addedGameLevel <= maxLevel)
+		{
+			char buf[160];
+			snprintf(buf, sizeof(buf), "Star level %d raised to %d: an exported plugin needs grade %d (the original refuses it at a lower level).",
+				(int)out.level, addedGameLevel, addedGameLevel);
+			report.notes.push_back(buf);
+			out.level = (int16_t)addedGameLevel;
+			out.pool.gameLevel = out.level;
+		}
 		// The game writes the table sorted by plugin id (byte order).
 		for (const PluginInfo & p : added)
 		{
