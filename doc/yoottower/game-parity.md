@@ -706,3 +706,53 @@ corrected-map run in §7.4 item 5, where all peaks are within tolerance).
    the holiday peak to 608 vs original 559, within tolerance; see item 1).* The original's day-2 peak is 559, OpenSky's is 596 before
    and 419 after the elevator change. The 663-versus-559 gap of the earlier calibration is gone
    from the peak, but the regression above now puts the holiday under the original.
+
+### 7.5 Second parity campaign
+
+Hotel rooms must be exported at status 30 (`bdac8e0`): at status 10 the original
+never opened them. With the corrected export, Hawaii hotel revenue is $45,000 on
+day 1 and $54,000 on day 2, versus OpenSky's $49,500 and $72,000. Room rates match;
+room-night supply/recycling remains unresolved. `tokyo_g2_hotel_subway` has zero
+hotel guests in both games.
+
+The blackout export fix (`9f5da51`) rewrites the `vEOB` consumption counter, which
+is saved state, to 5,833 against supply 5,000. **Correction to §7.4 item 3:** the
+original did not print "Power down" or black out on the old export. Only the
+consumption rewrite makes the original start the blackout (11:00; OpenSky 11:01).
+
+The 14:01 "Note" is an emergency escape, not restored power. `T2BlackOut::Start`
+(0x1001b620) adds 30 stress; `Exec` (0x1001b750) advances status 1 to 2 at 14:00,
+then runs the emergency and adds 300 stress. Status 3 persists until consumption
+is strictly below supply, or `BreakerOn` requests recovery. `Write` (0x1001ba50)
+saves status, consumption and supply. In `gp2-blackout4/oracle/snaps`, `vEOB#128`
+contains `0100c9168813` at 11:00 and `0300c9168813` after 14:01 and throughout day 2:
+status 1/3, consumption 5,833, supply 5,000. This is a lasting blackout, not merely
+a stranded pool after power recovered. Day 2 has 74 people in the pool, five
+inside, and none walking. The purported blackout check near `T2Tenant::Idle`
+is actually in `T2Tenant::Draw` (0x1005e4d0), where it darkens the tenant.
+
+OpenSky now gates route queries (including cached pool reachability) and elevator
+service on the YootTower blackout state. The emergency stairs clear active trips,
+retain staff/resident reservations and remove general visitors without ordinary
+pool recycling, following `T2People::BreakoutEmergency` (0x1004a770). This is an
+OpenSky adaptation of the emergency path, rather than a full per-person port.
+Simulation ticks that skip precisely 14:00 still schedule the escape. Recovery
+remains driven by supply/breakers, with regression checks for persistence and
+recovery; SimTower/OpenSky rulesets are unaffected.
+
+Reusing the corrected three-day oracle with `pipeline.py --skip-oracle`, daily
+population peaks change from **402 / 362 / 464** to **136 / 79 / 79**, against
+**140 / 79 / 79** in the original (pop max 4/4 within tolerance, previously 1/4).
+OpenSky stops gaining population during the blackout and matches the later
+resident/staff-only population. Funds remain within tolerance (4/4), but tenant
+charges still diverge: day-1/day-2 deltas are -$12,300/-$10,000 versus zero.
+Tenant estimates remain mismatched (24/60 within tolerance); matching population
+does not establish full tenant-state parity.
+Artifacts: `/lab/out/parity/gp2-blackout4/report-codex-escape.md` and
+`codex-escape/series.jsonl`, paired with the retained `oracle/` snapshots.
+
+Remaining open items: Large Elevator top gear; Event Center evening events
+(the fixture never opens); per-car rider counts (original 38 / 53 / 39);
+hotel room-night counts; and blackout tenant-idle/financial effects. Schools
+remain status 10 in the original because their opening route is unreachable.
+No goldens were regenerated.
