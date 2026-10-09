@@ -781,7 +781,7 @@ namespace Bld {
 			// Cars per shaft: the Simple Elevator takes 6, the Large Elevator 8 (BigElev MVDF).
 			const size_t maxCars = large ? 8 : 6;
 			const int length = it.height;
-			const int sl = it.x + origin, sr = sl + 4;
+			const int sl = it.x + origin, sr = sl + (large ? 6 : 4);   // Large shaft: 6 units wide (Express item)
 			Rect area;
 			area.left = sl; area.right = sr;
 			area.bottom = ground - it.y + 1;          // pit row below the bottom floor
