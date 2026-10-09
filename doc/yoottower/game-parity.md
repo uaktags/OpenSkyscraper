@@ -1275,3 +1275,41 @@ remain unmeasured against OpenSky. Goldens: none touched. Oracle instances stopp
 - **Stops, OpenSky:** `out.tower` serves exactly floors 0, 3, 9, 15, 21, 27, 33 (27 unserviced). This matches the original's request IDs, so no OpenSky change was needed.
 - **Car movement (original, 3-minute snapshots, `hkA-fine2`, 71 samples, stopped at 07:28 by a harness dialog):** car 0 goes 6 -> 9 -> 21 at 436, 442 and 448 min. That is about 0.5 floor per game minute, then 2 floors per game minute (gear 0, then gear 1 of the decompile, 2 idles a floor at 4 idles per minute). No car reached gear 2 in the window. OpenSky's car 1 moves at 460 min, car 0 at 490 min, in 30-minute dumps. Those samples are too coarse for a travel-time test, so travel times are **not compared**. The gear model itself (`Car::yootDrive`) was not changed.
 - Not done: a full-day fine-cadence original run (the harness stopped at 448 min), so a complete trip comparison is still missing.
+
+**C3 (hkC3-; the .bld import reads the Event Center booking, OpenSky opens the hall).** The
+importer ignored the EventCenter record, so OpenSky never had an event on an imported
+.bld. Confirmed by reading `BldLoader.cpp` (the tenant loop wrote no event for
+`eventcenter`) and `BldImport.cpp` (no record read). **Import (b8f2b1c):** the coming
+month's slot (`(month0 + 1) % 12` of the 12 u32 slots, the one FUN_1000dcb0 restores at
+00:00) gives the hall-event plugin through `hallEventLookup` (the exporter's id mapping in
+reverse, plus the HEDF bookingDays). The import writes `event`, `startDay = loadDay + 1`,
+`span = bookingDays - 1`. **Decision on the day-0 loss: mirrored.** FUN_1000e680 does not
+resolve the booked id at load, so the original has no event on the load day, and
+FUN_1000dcb0 restores it from the slot at the next 00:00. The original's observed
+run (days 1 and 2 open, day 0 closed, with PlArt's bookingDays of 3) fits "the booking
+starts on the load day and loses that day", so OpenSky closes the load day and runs
+bookingDays - 1 days after it. Day 3 is not observed (the series ends at minute 120), so
+the end of the run is an inference. Unit test: `testBldShippedSaves`, block "Event Center
+booking" (export of a PlArt booking on the tokyo floor slab, 12 slots filled, import gives
+`event="PlArt.t2p" startDay=loadDay+1 span="2"`; no lookup gives no event). 9/9 on `hkC3`.
+**Rerun (hkC3-ec, OpenSky only, against the hkC2-ec3 oracle):** the hall now opens on days 1
+and 2 and stays closed on day 0, as the original does. Day 1: status 30 from 540 (the samples
+are 520 at 10 and 550 at 30; the original is 517 at 10 and 564 at 30). Close at 1020 (17:01 message)
+with +15,000 both days, matching the original's +15,000 settlement on days 1 and 2. Day 0's
+idle hall takes -9,600 of funds at 18:00 in both games. Customers: original 70 (day 1) and 143
+(day 2); OpenSky 78 and 157 (+11% and +10%). First customers: original 3 at 611 with status
+30; OpenSky 6 at 580. Status 31 is never shown by OpenSky (30 throughout) and the original
+shows 31 from about 658 (day 1) and 574 (day 2); the status 30/31 switch is set outside
+EventCenter.dll (FUN_1000dbb0 treats 30, 31 and 32 alike and collects in each), so it is not
+modelled. Estimate: the original's hall reads 300 from day 1 and OpenSky leaves yootEstimate
+at 0, because `eventCenterTick` never sets it (the decompile has `T2Tenant::UpdateCommercialEstimate`
+hourly while open and at close; its formula is not in EventCenter.dll and was not traced).
+**eventCenterTick change (57fe556):** the per-idle collect amount is now
+min(cap, target) - inside - walking (FUN_1000dc70 calls CollectCustomer with target - walking -
+inside). It changed nothing on this fixture (78 and 157 both before and after), so the
+customer overshoot comes from the target value itself: OpenSky's target is 2 x good + medium
+(or the def's unkDC on day 1), which is at least 78 here, while the original stops at 70.
+Not resolved: where the original's target (`uVar1 = *(sub-plugin + 4)` in FUN_1000dbb0's
+10 -> 30 branch) differs from OpenSky's `hallValue` / `unkDC`. Goldens: none touched.
+Runs: `hkC3-ec` (import fix, before the collect change) and `hkC3-ec2` (after). Both
+OpenSky-only (`--skip-oracle`) on the hkC2-ec3 oracle; no oracle instances were started.
