@@ -1019,11 +1019,12 @@ void VenueSystem::cloudTick(long long absMinute)
 			c.x += c.speed;
 			if (c.x > profile.worldWidth * 8)
 			{
-				c.image = cloudImages[rand() % cloudImages.size()];
+				// MakeCloud (flag 0) reuses the hidden object (GetUnuseCloud),
+				// so the slot keeps its bitmap and speed; only the entry x and
+				// the height band are new.
 				const sf::Texture * t = worldTexture(c.image);
 				c.x = (float)(1 - (t ? (int)t->getSize().x : 64));
 				c.y = (float)Yoot::cloudFloor(profile.groundRow - 25, rand());
-				c.speed = rand() % 4 + 2;
 			}
 		}
 	}

@@ -250,7 +250,10 @@ void YootExtrasSystem::maruMinute(long long now, int minute)
 	if (maru.walker && maru.arriveAt < 0)
 	{
 		// Walking: he reaches the tenant and stands there (MaruReception).
-		if (!maru.walker->posing && minute < maru.endMin && maru.target) return;
+		// A walk still under way at the end time arrives first (DoReception
+		// does not test the clock on arrival); he then walks home from there.
+		// Vanishing mid-floor would not match the original.
+		if (!maru.walker->posing && maru.target && (minute < maru.endMin || maru.walker->walking)) return;
 		if (maru.walker->posing && minute < maru.endMin && maru.target)
 		{
 			// DoReception 0x1003abe0: only a tenant with people inside gets
