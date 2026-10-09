@@ -63,6 +63,7 @@ namespace Bld {
 			it.buildDay = e->IntAttribute("buildDay", -1);
 			it.ad = e->Attribute("ad") ? e->Attribute("ad") : "";
 			it.daysLeft = e->IntAttribute("daysLeft", 0);
+			it.event = e->Attribute("event") ? e->Attribute("event") : "";
 			if (const char * h = e->Attribute("holes"))
 			{
 				std::string s(h);
@@ -151,6 +152,29 @@ namespace Bld {
 			std::map<uint32_t, std::string>::const_iterator i = ids->find(id);
 			return i == ids->end() ? std::string() : i->second;
 		};
+	}
+
+	/// EventCenter.t2p SaveExtraData 0x1000e4f0 (64 + 9k bytes, little-endian; xferExtra
+	/// writes the s32 n in front): u32 booked hall-event sub-plugin id (the SP's +0x48),
+	/// 4 x s16 counters, s16 k + k x (u32, s16, s16, s8), s16 12 + 12 x u32 month slots.
+	/// LoadExtraData 0x1000e1f0 hands the id to T2Tenant::SetHallEventPlugin; FUN_1000bec0
+	/// only opens the hall (status 30 from open - 60) while that sub-plugin is set, so
+	/// an export with n = 0 sits at status 10 for ever (oracle tokyo_g3_venues).
+	static std::vector<uint8_t> eventCenterRecord(const TowerItem & it, const PluginManager * plugins)
+	{
+		uint32_t id = 0;
+		YootPluginIdentity ident;
+		AbstractPlugin * source = plugins ? plugins->get(it.event) : nullptr;
+		if (source && source->ensureLoaded() && readYootPluginIdentity(*source, ident)) id = ident.id;
+		std::vector<uint8_t> out;
+		auto u16 = [&out](uint32_t v) { out.push_back((uint8_t)v); out.push_back((uint8_t)(v >> 8)); };
+		auto u32 = [&u16](uint32_t v) { u16(v & 0xffff); u16(v >> 16); };
+		u32(id);
+		for (int i = 0; i < 4; i++) u16(0);    // good / medium / visitors / target: zero when booked
+		u16(0);                                // k: no hall-event table entries
+		u16(12);
+		for (int i = 0; i < 12; i++) u32(0);   // month slots
+		return out;
 	}
 
 	bool exportTower(const TowerState & tower, const BldData & templ, BldData & out,
@@ -631,6 +655,8 @@ namespace Bld {
 					t.extraCount = 0x405;
 					t.extra.assign(264, 0);
 				}
+				if (it.type == "eventcenter" && !it.event.empty())
+					t.extra = eventCenterRecord(it, plugins);
 			}
 			else
 			{

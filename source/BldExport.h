@@ -46,6 +46,7 @@ namespace Bld {
 		int buildDay = -1;         ///< YootTower build day (T2Equip +0x4c), -1 = unknown
 		std::string ad;            ///< billboard: advertise SP plugin file ("" = empty board)
 		int daysLeft = 0;          ///< billboard: campaign days left
+		std::string event;         ///< event center: booked hall-event SP plugin file ("" = none)
 		std::vector<std::pair<int, int> > holes; ///< floor: [l, r) gaps (Floor::holes)
 		std::vector<int> unserviced;
 		std::vector<TowerCar> cars;
