@@ -2148,12 +2148,16 @@ void Game::zoomBy(double factor, const sf::Vector2i * anchorPx)
 void Game::toggleElevatorService(Item::Elevator::Elevator * e, int floor)
 {
 	if (!e) return;
+	if (floor < e->position.y || floor >= e->position.y + e->size.y) return;
+	// Disabled valid stops must remain toggleable; reject structural stops
+	// using the same predicate as Express::connectsFloor before any mutation.
+	if (e->isExpress() && floor > 0 && !Item::Lobby::isSkyLobbyFloor(floor)) return;
 	if (!e->unservicedFloors.erase(floor))
 	{
 		e->unservicedFloors.insert(floor);
 		gameMap.removeNode(MapNode::Point(e->position.x + e->size.x / 2, floor), e);
 	}
-	else
+	else if (e->connectsFloor(floor))
 	{
 		gameMap.addNode(MapNode::Point(e->position.x + e->size.x / 2, floor), e);
 	}
@@ -2279,7 +2283,7 @@ if (!handled) {
 		if (itemsByType["elevator"].size() >= Item::Elevator::Elevator::kMaxShafts) {
 			constructionBlocked = true;
 			blockReason = "No more elevator shafts available";
-		} else if (express && toolPosition.y > 0 && toolPosition.y % 15 != 0) {
+		} else if (express && toolPosition.y > 0 && !Item::Lobby::isSkyLobbyFloor(toolPosition.y)) {
 			constructionBlocked = true;
 			blockReason = "New express shafts anchor at lobby floors";
 		} else if (mainLobby && toolPosition.y >= mainLobby->position.y + 1 &&
@@ -2329,7 +2333,7 @@ if (!handled) {
 		}
 
 		if (toolPrototype->icon == ICON_LOBBY) {
-			if (toolPosition.y % 15 != 0) {
+			if (toolPosition.y != 0 && !Item::Lobby::isSkyLobbyFloor(toolPosition.y)) {
 				constructionBlocked = true;
 				blockReason = "Lobbies can only be built on every 15th floor";
 			}
@@ -2353,7 +2357,36 @@ if (!handled) {
 				minFloorX = INT_MIN;
 				maxFloorX = INT_MAX;
 			}
-		} else if (toolPrototype->icon == ICON_STAIRS) {
+		} else if (toolPrototype->id == "stairs" || toolPrototype->id == "escalator") {
+			const bool escalator = toolPrototype->id == "escalator";
+			if (itemsByType["stairlike"].size() >= 64) {
+				constructionBlocked = true;
+				blockReason = escalator ? "No more escalators available" : "No more stairs available";
+			}
+			if (escalator && !constructionBlocked) {
+				for (int landing = 0; landing < 2; ++landing) {
+					const int y = toolPosition.y + landing;
+					const int x = toolPosition.x + (landing ? 7 : 0);
+					bool allowed = false;
+					auto deck = floorItems.find(y);
+					if (deck != floorItems.end() && !deck->second->underConstruction &&
+					    x >= deck->second->position.x && x < deck->second->getRect().maxX()) allowed = true;
+					for (auto *tenant : itemsByFloor[y]) {
+						if (tenant->prototype->id == "floor" || tenant->canHaulPeople() ||
+						    !tenant->getRect().containsPoint(int2(x, y))) continue;
+						const std::string &id = tenant->prototype->id;
+						allowed = !tenant->underConstruction && (id == "restaurant" || id == "shop" ||
+						          id == "fastfood" || id == "cinema" || id == "lobby" ||
+						          id == "partyhall" || id == "metro");
+						if (!allowed) break;
+					}
+					if (!allowed) {
+						constructionBlocked = true;
+						blockReason = "Escalators available only at commercial spaces";
+						break;
+					}
+				}
+			}
 			// Check obstruction from other transport items
 			const ItemSet &stairlike = itemsByType["stairlike"];
 			for (ItemSet::const_iterator ii = stairlike.begin(); !constructionBlocked && ii != stairlike.end(); ii++) {
@@ -2404,8 +2437,10 @@ if (!handled) {
 			// stairs/escalators themselves are checked against the shaft's
 			// uninflated footprint.
 			recti elevatorBoundary = toolBoundary;
-			elevatorBoundary.origin.y -= 1;
-			elevatorBoundary.size.y += 2;
+			elevatorBoundary.origin.x -= Item::Elevator::Elevator::kShaftClearanceCells;
+			elevatorBoundary.size.x += 2 * Item::Elevator::Elevator::kShaftClearanceCells;
+			elevatorBoundary.origin.y -= 2;
+			elevatorBoundary.size.y += 3;
 
 			const ItemSet &stairlike = itemsByType["stairlike"];
 			for (ItemSet::const_iterator ii = stairlike.begin(); !constructionBlocked && ii != stairlike.end(); ii++) {
@@ -2419,12 +2454,7 @@ if (!handled) {
 			const ItemSet &elevators = itemsByType["elevator"];
 			for (ItemSet::const_iterator ii = elevators.begin(); !constructionBlocked && ii != elevators.end(); ++ii) {
 				Item::Elevator::Elevator *other = (Item::Elevator::Elevator *) *ii;
-				if (other->isExpress() == (toolPrototype->icon == 6)) continue;
 				recti itemRect = other->getRect();
-				itemRect.origin.x -= Item::Elevator::Elevator::kShaftClearanceCells;
-				itemRect.size.x += 2 * Item::Elevator::Elevator::kShaftClearanceCells;
-				itemRect.origin.y -= 2;
-				itemRect.size.y += 3;
 				if (elevatorBoundary.intersectsRect(itemRect)) {
 					constructionBlocked = true;
 					blockReason = "Item requires more space on both sides";
@@ -3047,6 +3077,7 @@ Route Game::findRoute(Item::Item * start, Item::Item * destination, bool service
 
 	MapNode *start_mapnode = gameMap.findNode(start_point, start);
 	MapNode *destination_mapnode = gameMap.findNode(end_point, destination);
+	if (!start_mapnode || !destination_mapnode) return Route();
 	return pathFinder.findRoute(start_mapnode, destination_mapnode, start, destination, serviceRoute);
 }
 

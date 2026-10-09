@@ -41,6 +41,19 @@
 
 static int g_failures = 0;
 
+// SFML texture construction also needs a graphics context. Check before
+// creating textures or Application, so the seam suite remains headless.
+static bool graphicsScenariosAvailable()
+{
+    const char *headless = std::getenv("OPENSKY_HEADLESS");
+    if (headless && std::string(headless) == "1") return false;
+#if defined(__linux__) || defined(__FreeBSD__)
+    const char *display = std::getenv("DISPLAY");
+    if (!display || !*display) return false;
+#endif
+    return true;
+}
+
 #define EXPECT(cond)                                                          \
     do                                                                        \
     {                                                                         \
@@ -769,6 +782,10 @@ static void testPluginManager()
 static void testPluginBitmapLoader()
 {
     using OT::PluginBitmapLoader;
+    if (!graphicsScenariosAvailable()) {
+        std::cout << "SKIP: plugin bitmap texture scenarios (headless)\n";
+        return;
+    }
 
     // Condo.t2p RT_BITMAP 1000 is the YootCondo empty-room sheet. The
     // YootCondo class loads it at runtime via the previous loadPEBitmap;
@@ -909,11 +926,15 @@ static void testDecompiledPlugin()
     EXPECT(dh == 168);
 
     // The PNG loads and is resampled to the target dimensions.
-    sf::Texture tex;
-    EXPECT(PluginBitmapLoader::loadFromPlugin(*office, 1000, tex));
-    const sf::Vector2u sz = tex.getSize();
-    EXPECT(sz.x == 144);
-    EXPECT(sz.y == 168);
+    if (graphicsScenariosAvailable()) {
+        sf::Texture tex;
+        EXPECT(PluginBitmapLoader::loadFromPlugin(*office, 1000, tex));
+        const sf::Vector2u sz = tex.getSize();
+        EXPECT(sz.x == 144);
+        EXPECT(sz.y == 168);
+    } else {
+        std::cout << "SKIP: decompiled plugin texture scenario (headless)\n";
+    }
 
     // enumerateResources / resourcesByType agree.
     std::vector<AbstractPlugin::ResourceKey> flat = office->enumerateResources();
@@ -3273,9 +3294,355 @@ static int testDisasterScenarios() {
 #undef DISASTER_CHECK
 #endif
 
+// Real-engine transport scenarios; OpenSkyTests links these classes and runs
+// under the remote wrapper's Xvfb display, just like the disaster harness.
+#ifdef OPENSKY_TRANSPORT_SCENARIOS
+#include <queue>
+#include <list>
+#include <deque>
+#include <memory>
+#include <utility>
+#include <SFML/Graphics.hpp>
+#include <TGUI/TGUI.hpp>
+#include <TGUI/Backend/SFML-Graphics.hpp>
+#include <tinyxml2.h>
+#define private public
+#define protected public
+#include "Application.h"
+#include "Game.h"
+#include "Item/Lobby.h"
+#include "Item/Stairlike.h"
+#include "Item/Office.h"
+#include "Item/Condo.h"
+#include "Item/FastFood.h"
+#include "Item/Restaurant.h"
+#include "Item/Hotel.h"
+#include "Item/Elevator/Car.h"
+#include "Item/Elevator/Queue.h"
+#include "PathFinder/MapSearchNode.h"
+#include "PathFinder/FloorNode.h"
+#undef protected
+#undef private
+
+static void testElevatorDispatch()
+{
+ if (!graphicsScenariosAvailable()) {
+  std::cout << "SKIP: Batch 4 C++ transport scenarios (no display or OPENSKY_HEADLESS=1)\n";
+  return;
+ }
+ using namespace OT;
+ using namespace OT::Item::Elevator;
+ char exe[]="./OpenSkyTests", rules[]="--ruleset", sky[]="opensky";
+ char *args[]={exe,rules,sky};
+ Application app(3,args); app.audioMuted=true;
+ app.window.create(sf::VideoMode({1280,768}),"transport scenarios");
+ app.window.setVisible(false); app.gui.setWindow(app.window);
+ app.data.addSearchPath("../data");
+ Game g(app);
+ std::vector<std::unique_ptr<Person>> riders;
+ auto reset = [&]() {
+  riders.clear(); g.clearWorld(); g.money.clear(20000000); g.funds=20000000; g.rating=4;
+  struct Clock : Time { using Time::set; };
+  Clock clock; clock.set(300.0 / Time::kSimFramesPerDay); g.time=clock;
+ };
+ auto make = [&](const char *id, int x, int y) {
+  auto *item=g.itemFactory.make(id,int2(x,y)); g.addItem(item); item->underConstruction=false; return item;
+ };
+ auto shaft = [&](const char *id="elevator-standard", int x=0, int bottom=0, int height=20) {
+  auto *e=static_cast<Elevator *>(make(id,x,bottom)); e->size.y=height; e->updateSprite(); return e;
+ };
+ auto person = [&](Person::Type type=Person::kMan) {
+  riders.emplace_back(new Person(&g,type)); return riders.back().get();
+ };
+ auto enqueue = [&](Elevator *e, int from, int to, Person::Type type=Person::kMan) {
+  auto *p=person(type); p->journey.item=e; p->journey.fromFloor=from; p->journey.toFloor=to;
+  e->addPerson(p); return p;
+ };
+ auto tick = [&](Elevator *e, int count=1) {
+  for(int i=0;i<count;++i) { g.time.absolute+=1.0/2600; g.time.dta=1.0/2600; e->advance(0); }
+ };
+ auto place = [&](const char *id,int x,int y) {
+  g.toolPrototype=g.itemFactory.prototypesById.at(id); return g.constructToolAt(int2(x,y));
+ };
+
+ // E1: the predicate, structural stops, anchors, and sky-lobby construction.
+ reset();
+ for(int f=1;f<100;++f) EXPECT(Item::Lobby::isSkyLobbyFloor(f)==(f%15==14));
+ EXPECT(!Item::Lobby::isSkyLobbyFloor(0)); EXPECT(!Item::Lobby::isSkyLobbyFloor(-1));
+ auto *e=shaft("elevator-express",0,-2,50);
+ EXPECT(e->connectsFloor(-1)); EXPECT(e->connectsFloor(0)); EXPECT(e->connectsFloor(14));
+ EXPECT(e->connectsFloor(29)); EXPECT(!e->connectsFloor(15));
+ e->unservicedFloors.insert(14); EXPECT(!e->connectsFloor(14));
+ reset(); g.extendFloor(13,-20,20); EXPECT(place("lobby",0,14)); EXPECT(!place("lobby",0,15));
+ reset(); g.extendFloor(13,-20,20); EXPECT(place("elevator-express",0,14));
+ reset(); g.extendFloor(14,-20,20); EXPECT(!place("elevator-express",0,15));
+
+ // E4: all seven frame periods, including the hidden night period.
+ const int starts[]={0,400,800,1200,1600,2000,2400};
+ for(int i=0;i<7;++i) {
+  EXPECT(Elevator::schedulePeriod((300.0+starts[i])/2600)==i);
+  if(i>0) EXPECT(Elevator::schedulePeriod((299.0+starts[i])/2600)==i-1);
+ }
+ EXPECT(Elevator::schedulePeriod(300.0/2600+3)==0);
+
+ // E3: working car beats idle, strict threshold boundary, reversing costs,
+ // approach priority, assigned calls, and deterministic idle ties.
+ reset(); e=shaft(); auto *busy=*e->cars.begin(); e->addCar(7);
+ auto *idle=e->getIdleCar(7);
+ busy->setAltitude(4); busy->direction=Elevator::kUp; busy->state=Car::kMoving; busy->destinationFloor=12;
+ auto *onboard=person(); onboard->journey.toFloor=12; e->Item::Item::addPerson(onboard); busy->passengers.insert(onboard);
+ auto *p=enqueue(e,6,10); auto *q=e->getQueue(6,Elevator::kUp);
+ EXPECT(q->assignedCar==busy); EXPECT(q->answered); EXPECT(busy->destinationFloor==6);
+ reset(); e=shaft(); busy=*e->cars.begin(); e->addCar(7); idle=e->getIdleCar(7);
+ e->schedules[0][0].threshold=1;
+ busy->setAltitude(4); busy->direction=Elevator::kUp; busy->state=Car::kMoving; busy->destinationFloor=12;
+ onboard=person(); onboard->journey.toFloor=12; e->Item::Item::addPerson(onboard); busy->passengers.insert(onboard);
+ enqueue(e,6,10); EXPECT(e->getQueue(6,Elevator::kUp)->assignedCar==idle);
+ reset(); e=shaft(); busy=*e->cars.begin(); e->addCar(15);
+ busy->setAltitude(5); busy->direction=Elevator::kUp; busy->state=Car::kMoving; busy->destinationFloor=8;
+ onboard=person(); onboard->journey.toFloor=8; e->Item::Item::addPerson(onboard); busy->passengers.insert(onboard);
+ enqueue(e,2,1); EXPECT(e->getQueue(2,Elevator::kDown)->assignedCar==busy); EXPECT(busy->destinationFloor==8);
+ reset(); e=shaft(); auto *first=*e->cars.begin(); first->setAltitude(4); first->homeFloor=4; first->destinationFloor=4;
+ e->addCar(8); enqueue(e,6,10); EXPECT(e->getQueue(6,Elevator::kUp)->assignedCar==first);
+
+ // E5/E2: both shuttle modes run nonstop outbound and serve both queues
+ // returning. A workless car returns home rather than patrolling.
+ for(int mode=1;mode<=2;++mode) {
+  reset(); e=shaft("elevator-standard",0,0,11); auto *c=*e->cars.begin();
+  for(int day=0;day<2;++day) for(int period=0;period<7;++period) e->schedules[day][period].mode=mode;
+  c->setAltitude(5); c->homeFloor=5; c->destinationFloor=5;
+  auto *up=enqueue(e,5,8); auto *down=enqueue(e,5,2);
+  tick(e,5); EXPECT(c->passengers.count(up)); EXPECT(c->passengers.count(down));
+  EXPECT(c->destinationFloor==(mode==1?10:0));
+  tick(e,120); EXPECT(!e->people.count(up)); EXPECT(!e->people.count(down));
+  EXPECT(std::abs(c->altitude-5)<0.01); EXPECT(c->state==Car::kIdle); EXPECT(c->doorTicks==0);
+ }
+
+ // Calls arriving during the outbound shuttle cannot introduce a stop.
+ reset(); e=shaft("elevator-standard",0,0,11); auto *moving=*e->cars.begin();
+ e->schedules[0][0].mode=kScheduleExpressUp;
+ enqueue(e,3,1); EXPECT(moving->destinationFloor==10);
+ tick(e); enqueue(e,7,9); EXPECT(moving->destinationFloor==10);
+ tick(e,200); EXPECT(e->people.empty()); EXPECT(moving->state==Car::kIdle);
+ // A simulation frame advances the docking gear exactly once, including
+ // fractional frames, rather than using the old seconds-per-day base.
+ reset(); e=shaft(); moving=*e->cars.begin();
+ auto *rider=person(); rider->journey.toFloor=19; e->Item::Item::addPerson(rider); moving->passengers.insert(rider);
+ moving->moveTo(19); g.time.dta=0.5/2600; moving->advance(0); EXPECT(moving->altitude==0);
+ moving->advance(0); EXPECT(moving->altitude==1);
+ tick(e,5); EXPECT(moving->altitude==1); tick(e); EXPECT(moving->altitude==2);
+
+ // E6: exclusive distance charge, express exemption, staff span exemption,
+ // and a retry does not charge the route again.
+ for(int distance : {79,80,124,125}) {
+  reset(); auto *origin=make("floor",0,0); origin->size.x=2;
+  auto *stairs=make("stairs",distance+1,0); auto *dest=make("floor",0,1);
+  Route r; r.add(origin,0); r.add(stairs,1); r.add(dest,1);
+  auto *walker=person(); origin->Item::Item::addPerson(walker); walker->journey.set(r);
+  EXPECT_NEAR(walker->journeyStress(),35+(distance>=125?60:distance>=80?30:0),1e-6);
+  auto *staff=person(Person::kHousekeeper); origin->Item::Item::addPerson(staff); staff->journey.set(r);
+  EXPECT_NEAR(staff->journeyStress(),0,1e-6);
+  g.time.dta=19.0/2600; stairs->advance(0); EXPECT(walker->at==stairs);
+  g.time.dta=1.0/2600; stairs->advance(0); EXPECT(walker->at==dest);
+ }
+ reset(); auto *origin=make("floor",0,0); origin->size.x=2; e=shaft("elevator-express",150,0,30);
+ auto *dest=make("floor",0,14); Route r; r.add(origin,0); r.add(e,14); r.add(dest,14);
+ p=person(); origin->Item::Item::addPerson(p); p->journey.set(r); EXPECT_NEAR(p->journeyStress(),0,1e-6);
+
+ // E7: waits bank once, capped, with ground-only flat forgiveness.
+ for(int height : {1,2,3}) for(int floor : {0,14}) {
+  reset(); auto *lobby=make("lobby",0,0); lobby->size.y=height;
+  e=shaft(); e->clearCars(); p=enqueue(e,floor,floor+1); q=e->getQueue(floor,Elevator::kUp);
+  g.time.absolute+=60.0/2600; q->advance(0); EXPECT_NEAR(p->journeyStress(),0,1e-6);
+  EXPECT(q->popPerson()==p); EXPECT_NEAR(p->journeyStress(),60-(floor==0?(height==3?50:height==2?25:0):0),1e-6);
+ }
+ reset(); make("lobby",0,0)->size.y=3; e=shaft("elevator-service"); e->clearCars();
+ p=enqueue(e,0,5,Person::kHousekeeper); q=e->getQueue(0,Elevator::kUp); g.time.absolute+=60.0/2600;
+ q->popPerson(); EXPECT_NEAR(p->journeyStress(),0,1e-6);
+
+ reset(); make("lobby",0,0)->size.y=2; e=shaft(); e->clearCars(); p=enqueue(e,0,5);
+ q=e->getQueue(0,Elevator::kUp); g.time.absolute+=350.0/2600; q->popPerson();
+ EXPECT_NEAR(p->journeyStress(),275,1e-6);
+
+ // E8: every rejected rider retains the origin, accrues its own penalty,
+ // retries at exactly 16 frames, and can enter once a slot is available.
+ reset(); origin=make("floor",0,0); origin->size.x=2; e=shaft(); e->clearCars();
+ for(int i=0;i<40;++i) enqueue(e,0,5);
+ dest=make("floor",0,5); r.clear(); r.add(origin,0); r.add(e,5); r.add(dest,5);
+ p=person(); origin->Item::Item::addPerson(p); p->journey.set(r);
+ auto *other=person(); origin->Item::Item::addPerson(other); other->journey.set(r);
+ EXPECT(p->at==origin); EXPECT(other->at==origin); EXPECT(!e->people.count(p));
+ EXPECT(p->state==Person::kPlanning); EXPECT_NEAR(p->journeyStress(),5,1e-6); EXPECT_NEAR(other->journeyStress(),5,1e-6);
+ g.time.absolute+=15.0/2600; p->advance(0); EXPECT_NEAR(p->journeyStress(),5,1e-6);
+ g.time.absolute+=1.0/2600; p->advance(0); EXPECT_NEAR(p->journeyStress(),10,1e-6);
+ q=e->getQueue(0,Elevator::kUp); q->popPerson(); g.time.absolute+=16.0/2600; p->advance(0);
+ EXPECT(p->at==e); EXPECT(!p->journey.retryPending); EXPECT(q->people.size()==40);
+ EXPECT_NEAR(p->journeyStress(),10,1e-6);
+
+ // Staggered per-person watchdog ejects only expired riders, banks the
+ // capped wait once and re-arms remaining calls, including service queues.
+ for(bool service : {false,true}) {
+  reset(); origin=make("floor",0,0); make("lobby",0,0)->size.y=3;
+  e=shaft(service?"elevator-service":"elevator-standard"); e->clearCars();
+  p=enqueue(e,0,5); g.time.absolute+=100.0/2600; other=enqueue(e,0,5);
+  q=e->getQueue(0,Elevator::kUp); g.time.absolute+=200.0/2600; q->advance(0);
+  EXPECT(q->people.size()==1); EXPECT(q->people.front()==other); EXPECT(p->at==origin);
+  EXPECT(p->journey.item==nullptr); EXPECT(p->state==Person::kPlanning);
+  EXPECT(p->journey.toFloor==5); EXPECT(p->journey.retryPending);
+  EXPECT_NEAR(p->stress,service?0:250,1e-6); EXPECT(q->called); EXPECT(!q->answered);
+  g.time.absolute+=100.0/2600; q->advance(0); EXPECT(q->people.empty()); EXPECT(!q->called);
+ }
+
+ // Watchdog recovery is shared by workers, residents, customers and guests.
+ // Preserve the final destination beyond the failed leg, retry at 16 frames,
+ // tolerate missing map nodes and restore the activity when service returns.
+ for(int kind=0;kind<5;++kind) {
+  reset();
+  auto *office=static_cast<Item::Office *>(make("office",30,5));
+  auto *condo=static_cast<Item::Condo *>(make("condo",30,7));
+  auto *food=static_cast<Item::FastFood *>(make("fastfood",30,9));
+  // Restaurant is not registered by this factory; only its customer type
+  // is needed to verify the common Person retry path.
+  std::unique_ptr<Item::AbstractPrototype> restaurantPrototype(Item::Restaurant::makePrototype());
+  std::unique_ptr<Item::Restaurant> restaurant(new Item::Restaurant(&g,restaurantPrototype.get()));
+  auto *hotel=static_cast<Item::Hotel *>(make("hotel_single",30,13));
+  switch(kind) {
+   case 0: p=new Item::Office::Worker(office,Person::kMan); break;
+   case 1: p=new Item::Condo::CondoOccupant(condo,Person::kMan,8,18); break;
+   case 2: p=new Item::FastFood::Customer(food); break;
+   case 3: p=new Item::Restaurant::Customer(restaurant.get()); break;
+   default: p=new Item::Hotel::Guest(hotel); break;
+  }
+  riders.emplace_back(p);
+  g.extendFloor(0,-20,60); g.extendFloor(5,-20,60);
+  origin=g.floorItems.at(0); dest=office;
+  e=shaft(); e->clearCars(); auto *transfer=shaft("elevator-standard",80,3,3); transfer->clearCars();
+  g.gameMap.addNode(MapNode::Point(e->position.x+e->size.x/2,0),e);
+  r.clear(); r.add(origin,0); r.add(e,3); r.add(transfer,5); r.add(dest,5);
+  p->state=Person::kCommuting; origin->Item::Item::addPerson(p); p->journey.set(r);
+  q=e->getQueue(0,Elevator::kUp); g.time.absolute+=300.0/2600; q->advance(0);
+  EXPECT(p->at==origin); EXPECT(p->journey.toFloor==5); EXPECT(p->journey.destination==dest);
+  EXPECT(p->journey.retryPending); EXPECT(p->state==Person::kPlanning);
+  g.removeItem(transfer);
+  // An unavailable endpoint must return no route rather than dereference null.
+  auto *destinationMapNode=g.gameMap.floorNodes.at(5);
+  g.gameMap.floorNodes.erase(5);
+  const double firstRetry=p->journey.retryFrame;
+  g.time.absolute+=15.0/2600; p->advance(0); EXPECT(p->journey.retryFrame==firstRetry);
+  g.time.absolute+=1.0/2600; p->advance(0);
+  EXPECT(p->journey.retryPending); EXPECT(p->journey.retryFrame>firstRetry); EXPECT(p->journey.destination==dest);
+  g.gameMap.floorNodes[5]=destinationMapNode;
+  // A structurally present endpoint with no elevator service also retries.
+  g.toggleElevatorService(e,5); g.time.absolute+=16.0/2600; p->advance(0);
+  EXPECT(p->at==origin); EXPECT(p->journey.retryPending);
+  g.toggleElevatorService(e,5); g.time.absolute+=15.0/2600; p->advance(0); EXPECT(p->at==origin);
+  g.time.absolute+=1.0/2600; p->advance(0);
+  EXPECT(p->at==e); EXPECT(!p->journey.retryPending); EXPECT(p->state==Person::kCommuting);
+  EXPECT(p->journey.toFloor==5); EXPECT(p->journey.destination==dest);
+  e->addCar(0); e->respondToCalls(); tick(e,180);
+  EXPECT(p->at==dest); EXPECT(!p->journey.retryPending);
+  // A new owner activity supersedes recovery, and removing the retained
+  // destination safely cancels a pending retry.
+  p->journey.failWaiting(); r.clear(); r.add(origin,0); r.add(origin,0);
+  p->state=Person::kReturning; p->journey.set(r); EXPECT(!p->journey.retryPending);
+  r.clear(); r.add(origin,0); r.add(e,5); r.add(dest,5); p->journey.set(r); p->journey.failWaiting();
+  g.removeItem(dest); EXPECT(!p->journey.retryPending); EXPECT(p->journey.destination==nullptr);
+ }
+
+ // Expiring one rider preserves the car already dispatched for younger riders.
+ reset(); e=shaft(); e->clearCars(); p=enqueue(e,0,5);
+ g.time.absolute+=100.0/2600; other=enqueue(e,0,5); q=e->getQueue(0,Elevator::kUp);
+ e->addCar(10); auto *assigned=*e->cars.begin(); q->assignedCar=assigned; q->called=q->answered=true;
+ g.time.absolute+=200.0/2600; q->applyWatchdog();
+ EXPECT(q->people.size()==1); EXPECT(q->called); EXPECT(q->answered); EXPECT(q->assignedCar==assigned);
+ g.time.absolute+=100.0/2600; q->applyWatchdog();
+ EXPECT(q->people.empty()); EXPECT(!q->called); EXPECT(!q->answered); EXPECT(q->assignedCar==nullptr);
+
+ // E9: actual horizontal stairs/escalator distance and replacement full cost.
+ for(const char *id : {"stairs","escalator","elevator-standard","elevator-service"}) {
+  reset(); auto *transport=make(id,30,0);
+  std::list<MapNode *> list; FloorNode floorNode(&list); MapNode a(&floorNode), b(&floorNode);
+  a.position=MapNode::Point(34,0); b.position=MapNode::Point(34,1);
+  a.neighbours[MapNode::UP]=&b; a.transportItems[MapNode::UP]=transport;
+  MapSearchNode start(&a), finish(&b); start.start_point=MapNode::Point(10,0);
+  if(transport->isElevator()) {
+   auto *el=static_cast<Elevator *>(transport); el->clearCars();
+   for(int i=0;i<40;++i) enqueue(el,0,1);
+   const int cells=transport->position.x+transport->size.x/2-10;
+   EXPECT_NEAR(start.GetCost(finish),8*cells+1000,1e-6);
+   start.numElevators=1; EXPECT_NEAR(start.GetCost(finish),8*cells+6000,1e-6);
+  } else EXPECT_NEAR(start.GetCost(finish),8*20+(std::string(id)=="stairs"?640:0),1e-6);
+ }
+
+ // E10/E11: 30-floor count and clearance between every shaft type.
+ reset(); e=shaft(); EXPECT(e->canResizeTo(0,30)); EXPECT(!e->canResizeTo(0,31));
+ for(const char *id : {"elevator-standard","elevator-service","elevator-express"}) {
+  reset(); auto *existing=shaft(id,0,0,10); e=shaft("elevator-standard",11,0,10);
+  EXPECT(!e->canResizeTo(0,10)); e->position.x=existing->size.x+8; EXPECT(e->canResizeTo(0,10));
+  e->position.x=0; EXPECT(!e->canResizeTo(11,1)); EXPECT(e->canResizeTo(12,1));
+  EXPECT(existing!=e);
+  // Candidate inclusive top 9 plus one touches the other shaft at floor 10.
+  existing->position.y=10; e->position.y=0;
+  EXPECT(!e->canResizeTo(0,10)); EXPECT(e->canResizeTo(0,9));
+  reset(); shaft(id,0,0,10); g.extendFloor(0,-20,30); EXPECT(!place("elevator-standard",11,0));
+ }
+
+ // E12: escalators use the stairlike path, landing whitelist, construction,
+ // and one shared 64-record pool for stairs and escalators.
+ reset(); g.extendFloor(0,-20,40); g.extendFloor(1,-20,40); EXPECT(place("escalator",0,0));
+ reset(); g.extendFloor(1,-20,40); g.extendFloor(2,-20,40); make("office",0,1);
+ EXPECT(!place("escalator",0,1)); EXPECT(place("stairs",16,1));
+ reset(); g.extendFloor(1,-20,40); g.extendFloor(2,-20,40); make("shop",0,1)->underConstruction=true;
+ EXPECT(!place("escalator",0,1));
+ reset(); g.extendFloor(1,-20,40); g.extendFloor(2,-20,40); make("shop",0,1); EXPECT(place("escalator",0,1));
+ reset(); g.extendFloor(1,-20,40); g.extendFloor(2,-20,40); make("office",7,2);
+ EXPECT(!place("escalator",0,1));
+ reset(); g.extendFloor(1,-20,40); EXPECT(!place("escalator",0,1));
+ reset(); for(int i=0;i<64;++i) make(i%2?"stairs":"escalator",(i%16)*8-100,3+(i/16)*2);
+ g.extendFloor(1,-20,40); g.extendFloor(2,-20,40);
+ EXPECT(!place("stairs",0,1)); EXPECT(!place("escalator",0,1)); EXPECT(g.itemsByType["stairlike"].size()==64);
+
+ // E13: lobby/home patience applies at sky floors and ground mezzanines.
+ for(int floor : {0,1,14,29,7,8}) {
+  reset(); make("lobby",0,0)->size.y=3; e=shaft("elevator-standard",0,0,30); auto *c=*e->cars.begin();
+  c->homeFloor=7; c->setAltitude(floor); c->destinationFloor=floor; c->doorTicks=1; c->holdTicks=2; c->state=Car::kHauling;
+  tick(e); EXPECT(c->holdTicks==(floor==8?2:1)); EXPECT(c->doorTicks==(floor==8?0:1));
+ }
+
+ // E14: service toggles cannot inject structurally impossible map stops,
+ // and the dialog reflects those floors as OFF.
+ reset(); g.extendFloor(0,-20,20); g.extendFloor(5,-20,20); g.extendFloor(14,-20,20);
+ e=shaft("elevator-express",0,0,30); e->unservicedFloors.insert(5);
+ auto *invalidQueue=e->getQueue(5,Elevator::kUp);
+ const auto queueCount=e->queues.size(); const auto serviceFloors=e->unservicedFloors;
+ const auto pendingRoutes=g.routeBuildQueue;
+ g.toggleElevatorService(e,5); EXPECT(!e->connectsFloor(5));
+ EXPECT(e->unservicedFloors==serviceFloors); EXPECT(e->queues.size()==queueCount);
+ EXPECT(e->getQueue(5,Elevator::kUp)==invalidQueue); EXPECT(g.routeBuildQueue==pendingRoutes);
+ g.toggleElevatorService(e,-1); g.toggleElevatorService(e,30);
+ EXPECT(e->unservicedFloors==serviceFloors); EXPECT(e->queues.size()==queueCount);
+ EXPECT(g.routeBuildQueue==pendingRoutes);
+ EXPECT(!g.gameMap.findNode(MapNode::Point(3,5),e));
+ g.elevatorDialog.currentElevator=e; EXPECT(g.elevatorDialog.buttonLabel(5).find("[OFF]")!=std::string::npos);
+ g.toggleElevatorService(e,14); EXPECT(!e->connectsFloor(14));
+ g.toggleElevatorService(e,14); EXPECT(e->connectsFloor(14)); EXPECT(g.gameMap.findNode(MapNode::Point(3,14),e));
+ g.elevatorDialog.currentElevator=nullptr;
+ riders.clear(); g.clearWorld();
+ std::cout<<"Batch 4 C++ transport scenarios completed\n";
+}
+#endif
+
 int main()
 {
-#ifdef OPENSKY_DISASTER_SCENARIOS
+#ifdef OPENSKY_TRANSPORT_ONLY
+    testElevatorDispatch();
+    if (g_failures > 0) {
+        std::cerr << g_failures << " test(s) failed\n";
+        return 1;
+    }
+    std::cout << "All transport tests passed\n";
+    return 0;
+#elif defined(OPENSKY_DISASTER_SCENARIOS)
     return testDisasterScenarios();
 #else
 	testTdtLoader();
@@ -3329,6 +3696,16 @@ int main()
 	testOspAttrCompat();
 	testSimTowerEventClock();
 	testBatch3SecomNeverUnlocks();
+#ifdef OPENSKY_TRANSPORT_TEST_EXECUTABLE
+    if (graphicsScenariosAvailable()) {
+        if (std::system("\"" OPENSKY_TRANSPORT_TEST_EXECUTABLE "\"") != 0) {
+            std::cerr << "FAIL: transport scenario process\n";
+            ++g_failures;
+        }
+    } else {
+        std::cout << "SKIP: Batch 4 C++ transport scenarios (no display or OPENSKY_HEADLESS=1)\n";
+    }
+#endif
     if (g_failures > 0)
     {
         std::cerr << g_failures << " test(s) failed\n";

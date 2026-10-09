@@ -4,6 +4,7 @@
 #include "../../Game.h"
 #include "Car.h"
 #include "Queue.h"
+#include "../Lobby.h"
 
 using namespace OT;
 using namespace OT::Item::Elevator;
@@ -181,7 +182,6 @@ void Car::setState(State s)
 {
 	if (state != s) {
 		state = s;
-		journeyTime = 0;
 		if (state == kIdle) {
 			direction = Elevator::kNone;
 			elevator->respondToCalls();
@@ -211,12 +211,11 @@ void Car::advance(double dt)
 	const int passengersBefore = (int)passengers.size();
 	const int doorTicksBefore = doorTicks;
 	const State stateBefore = state;
-	const double frameDelta = game->time.dta / Time::kBaseSpeed;
+	const double frameDelta = game->time.dta * Time::kSimFramesPerDay;
 	journeyTime += frameDelta;
-	if (journeyTime < 1.0) return;
-	int steps = (int)journeyTime;
+	if (journeyTime + 1e-7 < 1.0) return;
+	int steps = (int)std::floor(journeyTime + 1e-7);
 	journeyTime -= steps;
-	if (steps > 64) steps = 64; // hitches cannot starve the door state machine
 
 	for (int tick = 0; tick < steps; ++tick)
 	{
@@ -235,30 +234,27 @@ void Car::advance(double dt)
 			}
 			if (doorTicks & 1)
 			{
-				Queue *q = elevator->getQueue(destinationFloor, direction);
-				if (doorTicks == 1)
-				{
-					while (!isFull() && q && !q->people.empty()) passengers.insert(q->popPerson());
-				}
-				else if (!isFull() && q && !q->people.empty())
-					passengers.insert(q->popPerson());
-				if (q && q->people.empty())
-				{
-					q->steppingInside = false;
-					q->called = false;
-					q->answered = false;
-				}
+				auto board = [&](Elevator::Direction dir) {
+					Queue *q = elevator->getQueue(destinationFloor, dir);
+					if (doorTicks == 1) {
+						while (!isFull() && !q->people.empty()) passengers.insert(q->popPerson());
+					} else if (!isFull() && !q->people.empty()) passengers.insert(q->popPerson());
+				};
+				board(direction);
+				if (elevator->scheduleMode() != kScheduleFull)
+					board(direction == Elevator::kUp ? Elevator::kDown : Elevator::kUp);
 			}
 			if (isFull())
 			{
 				doorTicks = 0; holdTicks = 0;
+				elevator->finishStop(this);
 				if (!passengers.empty()) setState(kClosingDoors);
 				else setState(kIdle);
 				elevator->decideCarDestination(this);
 				continue;
 			}
 			if (doorTicks == 1 && holdTicks > 0 && !isFull() &&
-				(fabs(altitude - homeFloor) < 0.01 || destinationFloor == 0 ||
+				(fabs(altitude - homeFloor) < 0.01 || destinationFloor == 0 || OT::Item::Lobby::isSkyLobbyFloor(destinationFloor) ||
 				 (game->mainLobby && destinationFloor >= game->mainLobby->position.y &&
 				  destinationFloor < game->mainLobby->position.y + game->mainLobby->size.y)))
 			{
@@ -268,8 +264,9 @@ void Car::advance(double dt)
 			--doorTicks;
 			if (doorTicks == 0)
 			{
-				if (passengers.empty()) { setState(kIdle); continue; }
+				elevator->finishStop(this);
 				elevator->decideCarDestination(this);
+				elevator->respondToCalls();
 			}
 			continue;
 		}
@@ -287,6 +284,21 @@ void Car::advance(double dt)
 			setAltitude(current + (direction == Elevator::kUp ? stride : -stride));
 			if ((int)std::lround(altitude) == destinationFloor)
 			{
+				if (!elevator->hasWork(this)) { doorTicks = 0; setState(kIdle); continue; }
+				if (elevator->scheduleMode() != kScheduleFull) {
+					const int mode = elevator->scheduleMode();
+					const int extreme = mode == kScheduleExpressUp ? elevator->position.y + elevator->size.y - 1 : elevator->position.y;
+					if (destinationFloor == extreme) shuttleReturning = true;
+					direction = mode == kScheduleExpressUp ? Elevator::kDown : Elevator::kUp;
+				} else {
+					// A reversal hall stop boards the direction of its owned call.
+					bool ahead = false;
+					for (auto *p : passengers) if ((p->journey.toFloor - destinationFloor) * direction > 0) ahead = true;
+					for (auto *q : elevator->queues) if (q->assignedCar == this && !q->people.empty() &&
+					    (q->floor - destinationFloor) * direction > 0) ahead = true;
+					if (!ahead) for (auto *q : elevator->queues) if (q->assignedCar == this &&
+					    q->floor == destinationFloor && !q->people.empty()) { direction = q->direction; break; }
+				}
 				doorTicks = 5;
 				setState(kHauling);
 			}
@@ -297,12 +309,12 @@ void Car::advance(double dt)
 		{
 			Queue *up = elevator->getQueue((int)std::lround(altitude), Elevator::kUp);
 			Queue *down = elevator->getQueue((int)std::lround(altitude), Elevator::kDown);
-			if ((up && up->called && elevator->scheduleAllows(Elevator::kUp)) ||
-			    (down && down->called && elevator->scheduleAllows(Elevator::kDown)))
+			if ((up && !up->people.empty() && (!up->assignedCar || up->assignedCar == this)) ||
+			    (down && !down->people.empty() && (!down->assignedCar || down->assignedCar == this)))
 			{
-				direction = (up && up->called && elevator->scheduleAllows(Elevator::kUp)) ? Elevator::kUp : Elevator::kDown;
+				direction = (up && !up->people.empty() && (!up->assignedCar || up->assignedCar == this)) ? Elevator::kUp : Elevator::kDown;
 				destinationFloor = (int)std::lround(altitude);
-				doorTicks = 1;
+				doorTicks = 5;
 				setState(kHauling);
 				continue;
 			}
@@ -335,11 +347,12 @@ Person * Car::nextPassengerToUnmount() const
 
 void Car::moveTo(int floor)
 {
-	if (destinationFloor != floor)
+	if (state == kMoving && destinationFloor == floor && std::abs(altitude - floor) > 0.01) return;
+	destinationFloor = floor;
+	if (std::abs(altitude - floor) > 0.01)
 	{
 		destinationFloor = floor;
 		startAltitude = altitude;
-		journeyTime = 0;
 		moveTicks = 0;
 		arrivingPlayed = false;
 		departingPlayed = false;

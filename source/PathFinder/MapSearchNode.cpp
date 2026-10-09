@@ -97,7 +97,7 @@ float MapSearchNode::GetCost(MapSearchNode &successor) {
 		// inside a lobby/zone is free in the EXE route table.
 		traverse_cost = 0;
 	} else if (i->isStairlike()) {
-		const int distance = std::abs((mapNode->floorNode ? start_point.x : mapNode->position.x) - start_point.x);
+		const int distance = std::abs(i->position.x - start_point.x);
 		const bool stairs = i->prototype->icon == ICON_STAIRS;
 		// Escalator score is 8*d; therefore scores below 640 are the
 		// TransferT early-accept branch and beat elevator candidates.
@@ -113,7 +113,7 @@ float MapSearchNode::GetCost(MapSearchNode &successor) {
 		successor.walkFloorsSinceTransport += std::abs(successor.mapNode->position.y - mapNode->position.y);
 	// The next transport score measures from this landing, not the original
 	// room, after a multi-leg route.
-	successor.start_point.x = mapNode->position.x;
+	successor.start_point.x = i->position.x;
 	} else if (i->isElevator()) {
 		const bool boarding = i != parent_item;
 		if (boarding) {
@@ -131,7 +131,7 @@ float MapSearchNode::GetCost(MapSearchNode &successor) {
 			else if (transfer)
 				traverse_cost = ROUTE_COST_PER_CELL * distance + (full ? ROUTE_TRANSFER_FULL_COST : ROUTE_TRANSFER_COST);
 			else
-				traverse_cost = ROUTE_COST_PER_CELL * distance + ROUTE_BASE_COST + (full ? ROUTE_FULL_COST : 0);
+				traverse_cost = ROUTE_COST_PER_CELL * distance + (full ? ROUTE_FULL_COST : ROUTE_BASE_COST);
 			successor.numElevators++;
 			successor.start_point.x = elevator_x;
 		}

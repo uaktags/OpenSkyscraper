@@ -7,7 +7,7 @@
 using namespace OT;
 using namespace Item;
 
-const static double kTransitionTime = 1.5;
+const static double kTransitionTime = 20;
 
 void Stairlike::init()
 {
@@ -24,13 +24,7 @@ layer = 1;
 void Stairlike::advance(double dt)
 {
 	Item::advance(dt);
-	double dta = game->time.dta / Time::kBaseSpeed;
-	for (People::iterator ip = people.begin(); ip != people.end();)
-	{
-		Person *p = *(ip++);
-		if ((transitionTimes[p] += dta) >= kTransitionTime)
-			p->journey.next();
-	}
+	double dta = game->time.dta * Time::kSimFramesPerDay;
 	// Animation pacing ported from OpenSkyWeb stairlike.js: frames follow
 	// the actual walking progress of the person on the stairs, with
 	// direction-aware frames on straight stairs (1..6 up, 7..13 down),

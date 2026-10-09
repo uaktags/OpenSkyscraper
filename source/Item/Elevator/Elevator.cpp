@@ -32,37 +32,40 @@ void Elevator::resetSchedules()
 		}
 }
 
-int Elevator::schedulePeriod(double hour)
+int Elevator::schedulePeriod(double absolute)
 {
-	int frame = (int)std::floor((hour / 24.0) * 2600.0);
-	int period = frame / 400;
-	if (period < 0) period = 0;
-	if (period >= kSchedulePeriodCount) period = kSchedulePeriodCount - 1;
-	return period;
+	const double stage = std::fmod(std::floor(absolute * Time::kSimFramesPerDay + 1e-7),
+	                               Time::kSimFramesPerDay);
+	const int frame = (int)std::fmod(stage - 300 + Time::kSimFramesPerDay,
+	                               Time::kSimFramesPerDay);
+	return std::min(6, frame / 400);
 }
 
-bool Elevator::scheduleAllows(Direction dir) const
+int Elevator::scheduleMode() const
 {
-	const int day = (game->time.isHoliday()) ? 1 : 0;
-	const SchedulePeriod &period = schedules[day][schedulePeriod(game->time.hour)];
-	if (period.mode == kScheduleExpressUp)
-		return dir == kUp;
-	if (period.mode == kScheduleExpressDown)
-		return dir == kDown;
-	return true;
+	const int day = game->time.isHoliday() ? 1 : 0;
+	return schedules[day][schedulePeriod(game->time.absolute)].mode;
+}
+
+bool Elevator::hasWork(const Car *car) const
+{
+	if (!car->passengers.empty()) return true;
+	for (auto *q : queues)
+		if (!q->people.empty() && q->assignedCar == car) return true;
+	return false;
 }
 
 int Elevator::scheduleThreshold() const
 {
 	const int day = (game->time.isHoliday()) ? 1 : 0;
-	const int threshold = schedules[day][schedulePeriod(game->time.hour)].threshold;
+	const int threshold = schedules[day][schedulePeriod(game->time.absolute)].threshold;
 	return std::max(0, std::min(5, threshold));
 }
 
 int Elevator::schedulePatienceTicks() const
 {
 	const int day = (game->time.isHoliday()) ? 1 : 0;
-	const int patience = schedules[day][schedulePeriod(game->time.hour)].patience;
+	const int patience = schedules[day][schedulePeriod(game->time.absolute)].patience;
 	return std::max(0, std::min(3, patience)) * 30;
 }
 
@@ -76,15 +79,15 @@ bool Elevator::canResizeTo(int bottom, int height) const
 
 	Game::ItemSetByString::const_iterator group = game->itemsByType.find("elevator");
 	if (group == game->itemsByType.end()) return true;
-	const int top = bottom + height;
+	const int top = bottom + height - 1; // Inclusive top floor.
 	for (Game::ItemSet::const_iterator it = group->second.begin(); it != group->second.end(); ++it)
 	{
 		const Elevator *other = static_cast<const Elevator *>(*it);
-		if (other == this || other->isExpress() == isExpress()) continue;
+		if (other == this) continue;
 		const bool horizontal = position.x - kShaftClearanceCells < other->position.x + other->size.x &&
 		                        position.x + size.x + kShaftClearanceCells > other->position.x;
-		const bool vertical = bottom - 2 < other->position.y + other->size.y + 1 &&
-		                      top + 1 > other->position.y - 2;
+		const bool vertical = bottom - 2 < other->position.y + other->size.y &&
+		                      top + 1 >= other->position.y;
 		if (horizontal && vertical) return false;
 	}
 	return true;
@@ -100,12 +103,21 @@ void Elevator::reassignCalls(Car *car)
 {
 	if (!car) return;
 	const int floor = (int)std::lround(car->altitude);
-	for (Queues::iterator it = queues.begin(); it != queues.end(); ++it)
-	{
-		Queue *q = *it;
-		if (q->floor != floor || !scheduleAllows(q->direction)) continue;
+	for (auto *q : queues) {
+		if (q->floor != floor || q->people.empty()) continue;
+		if (scheduleMode() == kScheduleFull && q->direction != car->direction) continue;
+		q->assignedCar = car;
+		q->called = q->answered = true;
+	}
+}
+
+void Elevator::finishStop(Car *car)
+{
+	for (auto *q : queues) {
+		if (q->assignedCar != car || q->floor != (int)std::lround(car->altitude)) continue;
+		q->assignedCar = nullptr;
 		q->answered = false;
-		q->called = false;
+		q->called = !q->people.empty();
 	}
 }
 
@@ -363,6 +375,7 @@ void Elevator::decodeXML(tinyxml2::XMLElement &xml)
 	{
 		if ((int)cars.size() >= kMaxCarsPerShaft) break;
 		Car *car = new Car(this);
+		car->index = (int)cars.size();
 		car->decodeXML(*e);
 		cars.insert(car);
 	}
@@ -414,7 +427,10 @@ bool Elevator::repositionMotor(int motor, int y)
 		height = y - position.y;
 	}
 	if (height < 1) height = 1;
-	if (!isExpress() && height > kNonExpressMaxSpan) return false;
+	if (!isExpress() && height > kNonExpressMaxSpan) {
+		game->timeWindow.showMessage("Elevator shaft can cover only 30 floors");
+		return false;
+	}
 	if (!canResizeTo(newy, height)) return false;
 	if (newy == position.y && height == size.y) return false;
 
@@ -453,6 +469,7 @@ void Elevator::addCar(int floor)
 {
 	if (!canAddCar(floor)) return;
 	Car *car = new Car(this);
+	car->index = (int)cars.size();
 	car->setAltitude(floor);
 	car->startAltitude = floor;
 	car->destinationFloor = floor;
@@ -468,10 +485,11 @@ bool Elevator::connectsFloor(int floor) const
 
 void Elevator::addPerson(Person *p)
 {
+	Direction dir = p->journey.toFloor > p->journey.fromFloor ? kUp : kDown;
+	if (!getQueue(p->journey.fromFloor, dir)->addPerson(p)) return;
+	if (p->at) p->at->removePerson(p);
+	p->journey.queueAccepted();
 	Item::addPerson(p);
-	Direction dir = (p->journey.toFloor > p->journey.fromFloor ? kUp : kDown);
-	LOG(DEBUG, "person %p queues at elevator floor %i (%s)", (void *)p, p->journey.fromFloor, dir == kUp ? "up" : "down");
-	getQueue(p->journey.fromFloor, dir)->addPerson(p);
 }
 
 void Elevator::removePerson(Person *p)
@@ -525,118 +543,152 @@ void Elevator::cleanQueues()
 
 void Elevator::called(Queue *queue)
 {
-	// Queue::callElevator() records the call timestamp and calls this
-	// hook.  Keep the pending call latched while a schedule period blocks
-	// its direction; getMostUrgentQueue() will dispatch it at the next
-	// permitted period.
-	if (!queue || queue->people.empty()) return;
-	if (!scheduleAllows(queue->direction)) return;
-	respondToCalls();
+	if (queue && !queue->people.empty()) respondToCalls();
 }
 
 void Elevator::respondToCalls()
 {
-	Queue *q;
-	while ((q = getMostUrgentQueue()))
+	while (Queue *q = getMostUrgentQueue())
 	{
-		Car *car = getIdleCar(q->floor);
-		if (!car)
+		Car *idle = nullptr, *approaching = nullptr, *reversing = nullptr;
+		double idleCost = 1e30, approachCost = 1e30, reverseCost = 1e30;
+		std::vector<Car *> ordered(cars.begin(), cars.end());
+		std::sort(ordered.begin(), ordered.end(), [](Car *a, Car *b) { return a->index < b->index; });
+		for (auto *c : ordered)
 		{
-			const int threshold = scheduleThreshold();
-			for (Cars::iterator it = cars.begin(); it != cars.end(); ++it)
-			{
-				Car *candidate = *it;
-				if (candidate->state != Car::kMoving || candidate->direction != q->direction)
-					continue;
-				const double distance = (q->floor - candidate->altitude) * (double)candidate->direction;
-				if (distance >= 0 && distance <= threshold)
-				{
-					car = candidate;
-					break;
-				}
+			const bool parked = !hasWork(c) && c->state == Car::kIdle && c->doorTicks == 0 &&
+			                    std::abs(c->altitude - c->homeFloor) < 0.01;
+			const double toward = (q->floor - c->altitude) * c->direction;
+			if (parked) {
+				const double cost = std::abs(c->altitude - q->floor);
+				if (cost < idleCost) { idle = c; idleCost = cost; }
+			} else if (c->direction == q->direction && toward >= 0) {
+				if (toward < approachCost) { approaching = c; approachCost = toward; }
+			} else {
+				double turn = c->altitude;
+				auto consider = [&](int floor) {
+					if ((floor - c->altitude) * c->direction >= 0 &&
+					    std::abs(floor - c->altitude) > std::abs(turn - c->altitude)) turn = floor;
+				};
+				for (auto *p : c->passengers) consider(p->journey.toFloor);
+				for (auto *call : queues)
+					if (!call->people.empty() && call->assignedCar == c) consider(call->floor);
+				const double cost = std::abs(c->altitude - turn) + std::abs(q->floor - turn);
+				if (cost < reverseCost) { reversing = c; reverseCost = cost; }
 			}
 		}
+		Car *work = approaching ? approaching : reversing;
+		const double workCost = approaching ? approachCost : reverseCost;
+		Car *car = !idle ? work : !work ? idle :
+		           workCost - idleCost < scheduleThreshold() ? work : idle;
 		if (!car) break;
+		q->assignedCar = car;
 		q->answered = true;
-		car->direction = q->direction;
-		car->moveTo(q->floor);
+		if (car->state == Car::kIdle) {
+			car->direction = q->direction;
+			car->shuttleMode = scheduleMode();
+			car->shuttleReturning = false;
+			// At the calling floor an idle car boards before starting its shuttle.
+			if (std::abs(car->altitude - q->floor) < 0.01) car->moveTo(q->floor);
+			else decideCarDestination(car);
+		} else if (car->state == Car::kMoving && car->doorTicks == 0)
+			decideCarDestination(car);
 	}
 }
 
-/// Returns the queue that is the most urgent to respond to.
 Queue *Elevator::getMostUrgentQueue()
 {
-	Queue *queue = NULL;
-	for (Queues::iterator iq = queues.begin(); iq != queues.end(); ++iq)
-	{
-		Queue *q = *iq;
-		if (q->people.empty() || !q->called || q->answered || !scheduleAllows(q->direction))
-			continue;
-		if (!queue || queue->getWaitDuration() > q->getWaitDuration()) queue = q;
+	Queue *queue = nullptr;
+	for (auto *q : queues) {
+		if (q->people.empty() || !q->called || q->answered) continue;
+		if (!queue || q->getWaitDuration() > queue->getWaitDuration()) queue = q;
 	}
 	return queue;
 }
 
-/// Returns the idle car closest to the given floor, or NULL if no car is idle.
 Car *Elevator::getIdleCar(int floor)
 {
-	Car *car = NULL;
-	for (Cars::iterator ic = cars.begin(); ic != cars.end(); ic++)
-	{
-		Car *c = *ic;
-		if (c->state == Car::kIdle && (!car || fabs(car->altitude - floor) > fabs(c->altitude - floor)))
-			car = c;
+	Car *best = nullptr;
+	for (auto *c : cars) {
+		if (hasWork(c) || c->state != Car::kIdle || c->doorTicks != 0 ||
+		    std::abs(c->altitude - c->homeFloor) >= 0.01) continue;
+		const double cost = std::abs(c->altitude - floor);
+		if (!best || cost < std::abs(best->altitude - floor) ||
+		    (cost == std::abs(best->altitude - floor) && c->index < best->index)) best = c;
 	}
-	return car;
+	return best;
 }
 
 void Elevator::decideCarDestination(Car *car)
 {
 	if (!car) return;
-	int nextFloor = INT_MAX;
-	for (People::iterator ip = car->passengers.begin(); ip != car->passengers.end(); ++ip)
-	{
-		const int floor = (*ip)->journey.toFloor;
-		if (nextFloor == INT_MAX ||
-		    std::abs(car->destinationFloor - nextFloor) > std::abs(car->destinationFloor - floor))
-			nextFloor = floor;
+	const int floor = (int)std::lround(car->altitude);
+	if (!hasWork(car)) {
+		car->shuttleReturning = false;
+		car->shuttleMode = scheduleMode();
+		car->doorTicks = 0;
+		if (floor != car->homeFloor) car->moveTo(car->homeFloor);
+		else car->setState(Car::kIdle);
+		return;
 	}
-
-	Queue *nextQueue = NULL;
-	double queueDistance = 0;
-	for (Queues::iterator iq = queues.begin(); iq != queues.end(); ++iq)
-	{
-		Queue *q = *iq;
-		if (q->people.empty() || !q->called || q->answered || !scheduleAllows(q->direction))
-			continue;
-		const double distance = (q->floor - car->altitude) * (double)car->direction;
-		if (distance < 0.5) continue;
-		if (!nextQueue || queueDistance > distance)
-		{
-			queueDistance = distance;
-			nextQueue = q;
+	const int mode = scheduleMode();
+	if (mode != car->shuttleMode) {
+		car->shuttleMode = mode;
+		car->shuttleReturning = false;
+	}
+	if (mode != kScheduleFull) {
+		const int outbound = mode == kScheduleExpressUp ? 1 : -1;
+		const int extreme = outbound > 0 ? position.y + size.y - 1 : position.y;
+		if (!car->shuttleReturning && floor != extreme) {
+			car->moveTo(extreme);
+			return;
 		}
+		car->shuttleReturning = true;
+		const int serve = -outbound;
+		int target = INT_MAX;
+		auto consider = [&](int f) {
+			if ((f - floor) * serve <= 0) return;
+			if (target == INT_MAX || std::abs(f - floor) < std::abs(target - floor)) target = f;
+		};
+		for (auto *p : car->passengers) consider(p->journey.toFloor);
+		if (!car->isFull()) for (auto *q : queues)
+			if (!q->people.empty() && q->assignedCar == car) consider(q->floor);
+		if (target != INT_MAX) { car->moveTo(target); return; }
+		const int end = serve > 0 ? position.y + size.y - 1 : position.y;
+		if (floor != end) { car->moveTo(end); return; }
+		car->shuttleReturning = false;
+		car->moveTo(extreme);
+		return;
 	}
-
-	if (nextQueue && !car->isFull())
-	{
-		const double floorDistance = nextFloor == INT_MAX ? 1e30 : std::abs(nextFloor - car->altitude);
-		if (queueDistance <= floorDistance)
-		{
-			nextQueue->answered = true;
-			car->moveTo(nextQueue->floor);
+	// SCAN: passenger stops and same-direction assigned calls first;
+	// opposite calls become the farthest reversal point of the sweep.
+	for (int pass = 0; pass < 2; ++pass) {
+		const int dir = car->direction == kNone ? (pass == 0 ? 1 : -1) :
+		                (pass == 0 ? car->direction : -car->direction);
+		int target = INT_MAX, opposite = INT_MAX;
+		auto consider = [&](int f) {
+			if ((f - floor) * dir <= 0) return;
+			if (target == INT_MAX || std::abs(f - floor) < std::abs(target - floor)) target = f;
+		};
+		for (auto *p : car->passengers) consider(p->journey.toFloor);
+		if (!car->isFull()) for (auto *q : queues) {
+			if (q->people.empty() || q->assignedCar != car || (q->floor - floor) * dir < 0) continue;
+			if (q->floor == floor) {
+				car->direction = q->direction; car->destinationFloor = floor;
+				car->doorTicks = 5; car->setState(Car::kHauling); return;
+			}
+			if (q->direction == dir) consider(q->floor);
+			else if (opposite == INT_MAX || std::abs(q->floor - floor) > std::abs(opposite - floor))
+				opposite = q->floor;
+		}
+		if (target == INT_MAX) target = opposite;
+		if (target != INT_MAX) {
+			car->moveTo(target);
+			// Hall direction at a reversal stop is selected when doors open.
 			return;
 		}
 	}
-	if (nextFloor != INT_MAX)
-	{
-		getQueue(nextFloor, car->direction)->answered = true;
-		car->moveTo(nextFloor);
-	}
-	else
-	{
-		car->setState(Car::kIdle);
-	}
+	car->setState(Car::kIdle);
 }
 
 void Elevator::evacuateForDisaster()

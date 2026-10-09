@@ -31,11 +31,12 @@ namespace OT {
 				bool called;
 				double callTime;
 				bool answered;
+				Car *assignedCar = nullptr;
 				double getWaitDuration();
 
 				typedef std::list<Person *> People;
 				People people;
-				void addPerson(Person * p);
+				bool addPerson(Person * p);
 				void removePerson(Person * p);
 				Person * popPerson();
 				void callElevator();
@@ -47,8 +48,7 @@ namespace OT {
 				virtual void render(sf::RenderTarget & target) const;
 
 			private:
-				double fullRetryFrame;
-				double waitStartFrame;
+				void bankWait(Person *p);
 				void applyWatchdog();
 			};
 		}

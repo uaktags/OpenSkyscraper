@@ -40,6 +40,9 @@ namespace OT {
 				Elevator::Direction direction;
 				int destinationFloor;
 				int homeFloor;
+				int index = 0; // stable creation order for dispatch ties
+				int shuttleMode = 0;
+				bool shuttleReturning = false;
 
 				typedef enum {
 					kIdle,

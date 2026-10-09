@@ -7,6 +7,7 @@ namespace OT {
 		class Lobby : public Item
 		{
 		public:
+			static bool isSkyLobbyFloor(int y) { return y > 0 && y % 15 == 14; }
 			OT_ITEM_CONSTRUCTOR(Lobby);
 			OT_ITEM_PROTOTYPE(Lobby) {
 				p->id    = "lobby";

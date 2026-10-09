@@ -22,9 +22,7 @@ Queue::Queue(Elevator *e)
 	  called(false),
 	  callTime(0),
 	  answered(false),
-	  steppingInside(false),
-	  fullRetryFrame(0),
-	  waitStartFrame(0)
+	  steppingInside(false)
 {
 }
 
@@ -43,84 +41,85 @@ double Queue::getWaitDuration()
 	return game->time.absolute - callTime;
 }
 
-void Queue::addPerson(Person *p)
+bool Queue::addPerson(Person *p)
 {
-	if (!p) return;
+	if (!p) return false;
 	if ((int)people.size() >= kQueueCapacity)
 	{
-		// TripT rejects the 41st rider and applies a single +5 penalty per
-		// 16-frame full-queue retry. Service staff are exempt from wait stress.
-		const double frame = game->time.absolute / Time::kBaseSpeed;
-		if (!elevator->isService() && frame >= fullRetryFrame)
-		{
-			p->addJourneyStress((double)kQueueFullPenalty);
-			fullRetryFrame = frame + kQueueFullRetryFrames;
-		}
-		return;
+		if (!elevator->isService() && !p->isServicePerson())
+			p->addJourneyStress(kQueueFullPenalty);
+		p->journey.queueRejected();
+		return false;
 	}
+	p->waitStartFrame = game->time.absolute * Time::kSimFramesPerDay;
 	people.push_back(p);
 	if (!called) callElevator();
+	return true;
 }
 
 void Queue::removePerson(Person *p)
 {
 	people.remove(p);
+	if (people.empty()) {
+		called = answered = steppingInside = false;
+		assignedCar = nullptr;
+	}
+}
+
+void Queue::bankWait(Person *p)
+{
+	if (elevator->isService()) return;
+	const double waited = std::min(300.0, std::max(0.0,
+		game->time.absolute * Time::kSimFramesPerDay - p->waitStartFrame));
+	const int height = game->mainLobby && floor == 0 ? game->mainLobby->size.y : 1;
+	const double bonus = height >= 3 ? 50.0 : height == 2 ? 25.0 : 0.0;
+	p->addJourneyStress(std::max(0.0, waited - bonus));
 }
 
 Person *Queue::popPerson()
 {
-	if (people.empty())
-		return NULL;
+	if (people.empty()) return nullptr;
 	Person *p = people.front();
-	people.pop_front();
+	bankWait(p);
+	removePerson(p);
 	return p;
 }
 
 void Queue::callElevator()
 {
-	if (!called && !people.empty())
-	{
+	if (!called && !people.empty()) {
 		called = true;
 		answered = false;
+		assignedCar = nullptr;
 		callTime = game->time.absolute;
-		waitStartFrame = game->time.absolute / Time::kBaseSpeed;
 		elevator->called(this);
 	}
 }
 
 void Queue::applyWatchdog()
 {
-	if (elevator->isService() || people.empty()) return;
-	const double frame = game->time.absolute / Time::kBaseSpeed;
-	if (frame - waitStartFrame < kQueueWatchdogFrames) return;
-	for (People::iterator it = people.begin(); it != people.end(); ++it)
-		(*it)->addJourneyStress(300.0); // failed trip banks the wait cap
-	called = false;
-	answered = false;
-	waitStartFrame = frame + kQueueFullRetryFrames;
-	fullRetryFrame = frame + kQueueFullRetryFrames;
+	const double frame = game->time.absolute * Time::kSimFramesPerDay;
+	bool ejected = false;
+	for (auto it = people.begin(); it != people.end();) {
+		Person *p = *it++;
+		if (frame - p->waitStartFrame + 1e-7 < kQueueWatchdogFrames) continue;
+		bankWait(p);
+		p->journey.failWaiting();
+		ejected = true;
+	}
+	if (ejected) {
+		called = !people.empty();
+		if (people.empty()) {
+			answered = steppingInside = false;
+			assignedCar = nullptr;
+		}
+	}
 }
 
 void Queue::advance(double dt)
 {
-	if (!people.empty() && !called)
-	{
-		const double frame = game->time.absolute / Time::kBaseSpeed;
-		// Failed calls are retried at the original one-in-sixteen cadence,
-		// rather than continuously hammering dispatch.
-		if (frame >= waitStartFrame && ((int)frame % kQueueFullRetryFrames) == 0)
-			callElevator();
-	}
 	applyWatchdog();
-	if (elevator->isService()) return;
-	const double frameDelta = game->time.dta / Time::kBaseSpeed;
-	for (People::iterator it = people.begin(); it != people.end(); ++it)
-	{
-		const double forgiveness = (game->mainLobby && floor == game->mainLobby->position.y)
-			? (game->mainLobby->size.y >= 3 ? 50.0 : 25.0) : 0.0;
-		const double scale = std::max(0.0, frameDelta - forgiveness / 300.0 * frameDelta);
-		(*it)->addJourneyStress(scale);
-	}
+	if (!called && !people.empty()) callElevator();
 }
 
 void Queue::draw(sf::RenderTarget &target, sf::RenderStates states) const

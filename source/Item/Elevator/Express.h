@@ -1,5 +1,6 @@
 #pragma once
 #include "Elevator.h"
+#include "../Lobby.h"
 
 namespace OT {
 	namespace Item {
@@ -28,10 +29,10 @@ namespace OT {
 				virtual bool connectsFloor(int floor) const
 				{
 					if(floor < 0) return true;
-					else if ((floor % 15) != 0) return false;
+					else if (floor > 0 && !Lobby::isSkyLobbyFloor(floor)) return false;
 					return Elevator::connectsFloor(floor);
 				}
 			};
 		}
 	}
-}
+}
