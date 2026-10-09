@@ -76,6 +76,9 @@ def daily(series):
                   'estimate': {k: v['estimate'] for k, v in last['tenants'].items()},
                   'status': {k: v['status'] for k, v in last['tenants'].items()},
                   'workers': {k: max(_staff(r['tenants'].get(k)) for r in rs) for k in last['tenants']}}
+        peak = max(rs, key=lambda r: r['population'])
+        if 'populationDetail' in peak:
+            res[d]['populationDetail'] = dict(peak['populationDetail'], minute=peak['minute'])
         prev_funds = last['funds']
     return res
 
@@ -171,6 +174,21 @@ def report(orc, osk, summary, title):
             cells.append('%s / %s%s' % (o[m], s[m], mark(ok)))
         lines.append('| %d | %s |' % (d, ' | '.join(cells)))
     lines.append('')
+    if any('populationDetail' in do[d] and 'populationDetail' in ds[d] for d in days):
+        lines += ['Population composition at each game’s sampled daily peak. Pool includes departures until midnight; '
+                  'origins count live general visitors and reserved staff/residents, including those still in the pool. '
+                  'OpenSky legacy item populations have unknown demand/transport types.', '',
+                  '| Day / game | Minute | Pool / deferred shrink | Origins | Demand types | Transport types |',
+                  '|---|---|---|---|---|---|']
+        for d in days:
+            for label, values in [('original', do[d]), ('OpenSky', ds[d])]:
+                p = values.get('populationDetail')
+                if not p:
+                    continue
+                counts = lambda field: ', '.join('%s: %d' % (k, v) for k, v in sorted(p[field].items())) or '-'
+                lines.append('| %d / %s | %d | %d / %d | %s | %s | %s |' % (
+                    d, label, p['minute'], p['pool'], p['shrink'], counts('origins'), counts('demands'), counts('transports')))
+        lines.append('')
     load = mover_load(orc, summary)
     if any(v[0] is not None for v in load.values()):
         lines += ['Mean people at the movers, 08:00-20:00 (orig / OpenSky): ' + '; '.join(

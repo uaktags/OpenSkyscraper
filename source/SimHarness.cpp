@@ -9,6 +9,8 @@
 #include "Game.h"
 #include "Logger.h"
 #include "SimHarness.h"
+#include "PeopleSystem.h"
+#include "Item/Item.h"
 
 using namespace OT;
 
@@ -93,6 +95,45 @@ std::string Sim::summaryJson(const Game & game, const Options & options, long ti
 	j << "  \"rating\": " << game.rating << ",\n";
 	j << "  \"population\": " << game.population << ",\n";
 	j << "  \"people\": " << game.people.size() << ",\n";
+	// Parity dumps need the live people: .tower saves return transient visitors
+	// to the pool. Keep normal summaries (and existing goldens) unchanged.
+	if (options.dumpEvery > 0 && game.eventSystem.people.enabled()) {
+		const PeopleSystem & ps = game.eventSystem.people;
+		std::map<std::string, int> origins, demands, transports;
+		auto countType = [&](const std::string & origin, const Yoot::PeopleType & type) {
+			origins[origin]++;
+			demands[std::to_string(type.demand)]++;
+			transports[std::to_string(type.transport)]++;
+		};
+		// Include reserved belong people, even when they are in the pool.
+		// Their commuting visitors are proxies, so count them only once.
+		for (auto * item : game.items) {
+			const auto & types = ps.belongOf(item);
+			for (const auto & type : types) countType(item->prototype->id, type);
+			// Legacy residents / facility staff have no T2PeopleType. Keep
+			// their real item population visible without inventing a type.
+			if (types.empty() && item->population > 0) {
+				origins[item->prototype->id] += item->population;
+				demands["unknown"] += item->population;
+				transports["unknown"] += item->population;
+			}
+		}
+		for (const auto * v : ps.visitors())
+			if (!v->home) countType("visitor", v->peopleType);
+		j << "  \"populationDetail\": {\"pool\": " << ps.pool.population
+		  << ", \"shrink\": " << ps.pool.shrinkCount << ", \"origins\": {";
+		auto counts = [&](const std::map<std::string, int> & values) {
+			bool first = true;
+			for (const auto & entry : values) {
+				j << (first ? "" : ", ") << "\"" << jsonEscape(entry.first) << "\": " << entry.second;
+				first = false;
+			}
+		};
+		counts(origins);
+		j << "}, \"demands\": {"; counts(demands);
+		j << "}, \"transports\": {"; counts(transports);
+		j << "}},\n";
+	}
 	j << "  \"rainy\": " << (game.sky.rainyDay ? "true" : "false") << ",\n";
 	j << "  \"money\": {\"todayIncome\": " << game.money.todayIncome
 	  << ", \"todayExpenses\": " << game.money.todayExpenses

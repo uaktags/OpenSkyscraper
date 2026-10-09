@@ -161,6 +161,11 @@ namespace OT
 		/// ClearBelongPeople: the tenant's belong people go back.
 		void releaseBelong(Item::Item * tenant);
 		const std::vector<Yoot::PeopleType> & belongOf(Item::Item * tenant) { return belong[tenant]; }
+		const std::vector<Yoot::PeopleType> & belongOf(Item::Item * tenant) const {
+			static const std::vector<Yoot::PeopleType> empty;
+			const auto it = belong.find(tenant);
+			return it == belong.end() ? empty : it->second;
+		}
 		/// Per belong person: T2People +0x78 flags kept while they are out
 		/// of the tower (the School's colds).
 		std::vector<int> & belongFlags(Item::Item * tenant) { return belongFlagMap[tenant]; }

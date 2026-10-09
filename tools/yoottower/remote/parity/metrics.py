@@ -111,6 +111,22 @@ def bld_record(d, frame):
             if isinstance(q, dict) and q.get('used'):
                 people[str(q['status'])] = people.get(str(q['status']), 0) + 1
     rec['people'] = people
+    # T2Pool RecoverPeople increments population; ShrinkPeople defers the
+    # decrement until midnight. The saved counter is not live occupancy.
+    tenants = {t['equipID']: proto_of_plugin(files.get(t['equipType'], ''))
+               for t in bld_tenants(d)}
+    detail = {'pool': d['pool']['population'], 'shrink': d['pool']['f18'],
+              'origins': {}, 'demands': {}, 'transports': {}}
+    for block in d['people']['blocks']:
+        for q in block['slots']:
+            if not isinstance(q, dict) or not q.get('used'):
+                continue
+            pt = q.get('peopleType', {})
+            origin = tenants.get(q['workTenant'], tenants.get(q['homeTenant'], 'visitor'))
+            for field, key in [('origins', origin), ('demands', str(pt.get('f0', 0) & 7)),
+                               ('transports', str(pt.get('transportType', -1)))]:
+                detail[field][key] = detail[field].get(key, 0) + 1
+    rec['populationDetail'] = detail
     return rec
 
 
@@ -179,6 +195,8 @@ def os_record(tower_path, json_path):
            'funds': s['funds'], 'population': s['population'], 'grade': s['rating'] + 1,
            'vip': _num(root.get('yootVipFlags'), 0), 'blackout': _num(root.get('powerBlackout'), 0),
            'money': s.get('money', {}), 'tenants': {}}
+    if 'populationDetail' in s:
+        rec['populationDetail'] = s['populationDetail']
     for it in root.iter('item'):
         typ = it.get('type')
         if typ in ('floor', 'lobby') or typ.startswith('elevator') or typ in ('stairs', 'escalator'):
