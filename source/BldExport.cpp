@@ -602,6 +602,17 @@ namespace Bld {
 				// status 9, but the idle first bumps a saved 9 to 10, which
 				// the station never leaves (closed, the dark band 300).
 				if (it.type == "subway") t.hdr.status = 8;
+				// Hotel rooms are the same shape: Singleroom.t2p
+				// ChangeStatusOnIdle 0x100136b0 opens only from status 9
+				// (case 9 -> 30) and has no case at all for the bumped 10,
+				// so an exported "just built" room never opens in the
+				// original even once its Front Desk links it (oracle
+				// hawaii_g3_boatdeck: 18 rooms sit at status 10 for 3 days,
+				// related = the open desk). OpenSky's imported rooms are
+				// open, so export status 30 (open, empty): the room then
+				// takes guests through FUN_10012d50 like an in-game one.
+				if (it.type == "hotel_single" || it.type == "hotel_double" || it.type == "hotel_suite")
+					t.hdr.status = 30;
 				t.estimate = (int16_t)std::max(0, it.yootEstimate);
 				// Condo.t2p sells at inMoney[index]: OpenSky's default selection is the third
 				// price ($150,000), the same default as an office; every other tenant here has one.
