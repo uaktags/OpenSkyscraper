@@ -2156,7 +2156,8 @@ void Game::settleDailyAccounting()
 	// evaluation. Maintenance and recurring rent are quarterly events at
 	// 4:59AM, handled by settleQuarterlyAccounting().
 	money.finalizeDay();
-	judgeSystem.evaluateAll(this);
+	// The tenant evaluation is a tenant idle: frozen during the YootTower blackout.
+	if (!eventSystem.tenantIdleFrozen()) judgeSystem.evaluateAll(this);
 	timeWindow.updateMoneyStats();
 }
 

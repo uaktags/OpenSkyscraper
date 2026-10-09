@@ -106,6 +106,11 @@ namespace OT
 
 		/// YootTower power and blackout (BOEV). Inert in other rulesets.
 		PowerSystem power;
+		/// YootTower: tenants stop idling while the exclusive blackout runs. The
+		/// original's T2TowerEvent::Idle returns 1 for an exclusive event that is
+		/// executing, and FUN_0041dc40 then skips T2TenantArrayList::DispatchIdle
+		/// (and the OutObj/template dispatch). Inert in other rulesets.
+		bool tenantIdleFrozen() const { return yoot && power.isBlackOut(); }
 		/// YootTower trash, restrooms and doctors (plan step 12). Inert elsewhere.
 		FacilitySystem facilities;
 		/// YootTower venues, final items and the subway (plan step 14 B). Inert elsewhere.

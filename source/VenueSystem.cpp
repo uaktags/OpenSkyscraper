@@ -160,10 +160,13 @@ void VenueSystem::advance()
 	// plugins' 8-minute idles are not skipped; lastMinute is absolute.
 	const int now = (int)Yoot::absoluteMinute(game->time.absolute);
 	if (lastMinute < 0 || now < lastMinute || now - lastMinute > 1440) lastMinute = now - 1;
+	// The venues are tenants: their idles (and the day's movies) stop while the
+	// blackout runs, so the skipped minutes are not replayed later.
+	const bool frozen = game->eventSystem.tenantIdleFrozen();
 	while (lastMinute < now)
 	{
 		++lastMinute;
-		minuteTick(((lastMinute % 1440) + 1440) % 1440);
+		if (!frozen) minuteTick(((lastMinute % 1440) + 1440) % 1440);
 	}
 }
 

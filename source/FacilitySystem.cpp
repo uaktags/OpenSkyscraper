@@ -85,6 +85,8 @@ void FacilitySystem::advance()
 	const int minute = std::max(0, std::min(1439, (int)std::floor(game->time.hour * 60.0)));
 	if (minute == lastMinute) return;
 	lastMinute = minute;
+	// Trash, colds and the other facility idles are tenant idles (frozen in a blackout).
+	if (game->eventSystem.tenantIdleFrozen()) return;
 	minuteTick(minute, Yoot::absoluteMinute(game->time.absolute));
 }
 

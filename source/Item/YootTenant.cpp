@@ -94,6 +94,9 @@ void YootTenant::advance(double dt)
 	// Catch up minute by minute, but never replay more than a day (loads,
 	// big jumps).
 	if (lastMinute < 0 || now < lastMinute || now - lastMinute > 1440) lastMinute = now - 1;
+	// Frozen while the blackout event runs (T2TenantArrayList::DispatchIdle is
+	// skipped, so no status, payment or estimate changes): skip the minutes.
+	if (game->eventSystem.tenantIdleFrozen()) { lastMinute = now; return; }
 	if (now == lastMinute) return;
 
 	if (lobbyRouteComputed)

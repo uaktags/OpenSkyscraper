@@ -139,6 +139,8 @@ void Office::updateSprite()
 
 void Office::advance(double dt)
 {
+	// Tenant idles are frozen during the YootTower blackout (EventSystem::tenantIdleFrozen).
+	if (prototype->yoot && game->eventSystem.tenantIdleFrozen()) return;
 	// YootTower (Office.t2p FUN_1000c0c0, status 10/11): a vacant office
 	// tries CollectEmployee in the first 8 minutes of each hour from 08:00
 	// to 16:59 (estimate above 200), on any day.

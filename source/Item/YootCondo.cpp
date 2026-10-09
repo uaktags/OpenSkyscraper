@@ -187,6 +187,7 @@ void YootCondo::render(sf::RenderTarget &target) const
 
 void YootCondo::advance(double dt)
 {
+	if (game->eventSystem.tenantIdleFrozen()) return;
 	if (!occupied && !game->time.isHoliday() && game->time.hour >= 7 && game->time.hour < 17 && isAttractive())
 	{
 		if (game->time.checkTick(0.002) && (rand() % 10) == 0)
