@@ -44,7 +44,7 @@ class Tower:
         self.world, self.rating, self.funds, self.vip, self.time = world, rating, funds, vip, time
         self.slabs = {}      # y -> (x0, x1)
         self.items = []      # (type, x, y, extra)
-        self.lifts = []      # (x, y0, height, cars)
+        self.lifts = []      # (x, y0, height, cars, kind)
         self.lobby = None
 
     def floor(self, y, x0, x1):
@@ -72,8 +72,8 @@ class Tower:
             x = self.add(t, x, y)
         return x
 
-    def lift(self, x, y0, height, cars=4):
-        self.lifts.append((x, y0, height, cars))
+    def lift(self, x, y0, height, cars=4, kind='elevator-standard'):
+        self.lifts.append((x, y0, height, cars, kind))
 
     def power(self):
         return sum(POWER.get(t, 8) for t, _, _, _ in self.items) + 20 * len(self.lifts)
@@ -86,7 +86,7 @@ class Tower:
                 for u in range(x, x + w):
                     assert (u, r) not in cells, '%s overlaps %s at %d,%d' % (t, cells[(u, r)], u, r)
                     cells[(u, r)] = t
-        for x, y0, height, _ in self.lifts:
+        for x, y0, height, _, _ in self.lifts:
             for r in range(y0, y0 + height):
                 for u in range(x, x + 4):
                     assert (u, r) not in cells, 'elevator at %d overlaps %s at %d,%d' % (x, cells[(u, r)], u, r)
@@ -107,7 +107,7 @@ class Tower:
             ev = '' if 'evaluation=' in extra else ' evaluation="50.0"'
             st = ' tenantStatus="9"' if t.startswith('yt_') else ''
             out.append('<item type="%s" x="%d" y="%d"%s%s%s/>' % (t, x, y, ev, extra, st))
-        for x, y0, height, cars in self.lifts:
+        for x, y0, height, cars, kind in self.lifts:
             stops = []
             for f in range(y0, y0 + height):
                 lobby_row = 0 < f < h
@@ -118,8 +118,8 @@ class Tower:
             span = [f for f in range(y0, y0 + height) if not (0 < f < h)]
             car = ''.join('<car altitude="%d.0" homeFloor="%d"/>' % (span[k * len(span) // cars], span[k * len(span) // cars])
                           for k in range(cars))
-            out.append('<item type="elevator-standard" x="%d" y="%d" evaluation="50.0" height="%d" showShaft="1">%s%s</item>'
-                       % (x, y0, height, ''.join(stops), car))
+            out.append('<item type="%s" x="%d" y="%d" evaluation="50.0" height="%d" showShaft="1">%s%s</item>'
+                       % (kind, x, y0, height, ''.join(stops), car))
         out.append('</tower>')
         return '\n'.join(out) + '\n'
 
@@ -201,6 +201,19 @@ def tokyo_g3_reggae():
     """tokyo_g3_venues with a Security Room, starting on day 12 (Y1 Dec.), the day the 3-star
     MAEV events (Mr. Maru every 20 days, Uncle Reggae every 25) and Santa begin."""
     return tokyo_g3_venues(time=11.020833, security=True)
+
+
+def tokyo_g5_large_elevator():
+    """Tokyo, 4 stars: one tall Large Elevator (elevator-express, BigElev) on the lobby, with
+    offices on six floors 6 rows apart (3..33). Seven served stops, under the Large Elevator's
+    cap of 8, so the distant-floor trips measure the car, not the stop limit."""
+    t = Tower('tokyo', 3)
+    t.set_lobby(-64, 56, 3)
+    t.floors([3, 9, 15, 21, 27, 33], -140, 140)
+    t.lift(-4, 0, 34, 8, kind='elevator-express')
+    for y in (3, 9, 15, 21, 27, 33):
+        offices(t, y, -120, 4)
+    return t
 
 
 def tokyo_g4_blackout():
@@ -303,7 +316,7 @@ def tokyo_g1_promo():
     return t
 
 
-TOWERS = [tokyo_g1_promo, tokyo_g2_hotel_subway, tokyo_g3_venues, tokyo_g3_reggae, tokyo_g4_blackout,
+TOWERS = [tokyo_g1_promo, tokyo_g2_hotel_subway, tokyo_g3_venues, tokyo_g3_reggae, tokyo_g4_blackout, tokyo_g5_large_elevator,
           hawaii_g2_resort, hawaii_g3_boatdeck]
 
 

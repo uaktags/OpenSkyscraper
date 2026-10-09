@@ -4444,6 +4444,37 @@ static void testBldShippedSaves()
 		// Working offices carry their 6 staff as population.
 		EXPECT(xml.find("type=\"office\" x=\"-13\" y=\"4\" evaluation=\"100.000\" yootEstimate=\"300\" occupied=\"1\" population=\"6\"") != std::string::npos);
 	}
+	// --- Large Elevator export: one EgiB mover on the BigElev plugin ------
+	{
+		report = ImportReport();
+		EXPECT(toTowerXml(tokyo, bldTestPrototypes, xml, report, error));
+		TowerState large;
+		EXPECT(parseTowerXml(xml, large, error));
+		for (TowerItem & it : large.items)
+			if (it.type == "elevator-standard") it.type = "elevator-express";
+		BldData exported, reread;
+		ImportReport exportReport;
+		EXPECT(exportTower(large, tokyo, exported, exportReport, error, &yootTestPlugins()));
+		EXPECT(exportReport.dropped.empty() && exportReport.imported["elevator-express"] == 1);
+		EXPECT(exported.usedMovers() == 1);
+		const Mover * big = nullptr;
+		for (const Mover & m : exported.movers)
+			if (m.hdr.used) big = &m;
+		// BigElev.t2p: EgiB, itemType 1812, 8 car slots, 2 x 10 three-s16 table (n = 120).
+		EXPECT(big && big->equipType == 1812);
+		EXPECT(big && big->modules.modules.size() == 8 && big->modules.f20 == 8);
+		EXPECT(big && big->extra.size() == 120 && big->length == 10);
+		bool plugin = false;
+		for (const PluginInfo & p : exported.plugins)
+			plugin |= p.itemType == 1812 && p.id == "EgiB" && p.name == "Large Elevator";
+		EXPECT(plugin);
+		EXPECT(writeBytes(exported, rebuilt, error));
+		EXPECT(parseBytes(rebuilt, reread, error));
+		const Mover * back = nullptr;
+		for (const Mover & m : reread.movers)
+			if (m.hdr.used) back = &m;
+		EXPECT(back && back->equipType == 1812 && back->modules.modules.size() == 8 && back->extra.size() == 120);
+	}
 	// --- Exporter: import -> export -> import is a fixed point -----------
 	{
 		report = ImportReport();

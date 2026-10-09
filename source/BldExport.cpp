@@ -519,6 +519,12 @@ namespace Bld {
 		if (!restroomPlugin) restroomPlugin = pluginForStem("Restroom.t2p");
 		if (!restroomPlugin) restroomPlugin = pluginForStem("KRestroom.t2p");
 		if (!apartmentPlugin) apartmentPlugin = pluginForStem("Apartment.t2p");
+		// Large Elevators (EgiB) are movers of their own plugin, BigElev.t2p.
+		// Looked up before the plugin table is merged, and only when the tower
+		// has one, so other saves keep their plugin table.
+		bool hasLargeElevator = false;
+		for (const TowerItem & it : tower.items) hasLargeElevator |= it.type == "elevator-express";
+		const PluginInfo * bigElevPlugin = hasLargeElevator ? pluginForStem("BigElev.t2p") : nullptr;
 		// Other native YootTower tenants (hotel rooms, facilities, venues):
 		// the first linked plugin in the template, its TNDF footprint and
 		// variation. Movers and outer objects have no tenant record.
@@ -675,6 +681,7 @@ namespace Bld {
 			if (it.type == "floor" || it.type == "lobby" || it.type == "office" || it.type == "shop" || it.type == "restroom" || it.type == "apartment" || it.type == "skybridge" || it.type == "billboard") continue;
 			if (isYootTenantPrototypeId(it.type) || nativeExported.count(&it)) continue;
 			if (it.type == "elevator-standard" && elevPlugin) continue;
+			if (it.type == "elevator-express" && bigElevPlugin) continue;
 			drop(it.type, "no YootTower counterpart in the exporter");
 		}
 		// -- Outdoor objects (bld-format.md §4.5): Billboards --------------------
@@ -768,7 +775,11 @@ namespace Bld {
 		int clampedCars = 0;
 		for (const TowerItem & it : tower.items)
 		{
-			if (it.type != "elevator-standard" || !elevPlugin) continue;
+			const bool large = it.type == "elevator-express";
+			if (!(it.type == "elevator-standard" && elevPlugin) && !(large && bigElevPlugin)) continue;
+			const PluginInfo * movePlugin = large ? bigElevPlugin : elevPlugin;
+			// Cars per shaft: the Simple Elevator takes 6, the Large Elevator 8 (BigElev MVDF).
+			const size_t maxCars = large ? 8 : 6;
 			const int length = it.height;
 			const int sl = it.x + origin, sr = sl + 4;
 			Rect area;
@@ -782,7 +793,7 @@ namespace Bld {
 			m.hdr.used = 1;
 			m.equipID = moverId;
 			m.area = area;
-			m.equipType = elevPlugin->itemType;
+			m.equipType = movePlugin->itemType;
 			m.showShaft = 1;
 			m.length = (int16_t)length;
 			m.reqIDTag = "ADIR";
@@ -818,16 +829,16 @@ namespace Bld {
 				}
 			}
 			m.reqIDs = wordArray(reqIds);
-			// Cars (6 slots, the Simple Elevator's maximum).
+			// Cars (6 slots for the Simple Elevator, 8 for the Large one).
 			m.modules.kind = "LMlE";
-			m.modules.f20 = 6;
+			m.modules.f20 = (int16_t)maxCars;
 			m.modules.rect.left = sl; m.modules.rect.right = sr;
 			m.modules.rect.top = ground - 1 - it.y; m.modules.rect.bottom = m.modules.rect.top + 1;
 			m.modules.rect2.left = 2; m.modules.rect2.top = 2; m.modules.rect2.right = -2; m.modules.rect2.bottom = -2;
-			m.modules.modules.resize(6);
+			m.modules.modules.resize(maxCars);
 			std::vector<TowerCar> cars = it.cars;
 			if (cars.empty()) cars.push_back(TowerCar());
-			if (cars.size() > 6) { clampedCars += (int)cars.size() - 6; cars.resize(6); }
+			if (cars.size() > maxCars) { clampedCars += (int)(cars.size() - maxCars); cars.resize(maxCars); }
 			for (size_t k = 0; k < cars.size(); k++)
 			{
 				MoverModule & c = m.modules.modules[k];
@@ -845,11 +856,16 @@ namespace Bld {
 			// most likely the car schedule) whatever n says. Written with the
 			// values the game saves for a fresh shaft. KElev.t2p (0x1000fbd0)
 			// has 2 x 10 three-s16 records, fresh (0, 0, 6) (FUN_100116f0).
-			const bool kElev = macOrder(elevPlugin->id) == "KELV";
+			// BigElev.t2p (Large Elevator) writes the same 2 x 10 table of three-s16
+			// records (n = 120, bld-format.md §4.3); its fresh values are assumed
+			// to match KElev's (0, 0, 6). The game reads whatever n says, so a
+			// different schedule loads but would change the car behaviour.
+			const bool kElev = !large && macOrder(elevPlugin->id) == "KELV";
+			const bool threeS16 = large || kElev;
 			for (int k = 0; k < 2 * 10; k++)
 			{
 				const uint8_t e[6] = {0, 0, 0, 0, 6, 0};
-				if (kElev) m.extra.insert(m.extra.end(), e, e + 6);
+				if (threeS16) m.extra.insert(m.extra.end(), e, e + 6);
 				else m.extra.insert(m.extra.end(), e + 2, e + 6);
 			}
 			// Shaft cells, machine row to pit row.
@@ -895,7 +911,7 @@ namespace Bld {
 		if (clampedCars)
 		{
 			char buf[96];
-			snprintf(buf, sizeof(buf), "%d elevator car(s) beyond the Simple Elevator's 6 were not written.", clampedCars);
+			snprintf(buf, sizeof(buf), "%d elevator car(s) beyond the mover's slots (6 Simple, 8 Large) were not written.", clampedCars);
 			report.notes.push_back(buf);
 		}
 
@@ -982,8 +998,10 @@ namespace Bld {
 				for (const PluginInfo & p : out.plugins)
 					if (p.itemType == t.equipType) { demand += powerOfStem(pluginStem(p)); break; }
 			}
-			// Only the standard elevator is exported as a mover (StdElev.t2p).
-			demand += (long long)out.movers.size() * powerOfStem("StdElev");
+			// Each mover draws its own plugin's consumption (StdElev or BigElev).
+			for (const Mover & m : out.movers)
+				for (const PluginInfo & p : out.plugins)
+					if (p.itemType == m.equipType) { demand += powerOfStem(pluginStem(p)); break; }
 			for (TowerEventRec & e : out.events)
 			{
 				if (e.type != "vEOB" || e.data.size() < 6) continue;
