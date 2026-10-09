@@ -937,6 +937,8 @@ Test (tests/test_main.cpp, testBldExport section): a Hawaii rating-2 tower with 
 Measured on the lab (tree hkE, TAGs hkE-repro and hkE-fix):
 - before: export level 3, the original shows the Plugin Check Error dialog listing only Gathering Area at load.
 - after: export level 4, the original loads with no dialog and the status panel shows four stars (oracle dialogs/ empty, load.png).
-- one-day run (hkE-fix, 1 day): still running at the time of writing; the day-1 numbers, the report.md comparison and the Gathering Area survival are pending.
+- one-day run (hkE-fix, 1 day, TAG hkE-fix, output /lab/out/parity/hkE-fix/yoot_visitors): finished, oracle exit 0, no dialogs during the run. report.md: funds change day 0 25,700 orig / 27,300 OpenSky, day 1 -500 / -500; population peak day 0 511 / 627 and day 1 78 / 78; grade 4 / 4 both days; within tolerance funds 2/2, pop_max 2/2, pop_min 2/2, grade 2/2, vip 2/2, customers 6/10, estimate 33/38.
+- Gathering Area survives in the original: gatheringarea@-36,13 status 13 (orig) / 13 (OpenSky) on day 0 and 177 customers (orig) vs 258 (OpenSky) on day 0 with an x mismatch flag on customers.
+- Not measured: the pre-fix run (hkE-repro) was stopped before its report, so the before numbers for funds, population and the Gathering Area's customers are not available; the before evidence is the Plugin Check Error dialog only.
 
 Open: the star level change is a deliberate departure from the source rating (the tower is three stars in OpenSky); the alternative, dropping the Gathering Area, loses the building. The lead should choose. Lab note: an earlier oracle process for hkE-repro did not exit on `parity.sh stop`; it was left running and should be checked.
