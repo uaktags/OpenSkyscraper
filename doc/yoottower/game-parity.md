@@ -756,3 +756,95 @@ Remaining open items: Large Elevator top gear; Event Center evening events
 hotel room-night counts; and blackout tenant-idle/financial effects. Schools
 remain status 10 in the original because their opening route is unreachable.
 No goldens were regenerated.
+
+### 7.6 Close-out campaign
+
+#### 7.6.F Visuals
+
+Scope: Mr. Maru's walk back, rubble, clouds, the black kite and dolphins, and the
+Billboard. Logic-level comparison only. No pixel comparison was made and no oracle
+run was made for this workstream. The lab tree is `hkF`.
+
+**Mr. Maru (MAEV 128) walk back.** Original: `T2Maru_Reggae::DoReception` 0x1003abe0,
+`FindNextTenant` 0x1003b760, `FindTargetTenant` 0x1003b660, `MaruReception` 0x1003aec0.
+- Arrival at a tenant is not gated by the clock. The clock gate
+  (`time <= this+0x50 && status unchanged`) applies to the stand phases only.
+  So a walk still under way at the end time arrives first.
+- At state 5, `FindTargetTenant` is chosen only while `time < endTime`. Otherwise
+  the state becomes 0xb with destination tenant ID 1 (the lobby). He walks there as
+  an ordinary people walk, then the state-1/8 exit path reaches `DeadVIP`. So the walk
+  back starts from the tenant where he stands and ends at the lobby, where he is removed.
+- Fixed in `YootExtrasSystem::maruMinute` (commit 758e109). A walk still under way
+  at the end time is finished, and then he walks home from that tenant. Before the
+  fix, `vipLeave` called `goOutTower` on a walking person, so he vanished mid-floor.
+- Not matched: `FindNextTenant` flips direction at the row end and returns the
+  current tenant as a zero-length destination. The original therefore repeats the
+  visit at the edge tenant before walking back. OpenSky flips and walks back at once.
+  Whether the repeat is a full reception depends on the tenant flag at `+0x60`, which
+  is not settled. The walk speed is the generic people walk in both games, and it
+  is not compared numerically.
+
+**Clouds (V6, CLEV, Tokyo and Hawaii).** Original: `T2Cloud::Exec` 0x100130b0,
+`CheckInView` 0x10013260, `MakeCloud` 0x100134d0, `GetUnuseCloud` 0x100133d0,
+`T2CloudObject::Tick` 0x100137a0, ctor 0x100135d0.
+- Ten clouds at all times. Each ticks once per 10 game minutes by its own speed
+  (`rand()%4+2` px, set once). Out-of-view clouds are reused via `GetUnuseCloud`.
+  The reused object keeps its bitmap and speed. Its entry x is `1 - width`, and its
+  height is `G - floor(sqrt(rand % G^2))` with G = groundLine - 25.
+- The OpenSky `VenueSystem::cloudTick` matched this except that it re-rolled bitmap
+  and speed on each recycle. Fixed (commit 758e109). That change consumes fewer
+  `rand()` calls, which shifted the shared random stream, so the sim goldens
+  `sim_people_yoottower` and `sim_visitors_yoottower` were regenerated (see the
+  commit message).
+- Not checked: whether the original's width comes from the "Cloud" OBJMAP object
+  (`GetObjectSize`) rather than the full bitmap, and the world origin offset.
+
+**Rubble (demolition and fire).** Original: `T2Tenant::BurntDown` 0x10061020 sets the
+tenant ID to 10000. `T2Tenant::Draw` 0x1005e4d0 then draws only
+`T2WorldDef::DrawRubble` 0x10072290 → `T2TowerEvent::DrawRubble` 0x1006a1e0, which
+draws the world 1007 "Rubble" object. The tenant graphic is not drawn. The object is
+clipped to the tenant's width from its left edge, one 36 px row per storey.
+OpenSky draws rubble per fire or bomb cell (`EventSystem::destroyFireCell`,
+`detonateBomb`) with an 8 px column of the 640 px strip at phase `x*8 % 640`. It
+draws on top of everything (`Game.cpp`, `win.draw(eventSystem)`), and it does not
+hide the items under the rubble. Differences to check on screen: the phase is global
+in OpenSky and per tenant in the original, and the original hides the burnt item's
+graphic. Not changed: the `EnumParts` tiling semantics of `T2ImageObj::DrawObject`
+0x1003a390 are not settled.
+
+**Black kite (TOEV, Kegon) and dolphins (DOEV, Hawaii).** Original: `T2Tonbi::Exec`
+0x100149f0 (Hawaii; Kegon 0x100134b0). It runs every 512 ticks while idle (mask 0x1ff)
+and every 4 ticks while flying (mask 3). Each start point is random from the list.
+`T2Tonbi::IsReady` tests the weather state at `+0x18` against {3, 4, 9, 10}.
+OpenSky `YootExtrasSystem::flightMinute` uses 4 ticks per game minute, the same
+kite and dolphin scripts, and the same start points.
+- Sprite sheets match the stacked-strip assumption: Kegon 8600 is 44x528 (12 frames
+  of 44 px) and Hawaii 8901 is 64x648 (18 frames of 36 px). The OBJMAP rects are not
+  decoded, so the frame cut is inferred rather than read.
+- Not matched: OpenSky gates on `rainyDay` in Tokyo only. The original applies the
+  weather test in every world, Kegon included, so the Kegon gate is unevidenced.
+- The dolphin `IsReady` (`T2Dolphin::IsReady` 0x10013e50) tests a cruise transport
+  arrival, and the OpenSky comment calls the cruise gate dead code. That is
+  consistent with the decompile but not confirmed in play.
+
+**Billboard (BILL, OuterObj 2100).** Original: the Billboard.dll day counter
+`FUN_1000bd20`, the campaign end `FUN_1000bba0`, and the ad draw `FUN_1000c1a0`.
+OpenSky `VenueSystem::newDay` counts one day per new day and clears the ad at zero,
+and `Billboard::showAd` centres the 128 DIB on a 160x60 board.
+- Unresolved: as decompiled, `FUN_1000bd20` decrements only when
+  `now < stored`, but `stored` is overwritten with `now` on every call, so the
+  literal reading never counts down. The Ghidra output or the unsigned comparison
+  probably needs a second look before OpenSky's countdown can be confirmed. The
+  board size of 160x60 is taken from a comment and is not measured.
+
+**Verification status.**
+- Done: build clean on `hkF`; `lab.sh test hkF` 9/9 after the golden regeneration.
+- Not done: no oracle or OpenSky screenshots, and no state dump of Maru, clouds
+  or the flights. No sim run logs a Maru visit, so the Maru change has no
+  measured effect. Pixel and motion checks of the clouds, rubble, kite, dolphins and
+  Billboard need a human look or a lab screenshot pass, at these times: Tokyo cloud
+  drift at 10-minute steps, a Hawaii dolphin run from 09:00, a Kegon kite run, a
+  burnt tenant on Tokyo, and a Billboard after its campaign ends.
+- Gotcha: a fresh worktree has empty `thirdparty/astar-search` and
+  `thirdparty/tinyxml2` submodules, so the lab build fails at `PathFinder.h` until
+  they are copied into the lab tree. `lab.sh sync` deletes them again on the next sync.
