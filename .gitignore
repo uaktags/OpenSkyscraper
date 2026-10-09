@@ -50,3 +50,6 @@ cmake_install.cmake
 memory/
 /SIMTOWER.EX_.bak
 __pycache__/
+
+# play-through harness results (pulled from Unraid)
+tools/playthrough/out/
