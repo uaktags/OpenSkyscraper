@@ -521,7 +521,7 @@ static void testLevelUpRules()
 	EXPECT(LevelUp::minRatingToBuild("recycling")        == 2);
 	EXPECT(LevelUp::minRatingToBuild("parking")          == 2);
 	EXPECT(LevelUp::minRatingToBuild("metro")            == 3);
-	EXPECT(LevelUp::minRatingToBuild("secom")            == 2);
+	EXPECT(LevelUp::minRatingToBuild("secom")            == 99); // never offered (batch3 Q8)
 	EXPECT(LevelUp::minRatingToBuild("cathedral")        == 4);
 	EXPECT(LevelUp::minRatingToBuild("fastfood")         == 0);
 	EXPECT(LevelUp::minRatingToBuild("office")           == 0);
@@ -3073,6 +3073,17 @@ static void testSimTowerEventClock()
 	EXPECT(t.eventFrame() == 108);
 }
 
+// Batch 3: SECOM is never offered at any star level (EXE build menu, Q8).
+static void testBatch3SecomNeverUnlocks()
+{
+	using OT::LevelUp;
+	for (int rating = 0; rating <= 4; ++rating)
+		EXPECT(LevelUp::minRatingToBuild("secom") > rating);
+	// The neighbouring unlocks are unchanged.
+	EXPECT(LevelUp::minRatingToBuild("security") <= 2);
+	EXPECT(LevelUp::minRatingToBuild("parking") == 2);
+}
+
 // Opt-in real-engine disaster scenarios. Compile this translation unit with
 // -DOPENSKY_DISASTER_SCENARIOS and link the OpenSkyscraper objects except main.
 // Run under Xvfb with a temporary writable cwd; normal seam tests are unchanged.
@@ -3167,8 +3178,14 @@ static int testDisasterScenarios() {
  for (const char *id : {"condo", "yoot_condo"}) {
   resetDisasterScenario(g);auto *oldCondo=makeDisasterItem(g,id,0,2);
   tinyxml2::XMLDocument saleDoc;DISASTER_CHECK(saleDoc.Parse("<item occupied=\"true\"/>")==0);oldCondo->decodeXML(*saleDoc.RootElement());
-  const int credit=oldCondo->prototype->price*2;DISASTER_CHECK(oldCondo->disasterSaleReversal()==credit);g.transferFunds(credit,"condo_sale","");g.destroyItemByDisaster(oldCondo);DISASTER_CHECK(g.funds==2000000);DISASTER_CHECK(g.money.todayIncome==0);DISASTER_CHECK(g.people.empty());
+  const int credit=150000;DISASTER_CHECK(oldCondo->disasterSaleReversal()==credit);g.transferFunds(credit,"condo_sale","");g.destroyItemByDisaster(oldCondo);DISASTER_CHECK(g.funds==2000000);DISASTER_CHECK(g.money.todayIncome==0);DISASTER_CHECK(g.people.empty());
  }
+ // Batch 3 (harness only; not part of OpenSkyTests): credits clamp at INT_MAX,
+ // disaster-offer days are day%60==59 or day%84==83.
+ resetDisasterScenario(g);g.transferFunds(INT_MAX,"clamp","");DISASTER_CHECK(g.funds==INT_MAX);g.transferFunds(1000,"clamp","");DISASTER_CHECK(g.funds==INT_MAX);
+ setDisasterTime(g,59+Time::hourToAbsolute(10));DISASTER_CHECK(g.isDisasterOfferDay());
+ setDisasterTime(g,83+Time::hourToAbsolute(10));DISASTER_CHECK(g.isDisasterOfferDay());
+ setDisasterTime(g,10+Time::hourToAbsolute(10));DISASTER_CHECK(!g.isDisasterOfferDay());
  // Parking deletion clears worker/guest pointers before their owners die.
  resetDisasterScenario(g);auto *office=static_cast<Item::Office *>(makeDisasterItem(g,"office",0,2));
  auto *hotel=static_cast<Item::Hotel *>(makeDisasterItem(g,"hotel_suite",15,2));auto *parking=static_cast<Item::Parking *>(makeDisasterItem(g,"parking",0,-1));
@@ -3311,6 +3328,7 @@ int main()
 	testYootGrades();
 	testOspAttrCompat();
 	testSimTowerEventClock();
+	testBatch3SecomNeverUnlocks();
     if (g_failures > 0)
     {
         std::cerr << g_failures << " test(s) failed\n";

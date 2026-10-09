@@ -82,7 +82,7 @@ void PartyHall::advance(double dt)
 		open = false;
 		spriteNeedsUpdate = true;
 		if (!eventSettled) {
-			if (patronsToday > 0)
+			if (patronsToday > 0 && !game->isDisasterOfferDay())
 				game->transferFunds(20000, "entertainment_income", "Income from Party Hall");
 			eventSettled = true;
 		}

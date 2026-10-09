@@ -92,7 +92,6 @@ namespace OT {
 				void clearCars();
 				virtual void evacuateForDisaster() override;
 				void addCar(int floor);
-				virtual int dailyMaintenanceCost() const override { return 100 + (int)cars.size() * 250 + size.y * 20; }
 
 
 				virtual bool canHaulPeople() const { return true; }

@@ -5,6 +5,7 @@
 
 using namespace OT;
 using namespace OT::Item;
+extern int openSkyQuarterlyRent(const std::string &prototypeId, int rentClass);
 
 sf::Texture YootCondo::emptyCondoTexture;
 sf::Texture YootCondo::residentTexture;
@@ -78,7 +79,7 @@ void YootCondo::decodeXML(tinyxml2::XMLElement &xml)
 	Item::decodeXML(xml);
 	const bool hasPopulation = (xml.FindAttribute("population") != NULL);
 	rent = xml.IntAttribute("rent");
-	rentDeposit = xml.IntAttribute("rentDeposit", xml.BoolAttribute("occupied") ? prototype->price * 2 : rent);
+	rentDeposit = xml.IntAttribute("rentDeposit", xml.BoolAttribute("occupied") ? 150000 : rent);
 	variant = xml.IntAttribute("variant");
 	lighting = (LightingConditions)xml.IntAttribute("lighting");
 	occupied = xml.BoolAttribute("occupied");
@@ -162,7 +163,7 @@ void YootCondo::advance(double dt)
 			occupied = true;
 			variant = rand() % 3;
 			spriteNeedsUpdate = true;
-			rentDeposit = prototype->price * 2;
+			rentDeposit = openSkyQuarterlyRent("yoot_condo", 1);
 			game->transferFunds(rentDeposit, "condo_sale", "Income from Yoot Condo sale");
 			createOccupants();
 		}
@@ -177,7 +178,7 @@ void YootCondo::advance(double dt)
 			spriteNeedsUpdate = true;
 			population = 0;
 			game->populationNeedsUpdate = true;
-			game->transferFunds(-prototype->price, "condo_buyback", "Repurchased vacated Yoot Condo");
+			game->transferFunds(-rentDeposit, "condo_buyback", "Repurchased vacated Yoot Condo");
 		}
 	}
 

@@ -96,6 +96,9 @@ namespace OT {
         void cancelTransientVip();
         bool rejectDisasterWorldEdit();
 		bool extendFloor(int floor, int minX, int maxX, bool free = false);
+		/// True on the days the bomb (day%60==59) or fire (day%84==83) event
+		/// is offered; venues pay no income then (ASM 1180:12e7).
+		bool isDisasterOfferDay() const;
 		/// Mint free stub floor slabs where a loaded tower lost them
 		/// (OpenSkyWeb ISSUE-041 self-heal). Returns true when repaired.
 		bool repairFloorCoverage();
@@ -283,7 +286,6 @@ namespace OT {
 		/// several of these per rendered frame.
 		void advanceSimTick(double dt);
 		void settleDailyAccounting();
-		int calculateDailyMaintenanceCost() const;
 		int lastAccountingDay;
 		/// Autosave bookkeeping (OpenSkyWeb autosave.js policy): last in-game
 		/// day and wall-clock second we wrote a crash-recovery snapshot.

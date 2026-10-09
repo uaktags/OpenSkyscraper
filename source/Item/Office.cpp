@@ -4,6 +4,9 @@
 #include "../Math/Rand.h"
 #include "../Time.h"
 #include "Parking.h"
+#include <algorithm>
+
+extern int openSkyQuarterlyRent(const std::string &prototypeId, int rentClass);
 
 using OT::Path;
 using OT::Route;
@@ -66,6 +69,7 @@ void Office::init()
 	lit = false;
 	rent = 10000;
 	rentDeposit = rent;
+	rentClass = 1;
 
 	sprite.setTexture(App->bitmaps.editionTexture("office", "simtower/office"));
 	sprite.setOrigin({0.f, 24.f});
@@ -97,6 +101,7 @@ void Office::encodeXML(tinyxml2::XMLPrinter &xml)
 	Item::encodeXML(xml);
 	xml.PushAttribute("rent", rent);
 	xml.PushAttribute("rentDeposit", rentDeposit);
+	xml.PushAttribute("rentClass", rentClass);
 	xml.PushAttribute("variant", variant);
 	xml.PushAttribute("occupied", occupied);
 	xml.PushAttribute("lit", lit);
@@ -108,6 +113,7 @@ void Office::decodeXML(tinyxml2::XMLElement &xml)
 	Item::decodeXML(xml);
 	rent = xml.IntAttribute("rent");
 	rentDeposit = xml.IntAttribute("rentDeposit");
+	rentClass = std::max(0, std::min(3, xml.IntAttribute("rentClass", 1)));
 	variant = xml.IntAttribute("variant");
 	occupied = xml.BoolAttribute("occupied");
 	lit = xml.BoolAttribute("lit");
@@ -137,7 +143,7 @@ void Office::advance(double dt)
 			variant = rand() % 6;
 			lit = true;
 			spriteNeedsUpdate = true;
-			rentDeposit = rent;
+			rentDeposit = openSkyQuarterlyRent("office", rentClass);
 			// A worker record survives a vacancy, but must not remain in
 			// Item::people (or count toward tower population) while the
 			// office is unlet.
@@ -146,7 +152,7 @@ void Office::advance(double dt)
 					addPerson(*iw);
 			population = workers.size();
 			game->populationNeedsUpdate = true;
-			game->transferFunds(rentDeposit, "deposit_income", "Occupied Office's rent deposit");
+			game->transferFunds(rentDeposit, "rent_income", "Office rent");
 		}
 	}
 

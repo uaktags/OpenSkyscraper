@@ -194,8 +194,7 @@ void FastFood::advance(double dt)
 		if (!revenueSettled) {
 			int amount = customersToday >= 50 ? 5000 : customersToday >= 35 ? 3000
 				: customersToday >= 25 ? 2000 : -3000;
-			const int absoluteDay = static_cast<int>(std::floor(game->time.absolute));
-			if (absoluteDay % 60 != 59 && absoluteDay % 84 != 83)
+			if (!game->isDisasterOfferDay())
 				game->transferFunds(amount, "retail_income", "Income from Fast Food");
 			revenueSettled = true;
 		}

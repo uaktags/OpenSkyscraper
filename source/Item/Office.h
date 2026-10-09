@@ -32,7 +32,6 @@ namespace OT
 			virtual void decodeXML(tinyxml2::XMLElement &xml) override;
 
 			virtual void advance(double dt) override;
-			virtual int dailyMaintenanceCost() const override { return 250; }
 			virtual bool isOccupied() const override { return occupied; }
 			/// Lit-state + worker access for the AnimPeple overlay in
 			/// Item::renderPeople (OpenSkyWeb office population rules).
@@ -46,6 +45,7 @@ return out;
 }
 			
 			bool isAttractive();
+			int rentClass; ///< EXE rent class (0 high .. 3 very low); default 1
 
 			virtual void addPerson(Person *p) override;
 			void prepareLunchQa(double lunchHour);

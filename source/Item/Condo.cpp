@@ -5,6 +5,7 @@
 using namespace OT;
 using namespace OT::Item;
 // Shared rent-table writer implemented by Game.cpp (resource 0x7f0b/0x3e9).
+#include <algorithm>
 extern int openSkyQuarterlyRent(const std::string &prototypeId, int rentClass);
 
 Condo::~Condo()
@@ -20,6 +21,7 @@ void Condo::init()
 	occupied = false;
 	rent = 150000;
 	rentDeposit = rent;
+	rentClass = 1;
 
 	sprite.setTexture(App->bitmaps.editionTexture("condo", "simtower/condo"));
 	sprite.setOrigin({0.f, 24.f});
@@ -33,6 +35,7 @@ void Condo::encodeXML(tinyxml2::XMLPrinter &xml)
 	Item::encodeXML(xml);
 	xml.PushAttribute("rent", rent);
 	xml.PushAttribute("rentDeposit", rentDeposit);
+	xml.PushAttribute("rentClass", rentClass);
 	xml.PushAttribute("variant", variant);
 	xml.PushAttribute("lighting", lighting);
 	xml.PushAttribute("occupied", occupied);
@@ -43,7 +46,8 @@ void Condo::decodeXML(tinyxml2::XMLElement &xml)
 {
 	rent = xml.IntAttribute("rent", 150000);
 	const bool hasPopulation = (xml.FindAttribute("population") != NULL);
-	rentDeposit = xml.IntAttribute("rentDeposit", xml.BoolAttribute("occupied") ? prototype->price * 2 : rent);
+	rentDeposit = xml.IntAttribute("rentDeposit", xml.BoolAttribute("occupied") ? 150000 : rent);
+	rentClass = std::max(0, std::min(3, xml.IntAttribute("rentClass", 1)));
 	variant = xml.IntAttribute("variant");
 	lighting = (LightingConditions)xml.IntAttribute("lighting");
 	occupied = xml.BoolAttribute("occupied");
@@ -106,7 +110,7 @@ void Condo::advance(double dt)
 			occupied = true;
 			variant = rand() % 3;
 			spriteNeedsUpdate = true;
-			rentDeposit = prototype->price * 2;
+			rentDeposit = openSkyQuarterlyRent("condo", rentClass);
 			game->transferFunds(rentDeposit, "condo_sale", "Income from Condo sale");
 			createOccupants();
 		}
@@ -123,7 +127,7 @@ void Condo::advance(double dt)
 		spriteNeedsUpdate = true;
 		population = 0;
 		game->populationNeedsUpdate = true;
-		const int buyback = openSkyQuarterlyRent("condo", 1);
+		const int buyback = openSkyQuarterlyRent("condo", rentClass);
 		game->transferFunds(-buyback, "condo_buyback", "Repurchased vacated Condo");
 	}
 

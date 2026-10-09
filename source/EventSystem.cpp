@@ -62,7 +62,6 @@ namespace
 	// --- Buried treasure (LevelT seg_1148, tuning 0xA8/AA/AC) ---
 	const int kTreasureAwards[3] = { 200000, 300000, 500000 };
 	const int kTreasureExtentPerStar = 25; // extent > star * 0x19
-	const int kCashCap = 99999999;         // AwardMoney 1178:076f clamp
 
 	// --- Santa (SantaT seg_11b8) ---
 	const int kSantaTickPixels = 10; // x -= 10 px/tick
@@ -136,7 +135,6 @@ void EventSystem::reset()
 	bombCleanupAt = -1;
 
 	treasureLatched = false;
-	pendingBuilds.clear();
 	rubble.clear();
     burnedSpans.clear();
 }
@@ -162,6 +160,7 @@ void EventSystem::launchSanta()
 	santaActive = true;
 	santaX = 4000.f; // off-screen right
 	santaY = kSantaBaseY;
+	game->timeWindow.showMessage("Santa Claus is coming to your tower!"); // msg 7 (11c0:0028)
 	LOG(IMPORTANT, "Santa flies across the tower");
 }
 
@@ -378,7 +377,7 @@ void EventSystem::stepFireFrame()
 		if (itL == fireLeft.end()) {
 			if (f > fireOriginFloor &&
 			    fireFrame == (f - fireOriginFloor) * kFireFloorFrames &&
-			    fireOriginCell >= L && fireOriginCell < R)
+			    fireOriginCell >= L)
 				fireLeft[f] = fireOriginCell;
 		} else {
 			int l = itL->second;
@@ -392,7 +391,7 @@ void EventSystem::stepFireFrame()
 		if (itR == fireRight.end()) {
 			if (f > fireOriginFloor &&
 			    fireFrame == (f - fireOriginFloor) * kFireFloorFrames &&
-			    fireOriginCell >= L && fireOriginCell + kFireCells <= R)
+			    fireOriginCell + kFireCells <= R)
 				fireRight[f] = fireOriginCell;
 		} else {
 			int r = itR->second;
@@ -466,7 +465,10 @@ void EventSystem::stepFireGuards()
 				// Partition by guard index; at the edge the highest
 				// burning floor wins, mid-floor the first.
 				int pick = -1;
-				for (int f = fireOriginFloor + gi; f <= top; f += kGuardsPerOffice) {
+				// EXE 1100:0da8 walks the file floor index (ground = 10) as
+				// f = gi, gi+6, ...; our y = file - 10, so y % 6 == (gi - 10) mod 6.
+				for (int f = gi - 10; f <= top; f += kGuardsPerOffice) {
+					if (f < -10) continue;
 					if (fireLeft.count(f) || fireRight.count(f)) {
 						pick = f;
 						if (!atEdge) break;
@@ -705,9 +707,8 @@ void EventSystem::payTreasure(int star)
 {
 	const int award = kTreasureAwards[star - 1];
 	treasureLatched = true;
-	// AwardMoney 1178:076f clamps the cash field at $99,999,999.
+	// The shared credit clamp (1180:13f2) lives in Game::transferFunds.
 	game->transferFunds(award, "treasure", "Buried treasure discovered");
-	if (game->funds > kCashCap) game->setFunds(kCashCap);
 	char buf[192];
 	snprintf(buf, sizeof(buf),
 	         "During construction, workers discovered ancient buried treasure! It sold for $%d.", award);
@@ -721,20 +722,15 @@ void EventSystem::armTreasureLatch(int star)
 	treasureLatched = treasureCondition(star);
 }
 
-void EventSystem::notifyBuilt()
+void EventSystem::notifyPlaced()
 {
-	// NotifyFacilityBuilt (1148:0163): on every successful build an armed
-	// latch plus the dig condition pays the star-tier award once.
-	for (Game::ItemSet::iterator i = game->items.begin(); i != game->items.end(); ++i) {
-		Item::Item * item = *i;
-		if (item->underConstruction) {
-			pendingBuilds.insert(item);
-		} else if (pendingBuilds.erase(item) != 0) {
-			const int star = game->rating + 1; // rating is 0-based
-			if (!treasureLatched && treasureCondition(star))
-				payTreasure(star);
-		}
-	}
+	// Concilia policy (game.c:287-307): the buried-treasure check runs on
+	// successful PLACEMENT (any build click, deck or shaft extension) (the build click), not when
+	// construction completes. An armed latch plus the dig condition pays
+	// the star-tier award once.
+	const int star = game->rating + 1; // rating is 0-based
+	if (!treasureLatched && treasureCondition(star))
+		payTreasure(star);
 }
 
 // --------------------------------------------------------- debug triggers
@@ -801,9 +797,6 @@ void EventSystem::advance(double dt)
 		santaY = kSantaBaseY + (phase < 8 ? phase : 16 - phase);
 		if (santaX < -200.f) santaActive = false;
 	}
-
-	// --- Buried treasure: watch for completed builds ---
-	notifyBuilt();
 
 	// --- Bomb deadline (checked before the guard sweep: a guard can't
 	// catch it on the deadline frame) ---
@@ -974,7 +967,6 @@ void EventSystem::decodeXML(tinyxml2::XMLElement & xml)
 	bombArmed = false;
 	bombCaught = false;
 	bombCleanupAt = -1;
-	pendingBuilds.clear();
 	// Old saves contain positions/latches only, no elapsed-frame progress
 	// to convert. Active fire/bomb and cathedral ceremonies remain transient.
 	fireFrame = 0;

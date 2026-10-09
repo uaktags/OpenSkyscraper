@@ -78,7 +78,8 @@ namespace OT
         bool rubbleIntersects(const recti &rect) const;
         bool clearRubble(int floor, int x);
         void burnFootprint(const recti &rect);
-        void forgetItem(Item::Item *item) { pendingBuilds.erase(item); }
+        /// Buried-treasure check on successful facility placement (build click).
+        void notifyPlaced();
 
 		/// Promotion-ceremony hook (LevelT @0047-004a): re-seed the buried
 		/// treasure latch with the NEW tier's dig condition, so a basement
@@ -131,7 +132,6 @@ namespace OT
 		void detonateBomb();
 
 		// --- buried treasure (LevelT seg_1148) ---
-		void notifyBuilt();
 		bool treasureCondition(int star) const;
 		void payTreasure(int star);
 
@@ -198,7 +198,6 @@ namespace OT
 
 		// --- buried treasure state ---
 		bool   treasureLatched; ///< true = paid/forfeited for this tier
-		std::set<Item::Item *> pendingBuilds; ///< items seen under construction
 
 		// --- rubble ---
 		std::set<long> rubble;

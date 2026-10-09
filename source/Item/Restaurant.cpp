@@ -182,8 +182,7 @@ void Restaurant::advance(double dt)
 		if (!revenueSettled) {
 			int amount = customersToday >= 50 ? 10000 : customersToday >= 35 ? 6000
 				: customersToday >= 25 ? 4000 : -6000;
-			const int absoluteDay = static_cast<int>(std::floor(game->time.absolute));
-			if (absoluteDay % 60 != 59 && absoluteDay % 84 != 83)
+			if (!game->isDisasterOfferDay())
 				game->transferFunds(amount, "retail_income", "Income from Restaurant");
 			revenueSettled = true;
 		}

@@ -33,7 +33,7 @@ static const int kRampGapLimitCells = 4;
 // Quarterly upkeep PER RAMP: maintenance table 0x3EA item 44 = 10000 x $100
 // (byte-verified). Spaces and cars cost nothing - ParkingT InParkingCar
 // (1198:031a) makes zero MoneyT calls, which is why
-// dailyMaintenanceCost() returns 0 and no income is ever booked here.
+// no income is ever booked here.
 const int Parking::kRampUpkeepPerQuarter = 10000;
 
 // =============================================================================

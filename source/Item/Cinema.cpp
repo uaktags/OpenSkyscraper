@@ -220,7 +220,7 @@ void Cinema::advance(double dt)
 		spriteNeedsUpdate = true;
 		if (!revenueSettled) {
 			int amount = patronsToday < 40 ? 0 : patronsToday < 80 ? 2000 : patronsToday < 100 ? 10000 : 15000;
-			if (amount > 0) game->transferFunds(amount, "entertainment_income", "Income from Movie Theatre");
+			if (amount > 0 && !game->isDisasterOfferDay()) game->transferFunds(amount, "entertainment_income", "Income from Movie Theatre");
 			revenueSettled = true;
 		}
 		const Route &r = game->findRoute(this, game->mainLobby);

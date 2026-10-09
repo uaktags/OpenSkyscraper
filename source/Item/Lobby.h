@@ -31,7 +31,6 @@ namespace OT {
 			virtual void addPerson(Person * p);
 			virtual void removePerson(Person * p);
 			virtual bool isLobby() const override { return true; }
-			virtual int dailyMaintenanceCost() const override { return size.x * 20; }
 
 			/// Per-person atrium walk timer (see advance); mirrors Stairlike.
 			std::map<Person *, double> transitionTimes;

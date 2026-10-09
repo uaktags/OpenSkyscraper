@@ -1,5 +1,6 @@
 /* Copyright (c) 2012-2015 Fabian Schuiki */
 /* Copyright (c) 2026 OpenSkyscraper contributors */
+#include <cmath>
 #include <cassert>
 #include <chrono>
 #include <TGUI/Widgets/Label.hpp>
@@ -52,11 +53,9 @@ int openSkyQuarterlyRent(const std::string &prototypeId, int rentClass)
 
 int openSkyDefaultRentClass(const std::string &prototypeId)
 {
-	// Existing office/condo saves used the neutral (average) class. Hotel
-	// checkout is the class-0 room rate used by the original room records.
-	if (prototypeId == "hotel_single" || prototypeId == "hotel_double" ||
-	    prototypeId == "hotel_suite" || prototypeId == "hotel")
-		return 0;
+	// EXE tenant creation (1200:1f2e) gives hotel rooms, offices and condos
+	// the average class (1); the class may be changed afterwards.
+	(void)prototypeId;
 	return 1;
 }
 
@@ -71,8 +70,13 @@ static int quarterlyMaintenanceCost(const Game *game)
 		const std::string &id = item->prototype->id;
 		if (id == "lobby")
 		{
-			if (game->rating >= 4) total += item->size.x * 1000;
-			else if (game->rating >= 3) total += item->size.x * 300;
+			// EXE 1180:0ae4: only sky lobbies (y > 0) are charged, per cell;
+			// the ground grand-lobby band is exempt (10a8:133b).
+			if (item->position.y > 0)
+			{
+				if (game->rating >= 3) total += item->size.x * 1000;
+				else if (game->rating >= 2) total += item->size.x * 300;
+			}
 		}
 		else if (id == "elevator-standard" || id == "standard_elevator")
 		{
@@ -91,16 +95,16 @@ static int quarterlyMaintenanceCost(const Game *game)
 		}
 		else if (id == "escalator")
 			total += std::max(1, item->size.y - 1) * 5000;
-		else if (id == "parking")
+		else if (id == "parkingramp")
 			total += Item::Parking::rampUpkeepPerQuarter();
+		else if (id == "housekeeping")
+			total += 10000;
 		else if (id == "metro")
 			total += 100000;
 		else if (id == "security" || id == "secom")
 			total += 20000;
 		else if (id == "recycling")
 			total += 50000;
-		else if (id == "hotel_single" || id == "hotel_double" || id == "hotel_suite" || id == "hotel")
-			total += 10000;
 	}
 	return total;
 }
@@ -122,32 +126,29 @@ static void settleQuarterlyAccounting(Game *game)
 			Item::Shop *shop = dynamic_cast<Item::Shop *>(item);
 			if (!shop || !shop->let) continue;
 		}
-		else
+		else if (id == "office")
 		{
+			// EXE 1138:0bad pays while the tenant status is < 16 (including
+			// workers away overnight); abandoned offices pay nothing.
 			if (!item->isOccupied()) continue;
 		}
-		// Office/Condo move-out eligibility is checked before rent. Their
-		// advance() pass below performs the safe occupant removal.
-		bool attractive = true;
-		if (id == "office")
+		else
 		{
-			Item::Office *office = dynamic_cast<Item::Office *>(item);
-			attractive = office && office->isAttractive();
-		}
-		else if (id == "condo" || id == "yoot_condo")
-		{
-			Item::Condo *condo = dynamic_cast<Item::Condo *>(item);
-			attractive = condo && !condo->lobbyRoute.empty() &&
-				condo->evaluation >= 30.0;
-		}
-		if (!attractive)
+			// Condos pay once at sale (move-in), never quarterly; hotel
+			// rooms pay at checkout.
 			continue;
+		}
 		int cls = openSkyDefaultRentClass(id);
 		if (id == "shop")
 		{
 			Item::Shop *shop = dynamic_cast<Item::Shop *>(item);
 			if (!shop || !shop->let) continue;
 			cls = shop->rentClass;
+		}
+		else if (id == "office")
+		{
+			Item::Office *office = dynamic_cast<Item::Office *>(item);
+			if (office) cls = office->rentClass;
 		}
 		const int rent = openSkyQuarterlyRent(id, cls);
 		if (rent > 0)
@@ -761,6 +762,7 @@ if (draggingElevator && draggingElevator->repositionMotor(draggingMotor, toolPos
 					}
 				}
 
+				eventSystem.notifyPlaced(); // shaft extension counts as a build
 				// Update PathFinder map
 				gameMap.handleElevatorResize(draggingElevator, draggingElevatorLower, draggingElevatorStart);
 
@@ -1374,7 +1376,6 @@ void Game::removeItem(Item::Item * item)
     inspectorDialog.close();
     elevatorDialog.close();
     if (draggingElevator == item) { draggingElevator = NULL; draggingMotor = 0; }
-    eventSystem.forgetItem(item);
     if (item->prototype->id != "floor") cancelTransientVip();
     // Cached owner routes also contain raw item pointers.
     for (Item::Item *other : items) {
@@ -1471,7 +1472,7 @@ bool Game::extendFloor(int floor, int minX, int maxX, bool free) {
 		f->updateSprite();
 		addItem(f);
 		if (!free) {
-			transferFunds(-f->prototype->price, "construction", "Floor");
+			transferFunds(-f->prototype->price * (maxX - minX), "construction", "Floor");
 			playOnce("simtower/construction/normal");
 		}
 	}
@@ -1847,15 +1848,16 @@ void Game::settleDailyAccounting()
 	timeWindow.updateMoneyStats();
 }
 
-int Game::calculateDailyMaintenanceCost() const
-{
-	// The old helper name is retained for source compatibility; the faithful
-	// amount is a quarterly resource sweep, not a daily charge.
-	return quarterlyMaintenanceCost(this);
-}
-
 void Game::transferFunds(int f, std::string category, std::string message)
 {
+	if (f > 0) {
+		// EXE clamp 1180:13f2: every credit limits balance+credit to
+		// 99,999,999 internal $100 units ($9,999,999,900). Balances are held
+		// as 32-bit dollars here, so the effective ceiling is INT_MAX.
+		const long long cap = std::min<long long>(9999999900LL, (long long)INT_MAX);
+		const long long room = cap - (long long)money.balance;
+		f = room <= 0 ? 0 : (int)std::min<long long>((long long)f, room);
+	}
 	money.record(f, category);
 	setFunds(money.balance);
 	playOnce("simtower/cash");
@@ -2159,6 +2161,19 @@ void Game::toggleElevatorService(Item::Elevator::Elevator * e, int floor)
 	updateRoutes();
 }
 
+// Number of deck cells that extendFloor() would newly create on `floor` for
+// the span [minX, maxX): the whole width of an empty floor, otherwise the
+// growth beyond the existing left/right edges.
+static int newFloorCells(const Game &game, int floor, int minX, int maxX)
+{
+	Game::FloorItems::const_iterator it = game.floorItems.find(floor);
+	if (it == game.floorItems.end()) return std::max(0, maxX - minX);
+	const Item::Item *f = it->second;
+	const int left = std::max(0, f->position.x - minX);
+	const int right = std::max(0, maxX - f->getRect().maxX());
+	return left + right;
+}
+
 bool Game::constructToolAt(int2 pos)
 {
     if (rejectDisasterWorldEdit()) return false;
@@ -2240,6 +2255,7 @@ bool Game::constructToolAt(int2 pos)
 if (!handled) {
 	bool constructionBlocked = false;
 	std::string blockReason;
+	std::string moneyReject; // exact EXE message 7/8 text when unaffordable
 	int minFloorX = INT_MAX;
 	int maxFloorX = INT_MIN;
 	for (int i = 0; i < toolPrototype->size.y; ++i) {
@@ -2501,6 +2517,32 @@ if (!handled) {
 							}
 							if (constructionBlocked) break;
 
+							{
+								// Affordability (EXE 1180:00f0): item first, then
+								// item + the widening terrain.
+								const int wl = std::max(0, l->position.x - toolPosition.x);
+								const int wr = std::max(0, toolRight - lobbyRight);
+								const int groundBand = l->position.y == 0;
+								const int widenCost = groundBand
+									? 5000 * l->size.y * (wl + wr)
+									: itemFactory.prototypesById["floor"]->price * l->size.y * (wl + wr);
+								// The tool's own new deck cells are part of the total.
+								long long ownCells = 0;
+								for (int i = 0; i < toolPrototype->size.y; i++)
+									ownCells += newFloorCells(*this, toolPosition.y + i, toolPosition.x, toolRight);
+								const long long ownTerrain = ownCells * itemFactory.prototypesById["floor"]->price;
+								if (money.balance < toolPrototype->price) {
+									constructionBlocked = true;
+									moneyReject = "Not enough money to build this item.";
+									break;
+								}
+								if ((long long)money.balance < (long long)toolPrototype->price + widenCost + ownTerrain) {
+									constructionBlocked = true;
+									moneyReject = "Not enough money to build the floor.";
+									break;
+								}
+							}
+
 							if (toolPosition.x < l->position.x) {
 								diffLeft = l->position.x - toolPosition.x;
 								l->size.x += diffLeft;
@@ -2515,7 +2557,9 @@ if (!handled) {
 								int newMaxX = l->getRect().maxX();
 								// Extend floor intervals on every lobby floor.
 								for (int f = l->position.y; f < l->position.y + l->size.y; f++) {
-									extendFloor(f, newMinX, newMaxX);
+									// Ground grand-lobby decks are priced by the lobby
+									// rate below, not the $500 floor rate.
+									extendFloor(f, newMinX, newMaxX, l->position.y == 0);
 									FloorItems::iterator fi = floorItems.find(f);
 									if (fi != floorItems.end()) {
 										std::multiset<int> &interval = fi->second->interval;
@@ -2529,8 +2573,12 @@ if (!handled) {
 								}
 								maxFloorX = l->position.x + l->size.x;
 								minFloorX = l->position.x;
-								transferFunds(-l->prototype->price * 4 / (diffLeft + diffRight), "construction", "Lobby extension");
-								playOnce("simtower/construction/flexible");
+								// EXE 1180:05fd: ground lobby extension is $5,000 x
+								// height x new deck cells; sky lobbies pay only floors.
+								if (l->position.y == 0) {
+									transferFunds(-5000 * l->size.y * (diffLeft + diffRight), "construction", "Lobby extension");
+									playOnce("simtower/construction/flexible");
+								}
 							}
 							break;
 						}
@@ -2567,9 +2615,54 @@ if (!handled) {
 		if (!constructionBlocked) {
 			LOG(DEBUG, "construct %s at %ix%i, size %ix%i", toolPrototype->id.c_str(), toolPosition.x, toolPosition.y, toolPrototype->size.x, toolPrototype->size.y);
 
-			// Construct floors
+			// Affordability (EXE 1180:00f0): reject on the item price first
+			// (message 7), then on item + new-floor terrain (message 8).
+			const bool groundLobby = toolPrototype->icon == ICON_LOBBY && toolPosition.y == 0;
+			bool lobbyAlreadyThere = false;
+			if (toolPrototype->icon == ICON_LOBBY) {
+				const ItemSet &lobbyFloor = itemsByFloor[toolPosition.y];
+				for (ItemSet::const_iterator ii = lobbyFloor.begin(); ii != lobbyFloor.end(); ++ii)
+					if ((*ii)->prototype->icon == ICON_LOBBY) { lobbyAlreadyThere = true; break; }
+			}
+			int groundLobbyHeight = toolPrototype->size.y;
+			if (groundLobby) {
+				const ItemSet &gl = itemsByFloor[0];
+				for (ItemSet::const_iterator ii = gl.begin(); ii != gl.end(); ++ii)
+					if ((*ii)->prototype->icon == ICON_LOBBY) { groundLobbyHeight = (*ii)->size.y; break; }
+			}
+			long long itemCost = 0, terrainCost = 0;
+			if (toolPrototype->icon == ICON_FLOOR || groundLobby || lobbyAlreadyThere)
+				itemCost = 0; // floor tool / ground-band lobby / extension of a lobby
+			else
+				itemCost = toolPrototype->price;
+			if (groundLobby) {
+				terrainCost = 5000LL * groundLobbyHeight *
+					newFloorCells(*this, 0, toolPosition.x, toolPosition.x + toolPrototype->size.x);
+			} else {
+				long long cells = 0;
+				for (int i = 0; i < toolPrototype->size.y; i++)
+					cells += newFloorCells(*this, toolPosition.y + i, toolPosition.x,
+					                       toolPosition.x + toolPrototype->size.x);
+				terrainCost = cells * itemFactory.prototypesById["floor"]->price;
+			}
+			if ((long long)money.balance < itemCost) {
+				moneyReject = "Not enough money to build this item.";
+			} else if ((long long)money.balance < itemCost + terrainCost) {
+				moneyReject = "Not enough money to build the floor.";
+			}
+			if (!moneyReject.empty()) {
+				constructionBlocked = true;
+			} else {
+
+			// Construct floors (ground grand-lobby decks are priced by the
+			// lobby rate, charged below)
 			for (int i = 0; i < toolPrototype->size.y; i++)
-				extendFloor(toolPosition.y + i, toolPosition.x, toolPosition.x + toolPrototype->size.x);
+				extendFloor(toolPosition.y + i, toolPosition.x, toolPosition.x + toolPrototype->size.x, groundLobby);
+			eventSystem.notifyPlaced(); // buried treasure on the build click (Concilia game_notify_built)
+			if (groundLobby && terrainCost > 0) {
+				transferFunds(-(int)terrainCost, "construction", lobbyAlreadyThere ? "Lobby extension" : toolPrototype->name);
+				playOnce("simtower/construction/flexible");
+			}
 
 			if (toolPrototype->icon == ICON_LOBBY) {
 				// Look for existing lobby to extend
@@ -2599,7 +2692,7 @@ if (!handled) {
 							int newMinX = l->position.x;
 							int newMaxX = l->getRect().maxX();
 							for (int f = l->position.y; f < l->position.y + l->size.y; f++) {
-								extendFloor(f, newMinX, newMaxX);
+								extendFloor(f, newMinX, newMaxX, groundLobby);
 								FloorItems::iterator fi = floorItems.find(f);
 								if (fi != floorItems.end()) {
 									std::multiset<int> &interval = fi->second->interval;
@@ -2611,8 +2704,8 @@ if (!handled) {
 									interval.insert(newMaxX);
 								}
 							}
-							transferFunds(-toolPrototype->price * 4 / diff, "construction", "Lobby extension");
-							playOnce("simtower/construction/flexible");
+							// Extension price is the new-deck terrain charge
+							// already booked above (no price*4/diff).
 						}
 						existingLobby = true;
 					}
@@ -2622,7 +2715,9 @@ if (!handled) {
 					Item::Item * item = itemFactory.make(toolPrototype, toolPosition);
 					LOG(INFO, "created new lobby item %p", item);
 					addItem(item);
-					transferFunds(-toolPrototype->price, "construction", toolPrototype->name);
+					// Ground-band lobbies are paid by the deck charge above.
+					if (!groundLobby)
+						transferFunds(-toolPrototype->price, "construction", toolPrototype->name);
 					playOnce("simtower/construction/normal");
 				}
 			} else if (toolPrototype->icon != ICON_FLOOR) {
@@ -2636,13 +2731,21 @@ if (!handled) {
 					item->updateRoutes();
 				playOnce("simtower/construction/normal");
 			}
-		} else {
-			LOG(DEBUG, "cannot construct %s at %ix%i, size %ix%i, reason: %s", toolPrototype->id.c_str(), toolPosition.x, toolPosition.y, toolPrototype->size.x, toolPrototype->size.y, blockReason.c_str());
+			} // affordable
+		}
+		if (constructionBlocked) {
+			LOG(DEBUG, "cannot construct %s at %ix%i, size %ix%i, reason: %s", toolPrototype->id.c_str(), toolPosition.x, toolPosition.y, toolPrototype->size.x, toolPrototype->size.y, moneyReject.empty() ? blockReason.c_str() : moneyReject.c_str());
 			playOnce("simtower/construction/impossible");
-			timeWindow.showMessage("Cannot place item there. " + blockReason + ".");
+			timeWindow.showMessage(moneyReject.empty() ? "Cannot place item there. " + blockReason + "." : moneyReject);
 		}
 	}
 	return items.size() != itemsBefore;
+}
+
+bool Game::isDisasterOfferDay() const
+{
+	const int day = static_cast<int>(std::floor(time.absolute));
+	return day % 60 == 59 || day % 84 == 83;
 }
 
 bool Game::isBatchDraggable(Item::AbstractPrototype * proto) const

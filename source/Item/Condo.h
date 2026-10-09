@@ -83,7 +83,6 @@ namespace OT
 			virtual void encodeXML(tinyxml2::XMLPrinter &xml) override;
 			virtual void decodeXML(tinyxml2::XMLElement &xml) override;
 			virtual void advance(double dt);
-			virtual int dailyMaintenanceCost() const override { return 150; }
 			virtual bool isOccupied() const override { return occupied; }
 
 			virtual void addPerson(Person *p);
@@ -104,6 +103,7 @@ namespace OT
 
 			int rent;
 			int rentDeposit;
+			int rentClass; ///< EXE rent class (0 high .. 3 very low); default 1
 			int variant;
 			LightingConditions lighting;
 			bool occupied;

@@ -1,4 +1,5 @@
 #include <cassert>
+#include <cmath>
 #include "Application.h"
 #include "Game.h"
 #include "Math/Rand.h"
@@ -27,23 +28,34 @@ Sky::Sky(Game *game) : GameObject(game)
 void Sky::advance(double dt)
 {
 	// Decide whether we're about to have a rainy day.
+	// SimTower rule (ASM 1020:0dcd/0e0d): rainy iff day % 8 == 4 and the
+	// tower is below 5 stars; set at 07:00, cleared at 17:00.
+	const bool simTowerRain =
+		(static_cast<int>(std::floor(game->time.absolute)) % 8) == 4 && game->rating < 4;
+	if (game->activeRules.profile().rain == RulesProfile::Rain::Random)
+	{
+		// Level-based so loads and time jumps outside 07:00-17:00 are right.
+		const bool inRainHours = game->time.hour >= 7.0 && game->time.hour < 17.0;
+		rainyDay = inRainHours && simTowerRain;
+	}
 	if (game->time.checkHour(5))
 	{
+		bool forecast = false;
 		switch (game->activeRules.profile().rain)
 		{
 			case RulesProfile::Rain::Random:
-				rainyDay = ((rand() % 3) == 0); // Statistically, every 3rd day will be rainy.
+				forecast = simTowerRain; // rainyDay itself flips at 07:00
 				break;
 			case RulesProfile::Rain::YootTokyo:
 				// Tokyo.t2p IsRainyDay: fixed days 4 and 8 of each year.
-				rainyDay = Time::yootTokyoIsRainy((unsigned)game->time.dayOfYear());
+				rainyDay = forecast = Time::yootTokyoIsRainy((unsigned)game->time.dayOfYear());
 				break;
 			case RulesProfile::Rain::Never:
-				rainyDay = false; // base T2WorldDef::IsRainyDay (Hawaii, Kegon)
+				rainyDay = forecast = false; // base T2WorldDef::IsRainyDay (Hawaii, Kegon)
 				break;
 		}
 		rainAnimation = 0;
-		game->timeWindow.showMessage(rainyDay ? "I've heard we're in for some bad weather..." : "Weather's going to be good today!");
+		game->timeWindow.showMessage(forecast ? "I've heard we're in for some bad weather..." : "Weather's going to be good today!");
 	}
 
 	/* Decide what sky color to use based on the current time of day. The drawing code will

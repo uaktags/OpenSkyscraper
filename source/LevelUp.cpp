@@ -71,10 +71,10 @@ namespace
 		{ "parking",         2 },
 		// 4 stars (rating >= 3)
 		{ "metro",          3 },
-		// 3 stars (rating >= 2): premium automated security (Tim: above the
-		// manual Security Office; web defaulted it to 2 stars with no
-		// authentic gate evidence).
-		{ "secom",           2 },
+		// SECOM is never offered by the EXE build menu at any star level
+		// (batch3 Q8); the class stays for saves/debug, the sentinel never
+		// unlocks.
+		{ "secom",          99 },
 		// 5 stars (rating >= 4)
 		{ "cathedral",      4 },
 	};

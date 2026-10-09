@@ -12,6 +12,7 @@ using namespace OT;
 using namespace OT::Item;
 // Shared rent-table writer implemented by Game.cpp (resource 0x7f0b/0x3e9).
 extern int openSkyQuarterlyRent(const std::string &prototypeId, int rentClass);
+extern int openSkyDefaultRentClass(const std::string &prototypeId);
 
 // Find a reachable Parking with a free slot and assign it. Mirrors the
 // FastFood/Restaurant iteration pattern. Returns the claimed Parking or NULL.
@@ -332,7 +333,7 @@ void Hotel::advance(double dt)
 		// unavailable; a negative checkoutTime is the durable latch.
 		else if (g->checkoutTime >= 0 && t >= g->checkoutTime)
 		{
-			const int stay = openSkyQuarterlyRent(prototype->id, 0);
+			const int stay = openSkyQuarterlyRent(prototype->id, openSkyDefaultRentClass(prototype->id));
 			game->transferFunds(stay, "hotel_income", "Hotel room checkout");
 			g->checkoutTime = -1;
 			const Route &r = game->findRoute(this, game->mainLobby);

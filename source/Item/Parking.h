@@ -64,7 +64,6 @@ namespace OT {
 			virtual void encodeXML(tinyxml2::XMLPrinter &xml);
 			virtual void decodeXML(tinyxml2::XMLElement &xml);
 			virtual void advance(double dt);
-			virtual int dailyMaintenanceCost() const override { return 0; }
 
 			/// Quarterly upkeep per parking RAMP (maintenance table 0x3EA
 			/// item 44 = 10000 x $100). The quarterly settle sweep calls this

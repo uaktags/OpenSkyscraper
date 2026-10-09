@@ -45,7 +45,6 @@ namespace OT {
 			virtual void encodeXML(tinyxml2::XMLPrinter & xml);
 			virtual void decodeXML(tinyxml2::XMLElement & xml);
 
-			virtual int dailyMaintenanceCost() const override { return 1000; }
 
 			/// ChurchT wedding state for the current day.
 			enum WeddingPhase {
