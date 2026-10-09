@@ -622,14 +622,72 @@ each day in the oracle's snapshots), so its row is not evidence yet.
 4. **Event Center evening events (item 2):** not evidenced. The Event Center stays in status 10
    (never opened) in both games in the venues run, so no evening event was drawn in either.
    The collect window change is evidenced by the decompile only.
-5. **Shop staff, Event Center leavers, venues and hotel:** the venues and hotel populations
-   are 1.5 to 4 times the original in both builds (customers within tolerance 8/29 and 19/64).
-   The hotel's day-2 peak fell from 2165 to 1826, but it is still far off. The cause is not
-   yet isolated (visitor pool sizes or the venue arrival rates are the likely places).
-   **Update:** the appointed-queue dispatch (StdElev FUN_1000cf90 / cda0 / d070: pickup sets, sweep cost,
-   end-of-window unappoint) restores the people tower's peaks to 510 / 480 / 608 against the original's
-   434 / 509 / 559 (all four days within tolerance, estimate 42/69 against 37/69 before the campaign).
-   Not yet compared with the original on the other towers; the rider counts per car are not re-measured.
+5. **Shop staff, Event Center leavers, venues and hotel:** the s8 venues/hotel
+   population comparison used an invalid exported elevator waiting map. The original's
+   constant 288 is real: every saved snapshot contains 264 office people, 24 staff,
+   zero general visitors and zero deferred departures. People/tenant states still change;
+   this is not a stale counter. The second shaft's queue overwrote the first shaft and
+   boarding cells (lobby row 109, x176 resolves request 1026 instead of the first shaft).
+   T2People::IsRegistRequest (T2DLL 0x10049380) looks up that cell; T2Request::Regist
+   (0x10052fe0) rejects the wrong boarding coordinate, leaving staff in SolveNoRoute.
+   BldExport now preserves shafts and partitions opposing waiting areas at the midpoint,
+   following T2FloorInfo::FillRequestID (0x10034ab0) and CalcRequestLeftEnd/RightEnd
+   (0x10034ef0 / 0x10034e50), including the odd cell on the right shaft's side.
+
+   **Corrected three-day comparison (days 0 / 1 / 2):** these rows supersede the s8
+   population rows above. OpenSky's imported geometry already routes both shafts;
+   its peaks are unchanged before/after the export fix. Hawaii's single-shaft input
+   is byte-identical, so its stored oracle was reused. All nine daily peaks are within
+   the existing harness tolerance; no population tuning or golden regeneration was needed.
+
+   | Tower | Original, old input | Original, corrected input | OpenSky before = after |
+   |---|---|---|---|
+   | tokyo_g3_venues | 288 / 288 / 288 | 710 / 765 / 1049 | 756 / 884 / 1006 |
+   | tokyo_g2_hotel_subway | 645 / 703 / 935 | 940 / 1417 / 2095 | 990 / 1379 / 1870 |
+   | hawaii_g3_boatdeck | 540 / 632 / 977 | 540 / 632 / 977 | 627 / 731 / 920 |
+
+   **What the peak counts:** T2Pool::RecoverPeople (0x10050790) adds population;
+   ShrinkPeople (0x10050870) defers subtraction until DayChanged (0x100504a0).
+   Thus departures accumulated since midnight are a large part of the peak, not live
+   venue attendance. The harness now extracts saved pool/shrink counts, live person
+   origins, demand and transport types; OpenSky dumps expose the corresponding counts
+   only when requested, with unknown types for legacy item populations. At each game's
+   sampled day-2 peak, the additive breakdown is:
+
+   | Tower / game | Office or condo | Staff | General visitors | Deferred departures | Total |
+   |---|---|---|---|---|---|
+   | venues / original | 306 | 24 | 44 | 675 | 1049 |
+   | venues / OpenSky | 294 | 20 | 75 | 617 | 1006 |
+   | hotel / original | 282 | 74 | 216 | 1523 | 2095 |
+   | hotel / OpenSky | 276 | 53 | 218 | 1323 | 1870 |
+   | Hawaii / original | 60 | 43 | 18 | 856 | 977 |
+   | Hawaii / OpenSky | 0 | 30 | 48 | 842 | 920 |
+
+   The old hotel oracle had only 250 deferred departures on day 2, versus OpenSky's
+   1323: blocked routes suppressed shop turnover, rather than excessive hotel guests.
+   Corrected-map general visitors are 216 versus 218. No hotel guests or venue audiences
+   are exercised: hotel rooms and the Event Center/theaters remain status 10; selected
+   films/hall events are not serialized by the exporter. Customer units, arrival rates,
+   bind/stay times and CheckRouteFromPool masks were checked against the existing
+   decompile-backed formulas, without changing unsettled numbers. Active venue/hotel
+   fixtures are still needed before their demand can be calibrated.
+
+   Residual composition gaps remain: OpenSky omits facility staff (doctor 4 in venues;
+   security/frontdesk/housekeeping 21 in Tokyo hotel), and Hawaii condo residents fall
+   from 115 on day 0 to zero versus the original's steady 60. Visitor recycling and
+   route scoring are likely further contributors: original queue scores include
+   +10 per waiting person (T2DLL 0x100427b0), absent from OpenSky's pool route check.
+   These are separate unresolved causes, not evidence for a capacity/rate multiplier.
+   Lab artifacts: /lab/out/parity/cxpop-before/<tower>/report.md and
+   /lab/out/parity/cxpop-fixed-map/<tower>/report.md, with series and saved snapshots.
+   The paired-elevator export regression and all 9 ctest checks pass; SimTower/OpenSky
+   and YootTower goldens are unchanged.
+
+   **Earlier elevator update:** appointed-queue dispatch (StdElev FUN_1000cf90 / cda0 /
+   d070: pickup sets, sweep cost, end-of-window unappoint) restores the people tower's
+   peaks to 510 / 480 / 608 against 434 / 509 / 559 (all four days within tolerance,
+   estimate 42/69 against 37/69 before the campaign). Rider counts per car were not
+   re-measured in this population campaign.
 6. **Holiday population (item 3):** the original's day-2 peak is 559, OpenSky's is 596 before
    and 419 after the elevator change. The 663-versus-559 gap of the earlier calibration is gone
    from the peak, but the regression above now puts the holiday under the original.
