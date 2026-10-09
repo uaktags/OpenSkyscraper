@@ -4507,6 +4507,30 @@ static void testBldShippedSaves()
 		EXPECT(again == expected);
 		if (again != expected) std::cerr << "re-import differs:\n" << again << "\nvs\n" << expected << "\n";
 
+		// Two shafts must keep their own boarding cells. The original's
+		// FillRequestID splits an odd gap toward the right shaft.
+		{
+			TowerState two;
+			EXPECT(parseTowerXml("<tower world=\"tokyo\"><item type=\"lobby\" x=\"-20\" y=\"0\" width=\"40\" height=\"1\"/>"
+				"<item type=\"floor\" x=\"-20\" y=\"1\" width=\"40\"/>"
+				"<item type=\"elevator-standard\" x=\"-4\" y=\"0\" height=\"2\"/>"
+				"<item type=\"elevator-standard\" x=\"5\" y=\"0\" height=\"2\"/></tower>", two, error));
+			BldData queues;
+			ImportReport qr;
+			EXPECT(exportTower(two, tokyo, queues, qr, error, &yootTestPlugins()));
+			const Mover & left = queues.movers[0], & right = queues.movers[1];
+			const int row = queues.requests[0].f1c;
+			auto moverCell = [&](int x) {
+				const size_t at = ((size_t)row * queues.hRange + x) * 4;
+				return queues.unitMap[at] | (queues.unitMap[at + 1] << 8);
+			};
+			EXPECT(moverCell(left.area.left) == left.equipID);
+			EXPECT(moverCell(left.area.left - 4) == left.reqIDs.items[0]);
+			EXPECT(moverCell(left.area.right + 2) == right.reqIDs.items[0]);
+			EXPECT(moverCell(right.area.left) == right.equipID);
+			EXPECT(queues.requests[1].drawWidth == 0 && queues.requests[4].drawWidth == 1);
+		}
+
 		// An OpenSky-authored Hawaii tower against the empty-lot template.
 		const std::string authored =
 			"<tower funds=\"4321000\" rating=\"1\" time=\"13.5\" ruleset=\"yoottower\" world=\"hawaii\">"

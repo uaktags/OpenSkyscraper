@@ -757,9 +757,6 @@ namespace Bld {
 					const int cells = side == 0 ? sl - sa.left : sa.right - sr;
 					q.drawWidth = (int16_t)std::max(0, cells - 2);
 					reqIds.push_back(q.requestID);
-					// Waiting area: the slab's cells on that side of the shaft.
-					const int from = side == 0 ? sa.left : sr, to = side == 0 ? sl : sa.right;
-					for (int u = from; u < to; u++) setU16(cell(row, u), q.requestID);
 					requests.push_back(q);
 				}
 			}
@@ -803,6 +800,40 @@ namespace Bld {
 				for (int u = sl; u < sr; u++) setU16(cell(row, u), moverId);
 			movers.push_back(pm);
 			report.imported[it.type]++;
+		}
+		// T2FloorInfo::FillRequestID 0x10034ab0 splits the space between
+		// opposing requests at their midpoint (the right shaft gets the odd
+		// cell). Filling each queue to the slab edge overwrites earlier
+		// shafts / requests: IsRegistRequest then sees the wrong mover.
+		for (Request & q : requests)
+		{
+			const int row = q.f1c;
+			const Mover & m = movers[q.moverID - 1].rec;
+			const int slab = slabAt(row, m.area.left);
+			const Rect & sa = tenants[slab].rec.area;
+			int from = q.upDown == 0 ? sa.left : q.f18;
+			int to = q.upDown == 0 ? q.f18 : sa.right;
+			for (const PendingMover & other : movers)
+			{
+				const Mover & n = other.rec;
+				if (n.equipID == m.equipID || row < n.area.top || row >= n.area.bottom) continue;
+				if (q.upDown == 0 && n.area.right <= q.f18 && n.area.right >= sa.left)
+				{
+					bool opposite = false;
+					for (const Request & r : requests)
+						if (r.moverID == n.equipID && r.f1c == row && r.upDown == 1) opposite = true;
+					from = std::max(from, opposite ? n.area.right + (q.f18 - n.area.right) / 2 : n.area.right + 2);
+				}
+				if (q.upDown == 1 && n.area.left >= q.f18 && n.area.left <= sa.right)
+				{
+					bool opposite = false;
+					for (const Request & r : requests)
+						if (r.moverID == n.equipID && r.f1c == row && r.upDown == 0) opposite = true;
+					to = std::min(to, opposite ? q.f18 + (n.area.left - q.f18) / 2 : n.area.left - 2);
+				}
+			}
+			q.drawWidth = (int16_t)std::max(0, to - from - 2);
+			for (int u = from; u < to; ++u) setU16(cell(row, u), q.requestID);
 		}
 		if (clampedCars)
 		{
