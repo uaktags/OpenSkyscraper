@@ -16,6 +16,8 @@
 #include "Person.h"
 #include "Time.h"
 #include "TimeWindow.h"
+#include "YootItemArt.h"
+#include "YootWorldArt.h"
 
 #include <algorithm>
 #include <climits>
@@ -79,6 +81,13 @@ namespace
 
 EventSystem::EventSystem(Game * game)
 : GameObject(game)
+, power(game)
+, facilities(game)
+, venues(game)
+, specials(game)
+, extras(game)
+, people(game)
+, yoot(false)
 {
 	reset();
 
@@ -109,8 +118,24 @@ EventSystem::EventSystem(Game * game)
 void EventSystem::reset()
 {
 	type = Type::None;
-	prevAbsolute = game ? game->time.absolute : 0.0;
-	lastDispatchDay = -1;
+	// SimTower constants; syncRuleset() swaps in the T2EV parameters.
+	yoot = false;
+	yootKey.clear();
+	scheduler = YootEventScheduler();
+	chopperCost = kFireChopperCost;
+	fireEndFrame = kFireEndFrame;
+	bombDetonateFrame = kBombDetonateFrame;
+	yootFireIdx = yootTerrorIdx = yootBlackoutIdx = yootSantaIdx = -1;
+	santaStartMinute = 0;
+	santaMinutes = 0;
+	reggae = Reggae();
+	power.configure(nullptr);
+	facilities.reset();
+	venues.reset();
+	specials.reset();
+	extras.reset();
+	people.reset();
+	prevAbsolute = game ? game->time.absolute : 0.0;	lastDispatchDay = -1;
 	santaActive = false;
 	santaX = 0;
 	santaY = 0;
@@ -245,9 +270,13 @@ void EventSystem::startFire()
 {
 	if (type != Type::None) return;
 	const int star = game->rating + 1; // rating is 0-based (0 = 1 star)
-	if (star <= kFireStarGate) return;                // star > 2
-	if (!hasSecurity()) return;                          // a security office exists
-	if (Item::Cathedral::towerHasCathedral(game)) return; // fires retire for good
+	// YootTower: FBEV's levelBit is the only gate (T2FireBurning::Start
+	// 0x10030d50 just needs IsBreakoutFire to find a burnable tenant).
+	if (!yoot) {
+		if (star <= kFireStarGate) return;                // star > 2
+		if (!hasSecurity()) return;                          // a security office exists
+		if (Item::Cathedral::towerHasCathedral(game)) return; // fires retire for good
+	}
 
 	const int floor = pickDisasterFloor();
 	if (floor == INT_MIN) return;
@@ -285,7 +314,7 @@ void EventSystem::offerFireChopper()
 	char buf[192];
 	snprintf(buf, sizeof(buf),
 	         "A fire has broken out on floor %d. Call the fire helicopter for $%d?",
-	         fireOriginFloor, kFireChopperCost);
+	         fireOriginFloor, chopperCost);
 	game->askEventChoice("FIRE!", buf, "Call Fire Crew", "Let it burn",
 		[this](bool yes) { if (type == Type::Fire) resolveFireResponse(yes); });
 }
@@ -308,7 +337,7 @@ void EventSystem::callChopper()
 {
 	if (type != Type::Fire) return;
 	if (fireChopperPaid || chopperX > 0) return;
-	if (game->funds < kFireChopperCost) {
+	if (game->funds < chopperCost) {
 		game->timeWindow.showMessage("You cannot afford the fire helicopter.");
 		return;
 	}
@@ -318,8 +347,8 @@ void EventSystem::callChopper()
 	// sweeps left (10e8:0147/0450).
 	chopperX = R - kFireCells;
 	fireChopperPaid = true;
-	game->transferFunds(-kFireChopperCost, "emergency", "Fire helicopter dispatched");
-	LOG(IMPORTANT, "Fire helicopter dispatched ($%d)", kFireChopperCost);
+	game->transferFunds(-chopperCost, "emergency", "Fire helicopter dispatched");
+	LOG(IMPORTANT, "Fire helicopter dispatched ($%d)", chopperCost);
 }
 
 void EventSystem::deployFireGuards()
@@ -327,11 +356,18 @@ void EventSystem::deployFireGuards()
 	// SetAllGuards(8): guards 0-2 take the office floor, 3-5 the floor
 	// below, each repolling a floor-index-mod-6 partition (GuardT).
 	guardOffices.clear();
+	// YootTower T2FireBurning::CallFireman 0x10031ed0: six people in total
+	// from the registry-5 tenants (Security Rooms, then Fire Departments).
+	std::vector<std::pair<Item::Item *, int> > sources;
+	if (yoot) sources = specials.firemen();
 	Game::ItemSetByString::const_iterator it = game->itemsByType.find("security");
-	if (it == game->itemsByType.end()) { fireGuardsActive = false; return; }
-	for (Game::ItemSet::const_iterator i = it->second.begin(); i != it->second.end(); ++i) {
+	if (!yoot && it != game->itemsByType.end())
+		for (Game::ItemSet::const_iterator i = it->second.begin(); i != it->second.end(); ++i)
+			sources.push_back(std::make_pair(*i, kGuardsPerOffice));
+	if (sources.empty()) { fireGuardsActive = false; return; }
+	for (const std::pair<Item::Item *, int> & src : sources) {
 		GuardOffice office;
-		office.floor = (*i)->position.y;
+		office.floor = src.first->position.y;
 		office.up = office.floor;
 		office.down = office.floor - 1;
 		for (int gi = 0; gi < kGuardsPerOffice; gi++) {
@@ -342,7 +378,7 @@ void EventSystem::deployFireGuards()
 			g.transit = 0;
 			g.pause = 0;
 			g.douse = false;
-			g.retired = false;
+			g.retired = gi >= src.second;
 		}
 		guardOffices.push_back(office);
 	}
@@ -432,6 +468,7 @@ void EventSystem::stepFireGuards()
 		GuardOffice & office = guardOffices[oi];
 		for (int gi = 0; gi < kGuardsPerOffice; gi++) {
 			Guard & g = office.g[gi];
+			if (g.retired) continue; // YootTower: beyond the six CallFireman sends
 			if (g.transit > 0) { g.transit--; continue; }
 			if (g.pause > 0) {
 				if (--g.pause == 0 && g.douse) {
@@ -525,16 +562,24 @@ void EventSystem::endFire()
 void EventSystem::offerBomb()
 {
 	if (type != Type::None) return;
-	if (!hasSecurity()) return;
-
-	// The ransom switch (10c8:006e) has cases only for stars 2/3/4.
-	// game->rating is 0-based, so the star is rating + 1.
 	int ransom;
-	switch (game->rating + 1) {
-		case 2: ransom = kBombRansom[0]; break;
-		case 3: ransom = kBombRansom[1]; break;
-		case 4: ransom = kBombRansom[2]; break;
-		default: return;
+	if (yoot) {
+		// T2Terrorist::Start 0x10063a60: TREV ransom, any grade in levelBit,
+		// no security gate (the guards only search).
+		YootTerroristDef def;
+		if (yootTerrorIdx < 0 || !decodeYootTerrorist(scheduler.events()[yootTerrorIdx], def)) return;
+		ransom = def.ransom * 100;
+	} else {
+		if (!hasSecurity()) return;
+
+		// The ransom switch (10c8:006e) has cases only for stars 2/3/4.
+		// game->rating is 0-based, so the star is rating + 1.
+		switch (game->rating + 1) {
+			case 2: ransom = kBombRansom[0]; break;
+			case 3: ransom = kBombRansom[1]; break;
+			case 4: ransom = kBombRansom[2]; break;
+			default: return;
+		}
 	}
 
 	const int floor = pickDisasterFloor();
@@ -554,8 +599,12 @@ void EventSystem::offerBomb()
 
 	// The floor is NEVER named (B9 dead code: guards don't know it either).
 	char text[192];
-	snprintf(text, sizeof(text),
-	         "They demand $%d or a hidden bomb will explode at 3 o'clock.", ransom);
+	if (yoot)
+		snprintf(text, sizeof(text), "They demand $%d or a hidden bomb will explode at %d:%02d.",
+		         ransom, bombDetonateFrame / 100, (bombDetonateFrame % 100) * 60 / 100);
+	else
+		snprintf(text, sizeof(text),
+		         "They demand $%d or a hidden bomb will explode at 3 o'clock.", ransom);
 	game->askEventChoice("Blackmail from Terrorists!", text, "Pay Them", "Find the Bomb",
 		[this](bool pay) { if (type == Type::Terror) resolveBombResponse(pay); });
 	game->timeWindow.showMessage("A bomb threat has been received. The bomb's location is unknown!");
@@ -675,14 +724,31 @@ void EventSystem::detonateBomb()
  const int maxF = bombFloor + kBombBlastFloorsUp;
  const int minX = bombSlot - kBombBlastHalfCells;
  const int maxX = bombSlot + kBombBlastHalfCells; // exclusive: +20 survives
- Game::ItemSet victims;
- for (Item::Item *item : game->items) {
-  recti r = item->getRect();
-  if (r.maxY() <= minF || r.minY() > maxF) continue;
-  if (r.maxX() <= minX || r.minX() >= maxX) continue;
-  victims.insert(item);
+ if (yoot) {
+  // YootTower DestroyTenants (10c8:02bd): penalise and stress everything
+  // in range and scatter rubble; items stay standing.
+  for (Game::ItemSet::iterator i = game->items.begin(); i != game->items.end(); ++i) {
+   Item::Item * item = *i;
+   recti rr = item->getRect();
+   if (rr.maxY() <= minF || rr.minY() > maxF) continue;
+   if (rr.maxX() <= minX || rr.minX() >= maxX) continue;
+   item->evaluation = std::max(0.0, item->evaluation - 60.0);
+   for (Item::Item::People::iterator pp = item->people.begin(); pp != item->people.end(); ++pp)
+    (*pp)->addStress(60.0);
+  }
+  for (int f = minF; f <= maxF; f++)
+   for (int x = minX; x <= maxX; x++)
+    addRubble(f, x);
+ } else {
+  Game::ItemSet victims;
+  for (Item::Item *item : game->items) {
+   recti rr = item->getRect();
+   if (rr.maxY() <= minF || rr.minY() > maxF) continue;
+   if (rr.maxX() <= minX || rr.minX() >= maxX) continue;
+   victims.insert(item);
+  }
+  for (Item::Item *item : victims) game->destroyItemByDisaster(item);
  }
- for (Item::Item *item : victims) game->destroyItemByDisaster(item);
  game->timeWindow.showMessage("BOMB DETONATED! Extensive damage reported.");
  bombArmed = false;
  guardOffices.clear();
@@ -722,8 +788,12 @@ void EventSystem::armTreasureLatch(int star)
 	treasureLatched = treasureCondition(star);
 }
 
-void EventSystem::notifyPlaced()
+void EventSystem::forgetItem(const Item::Item * item)
 {
+	pendingBuilds.erase(const_cast<Item::Item *>(item));
+}
+
+void EventSystem::notifyPlaced(){
 	// Concilia policy (game.c:287-307): the buried-treasure check runs on
 	// successful PLACEMENT (any build click, deck or shaft extension) (the build click), not when
 	// construction completes. An armed latch plus the dig condition pays
@@ -778,20 +848,28 @@ int EventSystem::clockFrame() const
 void EventSystem::advance(double dt)
 {
 	(void)dt;
+	syncRuleset();
 
-	// --- Calendar (TimeT 1208:0342) ---
-	if (game->time.checkHour(kDispatchHour))
-		dailyDispatch();
-	if (game->time.checkHour(21.0) &&
-	    (int)std::floor(game->time.absolute) % kSantaPeriodDays == kSantaPeriodDays - 1 &&
-	    !santaActive)
-		launchSanta();
+	if (yoot) {
+		// --- YootTower: the world's T2EV list (T2TowerEvent::Idle) ---
+		yootDispatch();
+	} else {
+		// --- Calendar (TimeT 1208:0342) ---
+		if (game->time.checkHour(kDispatchHour))
+			dailyDispatch();
+		if (game->time.checkHour(21.0) &&
+		    (int)std::floor(game->time.absolute) % kSantaPeriodDays == kSantaPeriodDays - 1 &&
+		    !santaActive)
+			launchSanta();
+	}
 
 	const double frames = elapsedFrames();
 	prevAbsolute = game->time.absolute;
 
-	// --- Santa fly-by (SantaT seg_11b8) ---
-	if (santaActive) {
+	// --- Santa fly-by (SantaT seg_11b8; YootTower T2SantaClaus) ---
+	if (yoot) {
+		yootAdvanceSanta(frames);
+	} else if (santaActive) {
 		santaX -= (float)(kSantaTickPixels * frames);
 		int phase = ((int)santaX >> 3) & 15; // 0..15
 		santaY = kSantaBaseY + (phase < 8 ? phase : 16 - phase);
@@ -808,8 +886,7 @@ void EventSystem::advance(double dt)
         prevAbsolute = game->time.absolute;
         return;
     }
-	if (type == Type::Terror && bombArmed && clockFrame() >= kBombDetonateFrame) {
-		detonateBomb();
+	if (type == Type::Terror && bombArmed && bombArmed && clockFrame() >= bombDetonateFrame) {		detonateBomb();
 		return;
 	}
 
@@ -820,7 +897,7 @@ void EventSystem::advance(double dt)
 		fireFrameAccum -= 1.0;
 		iterations++;
 		if (type == Type::Fire) {
-			if (clockFrame() >= kFireEndFrame) { endFire(); break; }
+			if (clockFrame() >= fireEndFrame) { endFire(); break; }
 			stepFireFrame();
 			if (type == Type::Fire && fireGuardsActive) stepFireGuards();
 		} else if (type == Type::Terror && bombArmed) {
@@ -855,7 +932,35 @@ bool EventSystem::handleClick(int2 tile)
 
 void EventSystem::draw(sf::RenderTarget & target, sf::RenderStates /*states*/) const
 {
-	// Rubble from past fires and blasts persists until rebuilt.
+	// YootTower: blackout darkening over the tenants, rooftop ornaments.
+	if (yoot) {
+		power.drawDarkening(target);
+		drawOutDecorations(target);
+		venues.draw(target);
+		people.draw(target);
+		extras.drawInFront(target);
+	}
+
+	// Rubble from past fires and blasts persists until rebuilt. Skin::Yoot:
+	// the world's 1007 `Rubble` strip over the whole row (T2WorldDef::
+	// DrawRubble), each cell showing its 8 px column of the 640 px loop.
+	const YootWorldArt * yootArt = game->yootSkinArt();
+	const YootPluginView * yootRubble = yootArt ? yootPluginView(game->app,
+		yootWorldPluginFile(yootArt->worldId()), sf::Color::Transparent, 1007, 1007, "Rubble") : nullptr;
+	if (yootRubble && !yootRubble->bands.empty()) {
+		const sf::IntRect band = yootRubble->band(0);
+		sf::Sprite s(yootRubble->texture);
+		for (std::set<long>::const_iterator it = rubble.begin(); it != rubble.end(); ++it) {
+			int floor, x;
+			decodeTile(*it, floor, x);
+			const int u = ((x * 8) % band.size.x + band.size.x) % band.size.x;
+			s.setTextureRect(sf::IntRect({band.position.x + u, band.position.y}, {8, band.size.y}));
+			s.setPosition({x * 8.0f, -(floor + 1) * 36.0f});
+			target.draw(s);
+		}
+		game->drawnSprites += (int)rubble.size();
+	}
+	else
 	for (std::set<long>::const_iterator it = rubble.begin(); it != rubble.end(); ++it) {
 		int floor, x;
 		decodeTile(*it, floor, x);
@@ -934,7 +1039,10 @@ void EventSystem::encodeXML(tinyxml2::XMLPrinter & xml) const
         for (const auto &span : floor.second)
             spans << floor.first << ' ' << span.first << ' ' << span.second << ' ';
     xml.PushAttribute("eventBurnedSpans", spans.str().c_str());
-	// Active events are not persisted mid-resolution; they end on reload.
+	power.encodeXML(xml);
+	venues.encodeXML(xml);
+	extras.encodeXML(xml);
+	people.encodeXML(xml);	// Active events are not persisted mid-resolution; they end on reload.
 }
 
 void EventSystem::decodeXML(tinyxml2::XMLElement & xml)
@@ -958,6 +1066,13 @@ void EventSystem::decodeXML(tinyxml2::XMLElement & xml)
 		rubble.insert(atol(r.substr(pos, sp - pos).c_str()));
 		pos = sp + 1;
 	}
+
+	// The blackout persists (T2BlackOut::Write); the scheduler re-syncs.
+	syncRuleset();
+	power.decodeXML(xml);
+	venues.decodeXML(xml);
+	extras.decodeXML(xml);
+	people.decodeXML(xml);
 
 	// A save with an active event reloads safe.
 	type = Type::None;

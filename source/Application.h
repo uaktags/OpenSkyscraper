@@ -19,6 +19,7 @@
 #include "Skin.h"
 #include "YootWorld.h"
 #include "BuildRules.h"
+#include "SimHarness.h"
 #include <map>
 
 #include <TGUI/TGUI.hpp>
@@ -143,9 +144,13 @@ namespace OT
 		bool setMouseAtStartup;
 		sf::Vector2i startupMousePosition;
 		std::string startupTool;
+		struct QaBuild { std::string id; int x, floor; };
+		std::vector<QaBuild> startupBuilds; ///< --qa-build id x floor (repeatable)
 		bool setViewportScrollAtStartup;
 		double startupViewportScrollHorizontal;
 		double startupViewportScrollVertical;
+		double startupZoomFactor = 0.0; ///< --qa-zoom: Game::zoomBy factor (0 = none)
+		bool startupOutside = false;    ///< --qa-outside: start in the Outside view
 		bool fullscreen;
 		std::string simTowerExecutable;
 		/// User-selected folder containing YootTower .t2p plugins
@@ -161,6 +166,9 @@ namespace OT
 		std::map<int, RulesProfile> m_yootProfiles;
 		bool m_loadedSimTowerResources;
 		bool m_debugMenu;
+		/// Headless deterministic simulation (--sim); see SimHarness.h.
+		Sim::Options m_sim;
+		int runSim();
 	};
 
 	extern Application * App;

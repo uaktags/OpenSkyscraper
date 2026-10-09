@@ -5,6 +5,8 @@
 #include <string>
 #include "../Game.h"
 #include "../Time.h"
+#include "../YootItemArt.h"
+#include "../YootWorldArt.h"
 #include "Item.h"
 #include <cmath>
 #include "Condo.h"
@@ -79,6 +81,9 @@ Item::~Item()
 	sprites.clear();
 	while (!people.empty())
 		removePerson(*people.begin());
+	// Tracking containers keyed by this pointer must not outlive it
+	// (SimLess dereferences keys in deterministic mode).
+	if (game) game->forgetTracking(this);
 		}
 
 void Item::setPosition(int2 p)
@@ -154,6 +159,23 @@ void Item::render(sf::RenderTarget &target) const
 			progress = elapsed / duration;
 			if (progress < 0.0) progress = 0.0;
 			if (progress > 1.0) progress = 1.0;
+		}
+
+		// Skin::Yoot: T2WorldDef::DrawBuild tiles the world's 1004
+		// `BuildPrc` over every row, scaffolding (pattern 0) while the
+		// status is 0..1 and the boarded-up crates (1) after.
+		if (const YootWorldArt * art = game->yootSkinArt())
+		{
+			const YootPluginView * v = yootPluginView(game->app, yootWorldPluginFile(art->worldId()),
+				sf::Color::Transparent, 1004, 1004, "BuildPrc");
+			if (v && v->bands.size() >= 2)
+			{
+				const sf::IntRect band = v->band(progress < 0.2 ? 0 : 1);
+				for (int story = 0; story < size.y; story++)
+					yootDrawLoop(target, *v, band, (float)p.x, (float)-(p.y + (story + 1) * 36), (float)s.x);
+				game->drawnSprites += size.y;
+				return;
+			}
 		}
 
 		sf::Texture &gridTex = app->bitmaps["simtower/construction/grid"];
@@ -262,6 +284,7 @@ void Item::render(sf::RenderTarget &target) const
 		canHaulPeople()
 		|| prototype->icon == ICON_FLOOR || itemId == "floor"
 		|| itemId == "cinema" || itemId == "partyhall"
+		|| itemId.compare(0, 3, "yt_") == 0  // YootTenant draws its PADF staff
 		|| sleepingCondo;
 	if (!people.empty() && !underConstruction && !suppressOccupants)
 	{
@@ -313,6 +336,18 @@ void Item::encodeXML(tinyxml2::XMLPrinter &xml)
 			xml.PushAttribute(key, (int)tenant.bank[i].total);
 		}
 	}
+	// YootTower-only attributes. The values keep their defaults under the
+	// SimTower/OpenSky rules, so gating on the ruleset keeps those saves
+	// byte-identical to the pre-YootTower format.
+	if (game && game->activeRules.profile().yootWorld)
+	{
+		if (yootEstimate != 0)
+			xml.PushAttribute("yootEstimate", yootEstimate);
+		if (yootBuildDay >= 0)
+			xml.PushAttribute("buildDay", yootBuildDay);
+		if (yootPeopleEstimate != 300)
+			xml.PushAttribute("yootPeopleEstimate", yootPeopleEstimate);
+	}
 	if (underConstruction)
 	{
 		xml.PushAttribute("underConstruction", underConstruction);
@@ -340,6 +375,9 @@ void Item::decodeXML(tinyxml2::XMLElement &xml)
 			tenant.bank[i].total = (int16_t)xml.IntAttribute(key, 0);
 		}
 	}
+	yootEstimate = xml.IntAttribute("yootEstimate", 0);
+	yootBuildDay = xml.IntAttribute("buildDay", -1);
+	yootPeopleEstimate = xml.IntAttribute("yootPeopleEstimate", 300);
 	// Saved state wins over the Factory's "fresh placement" default so a
 	// save mid-construction restores correctly (and finished items stay
 	// finished after a reload).

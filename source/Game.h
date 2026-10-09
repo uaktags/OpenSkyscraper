@@ -36,6 +36,9 @@
 #include "EventSystem.h"
 #include "BuildRules.h"
 #include "Skin.h"
+#include "YootCatalog.h"
+#include "YootWorldArt.h"
+#include <memory>
 
 
 namespace OT {
@@ -52,6 +55,18 @@ namespace OT {
 		/// clock mode (YootTower minute-linear time) and calendar.
 		void setRules(const BuildRules & rules);
 
+		/// YootTower item catalog (plan step 4): prototype id -> TNDF/MVDF
+		/// stats for the active world. Empty outside YootTower mode.
+		std::map<std::string, YootItemStats> yootCatalog;
+		/// OpenSky price/carCost of every overlaid prototype, restored when
+		/// the catalog is removed.
+		std::map<std::string, std::pair<int, int> > yootBasePrices;
+		/// Overlay (or, outside YootTower, remove) the catalog onto the
+		/// prototypes: price, carCost and prototype->yoot.
+		void applyItemCatalog();
+		/// Catalog entry for an item's prototype, or null.
+		const YootItemStats * yootStats(const Item::Item * item) const;
+
 
 		virtual ~Game();
 
@@ -65,6 +80,14 @@ namespace OT {
 
 		bool handleEvent(sf::Event & event);
 		void advance(double dt);
+		/// Headless sim step (--sim, SimHarness): the sim ticks of
+		/// advance() plus the weather roll, with no rendering or input.
+		/// A pending event choice is answered "yes" deterministically.
+		void advanceHeadless(double dt);
+		/// Event log for the headless summary; recording is off in play.
+		bool simRecording = false;
+		std::vector<std::string> simEvents;
+		void recordSimEvent(const std::string & message);
 
 		/// Jump the game clock to `h` (0..24) of the current day. The clock's
 		/// absolute-to-hour mapping is non-linear, so this goes through
@@ -77,9 +100,9 @@ namespace OT {
 
 		Item::Factory itemFactory;
 
-		typedef std::set<Item::Item *> ItemSet;
+		typedef std::set<Item::Item *, SimLess> ItemSet;
 		ItemSet items;
-		typedef std::set<class Person *> PersonSet;
+		typedef std::set<class Person *, SimLess> PersonSet;
 		PersonSet people;
 		typedef std::map<int, ItemSet> ItemSetByInt;
 		typedef std::map<std::string, ItemSet> ItemSetByString;
@@ -145,6 +168,9 @@ namespace OT {
 		/// YootTower VIP-visited bits (T2TowerDoc +0xa0). Each grade row's
 		/// vipFlag must be set before population can promote.
 		uint32_t yootVipFlags;
+		/// YootTower doc+0x9c: bit 0 = secret plugins loaded (the Kegon hot
+		/// spring unlocks the Spa). Saved as yootSecretItems.
+		uint32_t yootSecretItems = 0;
 		/// YootTower final-item hook (T2.exe FUN_00422670, doc vtable
 		/// +0x188): at the top grade (grade == numGrades) OR that grade's
 		/// flag into yootVipFlags so the last promotion can land. Called by
@@ -168,7 +194,9 @@ namespace OT {
 	// Yoot source. Read by ToolboxWindow's "View" button click handler (not
 	// at construction time), but declared here for proximity to the related
 	// state.
-	enum StatusMode { kNormal, kEval, kPric, kHotel };
+	// kOutside: Skin::Yoot only, the Control palette's "Outside" view
+	// (T2WorldDef::ClickOutViewButton 0x10071c00, view mode 1).
+	enum StatusMode { kNormal, kEval, kPric, kHotel, kOutside };
 	StatusMode statusMode;
 	void cycleStatusMode();
 
@@ -177,6 +205,11 @@ namespace OT {
 		Skin skin = Skin::OpenSky;
 		void setSkin(Skin newSkin);
 		void cycleSkin();
+		/// YootTower plugin art for the active world, or null when the skin
+		/// is not Yoot or the world plugin is missing (OpenSky art is used).
+		const YootWorldArt * yootSkinArt() const;
+		/// (Re)loads the YootTower art for the active skin and world.
+		void refreshYootArt();
 
 		/// Open the quarterly financial report dialog (Wave U row 49).
 		/// Called automatically once a 4:59AM quarterly settlement
@@ -246,8 +279,17 @@ namespace OT {
 		void askEventChoice(const std::string & title, const std::string & text,
 		                    const std::string & yesLabel, const std::string & noLabel,
 		                    const std::function<void(bool)> & onChoice);
+		/// Modal text entry with one OK button (YootTower T2Baseball dialog
+		/// 12006). OK with an empty text keeps the dialog open (DialogHook
+		/// refuses ""); headless runs accept `defaultText`.
+		void askEventText(const std::string & title, const std::string & text,
+		                  const std::string & defaultText,
+		                  const std::function<void(const std::string &)> & onText);
 		/// Close any open event choice without answering it.
 		void closeEventChoice();
+		/// --qa-build: runs the construction flow for prototype `id` at
+		/// (x, floor) as a tool click would. Returns true when built.
+		bool qaBuild(const std::string & id, int2 pos);
 
 		/// ISSUE-039 drag-to-place batching (OpenSkyWeb port): hold an item
 		/// tool and drag to lay out a whole row/column (Shift = full grid).
@@ -276,6 +318,8 @@ namespace OT {
 		std::vector<Item::Item *> routeBuildQueue;
 		void pumpRouteBuilds();
 		Decorations decorations;
+		std::unique_ptr<YootWorldArt> yootArt;
+		double yootClock = 0; ///< real seconds, drives the SE (sign light) cycle
 
 		/// Daily tenant & hotel evaluation engine. Updated once per day from
 		/// settleDailyAccounting(); scores are cached on each Item::evaluation.
@@ -296,6 +340,14 @@ namespace OT {
 		void encodeXML(tinyxml2::XMLPrinter & xml);
 		void decodeXML(tinyxml2::XMLDocument & xml);
 		void reloadGUI();
+
+		/// Deregister a dying object from the pointer-keyed tracking
+		/// containers (JudgeSystem visitorDaySeen/badDayStreak, EventSystem
+		/// pendingBuilds). SimLess dereferences its keys during deterministic
+		/// runs, so a stale entry for a freed object would be a
+		/// use-after-free on the next find()/insert().
+		void forgetTracking(const Person * p);
+		void forgetTracking(const Item::Item * item);
 
 	private:
 		void clearWorld();
@@ -362,8 +414,24 @@ bool validateBatchCell(Item::AbstractPrototype * proto, int x, int y, std::strin
 		/// time.quarter advances past this, we call Money::finalizeQuarter
 		/// so the finance window's quarterly accumulators reset.
 		int lastAccountingQuarter;
+		/// YootTower: financial cycle whose office rent (04:52-04:59, day 1)
+		/// has been collected (plan step 7, E4).
+		int yootRentCycle = -1;
+	public:
+		/// YootTower price selection (index into inMoney, 0 = cheapest) for
+		/// an item: shops use their rent class, the rest the OpenSky default
+		/// class, which maps to selection 2 (the YootTower default
+		/// inMoneyIndex seen in Sample Tokyo Map.bld).
+		int yootPriceSelection(const Item::Item * item) const;
+		/// Pay `amount` dollars (+ income / - cost) through the YootTower
+		/// ledger categories; no-op for 0.
+		void yootBook(int amount, const char * category, const char * message);
+	private:
 		double zoom;
 		double2 poi;
+		/// Horizontal camera range: poi.x stays in [-limit, limit]. 512 px,
+		/// or half the YootTower world's width so its edges are reachable.
+		double horizontalScrollLimit() const;
 		enum class ViewportDrag { None, Vertical, Horizontal };
 		ViewportDrag viewportDrag;
 

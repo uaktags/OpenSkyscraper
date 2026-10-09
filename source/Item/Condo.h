@@ -1,5 +1,6 @@
 #pragma once
 #include "../Sprite.h"
+#include "../YootItemArt.h"
 #include "Item.h"
 
 namespace OT
@@ -91,8 +92,10 @@ namespace OT
 			int diningSent = 0;
 
 			Sprite sprite;
+			/// Skin::Yoot plugin art (YootItemArt.h), null = OpenSky art.
+			const YootPluginView * yootView = nullptr;
 			bool spriteNeedsUpdate;
-			std::set<CondoOccupant *> occupants;
+			std::set<CondoOccupant *, SimLess> occupants;
 			CondoOccupant *family[3] = {nullptr, nullptr, nullptr};
 		};
 	}

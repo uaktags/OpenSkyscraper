@@ -4,6 +4,7 @@
 #include "../NameManager.h"
 #include "../Time.h"
 #include "Metro.h"
+#include "../XmlUtil.h"
 
 #include <vector>
 #include <algorithm>
@@ -65,7 +66,7 @@ void Metro::encodeXML(tinyxml2::XMLPrinter &xml)
 	xml.PushAttribute("visitorsToday", visitorsToday);
 	xml.PushAttribute("lastVisitorDay", lastVisitorDay);
 	{ std::string slots; for (bool used : slotUsed) slots += used ? '1' : '0'; xml.PushAttribute("slots", slots.c_str()); }
-	for (std::set<Visitor *>::iterator it = visitors.begin(); it != visitors.end(); ++it) {
+	for (std::set<Visitor *, SimLess>::iterator it = visitors.begin(); it != visitors.end(); ++it) {
 		Visitor *v = *it;
 		xml.OpenElement("visitor");
 		xml.PushAttribute("arrivalTime", v->arrivalTime);
@@ -110,9 +111,9 @@ void Metro::decodeXML(tinyxml2::XMLElement &xml)
 		v->slot = e->IntAttribute("slot", -1);
 		v->member = v->slot;
 		v->eval = e->DoubleAttribute("eval", 0.0);
-		v->name = xmlAttrOr(*e, "name", "");
-		v->from = xmlAttrOr(*e, "from", "");
-		v->goingTo = xmlAttrOr(*e, "goingTo", "");
+		v->name = xmlAttributeOr(*e, "name", "");
+		v->from = xmlAttributeOr(*e, "from", "");
+		v->goingTo = xmlAttributeOr(*e, "goingTo", "");
 		visitors.insert(v);
 	}
 	updateSprite();
@@ -169,7 +170,7 @@ void Metro::boardReturnedVisitors()
 {
 	// Metro passenger travel is a visitor pool, not a fare source in the EXE.
 	// Boarding removes only visitors that actually reached the platform.
-	for (std::set<Visitor *>::iterator it = visitors.begin(); it != visitors.end();) {
+	for (std::set<Visitor *, SimLess>::iterator it = visitors.begin(); it != visitors.end();) {
 		Visitor *v = *it;
 		if (v->returnedToMetro || v->at == this) {
 			delete v;
@@ -180,7 +181,7 @@ void Metro::boardReturnedVisitors()
 
 void Metro::clearAllVisitors()
 {
-	for (std::set<Visitor *>::iterator it = visitors.begin(); it != visitors.end(); ++it)
+	for (std::set<Visitor *, SimLess>::iterator it = visitors.begin(); it != visitors.end(); ++it)
 		delete *it;
 	visitors.clear();
 }

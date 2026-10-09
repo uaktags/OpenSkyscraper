@@ -74,6 +74,8 @@ namespace OT
 		bool found = false;        ///< resource present and header parsed
 		YootEventHeader header;
 		std::vector<int> body;     ///< remaining ints (non-VIEV events)
+		std::string text;          ///< MAEV trailing pstr (T2Maru_Reggae ctor 0x1003a770)
+		std::string bodyTail;      ///< bytes after the last whole int (MAEV message); kept for encodeYootEventResource
 		std::vector<YootVipDef> vips; ///< VIEV only
 	};
 
@@ -108,6 +110,11 @@ namespace OT
 		int dustOnAt = 0, toiletAt = 0, toiletDenomi = 0, discarded9999 = 0;
 		std::vector<int> cashAmounts;
 
+		// --- CODF id 1 (T2WorldDef::MakeColdTableDef 0x1006ec50) ---
+		bool hasColdTable = false;
+		int coldMinGrade = 0;          ///< first uint (3 in all worlds)
+		std::vector<int> coldMonthly;  ///< 12 cold denominators by day index
+
 		// --- WATR ---
 		std::vector<int> watrInts; ///< 6 ints discarded by the engine ([3]=floors above, [4]=below)
 		int initialFunds = 0;      ///< internal units (x exchangeMul / exchangeDiv = dollars)
@@ -140,14 +147,39 @@ namespace OT
 	const char * yootWorldDisplayName(YootWorld::Id id);    ///< "Tokyo" / "Hawaii" / "Kegon"
 	const char * yootWorldPluginFile(YootWorld::Id id);     ///< "Tokyo.t2p" / "Hawai.t2p" / "Kegon.t2p"
 	bool parseYootWorldIdentifier(const std::string & s, YootWorld::Id & out);
+	/// GetGradeUpMessage for the new grade: Tokyo.t2p 0x10015500 (grades
+	/// 2-5), Kegon WorldDef::GetGradeUpMessage 0x100153d0 ("Bamboo" / "Pine"),
+	/// Hawaii keeps T2WorldDef 0x10072490 ("... to a %d star level").
+	std::string yootGradeUpMessage(YootWorld::Id id, int grade);
+	/// T2WorldDef::DrawCalendar 0x10070a80: "YEAR %d %s." with the month
+	/// name of the day of year (Jan..Dec), then "WD" or "HD" (holiday, red).
+	std::string yootCalendarText(int year, int dayOfYear, bool holiday);
 
 	// --- Resource parsers (pure, over raw bytes) ---
 	bool parseYootWorldDef(const char * data, int length, YootWorld & out);
 	bool parseYootWatr(const char * data, int length, YootWorld & out);
 	bool parseYootFinf(const char * data, int length, YootWorld & out);
+	/// CODF id 1: uint minGrade, uint monthly[12] (FUN_1001c400).
+	bool parseYootColdTable(const char * data, int length, YootWorld & out);
 	bool parseYootEventResource(const std::string & resType, const char * data, int length, YootEvent & out);
 	/// Derives each VIP's flag exactly like T2VisitVIP::Init (shared mask accumulator).
 	void assignYootVipFlags(std::vector<YootVipDef> & vips);
+
+	// --- Resource encoders (inverse of the parsers above) ---
+	// Each writes the bytes its parser reads, so parse + encode is
+	// byte-identical for the shipped worlds (tests/test_main.cpp
+	// testYootWorldEncoders). The lossless editable form of every world
+	// resource is WorldResourceCodec.h; these keep the game's typed view
+	// writable. Return false when a string exceeds 255 bytes or a grid does
+	// not match its header.
+	bool encodeYootWorldDef(const YootWorld & w, std::string & out);          ///< WORLDDEF
+	bool encodeYootWatr(const YootWorld & w, std::string & out);              ///< WATR
+	/// FINF text: the 7-int header, then the mask as 0/1, one per CRLF line.
+	bool encodeYootFinf(const YootWorld & w, std::string & out);
+	/// One `*EV` resource: header, then the VIP list (VIEV) or the raw body ints.
+	bool encodeYootEventResource(const YootEvent & e, std::string & out);
+	/// T2EV: count, then {typeTag, resId} per event.
+	bool encodeYootTowerEvents(const std::vector<YootEvent> & events, std::string & out);
 
 	/// Loads every rule resource from a world plugin. Returns false when
 	/// WORLDDEF or WATR is missing/garbled (`error` says which).
@@ -192,6 +224,10 @@ namespace OT
 	{
 		bool available = false;  ///< some counterpart exists in this world
 		int minGrade = 0;        ///< lowest mGameLevel among available counterparts (1-based)
+		/// Every available counterpart has ATTR spec+0x24 set (secretItem,
+		/// e.g. the Kegon Spa): offered only once doc+0x9c is set (FUN_0041ca80;
+		/// T2HotSpring -> FUN_00422080).
+		bool secret = false;
 	};
 	/// Resolves yootPrototypeLinks() through the catalog's ATTR data.
 	/// Prototypes whose counterparts are all missing from the catalog are

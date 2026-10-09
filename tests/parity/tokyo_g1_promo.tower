@@ -1,0 +1,137 @@
+<tower funds="7877000" rating="0" time="0.020833" speed="1" rainy="0" tool="inspector" ruleset="yoottower" world="tokyo" yootVipFlags="0" x="-112" y="180">
+<money todayIncome="0" todayExpenses="0" yesterdayIncome="0" yesterdayExpenses="0" lastQuarterBalance="7877000" quarterIncome="0" quarterExpenses="0"/>
+<item type="lobby" x="-64" y="0" evaluation="50.0" width="120" height="3"/>
+<item type="floor" x="-64" y="3" evaluation="50.0" width="120"/>
+<item type="floor" x="-64" y="4" evaluation="50.0" width="120"/>
+<item type="floor" x="-64" y="5" evaluation="50.0" width="120"/>
+<item type="floor" x="-64" y="6" evaluation="50.0" width="120"/>
+<item type="floor" x="-64" y="7" evaluation="50.0" width="120"/>
+<item type="floor" x="-64" y="8" evaluation="50.0" width="120"/>
+<item type="floor" x="-64" y="9" evaluation="50.0" width="120"/>
+<item type="floor" x="-64" y="10" evaluation="50.0" width="120"/>
+<item type="floor" x="-64" y="11" evaluation="50.0" width="120"/>
+<item type="floor" x="-64" y="12" evaluation="50.0" width="120"/>
+<item type="floor" x="-64" y="13" evaluation="50.0" width="120"/>
+<item type="floor" x="-64" y="14" evaluation="50.0" width="120"/>
+<item type="yt_record" x="-64" y="3" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_burger" x="-44" y="3" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_coffee" x="-28" y="3" evaluation="50.0" tenantStatus="9"/>
+<item type="restroom" x="-16" y="3" evaluation="50.0"/>
+<item type="yt_icecream" x="0" y="3" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_bookstore" x="24" y="3" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_barber" x="39" y="3" evaluation="50.0" tenantStatus="9"/>
+<item type="office" x="-64" y="4" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-55" y="4" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-46" y="4" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-37" y="4" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-28" y="4" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-19" y="4" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="0" y="4" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="9" y="4" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="24" y="4" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="33" y="4" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="42" y="4" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-64" y="5" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-55" y="5" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-46" y="5" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-37" y="5" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-28" y="5" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-19" y="5" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="0" y="5" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="9" y="5" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="24" y="5" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="33" y="5" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="42" y="5" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-64" y="6" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-55" y="6" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-46" y="6" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-37" y="6" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-28" y="6" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-19" y="6" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="0" y="6" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="9" y="6" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="24" y="6" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="33" y="6" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="42" y="6" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="yt_burger" x="-64" y="7" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_coffee" x="-48" y="7" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_flower" x="-36" y="7" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_cigar" x="-24" y="7" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_drink" x="-21" y="7" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_ramen" x="0" y="7" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_bookstore" x="24" y="7" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_icecream" x="39" y="7" evaluation="50.0" tenantStatus="9"/>
+<item type="office" x="-64" y="8" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-55" y="8" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-46" y="8" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-37" y="8" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-28" y="8" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-19" y="8" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="0" y="8" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="9" y="8" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="24" y="8" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="33" y="8" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="42" y="8" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-64" y="9" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-55" y="9" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-46" y="9" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-37" y="9" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-28" y="9" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-19" y="9" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="0" y="9" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="9" y="9" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="24" y="9" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="33" y="9" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="42" y="9" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="yt_burger" x="-64" y="10" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_coffee" x="-48" y="10" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_flower" x="-36" y="10" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_cigar" x="-24" y="10" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_drink" x="-21" y="10" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_ramen" x="0" y="10" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_bookstore" x="24" y="10" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_icecream" x="39" y="10" evaluation="50.0" tenantStatus="9"/>
+<item type="office" x="-64" y="11" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-55" y="11" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-46" y="11" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-37" y="11" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-28" y="11" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-19" y="11" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="0" y="11" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="9" y="11" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="24" y="11" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="33" y="11" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="42" y="11" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-64" y="12" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-55" y="12" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-46" y="12" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-37" y="12" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-28" y="12" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-19" y="12" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="0" y="12" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="9" y="12" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="24" y="12" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="33" y="12" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="42" y="12" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="yt_burger" x="-64" y="13" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_coffee" x="-48" y="13" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_flower" x="-36" y="13" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_cigar" x="-24" y="13" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_drink" x="-21" y="13" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_ramen" x="0" y="13" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_bookstore" x="24" y="13" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_icecream" x="39" y="13" evaluation="50.0" tenantStatus="9"/>
+<item type="office" x="-64" y="14" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-55" y="14" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-46" y="14" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-37" y="14" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-28" y="14" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-19" y="14" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="0" y="14" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="9" y="14" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="24" y="14" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="33" y="14" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="42" y="14" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="elevator-standard" x="-4" y="0" evaluation="50.0" height="15" showShaft="1"><unserviced floor="1"/><unserviced floor="2"/><car altitude="0.0" homeFloor="0"/><car altitude="4.0" homeFloor="4"/><car altitude="6.0" homeFloor="6"/><car altitude="8.0" homeFloor="8"/><car altitude="10.0" homeFloor="10"/><car altitude="12.0" homeFloor="12"/></item>
+<item type="elevator-standard" x="20" y="0" evaluation="50.0" height="15" showShaft="1"><unserviced floor="1"/><unserviced floor="2"/><car altitude="0.0" homeFloor="0"/><car altitude="4.0" homeFloor="4"/><car altitude="6.0" homeFloor="6"/><car altitude="8.0" homeFloor="8"/><car altitude="10.0" homeFloor="10"/><car altitude="12.0" homeFloor="12"/></item>
+</tower>

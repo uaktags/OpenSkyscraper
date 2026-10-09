@@ -1,8 +1,10 @@
 /* Copyright (c) 2026 OpenSkyscraper Project */
 #include "YootWorld.h"
+#include "YootTenants.h"
 
 #include "AbstractPlugin.h"
 #include "PluginManager.h"
+#include "PluginResources.h"
 #include "WindowsPEExecutable.h"
 
 #include <cctype>
@@ -39,6 +41,7 @@ namespace OT
 				return v;
 			}
 			int left() const { return int(end_ - p_); }
+			std::string rest() { std::string v(p_, end_); p_ = end_; return v; }
 			bool ok() const { return ok_; }
 		private:
 			const char * p_;
@@ -143,6 +146,32 @@ namespace OT
 		return "Tokyo.t2p";
 	}
 
+	std::string yootGradeUpMessage(YootWorld::Id id, int grade)
+	{
+		const char * congrats = "Congratulations! Your building has been upgraded to ";
+		if (id == YootWorld::Id::Tokyo)
+		{
+			switch (grade)
+			{
+			case 5: return std::string(congrats) + "The Tower Grade, the highest level.";
+			case 4: return std::string(congrats) + "a four star level.";
+			case 3: return std::string(congrats) + "a three star level.";
+			default: return std::string(congrats) + "a two star level.";
+			}
+		}
+		if (id == YootWorld::Id::Kegon)
+			return std::string(congrats) + (grade == 5 ? "the \"Pine\" grade, the highest level." : "the \"Bamboo\" grade.");
+		return "Your building has been upgraded to a " + std::to_string(grade) + " star level";
+	}
+
+	std::string yootCalendarText(int year, int dayOfYear, bool holiday)
+	{
+		static const char * const months[12] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
+		                                        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+		const int m = ((dayOfYear % 12) + 12) % 12;
+		return "YEAR " + std::to_string(year) + " " + months[m] + ". " + (holiday ? "HD" : "WD");
+	}
+
 	bool parseYootWorldIdentifier(const std::string & s, YootWorld::Id & out)
 	{
 		if (s == "tokyo")  { out = YootWorld::Id::Tokyo;  return true; }
@@ -210,6 +239,19 @@ namespace OT
 		return true;
 	}
 
+	bool parseYootColdTable(const char * data, int length, YootWorld & w)
+	{
+		ResReader r(data, length);
+		const int minGrade = r.i();
+		std::vector<int> monthly;
+		for (int k = 0; k < 12; ++k) monthly.push_back(r.i());
+		if (!r.ok()) return false;
+		w.hasColdTable = true;
+		w.coldMinGrade = minGrade;
+		w.coldMonthly = monthly;
+		return true;
+	}
+
 	bool parseYootWatr(const char * data, int length, YootWorld & w)
 	{
 		ResReader r(data, length);
@@ -257,6 +299,8 @@ namespace OT
 		e.header = h;
 		e.body.clear();
 		e.vips.clear();
+		e.bodyTail.clear();
+		e.text.clear();
 		if (resType == "VIEV")
 		{
 			const int n = r.i();
@@ -276,10 +320,21 @@ namespace OT
 			}
 			if (!r.ok()) return false;
 			assignYootVipFlags(e.vips);
+			e.bodyTail = r.rest();
+		}
+		else if (resType == "MAEV")
+		{
+			// T2Maru_Reggae ctor 0x1003a770: 4 ints, then the claim pstr
+			// (empty for Mr. Maru, "'Uncle Reggae is noisy.'" for Reggae).
+			for (int k = 0; k < 4; ++k) e.body.push_back(r.i());
+			e.text = r.s();
+			if (!r.ok()) return false;
+			e.bodyTail = r.rest();
 		}
 		else
 		{
 			while (r.left() >= 4) e.body.push_back(r.i());
+			e.bodyTail = r.rest();
 		}
 		e.found = true;
 		return true;
@@ -297,6 +352,128 @@ namespace OT
 			used |= flag;
 			v.vipFlag = flag;
 		}
+	}
+
+	// T2WorldDef::T2WorldDef 0x1006e4e0 write order (inverse of parseYootWorldDef).
+	bool encodeYootWorldDef(const YootWorld & t, std::string & out)
+	{
+		if (t.discarded10.size() != 10 || t.gradeIconAnimIds.size() != 5) return false;
+		CResWriter w;
+		w.i32(t.sortKey);
+		w.i32(t.height);
+		w.i32(t.width);
+		w.i32(t.groundLine);
+		w.i32(t.buildArea.top);
+		w.i32(t.buildArea.left);
+		w.i32(t.buildArea.bottom);
+		w.i32(t.buildArea.right);
+		w.i32(t.entranceY); // POINT is stored y, x
+		w.i32(t.entranceX);
+		w.i32(t.topFloorLine);
+		w.i32(t.bottomFloorLine);
+		w.i32(t.startGrade);
+		w.i32(t.startMonth);
+		w.i32(t.lobbyHeight);
+		w.i32(t.outViewKind);
+		w.i32(t.unk17c);
+		w.i32(t.tiledBkgnd);
+		w.count(t.grades.size());
+		for (const YootGradeRow & g : t.grades)
+		{
+			w.u32(g.vipFlag);
+			w.i32(g.population);
+			w.i32(g.animId);
+			w.i32(g.animFrames);
+			w.i32(g.unk);
+			w.i32(g.animParam);
+		}
+		w.i32(t.bkgndTileHeight);
+		w.i32(t.bkgndTileWidth);
+		w.i32(t.unk188);
+		w.i32(t.unk18c);
+		for (int v : t.discarded10) w.i32(v);
+		for (int v : t.gradeIconAnimIds) w.i32(v);
+		w.str(t.towerNamePrefix);
+		w.i32(t.dustOnAt);
+		w.i32(t.toiletAt);
+		w.i32(t.toiletDenomi);
+		w.i32(t.discarded9999);
+		w.count(t.cashAmounts.size());
+		for (int v : t.cashAmounts) w.i32(v);
+		return w.finish(out);
+	}
+
+	bool encodeYootWatr(const YootWorld & t, std::string & out)
+	{
+		if (t.watrInts.size() != 6) return false;
+		CResWriter w;
+		for (int v : t.watrInts) w.i32(v);
+		w.i32(t.initialFunds);
+		w.i32(t.exchangeMul);
+		w.i32(t.exchangeDiv);
+		w.str(t.moneyUnit);
+		return w.finish(out);
+	}
+
+	bool encodeYootFinf(const YootWorld & t, std::string & out)
+	{
+		if (t.finfHeader.size() != 7 || t.finfWidth <= 0 || t.finfHeight <= 0
+		    || t.unbuildable.size() != size_t(t.finfHeight) * size_t(t.finfWidth))
+			return false;
+		out.clear();
+		for (int v : t.finfHeader) { out += std::to_string(v); out += "\r\n"; }
+		for (uint8_t v : t.unbuildable) out += v ? "1\r\n" : "0\r\n";
+		return true;
+	}
+
+	bool encodeYootEventResource(const YootEvent & e, std::string & out)
+	{
+		CResWriter w;
+		w.i32(e.header.levelBit);
+		w.i32(e.header.exclusive);
+		w.i32(e.header.cycleDay);
+		w.i32(e.header.beginMin);
+		w.i32(e.header.endMin);
+		if (e.resType == "VIEV")
+		{
+			w.count(e.vips.size());
+			for (const YootVipDef & v : e.vips)
+			{
+				w.i32(v.grade);
+				w.u32(v.destPluginId);
+				w.i32(v.arrivalMin);
+				w.i32(v.f3c);
+				w.i32(v.f40);
+				w.i32(v.f44);
+				w.i32(v.viplRes);
+				w.str(v.goodMsg);
+				w.str(v.badMsg);
+			}
+		}
+		else if (e.resType == "MAEV")
+		{
+			for (int v : e.body) w.i32(v);
+			w.str(e.text);
+		}
+		else
+		{
+			for (int v : e.body) w.i32(v);
+		}
+		if (!w.finish(out)) return false;
+		out += e.bodyTail;
+		return true;
+	}
+
+	bool encodeYootTowerEvents(const std::vector<YootEvent> & events, std::string & out)
+	{
+		CResWriter w;
+		w.count(events.size());
+		for (const YootEvent & e : events)
+		{
+			w.u32(e.typeTag);
+			w.i32(e.resId);
+		}
+		return w.finish(out);
 	}
 
 	bool loadYootWorld(const AbstractPlugin & plugin, YootWorld::Id id, YootWorld & out, std::string * error)
@@ -323,6 +500,11 @@ namespace OT
 		{
 			if (!parseYootFinf(finf->data, finf->length, w) && error)
 				*error = "FINF malformed (ignored)";
+		}
+		if (const WindowsPEExecutable::Resource * codf = plugin.getResource("CODF", 1))
+		{
+			if (!parseYootColdTable(codf->data, codf->length, w) && error)
+				*error = "CODF malformed (ignored)";
 		}
 		if (const WindowsPEExecutable::Resource * t2ev = plugin.getResource("T2EV", 1))
 		{
@@ -356,6 +538,10 @@ namespace OT
 		w.exchangeMul = 100;
 		w.exchangeDiv = 1;
 		w.moneyUnit = "$";
+		// WORLDDEF +0x170..0x178 and CODF id 1 are the same in all three worlds.
+		w.dustOnAt = 3; w.toiletAt = 1; w.toiletDenomi = 10;
+		w.hasColdTable = true; w.coldMinGrade = 3;
+		w.coldMonthly = {20, 30, 30, 30, 30, 30, 30, 30, 30, 30, 20, 20};
 		auto grades = [&](const int (&rows)[4][2]) {
 			for (int k = 0; k < 4; ++k)
 			{
@@ -454,7 +640,7 @@ namespace OT
 		// is offered when ANY linked plugin is available in the world; its
 		// unlock grade is the lowest mGameLevel among those. Prototypes with no
 		// row here (secom) keep the SimTower lock table (LevelUp::minRatingToBuild).
-		static const std::vector<YootPrototypeLink> links = {
+		static const YootPrototypeLink fixed[] = {
 			{"lobby",             {"Floor.t2p", "KFloor.t2p", nullptr}},
 			{"floor",             {"Floor.t2p", "KFloor.t2p", nullptr}},
 			{"stairs",            {"Stair.t2p", nullptr}},
@@ -468,18 +654,53 @@ namespace OT
 			{"hotel_single",      {"Singleroom.t2p", "Smallroom.t2p", nullptr}},
 			{"hotel_double",      {"Twinroom.t2p", "Smallroom.t2p", nullptr}},
 			{"hotel_suite",       {"Suiteroom.t2p", "Largeroom.t2p", nullptr}},
-			{"partyhall",         {"EventCenter.t2p", nullptr}},
-			{"cinema",            {"Theater.t2p", "ClassicTheater.t2p", nullptr}},
-			{"metro",             {"Subway.t2p", nullptr}},
 			{"office",            {"Office.t2p", nullptr}},
-			{"parking",           {"Parking.t2p", nullptr}},
+			// Parking.t2p variation 0 is the lot, 1 the gate (plan step 14); the
+			// SimTower parking and ramp are not offered in YootTower.
+			{"parkinglot",        {"Parking.t2p", nullptr}},
+			{"parkinggate",       {"Parking.t2p", nullptr}},
 			{"condo",             {"Condo.t2p", "HawaianCondo.t2p", nullptr}},
 			{"yoot_condo",        {"Condo.t2p", "HawaianCondo.t2p", nullptr}},
 			{"security",          {"Securityroom.t2p", nullptr}},
-			{"medicalcenter",     {"Doctor's.t2p", nullptr}},
-			{"recycling",         {"TrashFacility.t2p", "KTrashFacility.t2p", nullptr}},
-			{"cathedral",         {"Cathedral.t2p", nullptr}},
+			// Native YootTower facilities (plan step 12); they replace the
+			// SimTower Medical Center / Recycling Center in this ruleset.
+			{"doctor",            {"Doctor's.t2p", nullptr}},
+			{"trashfacility",     {"TrashFacility.t2p", "KTrashFacility.t2p", nullptr}},
+			{"restroom",          {"Restroom.t2p", "KRestroom.t2p", nullptr}},
+			{"powerroom",         {"PowerRoom.t2p", nullptr}},
+			// Native YootTower venues, final items and transport (plan step
+			// 14 part B); they replace the SimTower Movie Theatre, Party
+			// Hall, Metro Station and Cathedral in this ruleset.
+			{"theater",           {"Theater.t2p", nullptr}},
+			{"classictheater",    {"ClassicTheater.t2p", nullptr}},
+			{"eventcenter",       {"EventCenter.t2p", nullptr}},
+			{"billboard",         {"Billboard.t2p", nullptr}},
+			{"stadium",           {"Stadium.t2p", nullptr}},
+			{"yootcathedral",     {"Cathedral.t2p", nullptr}},
+			{"attraction",        {"Attraction.t2p", nullptr}},
+			{"observatory",       {"Observatory.t2p", nullptr}},
+			{"ticketbooth",       {"Ticket.t2p", nullptr}},
+			{"gatheringarea",     {"GatheringArea.t2p", nullptr}},
+			{"boatdeck",          {"Boatdeck.t2p", nullptr}},
+			{"subway",            {"Subway.t2p", nullptr}},
+			// Plan step 14: hotel back office, fire department, apartment.
+			{"frontdesk",         {"Front.t2p", "RFront.t2p", nullptr}},
+			{"housekeeping",      {"Maintenance.t2p", "RMaintenance.t2p", nullptr}},
+			{"firedept",          {"FireDepartment.t2p", nullptr}},
+			{"apartment",         {"Apartment.t2p", nullptr}},
+			{"school",            {"School.t2p", nullptr}},
+			{"skybridge",         {"SkyBrdge.t2p", nullptr}},
 		};
+		// Plugin-backed tenants (YootTenants.h) come first so that a covered
+		// plugin resolves to its own prototype (BLD import, VIP targets)
+		// before the generic OpenSky shop / restaurant / fast food rows.
+		static const std::vector<YootPrototypeLink> links = [&] {
+			std::vector<YootPrototypeLink> v;
+			for (const YootTenantPlugin & t : yootTenantPlugins())
+				v.push_back({t.prototypeId, {t.plugin, nullptr}});
+			v.insert(v.end(), std::begin(fixed), std::end(fixed));
+			return v;
+		}();
 		return links;
 	}
 
@@ -497,8 +718,10 @@ namespace OT
 				if (!p || !readYootPluginIdentity(*p, ident)) continue;
 				anyKnown = true;
 				// Grade-independent part of the filter: world mask + secret.
-				if (!yootPluginAvailable(ident, worldMask, ident.gameLevel)) continue;
+				if (!yootPluginAvailable(ident, worldMask, ident.gameLevel, true)) continue;
+				const bool secret = !yootPluginAvailable(ident, worldMask, ident.gameLevel);
 				if (!u.available || ident.gameLevel < u.minGrade) u.minGrade = ident.gameLevel;
+				u.secret = u.available ? (u.secret && secret) : secret;
 				u.available = true;
 			}
 			if (anyKnown) out[link.prototypeId] = u;

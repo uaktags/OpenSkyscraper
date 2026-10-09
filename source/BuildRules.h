@@ -7,6 +7,9 @@
 #include <string>
 #include <vector>
 
+#include "YootEvents.h"
+#include "YootFacilities.h"
+
 namespace OT {
 
 struct YootWorld;
@@ -53,6 +56,7 @@ struct RulesProfile
 	{
 		bool available = true;
 		int minRating = 0; ///< zero-based OpenSky rating (= mGameLevel - 1)
+		bool secret = false; ///< needs BuildRules::setSecretUnlocked (YootUnlock::secret)
 	};
 
 	bool yootWorld = false;       ///< true for a YootTower world profile
@@ -88,10 +92,19 @@ struct RulesProfile
 	std::vector<Vip> vips;
 	std::map<std::string, Unlock> unlocks; ///< absent = SimTower lock table
 
+	/// T2EV scenario events (VIEV excluded); empty = SimTower calendar.
+	std::vector<YootEventSpec> events;
+	int worldWidth = 0;           ///< WORLDDEF width in units (Santa's begin minute)
+
+	/// Trash / restroom / cold rates (WORLDDEF +0x170.., CODF; plan step 12).
+	YootFacilityRules facilities;
+
 	int unitForX(int x) const { return x + unitOriginX; }
 	int rowForFloor(int floor) const { return groundRow - 1 - floor; }
 	/// One cell (x, floor) against bounds, floor limits and the FINF mask.
 	bool allowsCell(int x, int floor) const;
+	/// Build area and FINF mask only, ignoring the floor limits.
+	bool allowsBuildAreaCell(int x, int floor) const;
 
 	static RulesProfile simTower();
 	static RulesProfile openSky();
@@ -126,6 +139,10 @@ public:
 
 	Ruleset ruleset() const;
 	const RulesProfile & profile() const { return m_profile; }
+	/// YootTower doc+0x9c bit 0 (set by the Kegon hot spring): secret
+	/// plugins (RulesProfile::Unlock::secret) become buildable.
+	void setSecretUnlocked(bool on) { m_secretUnlocked = on; }
+	bool secretUnlocked() const { return m_secretUnlocked; }
 
 	/// Stable, parseable identifier suitable for persistence and configuration.
 	const char * identifier() const;
@@ -139,6 +156,21 @@ public:
 	/// rectangle [x, x + width) x [floor, floor + height).
 	bool allowsFootprint(int x, int floor, int width, int height = 1) const;
 
+	/// YootTower items placed outside the floor area but inside the
+	/// WORLDDEF build area: a final item stands on the top floor and rises
+	/// above it (Stadium/Cathedral/Attraction AreaCheck), the subway sits
+	/// one row below the lowest floor (Subway.t2p AreaCheck). Checks the
+	/// build-area rows and the FINF mask, not the floor limits.
+	bool allowsSpecialFootprint(int x, int floor, int width, int height) const;
+
+	/// Prototypes that exist only in the YootTower ruleset (plugin-backed
+	/// native items) and the SimTower facilities they replace there.
+	static bool isYootOnlyPrototype(const std::string & prototypeId);
+	static bool isReplacedInYoot(const std::string & prototypeId);
+	/// Plugin file of a YootTower-only prototype when no catalog entry is
+	/// loaded (toolbox icon, art); nullptr for other prototypes.
+	static const char * yootOnlyPlugin(const std::string & prototypeId);
+
 	/// Minimum zero-based rating to build `prototypeId`; kUnavailable when
 	/// the active world does not offer it at all.
 	int minRatingToBuild(const std::string & prototypeId) const;
@@ -149,6 +181,7 @@ public:
 private:
 	Ruleset m_ruleset;
 	RulesProfile m_profile;
+	bool m_secretUnlocked = false;
 };
 
 } // namespace OT

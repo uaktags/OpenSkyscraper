@@ -15,7 +15,13 @@ public:
   Hotel *target=nullptr;
   int currentFloor, work=0, mode=0;
  };
- std::array<Maid*,6> maids{};
+ std::array<Maid*,6> maidStaff{};
+ // YootTower Maintenance.t2p facility API (SpecialSystem::housekeepingTick).
+ int maids() const;
+ int openMinute() const;
+ int closeMinute() const;
+ void setPattern(int p) { facilityPattern = p; }
+ int maidsOut = 0, roomsCleaned = 0, facilityPattern = 0;
  ~Housekeeping() override;
  void init() override;
  void advance(double) override;

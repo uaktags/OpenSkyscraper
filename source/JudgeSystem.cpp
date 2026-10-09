@@ -9,6 +9,8 @@
 #include "JudgeSystem.h"
 #include "Person.h"
 #include "TenantRules.h"
+#include "YootRules.h"
+#include "YootMisc.h"
 
 #include <algorithm>
 #include <cmath>
@@ -375,6 +377,24 @@ void JudgeSystem::judgeDaily(Game * game, bool isQuarterDay)
 	const bool quarter = isQuarterDay;
 	evaluateAll(game);
 
+	// YootTower (J1): the 1..300 estimate drives the decisions; the
+	// 0..100 evaluation mirrors it for overlays and inspectors.
+	if (game->activeRules.profile().yootWorld)
+	{
+		for (Game::ItemSet::iterator it = game->items.begin(); it != game->items.end(); ++it)
+		{
+			Item::Item * item = *it;
+			if (!item->prototype->yoot) continue;
+			const int yoot = yootEstimate(game, item);
+			if (yoot > 0)
+			{
+				item->yootEstimate = yoot;
+				item->evaluation = yoot / 3.0;
+			}
+		}
+	}
+	reviewUnderperformers(game);
+
 	std::vector<int> floors;
 	for (Game::ItemSetByInt::const_iterator f = game->itemsByFloor.begin();
 	     f != game->itemsByFloor.end(); ++f)
@@ -432,4 +452,122 @@ void JudgeSystem::judgeDaily(Game * game, bool isQuarterDay)
 		game->timeWindow.showMessage(buf);
 	}
 	reviewHotels(game);
+}
+
+int JudgeSystem::yootTrafficRange(Game * game, Item::Item * item)
+{
+	// T2TrafficInfo::GetRange at the entrance (YootExtrasSystem keeps the
+	// map: route legs booked per person, decayed hourly, ranges 0..3).
+	if (game->eventSystem.extras.traffic.configured())
+		return game->eventSystem.extras.trafficRange(item);
+	// Fallback without a map: people queued at or riding a mover that
+	// serves this floor within 8 cells of the tenant, one step per 5.
+	const int floor = item->position.y;
+	int count = 0;
+	for (Game::ItemSet::const_iterator it = game->items.begin(); it != game->items.end(); ++it)
+	{
+		Item::Item *mover = *it;
+		if (!mover->canHaulPeople() || mover->people.empty()) continue;
+		if (floor < mover->position.y || floor >= mover->position.y + mover->size.y) continue;
+		const int gap = mover->position.x >= item->position.x + item->size.x
+			? mover->position.x - (item->position.x + item->size.x)
+			: (item->position.x >= mover->position.x + mover->size.x
+				? item->position.x - (mover->position.x + mover->size.x) : 0);
+		if (gap > 8) continue;
+		for (Item::Item::People::const_iterator p = mover->people.begin(); p != mover->people.end(); ++p)
+			if ((*p)->journey.fromFloor == floor || (*p)->journey.toFloor == floor) ++count;
+	}
+	return std::min(3, count / 5);
+}
+
+int JudgeSystem::yootEstimate(Game * game, Item::Item * item)
+{
+	const YootItemStats *stats = item->prototype->yoot;
+	if (!stats) return 0;
+	const std::string & id = item->prototype->id;
+	const bool residential = id == "office" || id == "condo" || id == "yoot_condo" || id == "apartment" ||
+		id == "hotel_single" || id == "hotel_double" || id == "hotel_suite";
+	if (!residential)
+		return item->yootEstimate; // commercial: set at close (CalcProfitEstimate)
+
+	// T2Tenant::UpdateResidencialEstimate 0x10060e20.
+	Yoot::ResidentialInputs in;
+	for (Item::Item::People::const_iterator p = item->people.begin(); p != item->people.end(); ++p)
+		in.peopleEstimates.push_back((*p)->yootCurrentEstimate());
+	in.previousPeopleEstimate = item->yootPeopleEstimate;
+	in.senseOfNoise = stats->senseOfNoise;
+	in.trafficRange = in.senseOfNoise ? yootTrafficRange(game, item) : 0;
+	in.priceIndex = Yoot::priceIndex(game->yootPriceSelection(item), (int)stats->inMoney.size());
+	in.yearsSinceBuilt = Yoot::yearsSinceBuilt((int)std::floor(game->time.absolute), item->yootBuildDay);
+	int peopleEstimate = item->yootPeopleEstimate;
+	const int estimate = Yoot::residentialEstimate(in, &peopleEstimate);
+	item->yootPeopleEstimate = peopleEstimate;
+	return estimate;
+}
+
+void JudgeSystem::forget(const Person * p)
+{
+	visitorDaySeen.erase(const_cast<Person *>(p));
+}
+
+void JudgeSystem::forget(const Item::Item * item)
+{
+	badDayStreak.erase(const_cast<Item::Item *>(item));
+}
+
+void JudgeSystem::reviewUnderperformers(Game * game)
+{
+	// ExpandoBadHotel equivalent. The original dynamically grew/shrank
+	// hotels; our items have fixed footprints after construction, so we
+	// instead track a per-tenant "bad-day streak" and surface targeted
+	// complaints only when a tenant has been unhappy for several days.
+	// This avoids spamming the player on a single transient dip.
+	const double kBadThreshold = 25.0;
+	const int    kWarnAfterDays = 3;
+
+	// Build the current set of underperformers so we can prune stale
+	// entries below.
+	std::set<Item::Item *, SimLess> stillBad;
+	for (Game::ItemSet::iterator it = game->items.begin(); it != game->items.end(); ++it)
+	{
+		Item::Item * item = *it;
+		const std::string & id = item->prototype->id;
+		// Only track actual tenant types (skip elevators, floors, lobbies).
+		bool isTenant = (id == "office"   || id == "condo"    || id == "yoot_condo" ||
+		                 id == "hotel_single" || id == "hotel_double" ||
+		                 id == "hotel_suite"  || id == "hotel" ||
+		                 id == "fastfood" || id == "restaurant" ||
+		                 id == "cinema"   || id == "partyhall");
+		if (!isTenant) continue;
+
+		if (item->evaluation < kBadThreshold)
+		{
+			stillBad.insert(item);
+			int & streak = badDayStreak[item];
+			++streak;
+			// Warn once when the tenant crosses the persistence threshold,
+			// and again every 5 days after so the player is reminded.
+			if (streak == kWarnAfterDays || (streak > kWarnAfterDays && (streak - kWarnAfterDays) % 5 == 0))
+			{
+				char buf[160];
+				snprintf(buf, sizeof(buf), "%s on floor %i has been unhappy for %i day%s",
+				         item->prototype->name.c_str(),
+				         item->position.y,
+				         streak,
+				         streak == 1 ? "" : "s");
+				game->timeWindow.showMessage(buf);
+			}
+		}
+	}
+
+	// Decay/clear streaks for items that recovered, and prune entries for
+	// items that have been removed from the world.
+	for (std::map<Item::Item *, int, SimLess>::iterator it = badDayStreak.begin();
+	     it != badDayStreak.end(); )
+	{
+		if (stillBad.find(it->first) == stillBad.end())
+			it = badDayStreak.erase(it);
+		else
+			++it;
+	}
 }

@@ -57,6 +57,7 @@ class Codec:
         self.buf = data if self.reading else bytearray()
         self.pos = 0
         self.trace = []  # (offset, path) breadcrumbs for error messages
+        self.plugin_ids = {}  # numeric item type -> plugin mID (file order)
 
     # -- raw -------------------------------------------------------------
     def _take(self, n):
@@ -262,11 +263,43 @@ def equip(c, d):
     return True
 
 
+def stadium_extra_size(buf, pos):
+    """Bytes Stadium.t2p's record really occupies (its SaveExtraData
+    0x1000bee0 writes n = 0x405 from FUN_1000f7e0, then the record
+    FUN_1000f6a0, which is shorter; LoadExtraData 0x1000be40 reads the
+    record whatever n says): pstr name, u8, u16, two teams (pstr, u8,
+    3 x 20 x u16, 3 x u16; FUN_1000f730), u8, u8, u16."""
+    p = pos
+    p += 1 + buf[p]
+    p += 3
+    for _ in range(2):
+        p += 1 + buf[p]
+        p += 1 + 120 + 6
+    p += 4
+    if p > len(buf):
+        raise BldError("Stadium extra data runs past EOF at 0x%x" % pos)
+    return p - pos
+
+
+# Plugins (file-order mID) whose def overrides LoadExtraData with a reader
+# that does not consume exactly the n bytes its writer announced.  Every
+# other override (StdElev/KElev/KServ/ServElev/BigElev, Theater,
+# ClassicTheater, EventCenter, Front/RFront, PowerRoom, Subway,
+# Attraction, Boatdeck) writes n equal to its record size, so the generic
+# s32 n + n bytes stays exact (doc/yoottower/bld-format.md 4.2).
+EXTRA_SIZE = {"MUDS": stadium_extra_size}
+
+
 def extra_data(c, d):
     """T2EquipDef::LoadExtraData 0x1002f8c0: s32 n + n bytes (writer
-    always emits n=0).  Plugin-specific defs may override; none of the
-    sample saves need it."""
+    always emits n=0), or the def's own override (EXTRA_SIZE)."""
     n = c.s32(d, "extraLen")
+    sizer = EXTRA_SIZE.get(c.plugin_ids.get(d.get("equipType")))
+    if sizer and n > 0:
+        if c.reading:
+            n = sizer(c.buf, c.pos)
+        else:
+            n = len(d["extra"]) // 2
     c.raw(d, "extra", n)
 
 
@@ -379,14 +412,20 @@ def request(c, d):
 
 
 def outobj(c, d):
-    """T2OutObj::LoadSelf 0x100462e0 (no marker).  The OuterObjDef extra
-    data is empty (T2ToolDef::LoadExtraData) when the def is found."""
+    """T2OutObj::LoadSelf 0x100462e0 (no marker), then the def's
+    LoadExtraData (vtbl+0x50), or s32 n + n bytes when the def is missing.
+    The base T2ToolDef reads nothing, but the only shipped out-object,
+    Billboard.t2p, overrides it (0x1000c470 / 0x1000c550): s32 n (6) +
+    u32 ad sub-plugin mID (0 = none) + s16; n = 0 without a record.  So
+    s32 n + n bytes is exact for every shipped plugin."""
     if not object_hdr(c, d):
         return
     c.u16(d, "outObjID")
     c.srect(d, "area")
     c.u32(d, "valiation")
     c.s16(d, "outObjType")
+    n = c.s32(d, "extraLen")
+    c.raw(d, "extra", n)
 
 
 def people(c, d):
@@ -556,11 +595,25 @@ def plugin_info(c, d):
     c.bool8(d, "used")
 
 
+# Events whose Write/Read do not start with a payload length:
+# T2HotSpring (Kegon/Hawai.t2p 'HSEv') writes nothing at all, and the
+# T2Transport events (T2DLL metro 'MrEv' vtbl 0x10085f80, Hawai.t2p cruise
+# 'CrEv') write u32 firstPeople and, when it is not 0, u32 lastPeople.
+EVENT_NO_PAYLOAD = {"vESH"}
+EVENT_TRANSPORT = {"vERM", "vErC"}
+
+
 def tower_event(c, d):
-    c.tag(d, "type")         # event class 4cc
+    t = c.tag(d, "type")     # event class 4cc
     c.s16(d, "id")
     c.u8(d, "standby")       # 0 = list +0x10/+0x30, 1 = list +0x50
-    n = c.s32(d, "len")      # every T2EventItem::Write starts with its payload length
+    if t in EVENT_NO_PAYLOAD:
+        return
+    if t in EVENT_TRANSPORT:
+        if c.u32(d, "firstPeople"):
+            c.u32(d, "lastPeople")
+        return
+    n = c.s32(d, "len")      # T2EventItem::Write and the T2DLL events start with the payload length
     c.raw(d, "data", n)
 
 
@@ -603,6 +656,8 @@ def document(c, d):
     c.u16(dt, "seconds")
     n = c.count_of(d, "nPlugins", "plugins", c.s32)
     c.items(d, "plugins", n, plugin_info)
+    for p in reversed(d["plugins"]):  # numeric item type -> mID, first entry wins
+        c.plugin_ids[p["itemType"]] = p["id"]
     pl = sub(c, d, "people")
     block_list(c, pl, "blocks", 256, people, b">PP<", c.s32)
     c.trace.append("floor")

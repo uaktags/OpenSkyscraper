@@ -106,16 +106,23 @@ namespace OT
 			mutable Sprite residentSprite;
 			bool spriteNeedsUpdate;
 
-			std::set<YootCondoOccupant *> occupants;
+			std::set<YootCondoOccupant *, SimLess> occupants;
 			std::priority_queue<YootCondoOccupant *, std::deque<YootCondoOccupant *>, YootCondoOccupant::departsLaterThan> departureQueue;
 			std::priority_queue<YootCondoOccupant *, std::deque<YootCondoOccupant *>, YootCondoOccupant::returnsLaterThan> returnQueue;
 
-			// Static textures shared among instances
-			static sf::Texture emptyCondoTexture;
-			static sf::Texture residentTexture;
-			static bool texturesLoaded;
+			/// Plugin art: Condo.t2p, or the world's plugin through the
+			/// catalog (HawaianCondo.t2p in Hawaii); Apartment.t2p overrides.
+			virtual const char * condoPlugin() const;
+			/// Becoming occupied / vacated: sale and buy-back (YootCondo).
+			virtual void moveIn();
+			virtual void moveOut();
+			virtual int residentsToCreate() const;
+			virtual bool hasFamilies() const { return true; }
 
-			static bool loadTextures(Game *game);
+			// Textures shared among instances, cached per plugin.
+			const sf::Texture * emptyCondoTexture = nullptr;
+			const sf::Texture * residentTexture = nullptr;
+			bool loadTextures();
 		};
 	}
 }

@@ -107,9 +107,9 @@ void Cinema::decodeXML(tinyxml2::XMLElement &xml)
 		c->state = (Person::State)e->IntAttribute("state", Person::kShopping);
 		c->stress = e->DoubleAttribute("stress", 0.0);
 		c->eval = e->DoubleAttribute("eval", 0.0);
-		c->name = xmlAttrOr(*e, "name", "");
-		c->from = xmlAttrOr(*e, "from", "");
-		c->goingTo = xmlAttrOr(*e, "goingTo", "");
+		c->name = xmlAttributeOr(*e, "name", "");
+		c->from = xmlAttributeOr(*e, "from", "");
+		c->goingTo = xmlAttributeOr(*e, "goingTo", "");
 		c->bankCount = (int8_t)e->IntAttribute("bankCount", 0);
 		c->bankTotal = (int16_t)e->IntAttribute("bankTotal", 0);
 		customers.insert(c);

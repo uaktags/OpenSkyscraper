@@ -6,6 +6,7 @@
 #include <chrono>
 #include <TGUI/Widgets/Label.hpp>
 #include <TGUI/Widgets/Button.hpp>
+#include <TGUI/Widgets/EditBox.hpp>
 #include "Application.h"
 #include "Game.h"
 #include "SaveHash.h"
@@ -29,6 +30,13 @@
 #include "Item/Elevator/Car.h"
 #include "Item/Elevator/Queue.h"
 #include "OpenGL.h"
+#include "YootRules.h"
+#include "YootPlacementGame.h"
+#include "YootItemArt.h"
+#include "YootMisc.h"
+#include "YootOutView.h"
+#include "YootWorld.h"
+#include "SimHarness.h"
 
 using namespace OT;
 #ifdef _WIN32
@@ -163,6 +171,64 @@ static void settleQuarterlyAccounting(Game *game)
 		game->transferFunds(-maintenance, "maintenance", "Quarterly maintenance");
 }
 
+// YootTower quarter (plan step 7, E3): T2.exe FUN_0041dc40 opens the new
+// quarter's books (T2Settlement::Update) and charges
+// T2FloorInfo::CalcMentenanceCost at midnight of day 1. Each item pays its
+// TNDF/MVDF outMoney: lobbies per unit of width, movers per used car
+// (oracle: Sample Tokyo Map's Simple Elevator paid 2 x $12,000 for 2 of 6
+// car slots), stairs/escalators as 2 modules halved by attr 0x2000.
+// Office rent and commercial income are not part of this settlement.
+static void settleYootQuarter(Game *game)
+{
+	game->money.finalizeQuarter();
+	int total = 0;
+	for (Game::ItemSet::const_iterator it = game->items.begin(); it != game->items.end(); ++it)
+	{
+		Item::Item *item = *it;
+		const YootItemStats *stats = item->prototype->yoot;
+		if (!stats || item->underConstruction) continue;
+		int cars = 0;
+		if (item->isElevator())
+		{
+			Item::Elevator::Elevator *e = static_cast<Item::Elevator::Elevator *>(item);
+			cars = (int)e->cars.size();
+		}
+		else if (item->isStairlike())
+			cars = 2;
+		total += Yoot::maintenanceCost(*stats, item->size.x, cars);
+	}
+	if (total > 0)
+		game->transferFunds(-total, "maintenance", "Quarterly maintenance");
+}
+
+// YootTower office rent (plan step 7, E4; Office.t2p FUN_1000c0c0): every
+// let office pays 3 x inMoney[selection] once per quarter between 04:52
+// and 04:59 on day 1. Oracle (Sample Tokyo Map.bld): 9 offices at
+// inMoneyIndex 2 paid 9 x 3 x $3,000 = $81,000 by 05:24.
+static void collectYootOfficeRent(Game *game)
+{
+	// Apartments pay 3 x inMoney the same way (oracle: settlement 1102
+	// -21 = 3 x 7 units at inMoneyIndex 2).
+	int total = 0, apartments = 0;
+	for (const char * kind : {"office", "apartment"})
+	{
+		Game::ItemSetByString::const_iterator bucket = game->itemsByType.find(kind);
+		if (bucket == game->itemsByType.end()) continue;
+		for (Game::ItemSet::const_iterator it = bucket->second.begin(); it != bucket->second.end(); ++it)
+		{
+			Item::Item *tenant = *it;
+			if (tenant->underConstruction || !tenant->isOccupied() || !tenant->prototype->yoot) continue;
+			// Statuses 9-11 (no workers yet) take no quarterly rent.
+			if (std::string(kind) == "office" && tenant->population == 0) continue;
+			const int rent = Yoot::officeQuarterRent(*tenant->prototype->yoot, game->yootPriceSelection(tenant));
+			if (std::string(kind) == "apartment") apartments += rent;
+			else total += rent;
+		}
+	}
+	game->yootBook(total, "rent_income", "Income from office rentals just came in.");
+	game->yootBook(apartments, "rent_income", ""); // generic tenant payment: no message string
+}
+
 static double autosaveWallClock()
 {
 	return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
@@ -232,6 +298,45 @@ void Game::askEventChoice(const std::string & title, const std::string & text,
 	app.gui.add(window);
 	eventChoiceWindow = window;
 	eventChoiceCallback = onChoice;
+}
+
+void Game::askEventText(const std::string & title, const std::string & text,
+                        const std::string & defaultText,
+                        const std::function<void(const std::string &)> & onText)
+{
+	askEventChoice(title, text, "OK", "", nullptr);
+	tgui::Container::Ptr window = eventChoiceWindow;
+	window->removeAllWidgets();
+	tgui::Label::Ptr label = tgui::Label::create(text);
+	label->setPosition({14 * app.uiScale, 12 * app.uiScale});
+	label->setTextSize(13 * app.uiScale);
+	window->add(label);
+	tgui::EditBox::Ptr edit = tgui::EditBox::create();
+	edit->setText(defaultText);
+	edit->setSize({330 * app.uiScale, 26 * app.uiScale});
+	edit->setPosition({14 * app.uiScale, 44 * app.uiScale});
+	window->add(edit);
+	tgui::Button::Ptr ok = tgui::Button::create("OK");
+	ok->setSize({160 * app.uiScale, 30 * app.uiScale});
+	ok->setPosition({100 * app.uiScale, 85 * app.uiScale});
+	ok->onPress([this, edit]() { if (!edit->getText().empty()) answerEventChoice(true); });
+	window->add(ok);
+	eventChoiceCallback = [edit, onText](bool) { onText(edit->getText().toStdString()); };
+}
+
+bool Game::qaBuild(const std::string & id, int2 pos)
+{
+	std::map<std::string, Item::AbstractPrototype *>::iterator p = itemFactory.prototypesById.find(id);
+	if (p == itemFactory.prototypesById.end() || !p->second) return false;
+	Item::AbstractPrototype * previous = toolPrototype;
+	toolPrototype = p->second;
+	const size_t before = items.size();
+	const int fundsBefore = funds;
+	constructToolAt(pos);
+	toolPrototype = previous;
+	const bool built = items.size() != before || funds != fundsBefore;
+	LOG(IMPORTANT, "qa-build %s at %d,%d: %s", id.c_str(), pos.x, pos.y, built ? "built" : "refused");
+	return built;
 }
 
 void Game::answerEventChoice(bool yes)
@@ -363,6 +468,30 @@ Game::Game(Application & app)
 	}
 	//mapWindow     = NULL;
 
+	// YootTower floor holes: same-floor walking between two routing nodes
+	// requires continuous slab coverage (a hole is a visible gap). Under
+	// SimTower/OpenSky the test always answers walkable, which reproduces
+	// the previous link-everything graph exactly.
+	gameMap.horizontalWalkable = [this](int y, int x1, int x2) {
+		if (!activeRules.profile().yootWorld) return true;
+		const int lo = std::min(x1, x2), hi = std::max(x1, x2);
+		Item::Floor * slab = NULL;
+		FloorItems::const_iterator fi = floorItems.find(y);
+		if (fi != floorItems.end()) slab = fi->second;
+		for (int x = lo; x <= hi; x++) {
+			if (slab && slab->coversCell(x)) continue;
+			// Lobby cells stay walkable (the atrium is open floor).
+			ItemSetByInt::const_iterator row = itemsByFloor.find(y);
+			bool lobby = false;
+			if (row != itemsByFloor.end())
+				for (ItemSet::const_iterator i = row->second.begin(); i != row->second.end(); ++i)
+					if ((*i)->prototype->icon == ICON_LOBBY &&
+					    x >= (*i)->position.x && x < (*i)->position.x + (*i)->size.x) { lobby = true; break; }
+			if (!lobby) return false;
+		}
+		return true;
+	};
+
 	setRules(activeRules);
 	funds  = activeRules.profile().startFunds;
 	money.setBalance(funds);
@@ -371,6 +500,8 @@ Game::Game(Application & app)
 	countT = TenantRules::CountT();
 	populationNeedsUpdate = false;
 	yootVipFlags = 0;
+	yootSecretItems = 0;
+	activeRules.setSecretUnlocked(false);
 	lastAutosaveDay = (int)floor(time.absolute);
 	lastAutosaveWallClock = autosaveWallClock();
 
@@ -383,6 +514,8 @@ Game::Game(Application & app)
 	// Store the absolute three-day financial cycle, not Time::quarter's
 	// presentation value. This survives year wrap without duplicate billing.
 	lastAccountingQuarter = (int)floor(time.absolute / 3.0);
+	yootRentCycle = lastAccountingQuarter -
+		((time.day > 0 || time.hour * 60.0 >= Yoot::kOfficeRentFirstMinute) ? 0 : 1);
 	itemBelowCursor = NULL;
 	toolPrototype = NULL;
 	statusMode = kNormal;
@@ -399,6 +532,7 @@ Game::Game(Application & app)
 	metroStation = NULL;
 
 	itemFactory.loadPrototypes();
+	applyItemCatalog();
 
 	/*Item::Item * i = itemFactory.prototypes.front()->make(this);
 	addItem(i);
@@ -520,7 +654,7 @@ bool Game::handleEvent(sf::Event & event)
 		}
 		if (wheelEvent->wheel == sf::Mouse::Wheel::Horizontal || isShiftPressed) {
 			poi.x -= delta * 40.f * zoom;
-			poi.x = std::max(-512.0, std::min(512.0, poi.x));
+			poi.x = std::max(-horizontalScrollLimit(), std::min(horizontalScrollLimit(), poi.x));
 		} else {
 			poi.y += delta * 40.f * zoom;
 		}
@@ -564,8 +698,8 @@ bool Game::handleEvent(sf::Event & event)
 	switch (eventType) {
 		case EventType::KeyPressed: {
 			switch (keyCode) {
-				case sf::Keyboard::Key::Left:  poi.x = std::max(-512.0, poi.x - 20); return true;
-				case sf::Keyboard::Key::Right: poi.x = std::min(512.0, poi.x + 20); return true;
+				case sf::Keyboard::Key::Left:  poi.x = std::max(-horizontalScrollLimit(), poi.x - 20); return true;
+				case sf::Keyboard::Key::Right: poi.x = std::min(horizontalScrollLimit(), poi.x + 20); return true;
 				case sf::Keyboard::Key::Up:    poi.y += 20; return true;
 				case sf::Keyboard::Key::Down:  poi.y -= 20; return true;
 				case sf::Keyboard::Key::F1:    reloadGUI(); return true;
@@ -687,7 +821,27 @@ bool Game::handleEvent(sf::Event & event)
 			}
 			else if (itemBelowCursor) {
 				if (selectedTool == "bulldozer") {
-					bulldozeItem(itemBelowCursor);
+					if (activeRules.profile().yootWorld) {
+						// YootTower: floors go top-down / bottom-up, parking from the outside (step 13).
+						std::string yootReason;
+						const bool yootOk = Yoot::removalAllowed(*this, itemBelowCursor, yootReason);
+						const bool yootFloor = itemBelowCursor->prototype->icon == ICON_FLOOR;
+						if (!yootOk || (!yootFloor && (itemBelowCursor->prototype->icon == ICON_LOBBY || itemBelowCursor->prototype->icon == ICON_FLOOR || itemBelowCursor->prototype->icon == ICON_METRO))) {
+							playOnce("simtower/construction/impossible");
+							timeWindow.showMessage(yootOk ? "Cannot bulldoze " + itemBelowCursor->prototype->name : yootReason);
+							break;
+						}
+						LOG(DEBUG, "destroy %s", itemBelowCursor->desc().c_str());
+						bool canHaulPeople = false;
+						if (itemBelowCursor->canHaulPeople()) canHaulPeople = true;
+						removeItem(itemBelowCursor);
+						if (canHaulPeople) updateRoutes();
+						playOnce("simtower/bulldozer");
+					}
+					else {
+						// SimTower/OpenSky: EXE demolish rules (art batch 6).
+						bulldozeItem(itemBelowCursor);
+					}
 				}
 				else if (selectedTool == "finger") {
 					if (itemBelowCursor->prototype->id.find("elevator") == 0) {
@@ -712,7 +866,10 @@ bool Game::handleEvent(sf::Event & event)
 							}
 						} else {
 							LOG(DEBUG, "clicked elevator %s on floor %i", itemBelowCursor->desc().c_str(), toolPosition.y);
-							if (!e->unservicedFloors.erase(toolPosition.y)) {
+							if (e->unservicedFloors.count(toolPosition.y) && !e->canAddStop()) {
+								// YootTower Large Elevator stop cap (MVDF maxStop).
+								timeWindow.showMessage("This elevator cannot stop at any more floors.");
+							} else if (!e->unservicedFloors.erase(toolPosition.y)) {
 								e->unservicedFloors.insert(toolPosition.y);
 								gameMap.removeNode(MapNode::Point(e->position.x + e->size.x/2, toolPosition.y), itemBelowCursor);
 							} else {
@@ -801,7 +958,7 @@ bool Game::handleViewportScrollbarEvent(sf::Event &event)
 	auto setHorizontalFromMouse = [&](int x) {
 		double usable = std::max(1, static_cast<int>(ws.x) - scrollbarSize);
 		double t = std::max(0.0, std::min(1.0, x / usable));
-		poi.x = -512 + t * 1024;
+		poi.x = horizontalScrollLimit() * (2 * t - 1);
 	};
 
 	if (const auto *pressed = event.getIf<sf::Event::MouseButtonPressed>()) {
@@ -869,7 +1026,7 @@ void Game::drawViewportScrollbars(sf::RenderTarget &target) const
 	track.setPosition({0.f, bottomY});
 	target.draw(track);
 
-	double ht = std::max(0.0, std::min(1.0, (poi.x + 512) / 1024));
+	double ht = std::max(0.0, std::min(1.0, (poi.x / horizontalScrollLimit() + 1) / 2));
 	thumb.setSize({128.f, scrollbarSize - 2.f});
 	thumb.setPosition({static_cast<float>(ht * std::max(1.f, rightX - 128.f)), bottomY + 1.f});
 	target.draw(thumb);
@@ -877,11 +1034,21 @@ void Game::drawViewportScrollbars(sf::RenderTarget &target) const
 	target.setView(previous);
 }
 
+double Game::horizontalScrollLimit() const
+{
+	// YootTower: OpenSky x = 0 is the world centre (unit = x + width/2), so
+	// the world spans +-width/2 units of 8 px (Hawaii's sea, Tokyo's edges).
+	const RulesProfile & profile = activeRules.profile();
+	if (profile.yootWorld && profile.worldWidth > 0)
+		return std::max(512.0, profile.worldWidth * 8 * 0.5);
+	return 512.0;
+}
+
 void Game::qaSetViewportScrollFractions(double horizontal, double vertical)
 {
 	horizontal = std::max(0.0, std::min(1.0, horizontal));
 	vertical = std::max(0.0, std::min(1.0, vertical));
-	poi.x = -512 + horizontal * 1024;
+	poi.x = horizontalScrollLimit() * (2 * horizontal - 1);
 	poi.y = 360 * 12 - vertical * (360 * 13);
 }
 
@@ -907,13 +1074,17 @@ void Game::advanceSimTick(double dt)
 		autosaveIfDue();
 	}
 	const int financialCycle = (int)floor(time.absolute / 3.0);
+	// YootTower settles at midnight of day 1 (FUN_0041dc40), SimTower at 5:00.
+	const bool yootEconomy = activeRules.profile().yootWorld;
 	const bool quarterlySettlementDue =
-		financialCycle > lastAccountingQuarter && time.hour >= 5.0;
+		financialCycle > lastAccountingQuarter && (yootEconomy || time.hour >= 5.0);
 
     eventSystem.advance(dt);
     const bool frozen = eventWasActive || eventSystem.isActive();
-    if (!frozen) vipSystem.advance(dt);
-    if (!frozen) Item::Recycling::advanceAll(this);
+    // The EXE freezes the VIP system and recycling while a fire/bomb
+    // emergency is active; YootTower keeps them running.
+    if (!frozen || yootEconomy) vipSystem.advance(dt);
+    if (!frozen || yootEconomy) Item::Recycling::advanceAll(this);
 
 	for (ItemSet::iterator i = items.begin(); i != items.end(); i++) {
 		Item::Item * item = *i;
@@ -929,12 +1100,16 @@ void Game::advanceSimTick(double dt)
 				continue;
 			}
 		}
+		// YootTower BOEV remains active after the emergency escape until
+		// power is restored.
+		if (activeRules.profile().yootWorld && eventSystem.power.isBlackOut() &&
+		    item->isElevator()) continue;
         // Empty transports still advance their cars, doors and timers; the metro
         // keeps its 07:00/17:00 open-close sweep (trains and riders are gated inside).
         if (!frozen || item->isElevator() || item->isStairlike() || item->prototype->id == "metro") item->advance(dt);
     }
 
-    if (!frozen) for (PersonSet::iterator p = people.begin(); p != people.end(); p++) {
+    if (!frozen || yootEconomy) for (PersonSet::iterator p = people.begin(); p != people.end(); p++) {
         (*p)->advance(dt);
     }
 	bool quarterFinalized = false;
@@ -944,7 +1119,7 @@ void Game::advanceSimTick(double dt)
 	// Daily tenant judge on the 04:59 settle tick (first tick at/after 05:00
 	// each day): per-floor judge, quarter-day move-out/settle or the arm
 	// pass. It runs just BEFORE the quarterly rent loop so leavers do not pay.
-	if (time.hour >= 5.0 && (int)floor(time.absolute) > lastJudgeDay)
+	if (!yootEconomy && time.hour >= 5.0 && (int)floor(time.absolute) > lastJudgeDay)
 	{
 		lastJudgeDay = (int)floor(time.absolute);
 		// Quarter day: open the new quarter FIRST so move-out buybacks are
@@ -956,12 +1131,25 @@ void Game::advanceSimTick(double dt)
 	}
 	if (quarterlySettlementDue)
 	{
-		if (!quarterFinalized) money.finalizeQuarter();
-		settleQuarterlyAccounting(this);
+		if (yootEconomy) {
+			// T2 settlement at midnight of day 1; finalizes the quarter itself.
+			settleYootQuarter(this);
+		} else {
+			if (!quarterFinalized) money.finalizeQuarter();
+			settleQuarterlyAccounting(this);
+		}
 		lastAccountingQuarter = financialCycle;
 		// The original pops its financial report right after the
 		// quarterly settlement commits (Wave U row 49).
 		showReport();
+	}
+	// YootTower office rent: day 1, from 04:52 (a tick that jumps over the
+	// 8-minute window still pays once, late).
+	if (yootEconomy && time.day == 0 && financialCycle > yootRentCycle &&
+	    time.hour * 60.0 >= Yoot::kOfficeRentFirstMinute)
+	{
+		collectYootOfficeRent(this);
+		yootRentCycle = financialCycle;
 	}
 
 	// Batch 5 hotel pass (T16). The restaurants open from their own advance();
@@ -983,8 +1171,17 @@ void Game::advanceSimTick(double dt)
 
 	if (populationNeedsUpdate) {
 		populationNeedsUpdate = false;
-		// CountT is incremental (batch 5 T14): the global is countT.population.
-		setPopulation(countT.population);
+		if (yootEconomy) {
+			int p = 0;
+			for (ItemSet::iterator i = items.begin(); i != items.end(); i++) {
+				p += (*i)->population;
+			}
+			p += eventSystem.people.visitorPopulation(); // YootTower: the pool's visitors
+			setPopulation(p);
+		} else {
+			// CountT is incremental (batch 5 T14): the global is countT.population.
+			setPopulation(countT.population);
+		}
 	}
 
 	//Play sounds. checkHour reads the clock transition of the last
@@ -1010,6 +1207,18 @@ void Game::advanceSimTick(double dt)
 	}
 }
 
+void Game::advanceHeadless(double dt)
+{
+	if (eventChoiceCallback) {
+		recordSimEvent("event choice answered: yes");
+		answerEventChoice(true);
+	}
+	const int simTicks = (speedMode == kFastSpeedMode) ? kFastTicksPerFrame : 1;
+	for (int tick = 0; tick < simTicks; tick++)
+		advanceSimTick(dt / simTicks);
+	sky.advance(dt);
+}
+
 void Game::advance(double dt)
 {
 	sf::RenderWindow & win = app.window;
@@ -1026,8 +1235,23 @@ void Game::advance(double dt)
 
 	timeWindow.updateTime();
 	timeWindow.advance(dt);
+	levelUpDialog.advance(dt);
 	sky.advance(dt);
 	lighting.advance(dt);
+	if (yootArt) {
+		yootClock += dt;
+		YootSkyInputs sky_in;
+		sky_in.month = time.dayOfYear();
+		sky_in.minuteOfDay = (int)floor(time.hour * 60);
+		sky_in.rainy = sky.rainyDay;
+		// T2PaletteAnime::ChangeSE: one SE step every 5 of the 30 Hz
+		// IsSETime ticks, i.e. 6 steps a second.
+		sky_in.seKind = (int)(yootClock * 6);
+		yootArt->setOutside(statusMode == kOutside);
+		yootArt->update(sky_in);
+		// Plugin item sheets follow the tower palette (windows, signs).
+		yootRecolourPluginViews(yootArt->palette(), yootArt->animStart(), yootArt->animCount());
+	}
 	toolboxWindow.update();
 
 	// Refresh the minimap every ~1 second of game time (cheaper than every
@@ -1054,8 +1278,13 @@ void Game::advance(double dt)
 
 	//Constrain the POI.
 	double2 halfsize((win.getView().getSize().x)*0.5*zoom, (win.getView().getSize().y)*0.5*zoom);
-	poi.y = std::max<double>(std::min<double>(poi.y, 360*12 - halfsize.y), -360 + halfsize.y);
-	poi.x = std::max<double>(std::min<double>(poi.x, 512.0), -512.0);
+	// The YootTower skin scrolls down to the world's bottom row (Kegon's
+	// Observatory stands on B32, Tokyo's rock reaches B12).
+	double bottom = -360;
+	if (const YootWorldArt * art = yootSkinArt())
+		bottom = std::min(bottom, -36.0 * (art->geometry().height - art->geometry().groundLine));
+	poi.y = std::max<double>(std::min<double>(poi.y, 360*12 - halfsize.y), bottom + halfsize.y);
+	poi.x = std::max<double>(std::min<double>(poi.x, horizontalScrollLimit()), -horizontalScrollLimit());
 
 	//Adust the camera.
 	sf::FloatRect view(
@@ -1095,15 +1324,25 @@ void Game::advance(double dt)
 	}
 	if (previousPrototype != toolPrototype) timeWindow.updateTooltip();
 
-	//Draw the sky and decorations.
-	win.draw(sky);
+	//Draw the sky and decorations. The YootTower skin replaces the sky,
+	//skyline and ground with the world plugin's backdrop.
+	if (const YootWorldArt * art = yootSkinArt())
+		art->drawBackdrop(win);
+	else
+		win.draw(sky);
 	win.draw(decorations);
+	eventSystem.drawBehindTower(win);
 
 	//Draw the items that are in view.
 	Item::Item * previousItemBelowCursor = itemBelowCursor;
 	itemBelowCursor = NULL;
 
+	// Skin::Yoot Outside view: the facades replace the tower interior.
+	const bool yootOutside = statusMode == kOutside && yootSkinArt();
+	if (yootOutside) drawYootOutView(*this, win);
+
 	//Draw floor items first
+	if (!yootOutside)
 	for (ItemSet::iterator i = itemsByType["floor"].begin(); i != itemsByType["floor"].end(); i++) {
 		const int2 & vp = (*i)->getPositionPixels();
 		const sf::Vector2u & vs = (*i)->getSizePixels();
@@ -1115,7 +1354,8 @@ void Game::advance(double dt)
 	}
 
 	//Draw the remaining items in the building
-	for (int layer = 0; layer < 2; layer++) {
+	for (int layer = 0; layer < 2 && !yootOutside; layer++) {
+		if (layer == 1) eventSystem.drawUnderMovers(win);
 		for (ItemSet::iterator i = items.begin(); i != items.end(); i++) {
 			if ((*i)->layer != layer) continue;
 			const int2 & vp = (*i)->getPositionPixels();
@@ -1354,12 +1594,27 @@ void Game::addItem(Item::Item * item)
 
 		floorItems[item->position.y] = f;
 		decorations.updateFloor(item->position.y);
+		// A floor appeared (load order or minted slab): relink this level
+		// so previously severed YootTower runs reconnect where covered.
+		if (activeRules.profile().yootWorld)
+			gameMap.revalidateFloorLinks(item->position.y);
 	} else {
+		// YootTower special footprints (final items rising above the top
+		// floor, the subway below the lowest) deliberately have no slab for
+		// rows outside the floor limits: construction skips them, and so
+		// must the slab minting here (construction calls addItem for the
+		// finished item, and so does loading a save).
+		const bool yootSpecial = Yoot::usesSpecialFootprint(*this, item->prototype);
 		for (int i = 0; i < item->size.y; i++) {
 			itemsByFloor[item->position.y + i].insert(item);
 
 			if (floorItems.count(item->position.y + i) == 0) {
 				// This is necessary in case of loading a save game where the floor item is not loaded before the building item on that floor.
+				if (yootSpecial && !activeRules.profile().allowsCell(item->position.x, item->position.y + i)) {
+					LOG(DEBUG, "no floor slab minted under special-footprint %s on floor %i (outside the floor limits)",
+					    item->prototype->id.c_str(), item->position.y + i);
+					continue;
+				}
 				int minX = item->position.x;
 				int maxX = item->getRect().maxX();
 				Item::Floor * f = (Item::Floor *) itemFactory.make(itemFactory.prototypesById["floor"], int2(minX,item->position.y + i));
@@ -1411,7 +1666,7 @@ void Game::removeItem(Item::Item * item)
     if (Item::Hotel *hotel = dynamic_cast<Item::Hotel *>(item))
         for (Item::Item *hk : itemsByType["housekeeping"])
             if (Item::Housekeeping *center = dynamic_cast<Item::Housekeeping *>(hk))
-                for (Item::Housekeeping::Maid *maid : center->maids)
+                for (Item::Housekeeping::Maid *maid : center->maidStaff)
                     if (maid && maid->target == hotel) { maid->target = nullptr; if (maid->mode == 1) maid->mode = 0; }
     visualizeRoute.clear();
     inspectorDialog.close();
@@ -1459,6 +1714,7 @@ void Game::removeItem(Item::Item * item)
 		}
 	}
 
+	eventSystem.people.itemRemoved(item);
 	if (item == itemBelowCursor) itemBelowCursor = NULL;
 	if (item == mainLobby) mainLobby = NULL;
 	if (item == metroStation) metroStation = NULL;
@@ -1478,6 +1734,9 @@ bool Game::extendFloor(int floor, int minX, int maxX, bool free) {
 	if (floorItems.count(floor) != 0) {
 		// Look for existing floor to extend
 		Item::Floor * f = floorItems[floor];
+		// YootTower (E2): Floor.t2p charges per cell that had no floor, and
+		// a detached run leaves a hole between the two towers.
+		const int yootFresh = activeRules.profile().yootWorld ? f->yootCover(minX, maxX) : -1;
 		std::multiset<int> &interval = f->interval;
 		interval.erase(interval.find(f->position.x));
 		interval.erase(interval.find(f->getRect().maxX()));
@@ -1498,10 +1757,11 @@ bool Game::extendFloor(int floor, int minX, int maxX, bool free) {
 		interval.insert(f->position.x);
 		interval.insert(f->getRect().maxX());
 		gameMap.addNode(MapNode::Point(f->position.x + f->size.x/2, f->position.y + f->prototype->entrance_offset), f);
-		if (diff_left + diff_right > 0) {
+		if (diff_left + diff_right > 0 || yootFresh > 0) {
 			decorations.updateFloor(f->position.y);
 			if (!free) {
-				transferFunds(-f->prototype->price * (diff_left + diff_right), "construction", "Floor extension");
+				transferFunds(yootFresh >= 0 ? -f->prototype->price * yootFresh
+				                             : -f->prototype->price * (diff_left + diff_right), "construction", "Floor extension");
 				playOnce("simtower/construction/flexible");
 			}
 		}
@@ -1514,10 +1774,18 @@ bool Game::extendFloor(int floor, int minX, int maxX, bool free) {
 		f->updateSprite();
 		addItem(f);
 		if (!free) {
-			transferFunds(-f->prototype->price * (maxX - minX), "construction", "Floor");
+			// YootTower: T2TenantDef::CalcPayment charges every empty cell (E2).
+			// SimTower: the EXE charges width x price (art batch 6).
+			transferFunds(activeRules.profile().yootWorld
+			                   ? -Yoot::floorCharge(f->prototype->price, maxX - minX)
+			                   : -f->prototype->price * (maxX - minX), "construction", "Floor");
 			playOnce("simtower/construction/normal");
 		}
 	}
+	// Floor coverage on this level changed (extended, or holes punched for
+	// a detached YootTower run): rebuild the level's horizontal links.
+	if (activeRules.profile().yootWorld)
+		gameMap.revalidateFloorLinks(floor);
 	return true;
 }
 
@@ -1543,6 +1811,8 @@ void Game::autosaveIfDue()
 {
 	// Policy ported from OpenSkyWeb (src/core/autosave.js): snapshot on an
 	// in-game day change, throttled to at most one write per 60 real seconds.
+	// Headless runs (--sim) never autosave: the throttle reads the wall clock.
+	if (Sim::deterministic()) return;
 	const int day = (int)floor(time.absolute);
 	if (day == lastAutosaveDay) return;
 	const double now = autosaveWallClock();
@@ -1579,10 +1849,15 @@ bool Game::repairFloorCoverage()
 			continue;
 		}
 		const int h = std::max(1, item->size.y);
+		// Same exclusion as addItem/construction: YootTower special
+		// footprints stand without slabs outside the floor limits, so the
+		// repair must not mint coverage for those rows either.
+		const bool yootSpecial = Yoot::usesSpecialFootprint(*this, item->prototype);
 		for (int yy = item->position.y; yy < item->position.y + h; yy++) {
 			// Haulers only need a slab where the level has none at all;
 			// rooms always need coverage spanning their footprint.
 			if (item->canHaulPeople() && floorItems.count(yy) != 0) continue;
+			if (yootSpecial && !activeRules.profile().allowsCell(item->position.x, yy)) continue;
 			const int minX = item->position.x;
 			const int maxX = item->getRect().maxX();
 			std::map<int, std::pair<int,int> >::iterator n = needs.find(yy);
@@ -1653,6 +1928,8 @@ void Game::applyNewTowerProfile()
 	countT = TenantRules::CountT();
 	populationNeedsUpdate = false;
 	yootVipFlags = 0;
+	yootSecretItems = 0;
+	activeRules.setSecretUnlocked(false);
 	// YootTower doc init: T2DateTime(1, worldDef+0x74, 7:00).
 	if (profile.yootWorld)
 		time.set(profile.startDay + Time::hourToAbsolute(7.0));
@@ -1661,6 +1938,8 @@ void Game::applyNewTowerProfile()
 	lastAccountingDay = (int)floor(time.absolute);
 	lastJudgeDay = (int)floor(time.absolute) - (time.hour < 5.0 ? 1 : 0);
 	lastAccountingQuarter = (int)floor(time.absolute / 3.0);
+	yootRentCycle = lastAccountingQuarter -
+		((time.day > 0 || time.hour * 60.0 >= Yoot::kOfficeRentFirstMinute) ? 0 : 1);
 	timeWindow.updateFunds();
 	timeWindow.updateRating();
 }
@@ -1668,10 +1947,119 @@ void Game::applyNewTowerProfile()
 void Game::setRules(const BuildRules & rules)
 {
 	activeRules = rules;
+	activeRules.setSecretUnlocked((yootSecretItems & 1) != 0);
 	const RulesProfile & profile = activeRules.profile();
 	Time::setLinearClock(profile.linearClock);
 	time.calendar = profile.calendar == RulesProfile::Calendar::YootTower
 		? Time::Calendar::YootTower : Time::Calendar::SimTower;
+	applyItemCatalog();
+	refreshYootArt();
+}
+
+void Game::applyItemCatalog()
+{
+	// Detach and restore first so switching worlds/rulesets never leaves a
+	// dangling prototype->yoot or a YootTower price behind.
+	static std::map<std::string, int2> baseSizes; // YootTower-only prototypes and hotel rooms
+	// Hotel rooms take the TNDF footprint too: Singleroom 4, Twinroom 6,
+	// Suiteroom 16, Kegon's Smallroom 10 and Largeroom 16 units wide.
+	auto tndfSized = [](const std::string & id) {
+		return BuildRules::isYootOnlyPrototype(id) || id.compare(0, 6, "hotel_") == 0;
+	};
+	for (size_t i = 0; i < itemFactory.prototypes.size(); ++i)
+	{
+		Item::AbstractPrototype * p = itemFactory.prototypes[i];
+		p->yoot = nullptr;
+		if (tndfSized(p->id))
+		{
+			if (!baseSizes.count(p->id)) baseSizes[p->id] = p->size;
+			p->size = baseSizes[p->id];
+		}
+		std::map<std::string, std::pair<int, int> >::const_iterator base = yootBasePrices.find(p->id);
+		if (base != yootBasePrices.end())
+		{
+			p->price = base->second.first;
+			p->carCost = base->second.second;
+		}
+	}
+	yootCatalog.clear();
+	if (!activeRules.profile().yootWorld || itemFactory.prototypes.empty())
+		return;
+
+	// Plan step 4: TNDF/MVDF price, car price and limits from the world's
+	// plugins (E1, M1-M5). Prototypes without an available plugin keep
+	// their OpenSky numbers.
+	yootCatalog = resolveYootCatalog(app.pluginManager, activeRules.profile().worldMask);
+	for (size_t i = 0; i < itemFactory.prototypes.size(); ++i)
+	{
+		Item::AbstractPrototype * p = itemFactory.prototypes[i];
+		std::map<std::string, YootItemStats>::const_iterator s = yootCatalog.find(p->id);
+		if (s == yootCatalog.end()) continue;
+		if (!yootBasePrices.count(p->id))
+			yootBasePrices[p->id] = std::make_pair(p->price, p->carCost);
+		p->yoot = &s->second;
+		p->price = s->second.price;
+		// Per-world footprints of the native YootTower items (KRestroom 10x1,
+		// KTrashFacility 17x2, RMaintenance 12x1, ...). The gate's 16x2 is
+		// not in the TNDF (its width is the lot's), so it keeps its own.
+		if (tndfSized(p->id) && s->second.variation == 0 && s->second.width > 0)
+			p->size = int2(s->second.width, std::max(1, s->second.height));
+		if (s->second.mover && s->second.carPrice > 0)
+			p->carCost = s->second.carPrice;
+	}
+	LOG(INFO, "YootTower item catalog: %zu prototypes overlaid from plugin data", yootCatalog.size());
+}
+
+const YootItemStats * Game::yootStats(const Item::Item * item) const
+{
+	return item ? item->prototype->yoot : nullptr;
+}
+
+int Game::yootPriceSelection(const Item::Item * item) const
+{
+	const YootItemStats * stats = yootStats(item);
+	if (!stats) return 0;
+	int rentClass = openSkyDefaultRentClass(item->prototype->id);
+	// Hotel checkout historically used class 0; YootTower rooms start at the
+	// same default selection as every other priced tenant.
+	if (rentClass == 0) rentClass = 1;
+	if (const Item::Shop * shop = dynamic_cast<const Item::Shop *>(item))
+		rentClass = shop->tenant.rentClass;
+	// Hotel rooms take their Front Desk's rate for the room type (Front.t2p
+	// T2DLG 1000 popups; default selection 3 = index 2).
+	const int deskSelection = eventSystem.specials.roomSelection(item);
+	if (deskSelection >= 0) return std::min(deskSelection, std::max(0, (int)stats->inMoney.size() - 1));
+	return Yoot::selectionFromRentClass(rentClass, (int)stats->inMoney.size());
+}
+
+void Game::yootBook(int amount, const char * category, const char * message)
+{
+	if (amount != 0)
+		transferFunds(amount, category, message);
+}
+
+const YootWorldArt * Game::yootSkinArt() const
+{
+	return (skin == Skin::Yoot && yootArt && yootArt->loaded()) ? yootArt.get() : NULL;
+}
+
+void Game::refreshYootArt()
+{
+	if (skin != Skin::Yoot) {
+		yootArt.reset();
+		yootRecolourPluginViews(std::vector<YootRgb>(), 0, 0);
+		return;
+	}
+	// The YootTower ruleset names its world; other rulesets borrow the
+	// world picked in the menu (Tokyo by default).
+	YootWorld::Id world = app.selectedWorld();
+	const std::string & worldId = activeRules.profile().worldId;
+	if (!worldId.empty())
+		parseYootWorldIdentifier(worldId, world);
+	if (yootArt && yootArt->worldId() == world)
+		return;
+	yootArt.reset(new YootWorldArt);
+	yootArt->load(app.pluginManager, world);
 }
 
 int Game::lobbyHeightFromKeys() const
@@ -1710,6 +2098,8 @@ void Game::encodeXML(tinyxml2::XMLPrinter & xml)
 	if (activeRules.profile().yootWorld) {
 		xml.PushAttribute("world", activeRules.profile().worldId.c_str());
 		xml.PushAttribute("yootVipFlags", (unsigned)yootVipFlags);
+		xml.PushAttribute("yootRentCycle", yootRentCycle);
+		if (yootSecretItems) xml.PushAttribute("yootSecretItems", (unsigned)yootSecretItems);
 	}
 	xml.PushAttribute("skin", skinIdentifier(skin));
 
@@ -1876,12 +2266,17 @@ void Game::decodeXML(tinyxml2::XMLDocument & xml)
 	lobbyHeightLock = root->IntAttribute("lobbyHeightLock", 0);
 	if (lobbyHeightLock < 1 || lobbyHeightLock > 3) lobbyHeightLock = 0;
 	yootVipFlags = root->UnsignedAttribute("yootVipFlags", 0);
+	yootSecretItems = root->UnsignedAttribute("yootSecretItems", 0);
+	activeRules.setSecretUnlocked((yootSecretItems & 1) != 0);
 	time.set(root->DoubleAttribute("time"));
 	lastAccountingDay = (int)floor(time.absolute);
 	lastJudgeDay = (int)floor(time.absolute) - (time.hour < 5.0 ? 1 : 0);
 	const int currentCycle = (int)floor(time.absolute / 3.0);
+	const bool yootClock = activeRules.profile().yootWorld;
 	lastAccountingQuarter = root->IntAttribute("accountingCycle",
-		currentCycle - (time.hour < 5.0 ? 1 : 0));
+		currentCycle - (!yootClock && time.hour < 5.0 ? 1 : 0));
+	const bool rentDone = time.day > 0 || time.hour * 60.0 >= Yoot::kOfficeRentFirstMinute;
+	yootRentCycle = root->IntAttribute("yootRentCycle", currentCycle - (rentDone ? 0 : 1));
 	setSpeedMode(root->IntAttribute("speed"));
 	sky.rainyDay = root->BoolAttribute("rainy");
 	selectTool(root->Attribute("tool"));
@@ -1910,7 +2305,9 @@ void Game::decodeXML(tinyxml2::XMLDocument & xml)
 	tinyxml2::XMLElement * e = root->FirstChildElement("item");
 	while (e) {
 		Item::Item * item = itemFactory.make(*e);
-		addItem(item);
+		// YootTower-only types in a save loaded under another ruleset are
+		// rejected by the factory (NULL) and skipped here.
+		if (item) addItem(item);
 		e = e->NextSiblingElement("item");
 	}
 	// Old saves carry no CountT: derive it once from item state.
@@ -1922,6 +2319,10 @@ void Game::decodeXML(tinyxml2::XMLDocument & xml)
 	vipSystem.relink();
 	Item::Parking::relinkAll(this);
 	populationNeedsUpdate = true;
+	// Loaded floors decode their holes after the graph links were made;
+	// rebuild every level's horizontal links against the real coverage.
+	if (activeRules.profile().yootWorld)
+		gameMap.revalidateAllFloorLinks();
 	// Self-heal missing floor slabs on load (OpenSkyWeb ISSUE-041): repairs
 	// towers saved by builds that minted floors with the off-by-one drag bug.
 	if (repairFloorCoverage())
@@ -1936,6 +2337,10 @@ void Game::settleDailyAccounting()
 	// 4:59AM, handled by settleQuarterlyAccounting(). The tenant judge runs on
 	// the 04:59 settle tick in advanceSimTick (batch 5 T5).
 	money.finalizeDay();
+	// YootTower tenant evaluation idle (frozen during the blackout); the
+	// SimTower ruleset judges at the 04:59 tick in advanceSimTick instead.
+	if (activeRules.profile().yootWorld && !eventSystem.tenantIdleFrozen())
+		judgeSystem.evaluateAll(this);
 	timeWindow.updateMoneyStats();
 }
 
@@ -1981,6 +2386,7 @@ void Game::setRating(int r)
 	if (rating != r) {
 		bool improved = (r > rating);
 		rating = r;
+		recordSimEvent("rating " + std::to_string(rating));
 		if (improved) {
 			//TODO: show window
 			LOG(IMPORTANT, "rating increased to %i", rating);
@@ -2203,7 +2609,10 @@ void Game::yootCheckGrade()
 			break;
 		setRating(rating + 1);
 		levelUpDialog.showForRating(rating);
-		timeWindow.showMessage(std::string("Your tower has been given a ") + std::to_string(rating + 1) + "-Star Award!");
+		// The world's GetGradeUpMessage (Tokyo / Kegon override, Hawaii base).
+		YootWorld::Id world = YootWorld::Id::Tokyo;
+		parseYootWorldIdentifier(activeRules.profile().worldId, world);
+		timeWindow.showMessage(yootGradeUpMessage(world, rating + 1));
 		toolboxWindow.reload(); // refresh build locks
 	}
 }
@@ -2246,9 +2655,10 @@ void Game::setSpeedMode(int sm)
 
 void Game::cycleStatusMode()
 {
-	StatusMode next = static_cast<StatusMode>((static_cast<int>(statusMode) + 1) % 4);
+	StatusMode next = static_cast<StatusMode>((static_cast<int>(statusMode) + 1) % 5);
+	if (next == kOutside && skin != Skin::Yoot) next = kNormal;
 	statusMode = next;
-	const char *names[] = { "Normal view", "Evaluation view", "Pricing view", "Hotel view" };
+	const char *names[] = { "Normal view", "Evaluation view", "Pricing view", "Hotel view", "Outside view" };
 	timeWindow.showMessage(names[static_cast<int>(next)]);
 }
 
@@ -2284,6 +2694,7 @@ void Game::setSkin(Skin newSkin)
 		}
 	}
 	skin = newSkin;
+	refreshYootArt();
 
 	// Rebuild items in place: serialize the world, clear it, reload. The
 	// item decode path re-runs init() with the same state, so sprites are
@@ -2347,11 +2758,15 @@ void Game::zoomBy(double factor, const sf::Vector2i * anchorPx)
 void Game::toggleElevatorService(Item::Elevator::Elevator * e, int floor)
 {
 	if (!e) return;
+	if (e->unservicedFloors.count(floor) && !e->canAddStop())
+	{
+		timeWindow.showMessage("This elevator cannot stop at any more floors.");
+		return;
+	}
 	if (floor < e->position.y || floor >= e->position.y + e->size.y) return;
 	// Disabled valid stops must remain toggleable; reject structural stops
 	// using the same predicate as Express::connectsFloor before any mutation.
-	if (e->isExpress() && floor > 0 && !Item::Lobby::isSkyLobbyFloor(floor)) return;
-	if (!e->unservicedFloors.erase(floor))
+	if (e->isExpress() && floor > 0 && !Item::Lobby::isSkyLobbyFloor(floor)) return;	if (!e->unservicedFloors.erase(floor))
 	{
 		e->unservicedFloors.insert(floor);
 		gameMap.removeNode(MapNode::Point(e->position.x + e->size.x / 2, floor), e);
@@ -2544,8 +2959,10 @@ bool Game::constructToolAt(int2 pos)
 			return false;
 		}
 	}
-	if (!activeRules.allowsFootprint(pos.x, pos.y, toolPrototype->size.x, footprintHeight)) {
-		const std::string reason = "Footprint is outside the " +
+	// YootTower final items and the subway leave the floor area (step 13).
+	const bool yootSpecial = Yoot::usesSpecialFootprint(*this, toolPrototype);
+	if (!(yootSpecial ? activeRules.allowsSpecialFootprint(pos.x, pos.y, toolPrototype->size.x, footprintHeight)
+	                  : activeRules.allowsFootprint(pos.x, pos.y, toolPrototype->size.x, footprintHeight))) {		const std::string reason = "Footprint is outside the " +
 			std::string(activeRules.displayName()) + " build boundary";
 		LOG(DEBUG, "cannot construct %s at %ix%i: %s",
 		    toolPrototype->id.c_str(), pos.x, pos.y, reason.c_str());
@@ -2569,6 +2986,9 @@ bool Game::constructToolAt(int2 pos)
 		return true; // click consumed (no item built)
 	}
 	const size_t itemsBefore = items.size();
+	const int fundsBefore = funds;
+	if (toolPrototype->id == "skybridge" && activeRules.profile().yootWorld)
+		return Yoot::constructSkyBridge(*this, toolPrototype, toolPosition);
 	int height = toolPrototype->size.y;
 	int yHeightOffset = height;
 	if (toolPrototype->icon == ICON_LOBBY) {
@@ -2619,6 +3039,9 @@ if (!handled) {
 	int minFloorX = INT_MAX;
 	int maxFloorX = INT_MIN;
 	for (int i = 0; i < toolPrototype->size.y; ++i) {
+		const int f = toolPosition.y + i;
+		if (yootSpecial && (f < activeRules.profile().lowestFloor || f > activeRules.profile().highestFloor))
+			continue; // no slab outside the floor area (addItem fills in)
 		if (!canExtendFloor(*this, toolPosition.y + i, toolPosition.x,
 		                    toolPosition.x + toolPrototype->size.x)) {
 			constructionBlocked = true;
@@ -2661,10 +3084,43 @@ if (!handled) {
 		blockReason = toolPrototype->name + " unlocks at " +
 		              std::to_string(minRating + 1) + " stars";
 	}
+	else if (toolPrototype->yoot && toolPrototype->yoot->maxBuild > 0 &&
+	         (int)itemsByType[toolPrototype->id].size() >= toolPrototype->yoot->maxBuild)
+	{
+		// YootTower TenantDef maxBuildCount (W6, T2.exe STRTABLE 9999).
+		constructionBlocked = true;
+		blockReason = toolPrototype->name + " can only be placed once";
+	}
+	if (!constructionBlocked) {
+		// YootTower L1/L2/M6/I7 (top floor, subway, lobby, parking).
+		blockReason = Yoot::placementError(*this, toolPrototype, toolPosition.x, toolPosition.y, footprintHeight);
+		constructionBlocked = !blockReason.empty();
+	}
 
-	// Depth/height, metro, underground and count rules live in
-	// placementRuleBlock(), checked before this flow starts.
+	const int lowestFloor = activeRules.profile().lowestFloor;
+	// The YootTower subway sits below the lowest floor (placementError).
+	if (toolPosition.y < lowestFloor && toolPrototype->icon != ICON_METRO) {
+			constructionBlocked = true;
+			blockReason = "Cannot build below floor B" + std::to_string(-lowestFloor);
+		}
 
+		if (metroStation != NULL) {
+			const bool elevatorTool = toolPrototype->id.find("elevator") == 0;
+			const int lowestAllowed = metroStation->position.y -
+				(elevatorTool ? Item::Elevator::Elevator::kMetroClearanceFloors : 0);
+			if (toolPosition.y < lowestAllowed) {
+				constructionBlocked = true;
+				blockReason = "Cannot build below Metro Station";
+			}
+		}
+
+		if (toolPosition.y > 0 && toolPrototype->icon == ICON_METRO) {
+			constructionBlocked = true;
+			blockReason = toolPrototype->name + " unavailable above ground";
+		}
+
+		// (Cinema above ground is allowed per the EXE rules; the YootTower
+		// Theater replaces cinema there, so no preview rule is needed.)
 		if (toolPrototype->icon == ICON_LOBBY) {
 			if (toolPosition.y != 0 && !Item::Lobby::isSkyLobbyFloor(toolPosition.y)) {
 				constructionBlocked = true;
@@ -2840,6 +3296,7 @@ if (!handled) {
 				for (ItemSet::const_iterator ii = itemsNearby.begin(); !constructionBlocked && ii != itemsNearby.end(); ii++) {
 					Item::Item * i = *ii;
 					if (i->canHaulPeople()) continue;
+					if (toolPrototype->icon == ICON_FLOOR && i->prototype->id == "skybridge") continue; // split below
 					if (toolBoundary.intersectsRect(i->getRect())) {
 						constructionBlocked = true;
 						blockReason = i->prototype->name + " is in the way";
@@ -3024,14 +3481,15 @@ if (!handled) {
 
 			// Construct floors (ground grand-lobby decks are priced by the
 			// lobby rate, charged below)
+			const bool yootLobby = activeRules.profile().yootWorld && toolPrototype->icon == ICON_LOBBY;
 			for (int i = 0; i < toolPrototype->size.y; i++)
-				extendFloor(toolPosition.y + i, toolPosition.x, toolPosition.x + toolPrototype->size.x, groundLobby);
+				if (!yootSpecial || activeRules.profile().allowsCell(toolPosition.x, toolPosition.y + i))
+					extendFloor(toolPosition.y + i, toolPosition.x, toolPosition.x + toolPrototype->size.x, groundLobby || yootLobby);
 			eventSystem.notifyPlaced(); // buried treasure on the build click (Concilia game_notify_built)
 			if (groundLobby && terrainCost > 0) {
 				transferFunds(-(int)terrainCost, "construction", lobbyAlreadyThere ? "Lobby extension" : toolPrototype->name);
 				playOnce("simtower/construction/flexible");
 			}
-
 			if (toolPrototype->icon == ICON_LOBBY) {
 				// Look for existing lobby to extend
 				bool existingLobby = false;
@@ -3072,9 +3530,14 @@ if (!handled) {
 									interval.insert(newMaxX);
 								}
 							}
+							if (yootLobby)
+							{
+								transferFunds(-Yoot::floorCharge(toolPrototype->price, diff * l->size.y), "construction", "Lobby extension");
+								playOnce("simtower/construction/flexible");
+							}
 							// Extension price is the new-deck terrain charge
 							// already booked above (no price*4/diff).
-						}
+							}
 						existingLobby = true;
 					}
 				}
@@ -3083,8 +3546,10 @@ if (!handled) {
 					Item::Item * item = itemFactory.make(toolPrototype, toolPosition);
 					LOG(INFO, "created new lobby item %p", item);
 					addItem(item);
+					if (yootLobby)
+						transferFunds(-Yoot::floorCharge(toolPrototype->price, toolPrototype->size.x * toolPrototype->size.y), "construction", toolPrototype->name);
 					// Ground-band lobbies are paid by the deck charge above.
-					if (!groundLobby)
+					else if (!groundLobby)
 						transferFunds(-toolPrototype->price, "construction", toolPrototype->name);
 					playOnce("simtower/construction/normal");
 				}
@@ -3098,6 +3563,8 @@ if (!handled) {
 				} else
 					item->updateRoutes();
 				playOnce("simtower/construction/normal");
+			} else {
+				Yoot::skyBridgeFloorBuilt(*this, toolPosition.y, toolPosition.x, toolPosition.x + toolPrototype->size.x);
 			}
 			} // affordable
 		}
@@ -3107,6 +3574,8 @@ if (!handled) {
 			timeWindow.showMessage(moneyReject.empty() ? "Cannot place item there. " + blockReason + "." : moneyReject);
 		}
 	}
+	if (items.size() != itemsBefore || funds < fundsBefore)
+		eventSystem.extras.onBuilt(toolPosition.y + footprintHeight - 1); // T2HotSpring
 	return items.size() != itemsBefore;
 }
 
@@ -3216,8 +3685,8 @@ bool Game::validateBatchCell(Item::AbstractPrototype * proto, int x, int y, std:
     if (eventSystem.rubbleIntersects(recti(int2(x, y), proto->size))) {
         reason = "Bulldoze the burned area before rebuilding"; return false;
     }
-	if (!activeRules.allowsFootprint(x, y, proto->size.x, proto->size.y)) {
-		reason = "Footprint is outside the " +
+	if (!(Yoot::usesSpecialFootprint(*this, proto) ? activeRules.allowsSpecialFootprint(x, y, proto->size.x, proto->size.y)
+	                                               : activeRules.allowsFootprint(x, y, proto->size.x, proto->size.y))) {		reason = "Footprint is outside the " +
 			std::string(activeRules.displayName()) + " build boundary";
 		return false;
 	}
@@ -3232,7 +3701,23 @@ bool Game::validateBatchCell(Item::AbstractPrototype * proto, int x, int y, std:
 		return false;
 	}
 	if (placementRuleBlock(proto, x, y, reason)) return false;
-	if (proto->id == "secom") {
+	if (proto->yoot && proto->yoot->maxBuild > 0) {
+		Game::ItemSetByString::const_iterator same = itemsByType.find(proto->id);
+		if (same != itemsByType.end() && (int)same->second.size() >= proto->yoot->maxBuild) {
+			reason = proto->name + " can only be placed once";
+			return false;
+		}
+	}
+	reason = Yoot::placementError(*this, proto, x, y, proto->size.y);
+	if (!reason.empty()) return false;
+	if (activeRules.profile().yootWorld) {
+		const int lowestFloor = activeRules.profile().lowestFloor;
+		if (y < lowestFloor) { reason = "Cannot build below floor B" + std::to_string(-lowestFloor); return false; }
+		if (metroStation != NULL && y < metroStation->position.y) {
+			reason = "Cannot build above the metro station";
+			return false;
+		}
+	}	if (proto->id == "secom") {
 		Game::ItemSetByString::const_iterator sit = itemsByType.find("secom");
 		if (sit != itemsByType.end() && !sit->second.empty()) { reason = "Only one SECOM allowed"; return false; }
 	}
@@ -3377,6 +3862,17 @@ void Game::updateRoutes()
 	}
 }
 
+void Game::forgetTracking(const Person * p)
+{
+	judgeSystem.forget(p);
+}
+
+void Game::forgetTracking(const Item::Item * item)
+{
+	judgeSystem.forget(item);
+	eventSystem.forgetItem(item);
+}
+
 /** Recomputes queued lobby routes, bounded to a few milliseconds per frame
  *  so a full rebuild of a maxed tower spreads over a couple of seconds
  *  instead of blocking the load or the frame loop. */
@@ -3389,6 +3885,9 @@ void Game::pumpRouteBuilds()
 		Item::Item * item = routeBuildQueue.back();
 		routeBuildQueue.pop_back();
 		item->computeLobbyRoute();
+		// Headless runs (--sim) drain the queue: a wall-clock budget
+		// would make route timing depend on host speed.
+		if (Sim::deterministic()) continue;
 		if (std::chrono::steady_clock::now() - start > budget) break;
 	}
 }
@@ -3399,7 +3898,9 @@ void Game::pumpRouteBuilds()
 Route Game::findRoute(Item::Item * start, Item::Item * destination, bool serviceRoute)
 {
     if (!start || !destination || !items.count(start) || !items.count(destination)) return Route();
-	MapNode::Point start_point(start->position.x + start->size.x/2, start->position.y + start->prototype->exit_offset);
+	// T2BlackOut::Exec: the end minute triggers escape, not power recovery.
+	if (activeRules.profile().yootWorld && eventSystem.power.isBlackOut())
+		return Route();	MapNode::Point start_point(start->position.x + start->size.x/2, start->position.y + start->prototype->exit_offset);
 	MapNode::Point end_point(destination->position.x + destination->size.x/2, destination->position.y + destination->prototype->entrance_offset);
 
 	// For the special case of Metro, passengers can enter/exit from the middle floor if their destination is on that floor

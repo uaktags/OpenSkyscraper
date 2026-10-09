@@ -54,7 +54,7 @@ It begins with `64 a1 00 00 00 00`, right after a `ret 4` + nop pad.
 |---|---|---|---|
 | 1 | magic | 4 bytes `002T` | u32 `0x54323030` 'T200'. Any other value: load fails (H) |
 | 2 | world | 4cc | world plugin mID, looked up with `FindPlugin(id,'lPdW')`. `IAWH` Hawaii, `KJNS` Tokyo (H) |
-| 3 | header.level | s16 | doc+0x8c, the **star level**. Compared against plugin `GetGameLevel` to unlock tools (M) |
+| 3 | header.level | s16 | doc+0x8c, the **star level**. Compared against plugin `GetGameLevel` to unlock tools (M). Valid range: the world's startGrade..5. Loading runs FUN_00420b50, which loads the grade icon at WorldDef+0x144+level*4 (gradeIconAnimIds at +0x148..+0x158). Level 6 reads the towerNamePrefix string as a bitmap id, `T2BitImage` throws, and the load fails with "File load error" (oracle) |
 | 4 | header.f9c | s16 | doc+0x9c |
 | 5 | header.fa0 | u32 | doc+0xa0 |
 | 6 | header.f80 | s16 | doc+0x80 |
@@ -75,7 +75,7 @@ It begins with `64 a1 00 00 00 00`, right after a `ret 4` + nop pad.
 | 21 | settlement | T2Settlement | §8 (H) |
 | 22 | movies | u32 n + n×(4cc id, u32 len, len bytes) | `T2MoviePluginList::Read` 0x10043a10. The payload is `T2MoviePlugin::Read` (u32 + 6×s16 = 12 bytes; persons R/F, schedule) |
 | 23 | towerEvent | u32 latestBuild, s16 n, n×event | `T2WorldDef::ReadTowerEvent` → `T2TowerEvent::Read` 0x10069fc0. §9 |
-| 24 | ui | 4×SRect + 2×s32 + 4 bytes | main window placement, scrollH, scrollV, Tools / Control / Message palette rects, an all-zero SRect, then 4 bytes that are always `01` (H) |
+| 24 | ui | 4×SRect + 2×s32 + 4 bytes | main window placement, then the main view scroll in 1:1 pixels: **vertical first** (36 px per row), then horizontal (8 px per unit), then the Tools / Control / Message palette rects, an all-zero SRect, and 4 bytes that are always `01` (H). bld.py names the two scroll values `scrollH`, `scrollV`; the order is the other way round (oracle: Tokyo's 3516, 918 = top row 97.7, left unit 114.75) |
 | 25 | searchedTenant | u16 | doc+0x174 tenant equipID, or 0 |
 | 26 | names | s32 n + n×T2Name | `T2NameList::Read` 0x10044e60. §10 |
 | 27 | worldStats | world-specific | `T2WorldDef` vtbl+0xd0 `ReadStatisticsProc`. §11 |
@@ -180,7 +180,49 @@ T2DLL (`T2TenantDef`, `T2MoverDef`, `T2EquipDef`) uses `T2EquipDef::LoadExtraDat
 0x1002f8c0, which reads `s32 n + n bytes`. The writer `SaveExtraData` 0x1002f900
 always writes `n=0`. If the def is missing, the same `s32 n + n` is skipped. A plugin
 could subclass the def and override this. None of the tenants in the saves seen so
-far do.
+far do, but **StdElev.t2p does** (MoverDef vtbl+0x50 `FUN_1000f4e0` / +0x54
+`FUN_1000f570`): it writes `n = 80` and then 2 × 10 four-byte records (a day-type ×
+period table, most likely the car schedule), and its reader reads those 20 records
+**whatever n says**. A Simple Elevator written with any other payload size desyncs the
+load and crashes T2.exe (verified under the oracle). A fresh shaft stores
+`00 00 06 00` in every record.
+
+**Every plugin that overrides the extra data** (audit:
+`plugin_code_audit.py`, plus the two defs with a statically linked base class,
+ClassicTheater and BigElev, whose slots +0x50/+0x54 were read from the vtable):
+
+| Plugin | n written | Record (reader) |
+|---|---|---|
+| StdElev | 80 | 20 x (s16, s16), read whatever n says |
+| KElev, KServ, ServElev, BigElev | 120 | 2 x 10 x 3 s16, read whatever n says |
+| Theater, ClassicTheater | 20 | u32 movie sub-plugin mID + 4 x s32 |
+| EventCenter | 64 + 9k | u32 sub-plugin, 4 x s16, s16 k + k x (u32, s16, s16, s8), s16 12 + 12 x u32 |
+| Front, RFront | 20 | u16 3 + 3 x (u16, s32) |
+| PowerRoom | 9 | u16 5 + 5 x u8 + u16 |
+| Subway | 2 | s16 |
+| Attraction | 2 or 0 | s16 (renovated flag) |
+| Boatdeck | 0 | nothing (the reader makes the CrEv cruise event) |
+| **Stadium** | **0x405** | pstr team name, u8, u16, two team records (pstr, u8, 3 x 20 x u16, 3 x u16), u8, u8, u16: 264 bytes with empty names |
+
+All of them read their record when n > 0 and skip n bytes when the tenant has
+no object, so `s32 n + n bytes` is exact for every one **except Stadium**
+(SaveExtraData 0x1000bee0 writes n = 0x405 from FUN_1000f7e0, then the record
+FUN_1000f6a0; LoadExtraData 0x1000be40 reads the record whatever n is). bld.py
+(`EXTRA_SIZE`) and BldLoader (`stadiumExtraSize`) size a Stadium record from
+its strings and keep the announced n (`extraCount`) for the writer.
+
+**Audit status (2026-10-08).** Every save-override plugin in the table above is read
+and written as `s32 n + n bytes`, so the import keeps each record opaque and the export
+writes it back. The 446 game-written and oracle saves in the working corpus round-trip
+byte-identical through both `bld.py roundtrip` and `BldTool roundtrip`, and
+`testBldExtraRecordSizes` (tests/test_main.cpp) pins each record size. Exporter-written
+records are fresh-game values only for StdElev, KElev, Stadium and the Billboard
+(`BldExport.cpp`); for Theater, Front, EventCenter, Subway, PowerRoom and Attraction the
+export writes n = 0, so the game's constructor defaults stand. That is unverified for
+the game's later use of those records. A Gathering Area export (`GatheringArea.t2p`,
+plugin 1741) makes the original show **Plugin Check Error** when loaded; a game-written
+Gathering Area save loads cleanly, and changing the tenant's floor-id list did not clear
+the dialog. Still open.
 
 ### 4.3 Mover (`T2Mover::LoadSelf` 0x1003f400 / `SaveSelf` 0x1003f530)
 
@@ -216,8 +258,11 @@ Requests are the waiting areas beside each elevator stop.
 ### 4.5 Out-object (`T2OutObj::LoadSelf` 0x100462e0)
 
 There is **no marker**. T2Object, then if used: `u16 outObjID, SRect area, u32 valiation,
-s16 outObjType (plugin itemType, e.g. Billboard 2100)`. The OuterObjDef extra data is
-empty (`T2ToolDef::LoadExtraData` reads nothing).
+s16 outObjType (plugin itemType, e.g. Billboard 2100)`, then the OuterObjDef's
+`LoadExtraData` (vtbl+0x50), or `s32 n + n` bytes when the def is missing. The base
+`T2ToolDef::LoadExtraData` reads nothing, but the only shipped out-object plugin,
+**Billboard.t2p, overrides it** (0x1000c470 / 0x1000c550): `s32 n` (6) + `u32` ad
+sub-plugin mID (0 = no ad) + `s16`, or n = 0 without a record. So `s32 n + n` is exact.
 
 ## 5. People (`T2PeopleArrayList::Read` 0x1004b900, `T2People::LoadSelf` 0x1004a810)
 
@@ -281,6 +326,15 @@ with a **u32 payload length** (`T2EventItem::Read`/`Write` 0x10030650/0x10030640
 load, the game matches each record by (type, id) against the world's event lists. If
 nothing matches, it skips `len` bytes. bld.py keeps the payload as hex.
 
+**Exceptions** (no length prefix): `vESH` T2HotSpring (Kegon.t2p and Hawai.t2p
+0x10012cd0) writes **nothing**; the T2Transport events, `vERM` metro trains (T2DLL vtbl
+0x10085f80) and `vErC` cruise (Hawai.t2p, made by Boatdeck), write `u32 firstPeople` and,
+when it is not 0, `u32 lastPeople` (T2Transport::Write 0x1006c020). An empty train looks
+like a zero length; a train with people does not. X events that do not override
+Read/Write would write nothing too (T2WorldPlugin::XEventWrite is empty), but every
+shipped one seen either overrides them (Baseball 8, Wedding 13) or derives from T2EventItem
+(T2Tonbi: u32 0, written with type 0; that is the `0x00000000` record).
+
 Type codes found (from the class `GetType`): `vEOB` BlackOut, `vEBF` FireBurning,
 `vEaS` SantaClaus, `vErT` Terrorist, `vEiV` VisitVIP (14-byte payload), `vEaM`
 Maru_Reggae (14), `vEVT` TowerVision. `vEBB`, `vERM`, `vEdO` and a `0x00000000` type
@@ -337,9 +391,9 @@ population 57). Both round-trip byte-identical, and the on-screen values match
   Their layout is certain; only their meaning is not.
 * The traffic-map dimensions depend on the world plugin. A new world falls back to
   the validated search, which is O(cells) but fast.
-* A plugin def that overrides `LoadExtraData`/`SaveExtraData`, or a world-specific
-  `T2XEvent` without a length prefix, would break the generic parse. None occur in the
-  saves seen so far. bld.py would fail loudly at the next marker (`>NT<`, `>VM<`, …).
+* Plugin defs that override `LoadExtraData`/`SaveExtraData` and events without a length
+  prefix are handled as listed in §4.2, §4.5 and §9. A third-party plugin with its own
+  layout would fail loudly at the next marker (`>NT<`, `>VM<`, …).
 * The samples contain no out-objects, names, or non-empty event payloads other than
   VisitVIP, Maru_Reggae and BlackOut. Those paths follow the decompiled code but have
   not been exercised against real data.
@@ -369,3 +423,65 @@ population 57). Both round-trip byte-identical, and the on-screen values match
 The decompiled C and the vtable dumps are in `~/yoottower-decomp/save-agent/decomp/`.
 In that copy, the T2Archive operators were renamed `ar_rd_u16` and so on, so the
 overloads can be told apart: Ghidra prints `char&` and `char*` identically.
+
+## 15. OpenSky import and export (`source/BldLoader.*`, `source/BldExport.*`)
+
+`BldLoader` is a C++ port of bld.py with the same symmetric reader/writer, so every save
+listed above rewrites byte-identical. `--load-game X.bld` (and the Load dialog) imports a
+save into YootTower mode: `toTowerXml` resolves each record's numeric item type through
+the save's plugin table and the shipped catalog (`ItemTypeCatalog.h`) to a plugin stem,
+then through `yootPrototypeLinks()` to an OpenSky prototype. Positions use
+`x = unit - width/2` and `floor = groundLine - bottomRow`.
+
+| Imported | How |
+|---|---|
+| world, star level, VIP flags (doc+0xa0) | `world`, `rating = level - 1`, `yootVipFlags` |
+| date | `time = (year-1)*12 + month0 + minutes/1440` (one YootTower month is one day) |
+| funds, previous funds | dollars (x100); `lastQuarterBalance` and the period's net change |
+| Floor.t2p | `floor` (one slab per level; several records on a level are coalesced), variation 1 = `lobby` with its height |
+| tenants with a linked prototype | footprint must match the prototype; 1..300 `estimate` -> `yootEstimate` (+ evaluation/3); status >= 10 -> occupied / let; filled belong-list slots -> office population; shop price index -> `rentClass` |
+| 16xx shops without a link (Ice Cream Stand, ...) | the generic `shop` when the footprint fits (reported) |
+| Simple / Service / Large elevators | span from `length` (the shaft rect adds a machine and a pit row), unserviced floors from the request-id pairs, every car's position and home |
+| stairs / escalators | one flight per stair module rect (no sample contains one, untested) |
+| Billboard out-objects | `billboard` at `x = left - width/2`, `y = groundLine - bottom`; the ad's sub-plugin mID resolves to its SP plugin file (`subPluginLookup`), with the days left |
+
+Dropped and reported: tenants without an OpenSky counterpart (in the samples the 7
+Restrooms and the Apartment), people (the crowd re-simulates; OpenSky
+counts an occupied office's 6 staff at once, so populations differ), the visitor pool,
+traffic map, elevator stop tables and schedules, the per-category settlement totals,
+names, movies and tower-event state. The game speed is always imported as 1x.
+
+`BldExport` (`BldTool export IN.tower TEMPLATE.bld OUT.bld`) writes an OpenSky YootTower
+tower back: floors, lobbies, offices (Office.t2p), shops (as Ice Cream Stands) and Simple
+Elevators with cars, stop lists, waiting-area requests, unit map, cross-equip links and
+room numbers laid out as the game does. It reproduces the sample's request table exactly. Billboards are written as the game
+writes them (oracle save `save2-agent/saves/billboard.bld`): out-object type **2000** (the
+OODF tool type; the plugin table lists ATTR 2100), area 20x2, status 11 with the ad's
+`u32` mID and `s16` days left as extra data, or status 0 and n = 0 for an empty board, and
+the outside map filled at LArray index `row * hRange + unit` (1-based, so file position
+`row * hRange + unit - 1`). The unit map is not touched. An export of the imported save
+loads in T2.exe with the GAMEWORKS board on the facade (`save2-agent/shots/g0.png`).
+The world-wide sections (plugin table, pool, movies, events, palettes, world statistics)
+are copied from a template save of the same world. Both an export of the imported
+Sample Tokyo Map and an OpenSky-authored Hawaii tower load and run in T2.exe under the
+oracle (screenshots in `~/yoottower-decomp/bld-agent/`).
+
+**Sky Bridge.** Oracle saves of a 40-unit bridge between two towers
+(`save2-agent/saves/bridge_fresh.bld`, `bridge.bld`): right after the click the bridge
+(status 0, drawMode 2, no floor ids) stands on a Floor tenant of its own with status 1, and
+the unit map carries that Floor's id. Once built, the game merges the row's Floor tenants
+(left tower, bridge, right tower) into **one status-10 slab** and the bridge becomes a
+room over it: status 10, pattern 3, drawMode 0, `AECT` = [the slab], its own id in the unit
+map. The exporter writes the finished form; a bridge over a floor hole closes the hole on
+its row, and a bridge with no floor item under it gets its own slab. The original loads such
+an export with the finished bridge drawn (`save2-agent/shots/b5.png`).
+
+**Kegon.** Its unit map carries the world's FINF mask: `T2UnitInfo::InitMask` sets **0x8000
+in the first u16** of every unbuildable cell (5849 of 8448 cells: the cliff left of the
+shaft, the right edge and the two bottom rows), and the game saves the map with the bit.
+The exporter ORs it back from Kegon.t2p's FINF resource (`YootWorld::unbuildable`), which
+matches the oracle saves cell for cell, and writes Kegon's own KFloor (1010) and KElev
+(1818) records; KElev's extra data is 2 x 10 records of three s16, fresh `(0, 0, 6)`
+(FUN_100116f0), where StdElev has two. Restrooms fall back to KRestroom. An import of a
+game-written Kegon save exports back with the same flags and items, the original loads
+the export, and its own re-save round-trips (`save2-agent/saves-raw/kegon_resaved.bld`).

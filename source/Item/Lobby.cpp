@@ -100,6 +100,51 @@ void Lobby::updateSprite()
 
 void Lobby::render(sf::RenderTarget &target) const
 {
+	// YootTower skin: the Floor.t2p lobby view for this height (its left
+	// part carries the entrance), the world slab on top and, on the ground
+	// lobby, the 1003 awnings either side. Heights the plugin lacks
+	// (KFloor.t2p only has 1-row lobbies) keep the OpenSky art.
+	const YootWorldArt * yoot = game->yootSkinArt();
+	if (yoot && !underConstruction && yoot->hasLobbyView(size.y) && yoot->hasSlab())
+	{
+		sf::Color tint = game->lighting.compose(sf::Color::White);
+		if (game->statusMode == Game::kHotel)
+			tint = sf::Color(tint.r * 110 / 255, tint.g * 110 / 255, tint.b * 110 / 255, 160);
+		const recti r = getRect();
+		const float top = -(position.y + size.y) * 36.0f;
+		// A tenant built through the lobby (Kegon's Attraction reaches the
+		// top floor) owns its cells: the lobby is drawn only around it.
+		std::vector<std::pair<int, int> > runs(1, std::make_pair(r.minX(), r.maxX()));
+		for (int row = position.y; row < position.y + size.y; ++row)
+		{
+			Game::ItemSetByInt::const_iterator on = game->itemsByFloor.find(row);
+			if (on == game->itemsByFloor.end()) continue;
+			for (Item * other : on->second)
+			{
+				if (other == this || other->yootFloorCover() == 0) continue;
+				std::vector<std::pair<int, int> > rest;
+				for (const std::pair<int, int> & run : runs)
+				{
+					if (other->getRect().minX() > run.first) rest.push_back(std::make_pair(run.first, std::min(run.second, other->getRect().minX())));
+					if (other->getRect().maxX() < run.second) rest.push_back(std::make_pair(std::max(run.first, other->getRect().maxX()), run.second));
+				}
+				runs.swap(rest);
+			}
+		}
+		// Roof (8 px), the lobby view (36*h - 12 px), the floor strip (4 px).
+		for (const std::pair<int, int> & run : runs)
+		{
+			if (run.first >= run.second) continue;
+			yoot->drawRoof(target, run.first * 8.0f, run.second * 8.0f, top, tint);
+			yoot->drawLobbyView(target, size.y, run.first * 8.0f, run.second * 8.0f, top + 8.0f, tint, run.first == r.minX());
+			yoot->drawFloorStrip(target, run.first * 8.0f, run.second * 8.0f, top + size.y * 36.0f - 4.0f, tint);
+		}
+		if (position.y == 0)
+			yoot->drawTents(target, r.minX() * 8.0f, r.maxX() * 8.0f, 0.0f, tint);
+		game->drawnSprites += 3;
+		return;
+	}
+
 	Item::render(target);
 
 	const sf::View &view = target.getView();

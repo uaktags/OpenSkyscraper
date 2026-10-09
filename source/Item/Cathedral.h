@@ -75,7 +75,7 @@ namespace OT {
 			public:
 				Guest(Cathedral * church);
 			};
-			typedef std::set<Guest *> Guests;
+			typedef std::set<Guest *, SimLess> Guests;
 			Guests guests;
 			void clearGuests();
 

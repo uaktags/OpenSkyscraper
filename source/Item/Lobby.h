@@ -34,7 +34,7 @@ namespace OT {
 			virtual bool isLobby() const override { return true; }
 
 			/// Per-person atrium walk timer (see advance); mirrors Stairlike.
-			std::map<Person *, double> transitionTimes;
+			std::map<Person *, double, SimLess> transitionTimes;
 		};
 	}
 }

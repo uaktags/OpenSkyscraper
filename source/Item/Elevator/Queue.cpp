@@ -6,6 +6,9 @@
 #include "../../Sprite.h"
 #include "Elevator.h"
 #include "Queue.h"
+#include "../../YootPeopleArt.h"
+#include "../../YootRules.h"
+#include <vector>
 
 using namespace OT;
 using namespace OT::Item::Elevator;
@@ -22,8 +25,10 @@ Queue::Queue(Elevator *e)
 	  called(false),
 	  callTime(0),
 	  answered(false),
-	  steppingInside(false)
-{
+	  appointed(nullptr),
+	  steppingInside(false),
+	  fullRetryFrame(0),
+	  waitStartFrame(0){
 }
 
 Queue::~Queue()
@@ -119,7 +124,37 @@ void Queue::applyWatchdog()
 
 void Queue::advance(double dt)
 {
-	applyWatchdog();
+	if (!people.empty() && !called)
+	{
+		const double frame = game->time.absolute / Time::kBaseSpeed;
+		// Failed calls are retried at the original one-in-sixteen cadence,
+		// rather than continuously hammering dispatch.
+		if (frame >= waitStartFrame && ((int)frame % kQueueFullRetryFrames) == 0)
+			callElevator();
+		// YootTower: people left behind by a full car keep their T2Request
+		// and call again at once (16 SimTower frames are 2 game hours here).
+		else if (people.front()->yootRules())
+			callElevator();
+	}
+	if (!people.empty() && people.front()->yootRules())
+	{
+		// YootTower (P1, T2People::IdleWaitMover 0x10048880): every waiting
+		// person idles once per 2 game minutes and gains +5 stress; at 300
+		// they give up and jump to their destination. Replaces the
+		// SimTower watchdog and journey-bank wait stress.
+		const long long tick = Yoot::absoluteMinute(game->time.absolute) / Yoot::kPeopleIdleMinutes;
+		if (yootIdleTick < 0) yootIdleTick = tick;
+		long long ticks = tick - yootIdleTick;
+		yootIdleTick = tick;
+		for (; ticks > 0 && !people.empty(); --ticks)
+		{
+			std::vector<Person *> waiting(people.begin(), people.end());
+			for (size_t i = 0; i < waiting.size(); ++i)
+				waiting[i]->yootWaitTick(); // may remove the person from this queue
+		}
+		return;
+	}
+	yootIdleTick = -1;	applyWatchdog();
 	if (!called && !people.empty()) callElevator();
 }
 
@@ -161,6 +196,25 @@ void Queue::render(sf::RenderTarget &target) const
 		if (stepping)
 			x -= 16;
 
+		// YootTower: the world silhouette, facing the elevator (rows 0/3;
+		// the walking frame while stepping in).
+		const YootSilhouetteFrame yoot = yootPersonSilhouette(game, p);
+		if (yoot.texture)
+		{
+			Sprite y;
+			y.setTexture(*yoot.texture);
+			y.setTextureRect(yootSilhouetteRect((direction == Elevator::kUp ? 0 : 3) + (stepping ? 1 : 0)));
+			y.setOrigin({0.f, 36.f});
+			y.setPosition({(direction == Elevator::kUp ? -x - 8.f : elevator->size.x * 8.f + x - 8.f) + elevator->getPositionPixels().x,
+				-(float)(floor * 36)});
+			const double blue = 100.0, yellow = 230.0; // PPDF stress limits
+			sf::Color c = p->stress >= yellow ? sf::Color(255, 0, 0) : p->stress >= blue ? sf::Color(255, 128, 128) : sf::Color::White;
+			y.setColor(tinted ? game->lighting.compose(c) : c);
+			target.draw(y);
+			x += (stepping ? 16 : 8 * yoot.width);
+			if (x >= width) break;
+			continue;
+		}
 		// Calculate the texture subrect for this person.
 		int type = p->type;
 		sf::IntRect sr({type * 32, (stepping ? 48 : 0)}, {p->getWidth(), 24});

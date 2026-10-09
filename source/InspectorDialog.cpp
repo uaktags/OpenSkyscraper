@@ -12,6 +12,9 @@
 #include "Item/Metro.h"
 #include "Item/Parking.h"
 #include "NameManager.h"
+#include "Item/PowerRoom.h"
+#include "Item/YootVenueItems.h"
+#include "Item/YootSpecialItems.h"
 #include "Person.h"
 #include "TenantRules.h"
 
@@ -29,6 +32,7 @@ InspectorDialog::InspectorDialog(Game * game)
 	window = NULL;
 	content = NULL;
 	floorsButton = NULL;
+	transformerButton = NULL;
 	currentItem = NULL;
 }
 
@@ -41,7 +45,7 @@ void InspectorDialog::close()
 		content.reset();
 		floorsButton.reset();
 		for (int i = 0; i < 4; ++i) classButtons[i].reset();
-	}
+				transformerButton.reset();	}
 	currentItem = NULL;
 	// Clear the debug route overlay so the green line doesn't linger
 	// after the inspector is dismissed.
@@ -106,6 +110,56 @@ void InspectorDialog::buildWindow()
 		if (e) game->elevatorDialog.showForElevator(e);
 	});
 	window->add(floorsButton);
+
+	// "Transformer" button - YootTower Power Room only (PowerRoom.t2p
+	// dialog 0x1bbf "add transformer", FUN_1000c2f0).
+	transformerButton = tgui::Button::create("+ Transformer");
+	transformerButton->setSize(70 * app->uiScale, 18 * app->uiScale);
+	transformerButton->setPosition({144 * app->uiScale, 232 * app->uiScale});
+	transformerButton->setTextSize(11 * app->uiScale);
+	transformerButton->setVisible(false);
+	transformerButton->onPress([this] {
+		Item::PowerRoom * room = dynamic_cast<Item::PowerRoom *>(currentItem);
+		if (!room) return;
+		std::string reason;
+		if (!game->eventSystem.power.addTransformer(room, &reason))
+			game->timeWindow.showMessage(reason);
+		refresh();
+	});
+	window->add(transformerButton);
+
+	// YootTower venues: the movie (Theater.t2p 0x1000de70), the hall event
+	// (EventCenter.t2p FUN_1000d010) or the sponsor (Billboard.t2p
+	// FUN_1000bff0) is picked from a list; the subway schedule is expanded
+	// with a button (T2Transport::UpGrade).
+	venueChoice = tgui::ComboBox::create();
+	venueChoice->setSize(208 * app->uiScale, 18 * app->uiScale);
+	venueChoice->setPosition({6 * app->uiScale, 210 * app->uiScale});
+	venueChoice->setTextSize(11 * app->uiScale);
+	venueChoice->setVisible(false);
+	venueChoice->onItemSelect([this](const tgui::String &, const tgui::String & id) {
+		if (fillingChoice || !currentItem) return;
+		std::string reason;
+		if (Item::FrontDesk * desk = dynamic_cast<Item::FrontDesk *>(currentItem))
+			game->eventSystem.specials.chooseRate(desk, id.toStdString());
+		else if (!game->eventSystem.venues.choose(currentItem, id.toStdString(), &reason) && !reason.empty())
+			game->timeWindow.showMessage(reason);
+		refresh();
+	});
+	window->add(venueChoice);
+
+	venueButton = tgui::Button::create("Expand schedule");
+	venueButton->setSize(100 * app->uiScale, 18 * app->uiScale);
+	venueButton->setPosition({6 * app->uiScale, 210 * app->uiScale});
+	venueButton->setTextSize(11 * app->uiScale);
+	venueButton->setVisible(false);
+	venueButton->onPress([this] {
+		std::string reason;
+		if (!game->eventSystem.venues.upgradeSubway(dynamic_cast<Item::Subway *>(currentItem), &reason) && !reason.empty())
+			game->timeWindow.showMessage(reason);
+		refresh();
+	});
+	window->add(venueButton);
 
 	// Close button at the bottom.
 	auto closeBtn = tgui::Button::create("Close");
@@ -224,6 +278,19 @@ std::string InspectorDialog::describeItem(Item::Item * item)
 		}
 	}
 
+	if (dynamic_cast<Item::PowerRoom *>(item) && game->eventSystem.power.enabled())
+	{
+		const PowerSystem & power = game->eventSystem.power;
+		s << "\nTransformers: " << power.transformers() << "/" << Item::PowerRoom::kMaxTransformers << "\n";
+		s << "Supply:      " << power.supply() << "\n";
+		s << "Demand:      " << power.demand() << "\n";
+		s << "Transformer: $" << power.transformerPriceDollars() << "\n";
+		if (power.isBlackOut()) s << "BLACKOUT\n";
+	}
+
+	s << game->eventSystem.facilities.describe(item);
+	s << game->eventSystem.venues.describe(item);
+	s << game->eventSystem.specials.describe(item);
 	if (!item->people.empty())
 	{
 		s << "\nOccupants\n";
@@ -260,9 +327,11 @@ void InspectorDialog::refresh()
 	if (floorsButton)
 		floorsButton->setVisible(currentItem->isElevator());
 	refreshClassButtons();
-}
-
-void InspectorDialog::refreshClassButtons()
+	if (transformerButton)
+		transformerButton->setVisible(dynamic_cast<Item::PowerRoom *>(currentItem) != NULL &&
+		                              game->eventSystem.power.enabled());
+	refreshVenueChoice();
+}void InspectorDialog::refreshClassButtons()
 {
 	if (!currentItem) return;
 	const std::string & id = currentItem->prototype->id;
@@ -423,3 +492,33 @@ std::vector<std::string> InspectorDialog::tenantComments(Item::Item * item)
 		out.push_back(source->prototype->name + " neighbor is noisy");
 	return out;
 }
+
+void InspectorDialog::refreshVenueChoice()
+{
+	if (!venueChoice || !venueButton) return;
+	VenueSystem & venues = game->eventSystem.venues;
+	const bool isVenue = venues.enabled() && (dynamic_cast<Item::Theater *>(currentItem) ||
+		dynamic_cast<Item::EventCenter *>(currentItem) || dynamic_cast<Item::Billboard *>(currentItem));
+	venueButton->setVisible(venues.enabled() && dynamic_cast<Item::Subway *>(currentItem) != NULL);
+	if (Item::FrontDesk * desk = venues.enabled() ? dynamic_cast<Item::FrontDesk *>(currentItem) : NULL) {
+		// Front Desk room rates (Front.t2p T2DLG 1000), "* " marks the current ones.
+		venueChoice->setVisible(true);
+		fillingChoice = true;
+		venueChoice->removeAllItems();
+		for (const auto & c : game->eventSystem.specials.rateChoices(desk))
+			venueChoice->addItem(c.first, c.second);
+		fillingChoice = false;
+		return;
+	}
+	venueChoice->setVisible(isVenue);
+	if (!isVenue) return;
+	std::string current;
+	if (Item::Theater * t = dynamic_cast<Item::Theater *>(currentItem)) current = t->movie;
+	else if (Item::EventCenter * e = dynamic_cast<Item::EventCenter *>(currentItem)) current = e->event;
+	else if (Item::Billboard * b = dynamic_cast<Item::Billboard *>(currentItem)) current = b->ad;
+	fillingChoice = true;
+	venueChoice->removeAllItems();
+	for (const auto & c : venues.choices(currentItem))
+		venueChoice->addItem(c.first, c.second);
+	if (!current.empty()) venueChoice->setSelectedItemById(current);
+	fillingChoice = false;}
