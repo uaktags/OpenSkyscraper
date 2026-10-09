@@ -3992,7 +3992,7 @@ static bool bldTestPrototypes(const std::string & id, int & w, int & h)
 		{"fastfood", {16, 1}}, {"restaurant", {24, 1}}, {"shop", {12, 1}}, {"office", {9, 1}},
 		{"condo", {16, 1}}, {"yoot_condo", {16, 1}}, {"hotel_single", {4, 1}},
 		{"restroom", {9, 1}}, {"yt_icecream", {12, 1}}, {"apartment", {4, 1}},
-		{"skybridge", {8, 1}}, {"billboard", {20, 2}},
+		{"skybridge", {8, 1}}, {"billboard", {20, 2}}, {"eventcenter", {31, 2}},
 	};
 	std::map<std::string, std::pair<int, int> >::const_iterator i = sizes.find(id);
 	if (i == sizes.end()) return false;
@@ -4474,6 +4474,53 @@ static void testBldShippedSaves()
 		for (const Mover & m : reread.movers)
 			if (m.hdr.used) back = &m;
 		EXPECT(back && back->equipType == 1812 && back->modules.modules.size() == 8 && back->extra.size() == 120);
+	}
+	// --- Event Center booking: export -> import keeps the event -------------
+	{
+		// The exporter writes the booked id in all 12 month slots; the import
+		// maps the coming month's slot back to the plugin, closed on the load
+		// day and open for bookingDays - 1 days from the next one.
+		report = ImportReport();
+		EXPECT(toTowerXml(tokyo, bldTestPrototypes, xml, report, error));
+		TowerState state;
+		EXPECT(parseTowerXml(xml, state, error));
+		TowerItem hall;
+		for (const TowerItem & it : state.items)
+			if (it.type == "floor" && it.width >= 31 && hall.type.empty())
+			{
+				hall.type = "eventcenter";    // 31 x 2 on the slab's row
+				hall.x = it.x;
+				hall.y = it.y;
+				hall.event = "PlArt.t2p";
+			}
+		EXPECT(!hall.type.empty());
+		state.items.push_back(hall);
+		BldData exported, reread;
+		ImportReport exportReport;
+		EXPECT(exportTower(state, tokyo, exported, exportReport, error, &yootTestPlugins()));
+		EXPECT(exportReport.imported["eventcenter"] == 1);
+		EXPECT(writeBytes(exported, rebuilt, error) && parseBytes(rebuilt, reread, error));
+		const Tenant * hallTenant = nullptr;
+		for (const Tenant & t : reread.tenants)
+			if (t.hdr.used && t.extra.size() >= 64 && t.equipType == 1722) hallTenant = &t;
+		EXPECT(hallTenant && hallTenant->extra.size() == 64 + 9 * 0);
+		if (hallTenant)
+		{
+			const uint32_t booked = hallTenant->extra[0] | (hallTenant->extra[1] << 8) | (hallTenant->extra[2] << 16) | ((uint32_t)hallTenant->extra[3] << 24);
+			EXPECT(booked == 0x41727473 && hallTenant->extra[16 + 4 * 11] == 0x73 && hallTenant->extra[16 + 4 * 11 + 1] == 0x74);
+		}
+		std::string back;
+		ImportReport backReport;
+		EXPECT(toTowerXml(reread, bldTestPrototypes, back, backReport, error, SubPluginLookup(), hallEventLookup(yootTestPlugins())));
+		const int loadDay = (int)std::max<int>(0, (int)tokyo.year - 1) * 12 + (int)(tokyo.month0 % 12);
+		const std::string want = "event=\"PlArt.t2p\" startDay=\"" + std::to_string(loadDay + 1) + "\" span=\"2\"";
+		EXPECT(backReport.imported["eventcenter"] == 1);
+		EXPECT(back.find(want) != std::string::npos);
+		// Without a lookup the booking cannot be named, so the hall is imported empty.
+		std::string bare;
+		ImportReport bareReport;
+		EXPECT(toTowerXml(reread, bldTestPrototypes, bare, bareReport, error));
+		EXPECT(bare.find("event=\"") == std::string::npos);
 	}
 	// --- Exporter: import -> export -> import is a fixed point -----------
 	{

@@ -979,9 +979,23 @@ namespace Bld {
 		}
 	};
 
+	/// The Event Center record's month slot for `month` (0 = January): u32
+	/// sub-plugin id after the k x 9-byte hall table (EventCenter.t2p
+	/// SaveExtraData 0x1000e4f0, BldExport.cpp eventCenterRecord); 0 when absent.
+	static uint32_t hallEventSlot(const std::vector<uint8_t> & rec, int month)
+	{
+		if (rec.size() < 16) return 0;
+		const int k = (int16_t)(rec[12] | (rec[13] << 8));
+		if (k < 0) return 0;
+		const size_t slots = 16 + 9 * (size_t)k;
+		if (rec.size() < slots + 48 || month < 0 || month > 11) return 0;
+		const size_t at = slots + 4 * (size_t)month;
+		return rec[at] | (rec[at + 1] << 8) | (rec[at + 2] << 16) | ((uint32_t)rec[at + 3] << 24);
+	}
+
 	bool toTowerXml(const BldData & in, const PrototypeLookup & prototypes,
 		std::string & xml, ImportReport & report, std::string & error,
-		const SubPluginLookup & subPlugins)
+		const SubPluginLookup & subPlugins, const HallEventLookup & hallEvents)
 	{
 		YootWorld::Id worldId;
 		if (!worldFor4cc(in.world, worldId))
@@ -1024,6 +1038,8 @@ namespace Bld {
 		struct Span { int left, right; };
 		std::map<int, std::vector<Span> > floorSpans; // floor -> spans (coalesced below)
 		int nonDefaultRent = 0;
+		// The clock's day (the absolute clock below, floored): one YootTower month per day.
+		const int loadDay = (int)std::max<int>(0, (int)in.year - 1) * 12 + (int)(in.month0 % 12);
 		for (const Tenant & t : in.tenants)
 		{
 			if (!t.hdr.used) continue;
@@ -1142,6 +1158,23 @@ namespace Bld {
 			{
 				snprintf(buf, sizeof(buf), " buildDay=\"%d\"", (int)t.buildDay);
 				attrs += buf;
+			}
+			if (proto == "eventcenter")
+			{
+				// The original loses the booking on the load day: FUN_1000e680 does not
+				// find the booked id in the def's sub-plugin list, so the hall has no
+				// event (EventCenter.t2p LoadExtraData 0x1000e1f0). FUN_1000dcb0 restores
+				// the booking from the coming month's slot at the next 00:00. The import
+				// mirrors that: closed on the load day, then bookingDays - 1 days.
+				const uint32_t id = hallEventSlot(t.extra, ((int)in.month0 + 1) % 12);
+				const HallEventBooking b = id && hallEvents ? hallEvents(id) : HallEventBooking();
+				if (!b.plugin.empty() && b.days > 1)
+				{
+					snprintf(buf, sizeof(buf), " event=\"%s\" startDay=\"%d\" span=\"%d\"", b.plugin.c_str(), loadDay + 1, b.days - 1);
+					attrs += buf;
+				}
+				else if (id && b.plugin.empty())
+					report.notes.push_back("An Event Center's booked hall event has no installed plugin; imported without one.");
 			}
 			out.xml += attrs + "/>\n";
 			out.grow(x, y, w, h);

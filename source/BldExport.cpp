@@ -131,6 +131,21 @@ namespace Bld {
 		slots.assign(blocks * per, T());
 	}
 
+	HallEventLookup hallEventLookup(const PluginManager & plugins)
+	{
+		const SubPluginLookup names = subPluginLookup(plugins);
+		const PluginManager * pm = &plugins;
+		return [names, pm](uint32_t id) -> HallEventBooking
+		{
+			HallEventBooking b;
+			b.plugin = names(id);
+			AbstractPlugin * p = b.plugin.empty() ? nullptr : pm->get(b.plugin);
+			HallEventDef def;
+			if (p && p->ensureLoaded() && p->getHallEventDef(def)) b.days = (int)def.bookingDays;
+			return b;
+		};
+	}
+
 	SubPluginLookup subPluginLookup(const PluginManager & plugins)
 	{
 		const PluginManager * pm = &plugins;

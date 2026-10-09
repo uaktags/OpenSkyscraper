@@ -28,7 +28,7 @@ namespace OT
 		};
 		std::string xmlText;
 		Bld::ImportReport report;
-		if (!Bld::toTowerXml(save, lookup, xmlText, report, error, Bld::subPluginLookup(game.app.pluginManager)))
+		if (!Bld::toTowerXml(save, lookup, xmlText, report, error, Bld::subPluginLookup(game.app.pluginManager), Bld::hallEventLookup(game.app.pluginManager)))
 		{
 			LOG(ERROR, "Could not import YootTower save %s: %s", path.c_str(), error.c_str());
 			return false;

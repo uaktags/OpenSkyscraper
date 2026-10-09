@@ -84,5 +84,9 @@ namespace Bld {
 	/// -> plugin file (Billboard ads).
 	SubPluginLookup subPluginLookup(const PluginManager & plugins);
 
+	/// toTowerXml's hall-event lookup: the sub-plugin for a booked id and its
+	/// HEDF bookingDays (the inverse of eventCenterRecord's id).
+	HallEventLookup hallEventLookup(const PluginManager & plugins);
+
 }
 }
