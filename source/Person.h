@@ -27,7 +27,7 @@ namespace OT {
 		/// Activity state of a Person. The state machine drives daily routines:
 		/// a condo occupant cycles kHome -> kCommuting -> kWorking -> kReturning
 		/// -> kHome; an office worker omits kHome. Subclasses advance() drive the
-		/// transitions; Person::advance() is the no-op default.
+		/// transitions; Person::advance() handles journey retries and recovery.
 		typedef enum {
 			kWandering = 0,
 			kHome,
@@ -37,7 +37,8 @@ namespace OT {
 			kShopping,
 			kReturning,
 			kResting,
-			kIdle
+			kIdle,
+			kPlanning
 		} State;
 
 		Person(Game * game, Type type = kMan);
@@ -59,6 +60,8 @@ namespace OT {
 		void addJourneyStress(double amount);
 		void deliverJourneyStress();
 		double journeyStress() const { return pendingJourneyStress; }
+		bool isServicePerson() const { return type == kHousekeeper || type == kSecurity; }
+		double waitStartFrame = 0;
 
 		/// Record an unreachable destination. The stress hit is immediate; the
 		/// diagnostic itself is latched per game/floor pair.
@@ -77,6 +80,14 @@ namespace OT {
 			void set(const Route & r);
 
 			void next();
+			void retry();
+			void queueRejected();
+			void queueAccepted();
+			void failWaiting();
+			Item::Item *waitingAt = nullptr;
+			bool retryPending = false;
+			double retryFrame = 0;
+			State retryState = kWandering;
 			void cancel();
 			bool references(const Item::Item * target) const;
 			int fromFloor;
@@ -86,6 +97,9 @@ namespace OT {
 		private:
 			Person * const person;
 			std::queue<Route::Node> nodes;
+			Item::Item *destination = nullptr;
+			int destinationFloor = 0;
+			bool replanPending = false;
 		};
 		Journey journey;
 		double stress;

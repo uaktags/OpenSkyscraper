@@ -33,26 +33,31 @@ namespace
 	}
 
 	/// Route nodes describe the transport used by the leg ending at that node.
-	double routeStress(const Route &route)
+	double routeStress(const Route &route, const Person &person)
 	{
-		if (route.nodes.size() < 2) return 0.0;
-		int walkingFloors = 0;
+		if (person.isServicePerson() || route.nodes.size() < 2) return 0.0;
+		const Item::Item *origin = person.at ? person.at : route.nodes.front().item;
+		const double originX = origin ? origin->position.x + origin->size.x / 2.0 : 0.0;
 		double stress = 0.0;
+		bool chargedWalk = false;
 		for (size_t i = 1; i < route.nodes.size(); ++i)
 		{
 			const Route::Node &previous = route.nodes[i - 1];
 			const Route::Node &current = route.nodes[i];
 			const int floors = std::abs(current.toFloor - previous.toFloor);
-			if (floors == 0) continue;
-			if (isEscalatorNode(current.item))
-				stress += floors * 16.0;
-			else if (isStairNode(current.item))
-				stress += floors * 35.0;
-			else if (!isElevatorNode(current.item))
-				walkingFloors += floors;
+			if (isEscalatorNode(current.item)) stress += floors * 16.0;
+			else if (isStairNode(current.item)) stress += floors * 35.0;
+			if (!chargedWalk && current.item &&
+			    (current.item->isStairlike() || isElevatorNode(current.item)))
+			{
+				chargedWalk = true;
+				if (current.item->prototype->icon != 6)
+				{
+					const double distance = std::abs(current.item->position.x - originX);
+					stress += distance >= 125 ? 60.0 : distance >= 80 ? 30.0 : 0.0;
+				}
+			}
 		}
-		if (walkingFloors >= 80)  stress += 30.0;
-		if (walkingFloors >= 125) stress += 60.0;
 		return stress;
 	}
 }
@@ -118,6 +123,7 @@ void Person::recordNoRoute(int from, int to)
 
 void Person::advance(double dt)
 {
+	if (journey.retryPending) journey.retry();
 	if (state == kHome || state == kResting)
 		recoverStress(dt * 0.5);
 }
@@ -157,6 +163,10 @@ Person::Journey::Journey(Person * p)
 
 void Person::Journey::set(const Route & r)
 {
+	retryPending = replanPending = false;
+	waitingAt = nullptr;
+	destination = r.empty() ? nullptr : r.nodes.back().item;
+	destinationFloor = r.empty() ? fromFloor : r.nodes.back().toFloor;
 	while (!nodes.empty()) nodes.pop();
 	for (std::vector<Route::Node>::const_iterator nit = r.nodes.begin(); nit != r.nodes.end(); ++nit)
 		nodes.push(*nit);
@@ -165,41 +175,101 @@ void Person::Journey::set(const Route & r)
 		item = NULL;
 		toFloor = fromFloor;
 		person->recordNoRoute(fromFloor, toFloor);
+		person->state = Person::kResting;
 		return;
 	}
 
 	// Queue wait and movement penalties remain banked until final arrival.
-	person->addJourneyStress(routeStress(r));
+	person->addJourneyStress(routeStress(r, *person));
 	toFloor = nodes.front().toFloor;
 	next();
 }
 
 void Person::Journey::next()
 {
-	// Remove the person from where he/she is currently at.
-	if (person->at) person->at->removePerson(person);
-
+	retryPending = false;
+	waitingAt = person->at ? person->at : nodes.empty() ? nullptr : nodes.front().item;
 	fromFloor = toFloor;
-
+	if (!nodes.empty()) nodes.pop();
 	if (nodes.empty()) {
-		item = NULL;
+		if (person->at) person->at->removePerson(person);
+		item = nullptr;
+		waitingAt = nullptr;
+		destination = nullptr;
+		replanPending = false;
 		toFloor = fromFloor;
 		person->deliverJourneyStress();
 		return;
 	}
-
-	nodes.pop();
-	if (nodes.empty()) {
-		item = NULL;
-		toFloor = fromFloor;
-		person->deliverJourneyStress();
-		return;
-	}
-
-	item    = nodes.front().item;
+	item = nodes.front().item;
 	toFloor = nodes.front().toFloor;
 	assert(item);
+	// A rejected elevator rider stays in the origin item, with this leg
+	// intact. Only a successful admission detaches them from that item.
+	if (item->isElevator() && waitingAt && waitingAt->canHaulPeople()) {
+		if (person->at) person->at->removePerson(person);
+		auto landing = person->game->floorItems.find(fromFloor);
+		waitingAt = landing == person->game->floorItems.end() ? nullptr : landing->second;
+		if (waitingAt) waitingAt->Item::Item::addPerson(person);
+	}
+	if (!item->isElevator() && person->at) person->at->removePerson(person);
 	item->addPerson(person);
+}
+
+void Person::Journey::queueRejected()
+{
+	if (!retryPending) retryState = person->state;
+	retryPending = true;
+	retryFrame = person->game->time.absolute * Time::kSimFramesPerDay + 16;
+	person->state = Person::kPlanning;
+	if (!person->at && waitingAt && !waitingAt->canHaulPeople())
+		waitingAt->Item::Item::addPerson(person);
+}
+
+void Person::Journey::queueAccepted()
+{
+	if (retryPending) person->state = retryState;
+	retryPending = false;
+}
+
+void Person::Journey::retry()
+{
+	if (!retryPending ||
+	    person->game->time.absolute * Time::kSimFramesPerDay + 1e-7 < retryFrame) return;
+	if (replanPending) {
+		retryFrame = person->game->time.absolute * Time::kSimFramesPerDay + 16;
+		const Route route = person->game->findRoute(person->at, destination,
+		                                          person->isServicePerson());
+		if (route.empty()) return;
+		person->state = retryState;
+		set(route);
+	} else if (item) {
+		item->addPerson(person);
+	}
+}
+
+void Person::Journey::failWaiting()
+{
+	const int floor = fromFloor;
+	Item::Item *restAt = waitingAt;
+	if (person->at) person->at->removePerson(person);
+	while (!nodes.empty()) nodes.pop();
+	item = nullptr;
+	if (!retryPending) retryState = person->state;
+	retryPending = replanPending = true;
+	retryFrame = person->game->time.absolute * Time::kSimFramesPerDay + 16;
+	waitingAt = nullptr;
+	fromFloor = floor;
+	if (destination) toFloor = destinationFloor;
+	person->deliverJourneyStress();
+	person->state = Person::kPlanning;
+	// Keep the intended destination and re-plan from the landing until a
+	// route becomes available or the owning item sets a new journey.
+	if (!restAt || restAt->canHaulPeople()) {
+		auto it = person->game->floorItems.find(floor);
+		restAt = it == person->game->floorItems.end() ? nullptr : it->second;
+	}
+	if (restAt) restAt->Item::Item::addPerson(person);
 }
 
 int Person::getWidth()
@@ -214,6 +284,10 @@ void Person::Journey::cancel()
  if (person->at) person->at->removePerson(person);
  while (!nodes.empty()) nodes.pop();
  item = NULL;
+ waitingAt = nullptr;
+ retryPending = replanPending = false;
+ destination = nullptr;
+ destinationFloor = 0;
  fromFloor = toFloor = 0;
  person->pendingJourneyStress = 0;
  person->state = Person::kIdle;
@@ -223,7 +297,7 @@ void Person::Journey::cancel()
 
 bool Person::Journey::references(const Item::Item * target) const
 {
- if (item == target || person->at == target) return true;
+ if (item == target || person->at == target || waitingAt == target || destination == target) return true;
  std::queue<Route::Node> remaining = nodes;
  while (!remaining.empty()) {
   if (remaining.front().item == target) return true;

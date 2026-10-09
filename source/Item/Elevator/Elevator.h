@@ -27,7 +27,7 @@ namespace OT {
 			static const int kMaxShafts = 24;
 			static const int kMaxCarsPerShaft = 8;
 			static const int kMaxElevatorShafts = kMaxShafts;
-			static const int kNonExpressMaxSpan = 29;
+			static const int kNonExpressMaxSpan = 30;
 			static const int kShaftClearanceCells = 8;
 			static const int kMetroClearanceFloors = 1;
 			static const int kScheduleDays = 2;
@@ -72,8 +72,10 @@ namespace OT {
 				/// The seventh slot is the hidden night period retained for
 				/// compatibility with the original table.
 				SchedulePeriod schedules[kScheduleDays][kSchedulePeriodCount];
-				static int schedulePeriod(double hour);
-				bool scheduleAllows(Direction direction) const;
+				static int schedulePeriod(double absolute);
+				int scheduleMode() const;
+				bool hasWork(const Car *car) const;
+				void finishStop(Car *car);
 				int scheduleThreshold() const;
 				int schedulePatienceTicks() const;
 				void resetSchedules();

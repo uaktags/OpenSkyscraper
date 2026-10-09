@@ -217,6 +217,29 @@ target_compile_definitions(OpenSkyTests PRIVATE OPEN_SKY_ROUTE_SEAM_ONLY)
 # against SFML::Graphics is the simplest way to make the include paths
 # available to the test target without pulling in the rest of the engine.
 target_link_libraries(OpenSkyTests PRIVATE SFML::Graphics)
+# The full engine has global SFML textures that require a display before main.
+# Keep it in a separate process, invoked by the seam runner only with graphics.
+set(test_engine_sources ${sources})
+list(FILTER test_engine_sources EXCLUDE REGEX "/main\\.cpp$")
+add_executable(OpenSkyTransportTests tests/test_main.cpp ${test_engine_sources})
+target_include_directories(OpenSkyTransportTests PRIVATE source)
+target_compile_definitions(OpenSkyTransportTests PRIVATE
+  OPENSKY_TRANSPORT_SCENARIOS OPENSKY_TRANSPORT_ONLY
+)
+target_link_libraries(OpenSkyTransportTests PRIVATE
+  SFML::Audio SFML::Graphics SFML::Window SFML::System
+  TGUI::TGUI tinyxml2::tinyxml2 Freetype::Freetype OpenGL::GL
+)
+if(MSPACK_FOUND)
+  target_link_libraries(OpenSkyTransportTests PRIVATE ${MSPACK_LIBRARIES})
+endif()
+if(WIN32)
+  target_link_libraries(OpenSkyTransportTests PRIVATE Comdlg32)
+endif()
+add_dependencies(OpenSkyTests OpenSkyTransportTests)
+target_compile_definitions(OpenSkyTests PRIVATE
+  OPENSKY_TRANSPORT_TEST_EXECUTABLE="$<TARGET_FILE:OpenSkyTransportTests>"
+)
 add_test(NAME OpenSkyTests COMMAND OpenSkyTests)
 
 # ---------------------------------------------------------------------------

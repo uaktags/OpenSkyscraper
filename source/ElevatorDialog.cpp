@@ -36,8 +36,7 @@ void ElevatorDialog::close()
 std::string ElevatorDialog::buttonLabel(int floor) const
 {
 	bool served = (currentElevator == NULL) ||
-	              (currentElevator->unservicedFloors.find(floor) ==
-	               currentElevator->unservicedFloors.end());
+	              currentElevator->connectsFloor(floor);
 	char buf[32];
 	snprintf(buf, sizeof(buf), "F%d  %s", floor, served ? "[ON]" : "[OFF]");
 	return buf;
