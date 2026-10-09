@@ -2485,6 +2485,7 @@ static std::vector<uint8_t> buildTdtFixture()
 		else if (f == 20) putTenant(tenants, 50, 79, 31, 0); // metro part 1
 		else if (f == 21) putTenant(tenants, 50, 79, 32, 0); // metro part 2
 		else if (f == 22) putTenant(tenants, 50, 79, 33, 0); // metro part 3
+		else if (f >= 109 && f <= 113) putTenant(tenants, 200, 228, 36 + f - 109, 0); // cathedral: 28x5
 		put16(b, (int)(tenants.size() / 18));
 		put16(b, 0); put16(b, 200);
 		b.insert(b.end(), tenants.begin(), tenants.end());
@@ -2584,6 +2585,9 @@ static void testTdtLoader()
 	EXPECT(xml.find("type=\"cinema\" x=\"-127\" y=\"3\"") == std::string::npos);
 	// Metro's three parts merge to one at floor 20 -> y 10.
 	EXPECT(xml.find("type=\"metro\" x=\"-137\" y=\"10\"") != std::string::npos);
+	// Cathedral's five type 36..40 records merge at file floor 109 (our 99).
+	EXPECT(xml.find("type=\"cathedral\" x=\"13\" y=\"99\" evaluation=\"50.0\" width=\"28\" height=\"5\"") != std::string::npos);
+	EXPECT(xml.find("type=\"cathedral\" x=\"13\" y=\"100\"") == std::string::npos);
 	// Elevator: kind, span, skip-floor inversion (TDT 15 -> ours 5), car homes.
 	EXPECT(xml.find("type=\"elevator-standard\" x=\"-7\" y=\"0\" evaluation=\"50.0\" height=\"21\" showShaft=\"1\"") != std::string::npos);
 	EXPECT(xml.find("<unserviced floor=\"5\"/>") != std::string::npos);
@@ -3348,6 +3352,7 @@ static int testDisasterScenarios() {
 #include "Item/Hotel.h"
 #include "Item/Parking.h"
 #include "Item/Housekeeping.h"
+#include "Item/Cathedral.h"
 #include "Item/Elevator/Car.h"
 #include "Item/Elevator/Queue.h"
 #include "PathFinder/MapSearchNode.h"
@@ -4168,10 +4173,75 @@ static void testBatch6Placement(OT::Game &g)
  EXPECT(rejects("elevator-standard",0,-10,"Elevators cannot go below B9"));
 
  // B2: cathedral only on floor 100, only one.
- reset(); g.extendFloor(99,-60,120);
+ reset(); g.extendFloor(99,0,28); // exactly the original footprint's support
+ EXPECT(g.itemFactory.prototypesById.at("cathedral")->size == int2(28,5));
  EXPECT(rejects("cathedral",0,99,"Cathedral is available only on 100th floor"));
  EXPECT(accepts("cathedral",0,100));
+ auto *church=static_cast<Item::Cathedral *>(*g.itemsByType["cathedral"].begin());
+ EXPECT(church->size == int2(28,5));
+ EXPECT(church->getRect().maxY()==105);
+ EXPECT(g.itemsByFloor[104].count(church)==1);
+ EXPECT(g.itemsByFloor[105].count(church)==0);
+ EXPECT(church->sprite.getTexture().getSize()==sf::Vector2u(448,180));
+ EXPECT(church->sprite.getOrigin()==sf::Vector2f(0.f,180.f));
+ unsigned cathedralScale=0;
+ const sf::Texture *cathedralTwin=g.app.bitmaps.hiresFor(&church->sprite.getTexture(),cathedralScale);
+ EXPECT(cathedralTwin && cathedralScale==4 && cathedralTwin->getSize()==sf::Vector2u(1792,720));
+ church->underConstruction=false;
+ for(int state : {0,2,4,0}) {
+  g.sky.from=g.sky.to=state; g.sky.progress=1.0; g.lighting.advance(0);
+  church->render(g.app.window);
+  EXPECT(church->sprite.getTextureRect()==sf::IntRect({state==2?224:0,0},{224,180}));
+ }
  EXPECT(rejects("cathedral",60,100,"Only one Cathedral allowed"));
+ EXPECT(rejects("cathedral",0,101,"Maximum height has been reached"));
+
+ // Native fixed-size saves may omit dimensions, or carry the old 48x4.
+ // Migration happens before init and indexing, preserving y and clamping x.
+ const BuildRules previousRules=g.activeRules;
+ // This scenario app has a CLI OpenSky override; explicitly select the
+ // bounded policy before decoding so the lot-clamping checks exercise it.
+ g.setRules(BuildRules(BuildRules::Ruleset::SimTower));
+ for(const std::string dimensions : {std::string(" width=\"48\" height=\"4\""),std::string()}) {
+ for(int x : {13,-200,180}) {
+  reset();
+  tinyxml2::XMLDocument legacy;
+  std::string xml="<tower ruleset=\"simtower\" funds=\"20000000\" rating=\"4\" tool=\"inspector\"><item type=\"cathedral\" x=\""+std::to_string(x)+"\" y=\"100\""+dimensions+" weddingDone=\"1\"/></tower>";
+  EXPECT(legacy.Parse(xml.c_str())==tinyxml2::XML_SUCCESS); g.decodeXML(legacy);
+  church=static_cast<Item::Cathedral *>(*g.itemsByType["cathedral"].begin());
+  const int expectedX=x==-200?-187:x==180?160:13;
+  EXPECT(church->position==int2(expectedX,100)); EXPECT(church->size==int2(28,5));
+  EXPECT(church->weddingDone); EXPECT(g.activeRules.allowsHorizontalFootprint(church->position.x,church->size.x));
+  EXPECT(church->sprite.getPosition()==sf::Vector2f(expectedX*8.f,-3600.f));
+  EXPECT(g.itemsByFloor[104].count(church)==1);
+  EXPECT(g.itemsByFloor[105].count(church)==0);
+  tinyxml2::XMLPrinter saved;g.encodeXML(saved);tinyxml2::XMLDocument roundtrip;
+  EXPECT(roundtrip.Parse(saved.CStr())==tinyxml2::XML_SUCCESS);g.decodeXML(roundtrip);
+  church=static_cast<Item::Cathedral *>(*g.itemsByType["cathedral"].begin());
+  EXPECT(church->position==int2(expectedX,100) && church->size==int2(28,5));
+ }
+ }
+ // OpenSky has no fixed lot: an old anchor beyond SimTower's edge stays put.
+ g.setRules(BuildRules(BuildRules::Ruleset::OpenSky)); reset();
+ tinyxml2::XMLDocument unbounded;
+ EXPECT(unbounded.Parse("<tower ruleset=\"opensky\" tool=\"inspector\"><item type=\"cathedral\" x=\"180\" y=\"100\" width=\"48\" height=\"4\"/></tower>")==tinyxml2::XML_SUCCESS);
+ g.decodeXML(unbounded);
+ church=static_cast<Item::Cathedral *>(*g.itemsByType["cathedral"].begin());
+ EXPECT(church->position==int2(180,100) && church->size==int2(28,5));
+ g.setRules(BuildRules(BuildRules::Ruleset::SimTower));
+ // Real TDT cathedral rows decode to a single canonical building at the
+ // original file anchor (file 109 -> 99); native placement remains F100.
+ reset(); Tdt::TdtData cathedralTdt={}; cathedralTdt.level=5;cathedralTdt.balance=2000000000;
+ cathedralTdt.floors.resize(120);
+ for(int f=0;f<120;++f) cathedralTdt.floors[f].index=f;
+ for(int f=109;f<=113;++f) cathedralTdt.floors[f].tenants.push_back({200,228,36+f-109,0,0,0});
+ std::vector<std::string> importReport;const std::string imported=Tdt::toTowerXml(cathedralTdt,importReport);
+ tinyxml2::XMLDocument importDoc;EXPECT(importDoc.Parse(imported.c_str())==tinyxml2::XML_SUCCESS);g.decodeXML(importDoc);
+ EXPECT(g.itemsByType["cathedral"].size()==1);
+ church=static_cast<Item::Cathedral *>(*g.itemsByType["cathedral"].begin());
+ EXPECT(church->position==int2(13,99));EXPECT(church->size==int2(28,5));
+ EXPECT(g.itemsByFloor[103].count(church)==1);
+ g.setRules(previousRules);
 
  // B3: underground-only / not-underground classes; cinema now allowed above ground.
  reset(); g.extendFloor(1,-40,40); g.extendFloor(-1,-60,60); g.extendFloor(0,-60,60);

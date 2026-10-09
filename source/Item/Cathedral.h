@@ -30,10 +30,9 @@ namespace OT {
 				p->id    = "cathedral";
 				p->name  = "Cathedral";
 				p->price = 3000000;
-				p->size  = int2(48, 4);
+				p->size  = int2(28, 5); // 224x180 exterior; TDT parts 36..40.
 				// The EXE toolbox has no dedicated cathedral cell; reuse the
-				// party hall button art, matching the web port's sprite
-				// reuse (simtower/cathedral/main = composed partyhall).
+				// party hall button art (the exterior has its own sheet).
 				p->icon  = 15;
 			}
 			virtual ~Cathedral();
@@ -41,6 +40,7 @@ namespace OT {
 
 			virtual void init();
 			virtual void advance(double dt);
+			virtual void render(sf::RenderTarget & target) const override;
 
 			virtual void encodeXML(tinyxml2::XMLPrinter & xml);
 			virtual void decodeXML(tinyxml2::XMLElement & xml);
@@ -82,7 +82,7 @@ namespace OT {
 			// Declaration order == draw order (the sprite set is pointer-
 			// ordered): exterior, then the ceremony strips the cathedral
 			// wears while the wedding runs, then the couple on top.
-			Sprite sprite;
+			mutable Sprite sprite;
 			Sprite ceremonyStrips[6]; ///< simtower/church/ceremony0..5 (0 = topmost banner strip)
 			Sprite coupleA;           ///< simtower/church/couple (0x8828): bride / ceremony pose
 			Sprite coupleB;           ///< groom during the walk-in

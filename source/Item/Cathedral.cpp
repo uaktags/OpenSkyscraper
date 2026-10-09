@@ -43,14 +43,22 @@ void Cathedral::init()
 	coupleCellWidth = 16;
 	coupleArtReady = false;
 
-	// The SIMTOWER.EXE resources carry no dedicated cathedral bitmap; the
-	// web port composes "simtower/cathedral/main" from the party hall art
-	// (resource 0x8b28). Draw one party hall frame anchored bottom-left.
-	sprite.SetImage(App->bitmaps.editionTexture("partyhall", "simtower/partyhall"));
-	sprite.setTextureRect(sf::IntRect({0, 0}, {192, 60}));
-	sprite.setOrigin({0.f, 60.f});
+	// Two 224x180 frames (day, night), anchored at the building's bottom-left.
+	// The logical key also resolves data/bitmaps@4x/cathedral.png in Sprite.
+	sprite.SetImage(App->bitmaps.editionTexture("cathedral", "simtower/cathedral"));
+	sprite.setTextureRect(sf::IntRect({0, 0}, {224, 180}));
+	sprite.setOrigin({0.f, 180.f});
 	sprite.setPosition({static_cast<float>(getPosition().x * 8), static_cast<float>(-getPosition().y * 36)});
 	addSprite(&sprite);
+}
+
+void Cathedral::render(sf::RenderTarget & target) const
+{
+	// Lighting blends the Sky states: only night (0.55), not rain (0.78+),
+	// crosses this threshold. Refresh at draw time, including paused saves.
+	const int frame = game->lighting.brightness() <= 0.75 ? 1 : 0;
+	sprite.setTextureRect(sf::IntRect({frame * 224, 0}, {224, 180}));
+	Item::render(target); // preserves construction, tint and wedding overlays
 }
 
 void Cathedral::advance(double dt)

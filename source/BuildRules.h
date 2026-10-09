@@ -135,6 +135,9 @@ public:
 	/// Returns false for nonpositive or non-representable [x, x + width) spans.
 	bool allowsHorizontalFootprint(int x, int width) const;
 
+	/// Preserve a saved anchor where possible, clamping a resized item to the lot.
+	int clampHorizontalPosition(int x, int width) const;
+
 	/// Horizontal check plus floor limits and (YootTower) FINF mask for the
 	/// rectangle [x, x + width) x [floor, floor + height).
 	bool allowsFootprint(int x, int floor, int width, int height = 1) const;

@@ -159,7 +159,8 @@ std::string InspectorDialog::describeItem(Item::Item * item)
 {
 	std::ostringstream s;
 	s << (item->displayName.empty() ? item->prototype->name : item->displayName) << "\n";
-	s << "Floor " << item->position.y << ", x=" << item->position.x << "\n\n";
+	s << "Floor " << item->position.y << ", x=" << item->position.x
+	  << "  Size " << item->size.x << "x" << item->size.y << "\n\n";
 	if (item->underConstruction)
 	{
 		double remainAbs = item->constructionEndTime - game->time.absolute;

@@ -5,6 +5,7 @@
 #include "YootWorld.h"
 
 #include <climits>
+#include <algorithm>
 
 namespace {
 
@@ -184,6 +185,15 @@ bool BuildRules::allowsHorizontalFootprint(int x, int width) const
 		return true;
 
 	return x >= kSimTowerMinX && end <= kSimTowerMaxX;
+}
+
+int BuildRules::clampHorizontalPosition(int x, int width) const
+{
+	if (!hasFixedHorizontalBoundary() || width <= 0) return x;
+	const int left = m_profile.hasBuildArea ? m_profile.buildMinX : kSimTowerMinX;
+	const int right = m_profile.hasBuildArea ? m_profile.buildMaxX : kSimTowerMaxX;
+	const long long last = std::max<long long>(left, (long long)right - width);
+	return (int)std::max<long long>(left, std::min<long long>(x, last));
 }
 
 bool BuildRules::allowsFootprint(int x, int floor, int width, int height) const

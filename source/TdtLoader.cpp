@@ -511,8 +511,12 @@ namespace Tdt {
 					}
 				}
 			}
-			snprintf(buf, sizeof(buf), "<item type=\"%s\" x=\"%d\" y=\"%d\" evaluation=\"50.0\"/>",
-				cluster.family, cluster.left - X_ORIGIN, cluster.floor - Y_ORIGIN);
+			if (std::string(cluster.family) == "cathedral")
+				snprintf(buf, sizeof(buf), "<item type=\"cathedral\" x=\"%d\" y=\"%d\" evaluation=\"50.0\" width=\"28\" height=\"5\"/>",
+					cluster.left - X_ORIGIN, cluster.floor - Y_ORIGIN);
+			else
+				snprintf(buf, sizeof(buf), "<item type=\"%s\" x=\"%d\" y=\"%d\" evaluation=\"50.0\"/>",
+					cluster.family, cluster.left - X_ORIGIN, cluster.floor - Y_ORIGIN);
 			xml += buf; xml += "\n"; emittedItems++;
 		}
 

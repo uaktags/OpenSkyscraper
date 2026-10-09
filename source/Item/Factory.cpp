@@ -126,6 +126,11 @@ OT::Item::Item * Factory::make(tinyxml2::XMLElement & xml)
 			default: type = "hotel_single"; break;
 		}
 	}
+	// Fixed-size rooms did not serialize dimensions in older native saves.
+	// Reconstruct legacy 48x4 cathedrals as 28x5 before init()/addItem(), so
+	// the sprite and spatial indexes share the preserved bottom-left anchor.
+	if (type == "cathedral")
+		position.x = game->activeRules.clampHorizontalPosition(position.x, prototypesById.at(type)->size.x);
 	Item * item = make(type, position);
 	assert(item);
 	item->decodeXML(xml);
