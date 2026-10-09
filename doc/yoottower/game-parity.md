@@ -1232,3 +1232,35 @@ submodule was copied into the lab tree `hkC` only.
 - Not done: car travel-time comparison; per-car rider comparison for the Large Elevator. Both need riders first.
 
 **Open:** why the Large Elevator gets no riders in the original or in OpenSky on `tokyo_g5_large_elevator` (route or request set); per-car rider gap on day 2 of `yoot_people` (skipped per the lead).
+
+**C2 (hkC2-; booking survives the first midnight, original opens the hall).** The 7.6.C
+"not closed" state is resolved on the original side. The exported booking reaches the
+original, but it is dropped at the first midnight, not on load. Evidence: (1) the save
+record's booked id is read by `FUN_1000e680`, and game-written snap_002 of run `hkC2-ec3`
+still has booked id 0 on day 0 while all 12 month slots already hold PlArt (0x41727473).
+So the id lookup against the tenant def's list (+0x10c) failed at load, and the month slots
+(resolved against the tower plugin list via `FUN_1000cd60`) did load. (2) `FUN_1000dcb0`
+runs in the first 8 minutes of each day (`WithinMinutes(now, 0, 8)` in `FUN_1000bec0`) and
+sets the booked plugin (this+0x18) from the month slot of the coming month. With empty
+slots (our old export) the booking was cleared at 00:00, which is why the hall stayed at
+status 10 for three days. Snap_026 (day 1 00:06) shows booked id 0x41727473 and all 12
+slots set, so the midnight rollover now keeps the booking. (3) PlArt's HEDF fields (read
+via `decodeHallEventDef`, `SubPluginDefs.cpp:191`): bookingDays 3, openTime 600 (10:00),
+closeTime 1020 (17:00), monthMask 0x0f1f, cost 250. The original's hall went to status 30
+at minute 564 on day 1 (open - 60 = 540), then 31 with customers and an estimate of 300.
+Visitors peaked at 143 by day 2 close. **Fix (committed f0f241a):** `BldExport.cpp`
+`eventCenterRecord` writes the booked id in all 12 month slots, not zeros.
+
+**Measured (run `hkC2-ec3`, `parity.sh run hkC2-ec3 3 tests/parity/tokyo_g3_venues.tower`,
+oracle plus OpenSky, both finished).** Original Event Center: status 30 on day 1 from 564 to
+about 1000 min, 31 with customers 3 to 63, estimate 300; funds 7,989,600 at minute 564 and
+8,031,600 at minute 1034 on day 1 (the settlement and the other tenants included). The
+hall's own expenses (-10000 at 18:01) show each day in both runs. OpenSky: the hall stays at status 10 with zero
+customers on all three days (its `eventCenterTick` needs `e->today`, which comes from
+`VenueSystem.cpp:207` `runsOn(day)` and `hallCooldown`; the hall never gets a `today` event
+on this import). So OpenSky does not open the hall for this fixture, even though the
+original does with the corrected export. Not fixed in this pass: the open question is the
+OpenSky import of the booked event (`e->event`, `startDay`, `span`) against the original's
+bookingDays / monthMask rule. Income and audience parity for the Event Center therefore
+remain unmeasured against OpenSky. Goldens: none touched. Oracle instances stopped
+(`parity.sh status hkC2-ec3`: done).
