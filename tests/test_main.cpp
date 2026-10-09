@@ -3655,6 +3655,16 @@ static void testYootEventsAndPower()
 	power.breakerOn();
 	EXPECT(power.minute(800) == YootPowerModel::Ended);
 
+	// A headless tick can skip 14:00; escape still runs once and the
+	// blackout persists through midnight until breakers are restored.
+	EXPECT(power.start() == YootPowerModel::Started);
+	EXPECT(power.minute(839) == YootPowerModel::None);
+	EXPECT(power.minute(841) == YootPowerModel::None);
+	EXPECT(power.minute(842) == YootPowerModel::Escape);
+	EXPECT(power.minute(0) == YootPowerModel::None && power.isBlackOut());
+	power.breakerOn();
+	EXPECT(power.minute(1) == YootPowerModel::Ended && !power.isBlackOut());
+
 	// Per-item demand comes from the plugin ToolDef (+0xf0).
 	TemplateDef def;
 	AbstractPlugin * burger = pm.get("Burger.t2p");

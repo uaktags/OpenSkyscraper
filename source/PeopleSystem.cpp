@@ -259,6 +259,10 @@ void PeopleSystem::stationEnter(Item::Item * station, YootVisitor * v)
 
 bool PeopleSystem::reachableWithin(Item::Item * from, Item::Item * to, int score)
 {
+	// Check before the same-floor shortcut and cached routes: pool calls
+	// must fail as soon as BOEV starts, including routes cached while lit.
+	if (game->activeRules.profile().yootWorld && game->eventSystem.power.isBlackOut())
+		return false;
 	if (!from || !to) return false;
 	const int dx = std::abs(centerX(from) - centerX(to));
 	const bool sameFloor = from->position.y == to->position.y ||
@@ -1136,6 +1140,23 @@ void PeopleSystem::destroy(YootVisitor * v)
 	std::vector<YootVisitor *>::iterator it = std::find(visitorList.begin(), visitorList.end(), v);
 	if (it != visitorList.end()) visitorList.erase(it);
 	delete v;
+}
+
+void PeopleSystem::blackoutEscape()
+{
+	// T2BlackOut::Exec case 2 -> BreakoutEmergency (T2People 0x1004a770).
+	// Emergency stairs bypass the halted movers. Belong people retain their
+	// reservation; general people are removed, without normal pool recycling.
+	const std::vector<YootVisitor *> list = visitorList;
+	for (YootVisitor * v : list)
+	{
+		if (v->at) v->at->removePerson(v);
+		v->journey.clear();
+		v->dest = nullptr;
+		v->inside = nullptr;
+		if (!v->home) pool.removePeople(v->peopleType);
+		destroy(v);
+	}
 }
 
 void PeopleSystem::itemRemoved(Item::Item * item)

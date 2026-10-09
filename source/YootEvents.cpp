@@ -319,7 +319,8 @@ namespace OT
 		switch (status_)
 		{
 		case Dark:
-			if (now == endMin) status_ = EscapeDue;
+			// Simulation ticks can skip the exact BOEV end minute.
+			if (now >= endMin) status_ = EscapeDue;
 			// Exec falls through to the case-3 recovery test.
 			[[fallthrough]];
 		case Escaped:

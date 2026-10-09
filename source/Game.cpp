@@ -1060,6 +1060,9 @@ void Game::advanceSimTick(double dt)
 				continue;
 			}
 		}
+		// BOEV remains active after the emergency escape until power is restored.
+		if (activeRules.profile().yootWorld && eventSystem.power.isBlackOut() &&
+		    item->isElevator()) continue;
 		item->advance(dt);
 	}
 
@@ -3291,6 +3294,9 @@ void Game::pumpRouteBuilds()
  *  route is empty(), no path was found through the tower. */
 Route Game::findRoute(Item::Item * start, Item::Item * destination, bool serviceRoute)
 {
+	// T2BlackOut::Exec: the end minute triggers escape, not power recovery.
+	if (activeRules.profile().yootWorld && eventSystem.power.isBlackOut())
+		return Route();
 	MapNode::Point start_point(start->position.x + start->size.x/2, start->position.y + start->prototype->exit_offset);
 	MapNode::Point end_point(destination->position.x + destination->size.x/2, destination->position.y + destination->prototype->entrance_offset);
 

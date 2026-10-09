@@ -214,6 +214,8 @@ namespace OT
 		void pushOut(YootVisitor * v);
 		/// Visitors bound for / inside a removed item.
 		void itemRemoved(Item::Item * item);
+		/// BOEV emergency stairs: clear trips, remove general people.
+		void blackoutEscape();
 		/// YootVisitor::yootWalkTo: starts the walk to a route node.
 		bool walkToNode(YootVisitor * v, Item::Item * next, int floor);
 		/// T2RoutingTable::SelectNearTenant 0x10055db0 from `tenant`'s

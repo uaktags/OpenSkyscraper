@@ -134,6 +134,7 @@ void PowerSystem::advance()
 	if (!model.isBlackOut()) return;
 	switch (model.minute(minute)) {
 	case YootPowerModel::Escape:
+		game->eventSystem.people.blackoutEscape();
 		game->timeWindow.showMessage(kEscaped);
 		for (Game::PersonSet::iterator p = game->people.begin(); p != game->people.end(); ++p)
 			(*p)->addStress(YootPowerModel::kEscapeStress);
