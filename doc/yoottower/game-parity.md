@@ -1222,3 +1222,13 @@ how the def's sub-plugin list (+0x10c) is built at plugin load and why PlArt is 
 
 **Tests.** Lab `test hkC` after the rebase onto `fea6248`: 9/9. The `thirdparty/astar-search`
 submodule was copied into the lab tree `hkC` only.
+
+**Large Elevator export (follow-up).** BldExport wrote only StdElev movers. `elevator-express` (EgiB, Large Elevator) now exports as a BigElev mover: equipType 1812, 8 car slots (`LMlE` f20 = 8, `maxModule` 8), and the 2 x 10 three-s16 extra table (n = 120; bld-format §4.3). The plugin record comes from the catalog only when the tower has a Large Elevator. The vEOB demand counts each mover's own plugin. No game-written save in the corpus places a Large Elevator (only plugin-table entries), so the layout is from the decompile; the BigElev extra table's fresh values (0, 0, 6) are assumed from KElev and are unverified (the reader accepts any n). Unit test: `testBldShippedSaves` export block "Large Elevator export" (EgiB record, 8 cars, n = 120, round trip).
+
+- **Load failure found and fixed.** With a 4-wide shaft the original fails at load for any car count: `E:\T2\T2DLL\T2BitImage.cpp (190)`, `Src(826,862), Dest(0,36)`. The Express item is 6 units wide, so the exporter now uses a 6-wide shaft for Large Elevators. Then the tower loads (`hkA-vE6`, 8 cars, 10 floors, no dialog).
+- **Fixture:** `tests/parity/tokyo_g5_large_elevator.tower` (`towers.py`, `tokyo_g5_large_elevator`): Tokyo, 4 stars, one 34-floor Large Elevator (8 cars) on the lobby, slabs and four offices on floors 3, 9, 15, 21, 27, 33. Run `hkA-lift2` (1 day, oracle + OpenSky).
+- **Result: no rides in either game.** All 144 people stay in pool status 1 in the original's snapshots (day 0, 08:00-20:00), and OpenSky reports zero waiting and zero riding. Population peaks match (144 / 144). Car travel time between distant floors cannot be measured on this tower because nobody boards. I did not find the cause (the exporter's request/stop side or the lobby route to the Large Elevator); the same tower shape works with a Simple Elevator in `yoot_people`, so the difference is the Large Elevator's request set or its route from the lobby.
+- `oracle_run.py --step MIN` (new) sets the snapshot cadence. A 5-minute fine run was started (`hkA-fine`) but ended with a failed click on the harness after the first snapshots, so it has no usable data and was stopped.
+- Not done: car travel-time comparison; per-car rider comparison for the Large Elevator. Both need riders first.
+
+**Open:** why the Large Elevator gets no riders in the original or in OpenSky on `tokyo_g5_large_elevator` (route or request set); per-car rider gap on day 2 of `yoot_people` (skipped per the lead).
