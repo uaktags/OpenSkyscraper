@@ -3,6 +3,7 @@
 #include "../Math/Rand.h"
 #include "FastFood.h"
 #include "Office.h"
+#include "Metro.h"
 #include <string>
 #include <algorithm>
 #include <cmath>
@@ -58,6 +59,8 @@ void FastFood::encodeXML(tinyxml2::XMLPrinter &xml)
 	xml.PushAttribute("customersToday", customersToday);
 	xml.PushAttribute("lastDemandDay", lastDemandDay);
 	xml.PushAttribute("revenueSettled", revenueSettled);
+    std::string slots; for (bool used : dispatched) slots += used ? '1' : '0';
+    xml.PushAttribute("dispatched",slots.c_str());
 	for (int i = 0; i < 3; ++i) {
 		char key[32];
 		snprintf(key, sizeof(key), "serviceScore%d", i);
@@ -76,6 +79,9 @@ void FastFood::encodeXML(tinyxml2::XMLPrinter &xml)
 		xml.PushAttribute("type", customer->type);
 		xml.PushAttribute("state", customer->state);
 		xml.PushAttribute("stress", customer->stress);
+        xml.PushAttribute("bankCount", int(customer->bankCount));
+        xml.PushAttribute("bankTotal", int(customer->bankTotal));
+        xml.PushAttribute("poolSlot", customer->poolSlot);
 		xml.PushAttribute("eval", customer->eval);
 		xml.PushAttribute("name", customer->name.c_str());
 		xml.PushAttribute("from", customer->from.c_str());
@@ -102,6 +108,8 @@ void FastFood::decodeXML(tinyxml2::XMLElement &xml)
 	customersToday = std::max(0, xml.IntAttribute("customersToday", 0));
 	lastDemandDay = xml.IntAttribute("lastDemandDay", -1);
 	revenueSettled = xml.BoolAttribute("revenueSettled", false);
+    std::string slots=xml.Attribute("dispatched", "");
+    for (int k=0;k<40;++k) dispatched[k]=k<int(slots.size()) && slots[k]=='1';
 	for (int i = 0; i < 3; ++i) {
 		char key[32];
 		snprintf(key, sizeof(key), "serviceScore%d", i);
@@ -117,6 +125,8 @@ void FastFood::decodeXML(tinyxml2::XMLElement &xml)
 		c->type = (Person::Type)e->IntAttribute("type", Person::kMan);
 		c->state = (Person::State)e->IntAttribute("state", Person::kWandering);
 		c->stress = e->DoubleAttribute("stress", 0.0);
+        c->bankCount=e->IntAttribute("bankCount",0); c->bankTotal=e->IntAttribute("bankTotal",0);
+        c->poolSlot=e->IntAttribute("poolSlot",-1);
 		c->eval = e->DoubleAttribute("eval", 0.0);
 		c->name = e->Attribute("name", "");
 		c->from = e->Attribute("from", "");
@@ -152,44 +162,27 @@ void FastFood::advance(double dt)
 	const int period = game->sky.rainyDay ? 2 : (game->time.isHoliday() ? 1 : 0);
 	const int cap = period == 0 ? 35 : period == 1 ? 50 : 25;
 
-	if (game->time.checkHour(10))
-	{
-		open = true;
-		revenueSettled = false;
-		clearCustomers();
-		walkinsYesterday = walkinsToday;
-		population = walkinsYesterday;
-		customersToday = walkinsToday = 0;
-		int score = serviceScore[period];
-		if (period == 1) score = std::max(score, serviceScore[0]);
-		dailyQuota = std::max(10, std::min(cap, score));
-		quotaRemaining = dailyQuota;
-		lastDemandDay = day;
-		serviceScore[period] = 0;
-	spriteNeedsUpdate = true;
-	}
+	if (game->time.checkHour(10) && lastDemandDay != day) openDay();
 
-	if (open && quotaRemaining > 0 && customers.size() < 40 &&
-		game->time.checkTick(16.0 / 2600.0))
-	{
-		const double hour = game->time.hour;
-		int width = (hour >= 10.0 && hour < 17.0) ? 36 :
-			(hour >= 17.0 && hour < 21.0) ? 6 : 0;
-		if (width > 0 && (width == 1 || rand() % width == 0)) {
-			Customer *c = new Customer(this);
-			c->arrivalTime = game->time.absolute;
-			customers.insert(c);
-			arrivingCustomers.push(c);
-			--quotaRemaining;
-			++walkinsToday;
-		}
-	}
+    if (open && quotaRemaining>0) {
+        const double hour=game->time.hour;
+        const int width=(hour >= 10 && hour < 17) ? 36 : (hour >= 17 && hour < 21) ? 6 : 0;
+        const long visits=visitsThisTick(game, 16, 0);
+        for (long v=0;v<visits;++v) for (int k=0;k<40 && quotaRemaining>0;++k) {
+            if (dispatched[k] || width==0 || (width>1 && rand()%width!=0)) continue;
+            dispatched[k]=true;
+            Customer *c=new Customer(this); c->poolSlot=k; c->member=k;
+            c->arrivalTime=game->time.absolute;
+            customers.insert(c); arrivingCustomers.push(c);
+            --quotaRemaining; ++walkinsToday; ++customersToday;
+        }
+    }
 
 	if (game->time.checkHour(21) && open)
 	{
 		open = false;
 		population = walkinsToday;
-		game->populationNeedsUpdate = true;
+		// Closing changes the inspector display only; CountT rotates on opening.
 		spriteNeedsUpdate = true;
 		if (!revenueSettled) {
 			int amount = customersToday >= 50 ? 5000 : customersToday >= 35 ? 3000
@@ -211,10 +204,13 @@ void FastFood::advance(double dt)
 	for (std::list<Person *>::iterator ip = eatingCustomers.begin(); ip != eatingCustomers.end();) {
 		Person *p = *ip;
 		CustomerMetadata &m = customerMetadata[p];
-		if (game->time.absolute >= m.arrivalTime + 20 * Time::kBaseSpeed || !open) {
-			const Route &r = game->findRoute(this, game->mainLobby);
+		if (game->time.eventFramesSince(m.arrivalTime) >= 60 && (!open || game->time.eventFramesSince(m.arrivalTime) >= (8 + (game->tenantSlotIndex(this)*5)%12)*8)) {
+            Item *destination=p->home;
+            if (auto *visitor=dynamic_cast<Metro::Visitor*>(p)) destination=visitor->station;
+            if (!destination || !game->items.count(destination)) destination=game->mainLobby;
+            Route r=game->findRoute(this,destination);
 			if (r.empty()) { ++ip; continue; }
-			ip = eatingCustomers.erase(ip);
+			++ip;
 			removePerson(p);
 			p->state = Person::kReturning;
 			p->from = prototype->name;
@@ -222,35 +218,39 @@ void FastFood::advance(double dt)
 			p->journey.set(r);
 		} else ++ip;
 	}
+    for (auto it=customers.begin();it!=customers.end();) {
+        Customer *c=*it;
+        if (c->state==Person::kReturning && !c->at && !c->journey.item) { it=customers.erase(it); delete c; }
+        else ++it;
+    }
 	if (spriteNeedsUpdate) updateSprite();
 }
 
 void FastFood::addPerson(Person *p)
 {
-	if (people.size() >= 40) {
-		// Door admission is a hard 40-person cap.  Bounce an arriving person
-		// back toward the lobby instead of leaving Journey pointing at a
-		// venue that never accepted them.
-		Item::addPerson(p);
-		Item::removePerson(p);
-		p->state = Person::kReturning;
-		p->goingTo = "Exit";
-		if (game->mainLobby) {
-			const Route &r = game->findRoute(this, game->mainLobby);
-			if (!r.empty()) p->journey.set(r);
-		}
-		return;
-	}
-	Item::addPerson(p);
-	p->state = Person::kLunch;
-	p->eval = 50;
-	CustomerMetadata &m = customerMetadata[p];
-	m.arrivalTime = game->time.absolute;
-	eatingCustomers.push_back(p);
-	++customersToday;
-	const int period = game->sky.rainyDay ? 2 : (game->time.isHoliday() ? 1 : 0);
-	serviceScore[period] = std::min(50, serviceScore[period] + 2);
-	spriteNeedsUpdate = true;
+    // Journey::next already banked the final transport leg, so grading reads
+    // the updated mean even at a shut door.
+    const int period=game->sky.rainyDay?2:(game->time.isHoliday()?1:0);
+    const int cap=period==0?35:period==1?50:25;
+    const int mean=p->bankedMean(), bar2=game->rating<=2?150:200;
+    serviceScore[period]=std::min(cap,serviceScore[period]+(mean<80?2:mean<bar2?1:0));
+    if (!open || people.size()>=40) {
+        Item::addPerson(p);
+        Item *destination=p->home;
+        if (auto *visitor=dynamic_cast<Metro::Visitor*>(p)) destination=visitor->station;
+        if (!destination || !game->items.count(destination)) destination=game->mainLobby;
+        p->state=Person::kReturning;
+        Route route=game->findRoute(this,destination);
+        if (!route.empty()) p->journey.set(route);
+        else { Item::removePerson(p); p->recordNoRoute(position.y,destination?destination->position.y:0); }
+        return;
+    }
+    Item::addPerson(p); p->state=Person::kLunch;
+    customerMetadata[p].arrivalTime=game->time.absolute;
+    eatingCustomers.push_back(p);
+    auto *customer=dynamic_cast<Customer*>(p);
+    if (!customer || customer->owner!=this) ++customersToday;
+    spriteNeedsUpdate=true;
 }
 
 void FastFood::removePerson(Person *p)
@@ -267,14 +267,21 @@ void FastFood::clearCustomers()
 		delete *c;
 	while (!arrivingCustomers.empty())
 		arrivingCustomers.pop();
-	eatingCustomers.clear();
 	customers.clear();
-	customerMetadata.clear();
+    for (auto it=eatingCustomers.begin();it!=eatingCustomers.end();) {
+        Person *p=*it; ++it;
+        if (!game->people.count(p)) continue;
+        Item *dest=p->home ? p->home : game->mainLobby;
+        if (auto *visitor=dynamic_cast<Metro::Visitor*>(p)) dest=visitor->station;
+        Route route=game->findRoute(this,dest);
+        if (!route.empty()) { p->state=Person::kReturning; p->journey.set(route); }
+    }
 }
 
 FastFood::Customer::Customer(FastFood *item)
 	: Person(item->game)
 {
+	owner=item; home=nullptr;
 	arrivalTime = 0;
 	Type types[] = {kMan, kWoman1, kWoman2, kWomanWithChild1};
 	type = types[rand() % 4];
@@ -301,4 +308,30 @@ void FastFood::evacuateForDisaster()
  revenueSettled = true;
  spriteNeedsUpdate = true;
  updateSprite();
+}
+
+void FastFood::openDay()
+{
+    const int day=int(std::floor(game->time.absolute));
+    const int period=game->sky.rainyDay?2:(game->time.isHoliday()?1:0);
+    const int cap=period==0?35:period==1?50:25;
+    if (lastDemandDay==day) return;
+
+		open = true;
+		revenueSettled = false;
+		clearCustomers();
+		walkinsYesterday = walkinsToday;
+		population = walkinsYesterday;
+		customersToday = walkinsToday = 0;
+		int score = serviceScore[period];
+		if (period == 1) score = std::max(score, serviceScore[0]);
+		dailyQuota = std::max(10, std::min(cap, score));
+		quotaRemaining = dailyQuota;
+		lastDemandDay = day;
+		serviceScore[period] = 0;
+	spriteNeedsUpdate = true;
+	
+    for (bool &used : dispatched) used=false;
+    game->resetCategoryOnce(5);
+    game->addPopulation(5,walkinsYesterday);
 }

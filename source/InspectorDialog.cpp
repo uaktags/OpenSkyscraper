@@ -7,9 +7,16 @@
 #include "Item/Office.h"
 #include "Item/Condo.h"
 #include "Item/Shop.h"
+#include "Item/Cinema.h"
+#include "Item/PartyHall.h"
+#include "Item/Metro.h"
+#include "Item/Parking.h"
+#include "NameManager.h"
 #include "Person.h"
+#include "TenantRules.h"
 
 #include <cstdio>
+#include <cmath>
 #include <sstream>
 
 using namespace OT;
@@ -33,6 +40,7 @@ void InspectorDialog::close()
 		window.reset();
 		content.reset();
 		floorsButton.reset();
+		for (int i = 0; i < 4; ++i) classButtons[i].reset();
 	}
 	currentItem = NULL;
 	// Clear the debug route overlay so the green line doesn't linger
@@ -63,8 +71,26 @@ void InspectorDialog::buildWindow()
 	content->setPosition({6 * app->uiScale, 4 * app->uiScale});
 	content->getRenderer()->setTextColor(sf::Color(220, 226, 234));
 	content->getScrollbar()->setPolicy(tgui::Scrollbar::Policy::Automatic);
-	content->setSize({208 * app->uiScale, 218 * app->uiScale});
+	content->setSize({208 * app->uiScale, 198 * app->uiScale});
 	window->add(content);
+
+	// Rent class selector (T12): four buttons, most expensive class first,
+	// each labelled with its quarterly rent. Shown for office, condo, shop
+	// and hotel items.
+	for (int i = 0; i < 4; ++i)
+	{
+		classButtons[i] = tgui::Button::create("");
+		classButtons[i]->setSize(50 * app->uiScale, 18 * app->uiScale);
+		classButtons[i]->setPosition({(6 + i * 53) * app->uiScale, 208 * app->uiScale});
+		classButtons[i]->setTextSize(10 * app->uiScale);
+		classButtons[i]->setVisible(false);
+		classButtons[i]->onPress([this, i] {
+			if (!currentItem) return;
+			currentItem->setRentClass(i);
+			refresh();
+		});
+		window->add(classButtons[i]);
+	}
 
 	// "Floors..." button - only visible when inspecting an elevator. Opens
 	// the ElevatorDialog with per-floor service toggles.
@@ -140,6 +166,8 @@ std::string InspectorDialog::describeItem(Item::Item * item)
 		if (remainAbs < 0) remainAbs = 0;
 		int remainMinutes = static_cast<int>(remainAbs / OT::Time::hourToAbsolute(1.0) * 60.0);
 		s << "[under construction]\nReady in ~" << remainMinutes << " min\n\n";
+		if (item->prototype->id == "restaurant" || item->prototype->id == "fastfood")
+			s << "Opens tomorrow\n";
 		return s.str();
 	}
 	s << "Maintenance: quarterly sweep\n";
@@ -149,16 +177,9 @@ std::string InspectorDialog::describeItem(Item::Item * item)
 	else s << "Route score: (unreachable)\n";
 
 	const std::string &id = item->prototype->id;
-	if (id == "office" || id == "condo" || id == "yoot_condo" ||
-	    id == "shop" || id == "hotel_single" || id == "hotel_double" ||
-	    id == "hotel_suite" || id == "hotel")
+	if (item->hasTenantRecord() && id != "restaurant" && id != "fastfood")
 	{
-		int cls = openSkyDefaultRentClass(id);
-		if (id == "shop")
-		{
-			Item::Shop *shop = dynamic_cast<Item::Shop *>(item);
-			if (shop) cls = shop->rentClass;
-		}
+		const int cls = item->tenant.rentClass;
 		s << "Rent class:    " << cls << "\n";
 		s << "Rent/quarter: $" << openSkyQuarterlyRent(id, cls) << "\n";
 	}
@@ -194,6 +215,15 @@ std::string InspectorDialog::describeItem(Item::Item * item)
 		s << "Waiting:     " << waiting << "\n";
 	}
 
+	{
+		const std::vector<std::string> comments = tenantComments(item);
+		if (!comments.empty())
+		{
+			s << "\n";
+			for (size_t i = 0; i < comments.size(); ++i) s << comments[i] << "\n";
+		}
+	}
+
 	if (!item->people.empty())
 	{
 		s << "\nOccupants\n";
@@ -202,10 +232,10 @@ std::string InspectorDialog::describeItem(Item::Item * item)
 		     p != item->people.end() && shown < 8; ++p, ++shown)
 		{
 			Person *person = *p;
-			s << "- " << (person->name.empty() ? typeName(person->type) : person->name)
+			s << "- " << personLabel(person)
 			  << " [" << stateName(person->state) << "]"
-			  << "  banked stress " << static_cast<int>(person->stress) << "/300"
-			  << "  eval " << static_cast<int>(person->eval) << "/100\n";
+			  << "  " << personWhereabouts(person)
+			  << "  wait " << person->bankedMean() << "\n";
 		}
 		if (item->people.size() > 8)
 			s << "...+" << (item->people.size() - 8) << " more\n";
@@ -229,4 +259,167 @@ void InspectorDialog::refresh()
 	// Show the "Floors..." button only when inspecting an elevator.
 	if (floorsButton)
 		floorsButton->setVisible(currentItem->isElevator());
+	refreshClassButtons();
+}
+
+void InspectorDialog::refreshClassButtons()
+{
+	if (!currentItem) return;
+	const std::string & id = currentItem->prototype->id;
+	const bool selectable = currentItem->hasTenantRecord() && id != "restaurant" &&
+	                        id != "fastfood" && !currentItem->underConstruction;
+	for (int i = 0; i < 4; ++i)
+	{
+		if (!classButtons[i]) continue;
+		classButtons[i]->setVisible(selectable);
+		if (!selectable) continue;
+		const int rent = openSkyQuarterlyRent(id, i);
+		char label[32];
+		if (rent >= 1000) snprintf(label, sizeof(label), "$%dk", rent / 1000);
+		else snprintf(label, sizeof(label), "$%d", rent);
+		std::string text = label;
+		if (currentItem->tenant.rentClass == i) text = "[" + text + "]";
+		classButtons[i]->setText(text);
+	}
+}
+
+std::string InspectorDialog::personLabel(Person * person)
+{
+	using NM = NameManager;
+	NM::Role role = NM::Role::Visitor;
+	const void * key = person->home;
+	if (person->home)
+	{
+		const std::string & hid = person->home->prototype->id;
+		if (hid == "office") role = NM::Role::Office;
+		else if (hid == "condo") role = NM::Role::Condo;
+		else role = NM::Role::HotelGuest;
+	}
+	else if (person->type == Person::kHousekeeper || person->type == Person::kSecurity)
+		role = NM::Role::Staff;
+	std::string custom = key ? NM::customName(key, person->member) : std::string();
+	const bool vip = person->name == "VIP";
+	if (custom.empty() && !person->name.empty() && !vip) custom = person->name;
+	return NM::personLabel(custom, vip, role, person->member, (int)person->type, game->time.hour);
+}
+
+std::string InspectorDialog::personWhereabouts(Person * person)
+{
+	std::string homeType = person->home ? person->home->prototype->name : std::string("Tower");
+	std::string floorText = "Floor " + std::to_string(person->home ? person->home->position.y :
+		person->at ? person->at->position.y : 0);
+	return NameManager::whereabouts(person->goingTo, homeType, floorText);
+}
+
+std::vector<std::string> InspectorDialog::tenantComments(Item::Item * item)
+{
+	std::vector<std::string> out;
+	const std::string & id = item->prototype->id;
+	const bool isHotel = id == "hotel_single" || id == "hotel_double" ||
+	                     id == "hotel_suite" || id == "hotel";
+	const bool isFood = id == "restaurant" || id == "fastfood";
+
+	// 1. Occupied stressed office / condo.
+	if ((id == "office" || id == "condo") && item->isOccupied() &&
+	    item->tenant.category == TenantRules::kStressed)
+		out.push_back("Conditions are terrible");
+
+	// 2. Infested room.
+	if (Item::Hotel * hotel = dynamic_cast<Item::Hotel *>(item))
+		if (hotel->roomState == Item::Hotel::kInfested) out.push_back("Room is too dirty");
+
+	// 3. Transport.
+	if (id == "office" || id == "condo" || id == "shop" || isFood || isHotel ||
+	    id == "cinema" || id == "partyhall")
+	{
+		if (item->lobbyRouteComputed && item->lobbyRoute.empty() && item->position.y != 0)
+			out.push_back("No transportation connected");
+		else if (!item->lobbyRoute.empty())
+		{
+			const Item::Item * transport = nullptr;
+			const double originX = item->position.x + item->size.x / 2.0;
+			for (size_t i = 0; i < item->lobbyRoute.nodes.size(); ++i)
+			{
+				const Item::Item * n = item->lobbyRoute.nodes[i].item;
+				if (n && (n->isStairlike() || n->isElevator())) transport = n;
+			}
+			if (transport)
+			{
+				const int tier = TenantRules::distanceTier(
+					(int)std::abs(transport->position.x - originX));
+				if (tier > 0)
+				{
+					const char * name = transport->isElevator() ? "Elevator" :
+						transport->prototype->id == "escalator" ? "Escalator" : "Stairs";
+					out.push_back(std::string(name) + (tier == 2 ? " is very far away" : " is far away"));
+				}
+			}
+		}
+	}
+
+	// 4. Cinema.
+	if (Item::Cinema * cinema = dynamic_cast<Item::Cinema *>(item))
+		out.push_back(TenantRules::cinemaLine(cinema->movieAgeDays, cinema->quotaMatinee));
+
+	// 5. Shop.
+	if (Item::Shop * shop = dynamic_cast<Item::Shop *>(item))
+	{
+		if (!shop->let) out.push_back("No renters");
+		else
+		{
+			out.push_back(TenantRules::businessLine(shop->customersToday));
+			if (game->time.isHoliday() && shop->customersToday >= 35)
+				out.push_back("Weekends attract more customers");
+			else if (game->sky.rainyDay && shop->customersToday < 35)
+				out.push_back("Rain might cause fewer customers");
+		}
+	}
+
+	// 6. Medical center out of reach.
+	if ((id == "office" || id == "condo") && game->rating >= 2)
+	{
+		const int z = TenantRules::lookupZone(item->position.y);
+		const bool own = z <= 6 && !game->venueLists[z][3].empty();
+		if (!own && game->venueLists[0][3].empty())
+			out.push_back("Medical Center is too far away");
+	}
+
+	// 7. Parking.
+	if (Item::Parking * parking = dynamic_cast<Item::Parking *>(item))
+	{
+		bool unusable = false;
+		const std::vector<Item::Parking::Bay> & bays = parking->bays();
+		for (size_t i = 0; i < bays.size(); ++i) if (!bays[i].usable) unusable = true;
+		if (unusable) out.push_back("Not connected to Ramp");
+		for (size_t i = 0; i < bays.size(); ++i)
+			if (bays[i].occupied && bays[i].person)
+				out.push_back("Car for " + personLabel(bays[i].person));
+	}
+
+	// 8. Dead retail zone.
+	if ((id == "shop" || isFood) && TenantRules::registrationZone(item->position.y) < 0)
+		out.push_back("Too far from Lobby or Skylobby");
+
+	// 9. Food under construction.
+	if (isFood && item->underConstruction) out.push_back("Opens tomorrow");
+
+	// 10. Party.
+	if (id == "partyhall" && !item->people.empty()) out.push_back("A Party is happening!");
+
+	// 11. Recycling.
+	if (id == "recycling" && !game->recyclingAdequate) out.push_back("Full of Garbage");
+
+	// 12. Metro.
+	if (id == "metro")
+	{
+		const double h = game->time.hour;
+		if (h < 10.0) out.push_back("First train is not coming");
+		else if (h >= 21.0) out.push_back("Last train is gone");
+		else if (!item->people.empty()) out.push_back("Crowded with passengers");
+	}
+
+	// 13. Noisy neighbour.
+	if (Item::Item * source = game->judgeSystem.noiseSource(item))
+		out.push_back(source->prototype->name + " neighbor is noisy");
+	return out;
 }

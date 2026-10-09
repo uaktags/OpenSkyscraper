@@ -66,6 +66,9 @@ void PartyHall::advance(double dt)
 	if (game->time.checkHour(13)) {
 		open = true;
 		quota = 50;
+		// CountT party category (T14): daily reset at the 13:00 quota set.
+		game->resetCategoryOnce(TenantRules::kCountParty);
+		game->addPopulation(TenantRules::kCountParty, quota);
 		patronsToday = 0;
 		eventSettled = false;
 		clearVisitors();

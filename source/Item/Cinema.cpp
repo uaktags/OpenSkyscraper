@@ -77,6 +77,8 @@ void Cinema::encodeXML(tinyxml2::XMLPrinter &xml)
 		xml.PushAttribute("name", customer->name.c_str());
 		xml.PushAttribute("from", customer->from.c_str());
 		xml.PushAttribute("goingTo", customer->goingTo.c_str());
+		xml.PushAttribute("bankCount", (int)customer->bankCount);
+		xml.PushAttribute("bankTotal", (int)customer->bankTotal);
 		xml.CloseElement();
 	}
 }
@@ -107,6 +109,8 @@ void Cinema::decodeXML(tinyxml2::XMLElement &xml)
 		c->name = e->Attribute("name", "");
 		c->from = e->Attribute("from", "");
 		c->goingTo = e->Attribute("goingTo", "");
+		c->bankCount = (int8_t)e->IntAttribute("bankCount", 0);
+		c->bankTotal = (int16_t)e->IntAttribute("bankTotal", 0);
 		customers.insert(c);
 		if (open) addPerson(c);
 	}
@@ -157,6 +161,9 @@ void Cinema::advance(double dt)
 		quotaMatinee = (movieType >= 7 ? (movieAgeDays / 3 >= 3 ? 20 : movieAgeDays / 3 == 2 ? 40 : 60)
 			: (movieAgeDays / 3 >= 3 ? 20 : 40));
 		quotaEvening = quotaMatinee;
+		// CountT cinema category (T14): daily reset, then quota sum per hall.
+		game->resetCategoryOnce(TenantRules::kCountCinema);
+		game->addPopulation(TenantRules::kCountCinema, quotaMatinee + quotaEvening);
 		open = false;
 		playing = false;
 		intermission = false;

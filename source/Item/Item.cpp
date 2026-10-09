@@ -1,5 +1,6 @@
 /* Copyright (c) 2012-2015 Fabian Schuiki */
 #include <cassert>
+#include <cstdio>
 #include <algorithm>
 #include <string>
 #include "../Game.h"
@@ -20,6 +21,45 @@ using OT::int2;
 using OT::rectd;
 using OT::recti;
 using std::string;
+
+int Item::visitsThisTick(Game * game, int period, int phase)
+{
+	const double dta = game->time.dta;
+	if (dta <= 0.0 || period <= 0) return 0;
+	const long kDay = Time::kSimFramesPerDay;
+	auto stageOf = [](double a) { return (long)std::floor(a * Time::kSimFramesPerDay + 1e-6) - 300; };
+	auto floorDiv = [](long a, long b) { long q = a / b; if ((a % b != 0) && ((a < 0) != (b < 0))) --q; return q; };
+	const long sc = stageOf(game->time.absolute);
+	const long sp = stageOf(game->time.absolute - dta);
+	const long dc = floorDiv(sc, kDay), dp = floorDiv(sp, kDay);
+	const long fc = sc - kDay * dc, fp = sp - kDay * dp;
+	auto upto = [&](long f) { return f < phase ? 0L : (f - phase) / period + 1; };
+	long count = dc == dp ? upto(fc) - upto(fp) : upto(kDay - 1) - upto(fp) + upto(fc);
+	if (count < 0) count = 0;
+	return (int)std::min(count, 8L);
+}
+
+bool Item::hasTenantRecord() const
+{
+	const std::string & id = prototype->id;
+	return id == "office" || id == "condo" || id == "shop" ||
+	       id == "restaurant" || id == "fastfood" || id == "hotel" ||
+	       id == "hotel_single" || id == "hotel_double" || id == "hotel_suite";
+}
+
+void Item::resetTenantBanks()
+{
+	for (int i = 0; i < 6; ++i) tenant.bank[i] = TenantRules::Bank();
+}
+
+void Item::setRentClass(int c)
+{
+	tenant.rentClass = (uint8_t)std::max(0, std::min(3, c));
+	const std::string & id = prototype->id;
+	// Hotels only store the class (used at the next checkout / 17:00 pass).
+	if (id == "office" || id == "condo" || id == "shop")
+		game->judgeSystem.rescueOne(this);
+}
 
 double Item::constructionDuration() const
 {
@@ -258,6 +298,21 @@ void Item::encodeXML(tinyxml2::XMLPrinter &xml)
 	xml.PushAttribute("x", position.x);
 	xml.PushAttribute("y", position.y);
 	xml.PushAttribute("evaluation", evaluation);
+	if (hasTenantRecord())
+	{
+		xml.PushAttribute("armed", tenant.armed);
+		xml.PushAttribute("category", (int)tenant.category);
+		xml.PushAttribute("tenure", (int)tenant.tenure);
+		xml.PushAttribute("rentClass", (int)tenant.rentClass);
+		for (int i = 0; i < 6; ++i)
+		{
+			char key[24];
+			snprintf(key, sizeof(key), "bankCount%d", i);
+			xml.PushAttribute(key, (int)tenant.bank[i].count);
+			snprintf(key, sizeof(key), "bankTotal%d", i);
+			xml.PushAttribute(key, (int)tenant.bank[i].total);
+		}
+	}
 	if (underConstruction)
 	{
 		xml.PushAttribute("underConstruction", underConstruction);
@@ -268,6 +323,23 @@ void Item::encodeXML(tinyxml2::XMLPrinter &xml)
 void Item::decodeXML(tinyxml2::XMLElement &xml)
 {
 	evaluation = xml.DoubleAttribute("evaluation", 50.0);
+	if (hasTenantRecord())
+	{
+		tenant.armed = xml.BoolAttribute("armed", false);
+		const int cat = xml.IntAttribute("category", 255);
+		tenant.category = (uint8_t)((cat >= 0 && cat <= 3) ? cat : 255);
+		tenant.tenure = (uint8_t)std::max(0, std::min(120, xml.IntAttribute("tenure", 0)));
+		tenant.rentClass = (uint8_t)std::max(0, std::min(3, xml.IntAttribute("rentClass", 1)));
+		tenant.redraw = false;
+		for (int i = 0; i < 6; ++i)
+		{
+			char key[24];
+			snprintf(key, sizeof(key), "bankCount%d", i);
+			tenant.bank[i].count = (int8_t)xml.IntAttribute(key, 0);
+			snprintf(key, sizeof(key), "bankTotal%d", i);
+			tenant.bank[i].total = (int16_t)xml.IntAttribute(key, 0);
+		}
+	}
 	// Saved state wins over the Factory's "fresh placement" default so a
 	// save mid-construction restores correctly (and finished items stay
 	// finished after a reload).

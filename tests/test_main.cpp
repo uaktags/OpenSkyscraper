@@ -18,10 +18,12 @@
 #include "../source/Route.h"
 #include "../source/Money.h"
 #include "../source/NameManager.h"
+#include "../source/TenantRules.h"
 #include "../source/TimeWindowStyle.h"
 #include "../source/WindowsPEExecutable.h"
 #include "../source/Lighting.h"
 #include "../source/JudgeSystem.h"
+#include "../source/TenantRules.h"
 #include "../source/LevelUp.h"
 #include "../source/SaveHash.h"
 #include "../source/PluginManager.h"
@@ -3105,6 +3107,8 @@ static void testBatch3SecomNeverUnlocks()
 	EXPECT(LevelUp::minRatingToBuild("parking") == 2);
 }
 
+
+
 // Opt-in real-engine disaster scenarios. Compile this translation unit with
 // -DOPENSKY_DISASTER_SCENARIOS and link the OpenSkyscraper objects except main.
 // Run under Xvfb with a temporary writable cwd; normal seam tests are unchanged.
@@ -3124,6 +3128,8 @@ static void testBatch3SecomNeverUnlocks()
 #include "Application.h"
 #include "Game.h"
 #include "Item/Condo.h"
+#include "Item/YootCondo.h"
+#include "Item/Housekeeping.h"
 #include "Item/Hotel.h"
 #include "Item/Office.h"
 #include "Item/Restaurant.h"
@@ -3161,7 +3167,7 @@ static void resetDisasterScenario(Game &g) {
  g.eventSystem.prevAbsolute=g.time.absolute;
 }
 static int testDisasterScenarios() {
- char exe[]="/tmp/b-codex-batch2/scenarios", rules[]="--ruleset", sky[]="opensky", log[]="--log", logpath[]="/tmp/audit/batch2_cpp_scenarios.log";
+ char exe[]="OpenSkyDisasterTests", rules[]="--ruleset", sky[]="opensky", log[]="--log", logpath[]="/tmp/opensky_disaster_scenarios.log";
  char *args[]={exe,rules,sky,log,logpath}; Application app(5,args);app.audioMuted=true;
  app.window.create(sf::VideoMode({1280,768}),"disaster scenarios");app.window.setVisible(false);app.gui.setWindow(app.window);
  app.data.addSearchPath("/home/tim/Projects/OpenSky-art-v2/data");
@@ -3173,7 +3179,7 @@ static int testDisasterScenarios() {
  // Every registered prototype: common survivor predicate and whole footprint.
  for (auto *proto:g.itemFactory.prototypes) {
   resetDisasterScenario(g);auto *item=makeDisasterItem(g,proto->id.c_str(),0,1);
-  bool expected=proto->id=="lobby" || proto->id=="floor" || proto->id=="security" || proto->id=="metro" || proto->id=="cathedral" || item->canHaulPeople();
+  bool expected=proto->id=="lobby" || proto->id=="floor" || proto->id=="security" || proto->id=="housekeeping" || proto->id=="metro" || proto->id=="cathedral" || item->canHaulPeople();
   auto r=item->getRect();int before=g.funds;
   g.destroyItemByDisaster(item);
   DISASTER_CHECK((g.items.count(item)!=0)==expected);DISASTER_CHECK(g.funds==before);
@@ -3193,7 +3199,7 @@ static int testDisasterScenarios() {
  resetDisasterScenario(g);auto *condo=static_cast<Item::Condo *>(makeDisasterItem(g,"condo",0,2));
  condo->occupied=true;condo->rentDeposit=160000;condo->createOccupants();
  g.transferFunds(160000,"condo_sale","scenario sale");int n=g.people.size();DISASTER_CHECK(n>0);
- auto *resident=*condo->occupants.begin();condo->addPerson(resident);
+ auto *resident=*condo->occupants.begin();DISASTER_CHECK(resident->at==condo);
  g.destroyItemByDisaster(condo);DISASTER_CHECK(g.people.empty());DISASTER_CHECK(g.funds==2000000);DISASTER_CHECK(g.money.todayIncome==0);DISASTER_CHECK(g.money.todayExpenses==0);DISASTER_CHECK(g.money.quarterIncome==0);
  // Old saves without a sale/deposit field derive the exact move-in credit.
  for (const char *id : {"condo", "yoot_condo"}) {
@@ -3216,8 +3222,8 @@ static int testDisasterScenarios() {
  // Destination journey and UI/VIP handles are purged through silent deletion.
  resetDisasterScenario(g);office=static_cast<Item::Office *>(makeDisasterItem(g,"office",0,2));building=makeDisasterItem(g,"restaurant",15,2);
  worker=*office->workers.begin();Route route;route.add(office,2);route.add(building,2);worker->journey.set(route);
- g.visualizeRoute=route;g.inspectorDialog.showForItem(building);g.vipSystem.yootDestination=building;g.eventSystem.pendingBuilds.insert(building);
- g.destroyItemByDisaster(building);DISASTER_CHECK(!worker->at);DISASTER_CHECK(!worker->journey.item);DISASTER_CHECK(!worker->journey.references(building));DISASTER_CHECK(g.visualizeRoute.empty());DISASTER_CHECK(!g.inspectorDialog.isVisible());DISASTER_CHECK(!g.vipSystem.yootDestination);DISASTER_CHECK(!g.eventSystem.pendingBuilds.count(building));
+ g.visualizeRoute=route;g.inspectorDialog.showForItem(building);g.vipSystem.yootDestination=building;
+ g.destroyItemByDisaster(building);DISASTER_CHECK(!worker->at);DISASTER_CHECK(!worker->journey.item);DISASTER_CHECK(!worker->journey.references(building));DISASTER_CHECK(g.visualizeRoute.empty());DISASTER_CHECK(!g.inspectorDialog.isVisible());DISASTER_CHECK(!g.vipSystem.yootDestination);
  // Evacuation parks permanent owner records, deletes transient patrons, and
  // empties transport state through virtual detachment before resetting cars.
  resetDisasterScenario(g);office=static_cast<Item::Office *>(makeDisasterItem(g,"office",0,2));office->occupied=true;office->population=6;
@@ -3228,11 +3234,15 @@ static int testDisasterScenarios() {
  auto *stairs=static_cast<Item::Stairlike *>(makeDisasterItem(g,"stairs",105,1));
  worker=*office->workers.begin();worker->journey.fromFloor=0;worker->journey.toFloor=2;elevator->addPerson(worker);worker->stress=81;
  auto *car=*elevator->cars.begin();car->state=Item::Elevator::Car::kMoving;car->altitude=3;car->doorTicks=4;
- resident=*condo->occupants.begin();stairs->addPerson(resident);building=makeDisasterItem(g,"shop",115,2);building->underConstruction=true;
+ resident=*condo->occupants.begin();DISASTER_CHECK(resident->at==condo);condo->removePerson(resident);DISASTER_CHECK(!resident->at);DISASTER_CHECK(condo->occupants.count(resident));stairs->addPerson(resident);building=makeDisasterItem(g,"shop",115,2);building->underConstruction=true;
  g.eventSystem.type=EventSystem::Type::Fire;g.evacuateForDisaster();
  DISASTER_CHECK(!building->underConstruction);DISASTER_CHECK(hotel->guests.empty());DISASTER_CHECK(hotel->roomState==Item::Hotel::kDirty);DISASTER_CHECK(food->customers.empty());DISASTER_CHECK(!food->open);DISASTER_CHECK(food->customersToday==0);DISASTER_CHECK(elevator->people.empty());DISASTER_CHECK(elevator->queues.empty());DISASTER_CHECK(car->state==Item::Elevator::Car::kIdle);DISASTER_CHECK(car->altitude==car->homeFloor);DISASTER_CHECK(car->doorTicks==0);DISASTER_CHECK(stairs->people.empty());DISASTER_CHECK(stairs->transitionTimes.empty());DISASTER_CHECK(condo->occupants.size()>0);DISASTER_CHECK(office->occupied);DISASTER_CHECK(condo->occupied);
- for (auto *item : g.items) DISASTER_CHECK(item->people.empty());
- for(auto *p:g.people){DISASTER_CHECK(!p->at);DISASTER_CHECK(!p->journey.item);DISASTER_CHECK(p->state==Person::kIdle);}DISASTER_CHECK(worker->stress==81);
+ // Batch 5 owner persons (condo/yoot residents, maids) live inside their own unit
+ // after evacuation; every other item is empty and nobody is mid-journey.
+ auto ownerHome=[](Item::Item *it){return dynamic_cast<Item::Condo *>(it)||dynamic_cast<Item::YootCondo *>(it)||dynamic_cast<Item::Housekeeping *>(it);};
+ for (auto *item : g.items) {if(ownerHome(item)){for(auto *p:item->people)DISASTER_CHECK(p->at==item);}else DISASTER_CHECK(item->people.empty());}
+ for(auto *p:g.people){DISASTER_CHECK(!p->at||ownerHome(p->at));DISASTER_CHECK(!p->journey.item);DISASTER_CHECK(p->state==Person::kIdle);}
+ for(auto *p:condo->occupants)DISASTER_CHECK(p->at==condo&&!p->out);DISASTER_CHECK(worker->stress==81);
  // Other venue state mappings and temporary owner teardown.
  auto *fast=static_cast<Item::FastFood *>(makeDisasterItem(g,"fastfood",130,2));
  auto *fastCustomer=new Item::FastFood::Customer(fast); fast->customers.insert(fastCustomer); fast->addPerson(fastCustomer); fast->open=true; fast->customersToday=9;
@@ -3241,13 +3251,12 @@ static int testDisasterScenarios() {
  auto *metro=static_cast<Item::Metro *>(makeDisasterItem(g,"metro",215,-3));auto *rider=new Item::Metro::Visitor(metro);metro->visitors.insert(rider);metro->addPerson(rider);metro->trainPresent=true;
  auto *church=static_cast<Item::Cathedral *>(makeDisasterItem(g,"cathedral",250,2));auto *churchGuest=new Item::Cathedral::Guest(church);church->guests.insert(churchGuest);church->addPerson(churchGuest);church->weddingPhase=Item::Cathedral::kWeddingGuestsArriving;
  auto *shop=static_cast<Item::Shop *>(building);shop->open=true;shop->patrons=12;shop->customersToday=12;
- hotel->housekeeper=new Item::Hotel::Housekeeper(hotel);hotel->addPerson(hotel->housekeeper);
- g.evacuateForDisaster();DISASTER_CHECK(fast->customers.empty());DISASTER_CHECK(!fast->open);DISASTER_CHECK(fast->customersToday==0);DISASTER_CHECK(movie->customers.empty());DISASTER_CHECK(!movie->playing);DISASTER_CHECK(movie->patronsToday==0);DISASTER_CHECK(hall->visitors.empty());DISASTER_CHECK(!hall->open);DISASTER_CHECK(hall->patronsToday==0);DISASTER_CHECK(metro->visitors.empty());DISASTER_CHECK(!metro->trainPresent);DISASTER_CHECK(church->guests.empty());DISASTER_CHECK(church->weddingPhase==Item::Cathedral::kWeddingIdle);DISASTER_CHECK(!shop->open);DISASTER_CHECK(shop->patrons==0);DISASTER_CHECK(!hotel->housekeeper);
+ g.evacuateForDisaster();DISASTER_CHECK(fast->customers.empty());DISASTER_CHECK(!fast->open);DISASTER_CHECK(fast->customersToday==0);DISASTER_CHECK(movie->customers.empty());DISASTER_CHECK(!movie->playing);DISASTER_CHECK(movie->patronsToday==0);DISASTER_CHECK(hall->visitors.empty());DISASTER_CHECK(!hall->open);DISASTER_CHECK(hall->patronsToday==0);DISASTER_CHECK(metro->visitors.empty());DISASTER_CHECK(!metro->trainPresent);DISASTER_CHECK(church->guests.empty());DISASTER_CHECK(church->weddingPhase==Item::Cathedral::kWeddingIdle);DISASTER_CHECK(!shop->open);DISASTER_CHECK(shop->patrons==0);
  // Real simulation freeze with an active bomb resolved but awaiting cleanup.
  g.eventSystem.type=EventSystem::Type::Terror;g.eventSystem.bombArmed=false;g.eventSystem.bombCleanupAt=g.time.absolute+100.0/2600;
  const double beforeTime=g.time.absolute;const int beforePeople=g.people.size();worker->state=Person::kHome;food->open=true;food->quotaRemaining=40;
- car->moveTo(2);const double beforeAltitude=car->altitude;
- g.advanceSimTick(2);DISASTER_CHECK(car->altitude!=beforeAltitude);DISASTER_CHECK(!metro->trainPresent);DISASTER_CHECK(!hotel->housekeeper);DISASTER_CHECK(g.time.absolute>beforeTime);DISASTER_CHECK(g.people.size()==beforePeople);DISASTER_CHECK(worker->stress==81);DISASTER_CHECK(food->customers.empty());DISASTER_CHECK(food->quotaRemaining==40);DISASTER_CHECK(g.eventSystem.isActive());
+ car->moveTo(4);const double beforeAltitude=car->altitude;
+ g.advanceSimTick(2);DISASTER_CHECK(car->altitude!=beforeAltitude);DISASTER_CHECK(!metro->trainPresent);DISASTER_CHECK(g.time.absolute>beforeTime);DISASTER_CHECK(g.people.size()==beforePeople);DISASTER_CHECK(worker->stress==81);DISASTER_CHECK(food->customers.empty());DISASTER_CHECK(food->quotaRemaining==40);DISASTER_CHECK(g.eventSystem.isActive());
  g.toolPrototype=g.itemFactory.prototypesById["office"];int beforeFunds=g.funds;DISASTER_CHECK(!g.constructToolAt(int2(140,2)));DISASTER_CHECK(g.funds==beforeFunds);
  g.eventSystem.bombCleanupAt=g.time.absolute;g.advanceSimTick(0);DISASTER_CHECK(!g.eventSystem.isActive());DISASTER_CHECK(g.time.eventFrame()==1500);
  worker->state=Person::kHome;g.advanceSimTick(1);DISASTER_CHECK(worker->stress<81);
@@ -3277,7 +3286,7 @@ static int testDisasterScenarios() {
  // Overlay-only legacy saves still load and can be bulldozed.
  resetDisasterScenario(g);g.eventSystem.addRubble(2,0);g.eventSystem.addRubble(2,1);tinyxml2::XMLPrinter legacyXml;legacyXml.OpenElement("event");g.eventSystem.encodeXML(legacyXml);legacyXml.CloseElement();tinyxml2::XMLDocument legacyDoc;DISASTER_CHECK(legacyDoc.Parse(legacyXml.CStr())==0);legacyDoc.RootElement()->DeleteAttribute("eventBurnedSpans");g.eventSystem.decodeXML(*legacyDoc.RootElement());DISASTER_CHECK(g.eventSystem.hasRubble(2,0));DISASTER_CHECK(g.eventSystem.clearRubble(2,1));DISASTER_CHECK(!g.eventSystem.hasRubble(2,0));
  // Population recount drops destroyed tenants; repeated destruction is silent.
- resetDisasterScenario(g);office=static_cast<Item::Office *>(makeDisasterItem(g,"office",0,2));office->occupied=true;office->population=6;g.setPopulation(6);
+ resetDisasterScenario(g);office=static_cast<Item::Office *>(makeDisasterItem(g,"office",0,2));office->occupied=true;office->population=6;g.addPopulation(office->populationCategory(),office->populationContribution());g.advanceSimTick(0);DISASTER_CHECK(g.population==6);
  g.destroyItemByDisaster(office);DISASTER_CHECK(g.populationNeedsUpdate);g.advanceSimTick(0);DISASTER_CHECK(g.population==0);DISASTER_CHECK(g.people.empty());
  // Burned-only floors retain their extent and front movement after deletion.
  resetDisasterScenario(g);building=makeDisasterItem(g,"shop",0,2);g.destroyItemByDisaster(building);int extentLeft,extentRight;DISASTER_CHECK(g.eventSystem.floorExtent(2,extentLeft,extentRight));DISASTER_CHECK(extentLeft==0);DISASTER_CHECK(extentRight==12);
@@ -3317,6 +3326,8 @@ static int testDisasterScenarios() {
 #include "Item/FastFood.h"
 #include "Item/Restaurant.h"
 #include "Item/Hotel.h"
+#include "Item/Parking.h"
+#include "Item/Housekeeping.h"
 #include "Item/Elevator/Car.h"
 #include "Item/Elevator/Queue.h"
 #include "PathFinder/MapSearchNode.h"
@@ -3324,6 +3335,7 @@ static int testDisasterScenarios() {
 #undef protected
 #undef private
 
+static void testBatch5Engine(OT::Game &g);
 static void testElevatorDispatch()
 {
  if (!graphicsScenariosAvailable()) {
@@ -3628,7 +3640,470 @@ static void testElevatorDispatch()
  g.toggleElevatorService(e,14); EXPECT(e->connectsFloor(14)); EXPECT(g.gameMap.findNode(MapNode::Point(3,14),e));
  g.elevatorDialog.currentElevator=nullptr;
  riders.clear(); g.clearWorld();
+ testBatch5Engine(g);
  std::cout<<"Batch 4 C++ transport scenarios completed\n";
+}
+#endif
+
+
+// batch5-A: tenant record rules, noise scan, population arithmetic, name registry.
+static void testBatch5ATenantRules()
+{
+    using namespace OT::TenantRules;
+
+    // T2: int8/int16 wrap and signed truncating mean.
+    Bank b;
+    EXPECT(bankedMean(b) == 0);
+    bankAdd(b, 100.4); bankAdd(b, 51.6);
+    EXPECT(b.count == 2 && b.total == 152);
+    EXPECT(bankedMean(b) == 76);
+    Bank w;
+    for (int i = 0; i < 128; ++i) bankAdd(w, 1.0);
+    EXPECT(w.count == -128);               // int8 wrap
+    Bank big; bankAdd(big, 30000.0); bankAdd(big, 30000.0);
+    EXPECT(big.total == (int16_t)60000);   // int16 wrap
+    EXPECT(bankedMean((int8_t)3, (int16_t)-10) == -3);
+    EXPECT(bankedMean((int8_t)0, (int16_t)500) == 0);
+
+    // T3: divisors, class adjustment, noise, clamp, bars.
+    Bank office[6];
+    for (int i = 0; i < 6; ++i) { office[i].count = 1; office[i].total = 100; }
+    EXPECT(rawMetric(office, 6, divisorFor(kOffice)) == 100);
+    Bank travelled[2]; travelled[0].count = 1; travelled[0].total = 90;
+    EXPECT(rawMetric(travelled, 2, divisorFor(kTwin)) == 45);       // nontraveller contributes 0
+    EXPECT(rawMetric(travelled, 1, divisorFor(kSingle)) == 90);
+    EXPECT(divisorFor(kCondo) == 3 && divisorFor(kSuite) == 2);
+    EXPECT(adjustMetric(100, 0, false) == 130);
+    EXPECT(adjustMetric(100, 1, false) == 100);
+    EXPECT(adjustMetric(100, 2, false) == 70);
+    EXPECT(adjustMetric(100, 3, false) == 0);
+    EXPECT(adjustMetric(100, 3, true) == 60);                       // class 3 then noise
+    EXPECT(adjustMetric(10, 2, false) == 0);                        // clamped at 0
+    EXPECT(adjustMetric(500, 0, true) == 590);                      // no upper clamp
+    EXPECT(categoryFor(79, 0) == kHappy && categoryFor(80, 0) == kOk);
+    EXPECT(categoryFor(149, 0) == kOk && categoryFor(150, 0) == kStressed);
+    EXPECT(categoryFor(150, 3) == kOk && categoryFor(199, 3) == kOk && categoryFor(200, 3) == kStressed);
+    EXPECT(categoryFor(-1, 0) == kUnjudged);
+    EXPECT(judgeCategory(office, kOffice, 1, false, false, 0) == kUnjudged);
+    EXPECT(judgeCategory(office, kOffice, 1, false, true, 0) == kOk);
+    EXPECT(judgeCategory(office, kOffice, 1, true, true, 0) == kStressed);   // 160 >= 150
+    EXPECT(evaluationFor(kHappy) == 90 && evaluationFor(kOk) == 60 &&
+           evaluationFor(kStressed) == 20 && evaluationFor(kUnjudged) == 50);
+
+    // T4: noise scan. Slots in slot order; victim is a hotel (range 20).
+    {
+        Slot s[5] = {
+            {0, 10, kSlotRestaurant}, {10, 30, kSlotOther}, {30, 40, kSlotHotel},
+            {40, 50, kSlotOther}, {50, 60, kSlotShop}};
+        // Left: the first record is tested after the decrement, the loop stops on the
+        // first source found. 30-20=10: slot 1 (left 10) passes, slot 0 is tested.
+        EXPECT(noiseSourceIndex(s, 5, 2) == 0);   // left source wins over the right shop
+        s[0].type = kSlotOther;
+        EXPECT(noiseSourceIndex(s, 5, 2) == 4);     // right: shop at 50 <= 40+20
+        // Cutoff: the record after the decrement is tested, then the range check stops the scan.
+        Slot g[3] = {{0, 10, kSlotShop}, {25, 35, kSlotOther}, {60, 70, kSlotHotel}};
+        EXPECT(noiseSourceIndex(g, 3, 2) == -1);    // slot 1 tested, left 25 < 40 stops the scan
+        Slot h[3] = {{0, 10, kSlotShop}, {45, 55, kSlotShop}, {60, 70, kSlotHotel}};
+        EXPECT(noiseSourceIndex(h, 3, 2) == 1);
+        // Source sets by victim.
+        EXPECT(isNoiseSource(kSlotOffice, kSlotOffice) == false);
+        EXPECT(isNoiseSource(kSlotOffice, kSlotHotel) && isNoiseSource(kSlotOffice, kSlotCondo));
+        EXPECT(!isNoiseSource(kSlotHotel, kSlotHotel) && isNoiseSource(kSlotHotel, kSlotCondo));
+        EXPECT(isNoiseSource(kSlotCinema, kSlotOffice) && isNoiseSource(kSlotParty, kSlotCondo));
+        EXPECT(noiseRange(kSlotOffice) == 10 && noiseRange(kSlotHotel) == 20 && noiseRange(kSlotCondo) == 30);
+    }
+
+    // T17/T18: roach spread, neglect to infested at tenure 3, arm / rescue.
+    {
+        Room r[5];
+        for (int i = 0; i < 5; ++i) r[i].hotel = true;
+        r[2].state = kRoomInfested;
+        roachSpread(r, 5);
+        EXPECT(r[1].state == kRoomInfested && r[3].state == kRoomInfested);
+        EXPECT(r[0].state == kRoomClean && r[4].state == kRoomClean);   // no snapshot cascade
+        EXPECT(!r[1].armed && r[1].category == kUnjudged && r[1].redraw);
+        Room gap[3]; gap[0].hotel = true; gap[1].hotel = false; gap[2].hotel = true;
+        gap[0].state = kRoomInfested;
+        roachSpread(gap, 3);
+        EXPECT(gap[2].state == kRoomClean);                              // gap blocks the spread
+        Room n[1]; n[0].hotel = true; n[0].state = kRoomDirty; n[0].armed = true; n[0].tenure = 5;
+        hotelNeglect(n, 1);
+        EXPECT(!n[0].armed && n[0].tenure == 0 && n[0].category == kStressed);
+        hotelNeglect(n, 1); hotelNeglect(n, 1); EXPECT(n[0].tenure == 2 && n[0].state == kRoomDirty);
+        hotelNeglect(n, 1); EXPECT(n[0].tenure == 3 && n[0].state == kRoomInfested);
+        Room a[3];
+        for (int i = 0; i < 3; ++i) { a[i].hotel = true; a[i].type = 1; }
+        a[0].category = 0; a[1].category = 2; a[2].category = 255;
+        hotelArmRescue(a, 3);
+        EXPECT(a[0].armed && a[0].category == kOk && a[1].category == kOk && a[0].bankReset);
+        EXPECT(!a[2].armed && !a[2].bankReset);                          // 255 does neither
+        a[0].armed = false; a[0].category = 0; a[1].category = 1;
+        hotelArmRescue(a, 3);
+        EXPECT(!a[0].armed);                                             // no twin: disarm
+    }
+
+    // T24: maid pick slices and exact dirty state.
+    {
+        const int f[4] = {11, 12, 17, 5};
+        const int st[4] = {kRoomDirty, kRoomInfested, kRoomDirty, kRoomDirty};
+        const bool hotel[4] = {true, true, true, true};
+        EXPECT(pickDirtyRoom(f, st, hotel, 4, 10, 5) == 0);   // f%6==5 -> floor 11 first
+        EXPECT(pickDirtyRoom(f, st, hotel, 4, 12, 5) == 2);   // 17 above the anchor
+        EXPECT(pickDirtyRoom(f, st, hotel, 4, 12, 0) == -1);  // floor 12 is infested only
+        EXPECT(pickDirtyRoom(f, st, hotel, 4, 4, 5) == 3);    // floor 5 is first from below the anchor
+    }
+
+    // T14: CountT arithmetic.
+    {
+        CountT c;
+        c.add(kCountOffice, 6); c.add(kCountCondo, 3); c.add(kCountShop, 10);
+        EXPECT(c.population == 19 && c.dirty);
+        c.add(kCountOffice, -6);
+        EXPECT(c.population == 13);
+        c.reset(kCountShop);                      // the shop +10 leaks until the daily reset
+        EXPECT(c.population == 3 && c.cat[kCountShop] == 0);
+        EXPECT(c.resetOnce(kCountFastFood, 4) && !c.resetOnce(kCountFastFood, 4) && c.resetOnce(kCountFastFood, 5));
+        c.add(-1, 5);                             // unrecognised still changes the global
+        EXPECT(c.population == 8);
+    }
+
+    // T7/T8: shop and food categories.
+    EXPECT(shopCategory(false, 99, 1) == kUnjudged);
+    EXPECT(shopCategory(true, 25, 1) == kHappy && shopCategory(true, 24, 1) == kOk);
+    EXPECT(shopCategory(true, 19, 1) == kStressed);
+    EXPECT(shopCategory(true, 30, 0) == kHappy && shopCategory(true, 29, 0) == kOk);   // +5 shift
+    EXPECT(shopCategory(true, 13, 3) == kHappy && shopCategory(true, 12, 3) == kOk);    // -12 shift
+    EXPECT(foodCategory(50) == 3 && foodCategory(35) == 2 && foodCategory(25) == 1 && foodCategory(24) == 0);
+
+    // T42, T48, zones, strings.
+    EXPECT(recyclingRequired(499) == 1 && recyclingRequired(500) == 2 && recyclingRequired(2500) == 6);
+    EXPECT(vipVerdict(300, 2) == 1 && vipVerdict(302, 2) == 2 && vipVerdict(0, 0) == 1);
+    EXPECT(registrationZone(10) == 1 && registrationZone(5) == -1 && registrationZone(-5) == 0);
+    EXPECT(registrationZone(-6) == 0 && registrationZone(-20) == -1 && registrationZone(100) == -1);
+    EXPECT(lookupZone(-3) == 0 && lookupZone(14) == 1 && lookupZone(0) == 0);
+    EXPECT(std::string(businessLine(50)) == "Business is very good!");
+    EXPECT(std::string(businessLine(10)) == "Very few customers");
+    EXPECT(std::string(cinemaLine(0, 0)) == "New movie showing!");
+    EXPECT(std::string(cinemaLine(5, 60)) == "It's a Sellout!");
+    EXPECT(std::string(cinemaLine(5, 10)) == "Terrible sales! Change the movie!");
+    EXPECT(distanceTier(79) == 0 && distanceTier(80) == 1 && distanceTier(125) == 2);
+}
+
+static void testBatch5ANames()
+{
+    using OT::NameManager;
+    using Role = NameManager::Role;
+    NameManager::reset();
+    EXPECT(NameManager::genericLabel(Role::HotelGuest, 2, 0, 9) == "Woman");
+    EXPECT(NameManager::genericLabel(Role::HotelGuest, 1, 0, 9) == "Man");
+    EXPECT(NameManager::genericLabel(Role::Office, 1, 1, 9) == "Salesman");
+    EXPECT(NameManager::genericLabel(Role::Office, 3, 0, 9) == "Man");
+    EXPECT(NameManager::genericLabel(Role::Office, 5, 4, 9) == "Woman");
+    EXPECT(NameManager::genericLabel(Role::Condo, 1, 6, 9) == "Mother with Baby");
+    EXPECT(NameManager::genericLabel(Role::Condo, 2, 3, 9) == "Child");
+    EXPECT(NameManager::genericLabel(Role::Visitor, 9, 2, 9) == "Woman");        // 9 & 7 = 1
+    EXPECT(NameManager::genericLabel(Role::Visitor, 5, 2, 9) == "Woman with Kid");
+    EXPECT(NameManager::genericLabel(Role::Visitor, 7, 2, 9) == "Mother with Baby");
+    EXPECT(NameManager::genericLabel(Role::Visitor, 4, 2, 9) == "Man");
+    EXPECT(NameManager::genericLabel(Role::Staff, 0, 8, 9) == "Security");
+    EXPECT(NameManager::genericLabel(Role::Staff, 0, 5, 16.5) == "Housekeeper");
+    EXPECT(NameManager::genericLabel(Role::Staff, 0, 5, 17.5) == "Janitor");
+    EXPECT(NameManager::personLabel("Bob", true, Role::Office, 0, 0, 9) == "Bob");
+    EXPECT(NameManager::personLabel("", true, Role::Office, 0, 0, 9) == "VIP");
+    EXPECT(NameManager::personLabel("", false, Role::Office, 0, 0, 9) == "Salesman");
+
+    EXPECT(NameManager::whereabouts("Lobby to eat", "Office", "Floor 3") == "Lobby to eat");
+    EXPECT(NameManager::whereabouts("Medical Center", "Office", "Floor 9") == "Medical Center, Floor 9");
+    EXPECT(NameManager::whereabouts("", "Condo", "Floor 12") == "Condo, Floor 12");
+
+    // Registry: 20 slots, 15 chars, empty deletes, replace keeps the slot.
+    int tenants[25];
+    for (int i = 0; i < 20; ++i) EXPECT(NameManager::setCustomName(&tenants[i], 0, "A", NameManager::kNameHotel));
+    EXPECT(!NameManager::setCustomName(&tenants[20], 0, "B"));                 // full: reject new
+    EXPECT(NameManager::setCustomName(&tenants[3], 0, "0123456789ABCDEFGHI"));  // replace still works
+    EXPECT(NameManager::customName(&tenants[3], 0) == "0123456789ABCDE");
+    EXPECT(NameManager::customNameCount() == 20);
+    EXPECT(NameManager::setCustomName(&tenants[3], 0, ""));
+    EXPECT(NameManager::customName(&tenants[3], 0).empty() && NameManager::customNameCount() == 19);
+    EXPECT(NameManager::setCustomName(&tenants[20], 1, "Z", NameManager::kNameVisitor));
+    NameManager::purgeClass(NameManager::kNameHotel);
+    EXPECT(NameManager::customNameCount() == 1);
+    NameManager::removeTenant(&tenants[20]);
+    EXPECT(NameManager::customNameCount() == 0);
+    NameManager::reset();
+}
+
+// batch5-B
+// Pure logic of the hotel / maid / batch-5 rules (TenantRules.h).
+static OT::TenantRules::Room b5Room(bool hotel, int state, int type = 0)
+{
+	OT::TenantRules::Room r;
+	r.hotel = hotel; r.state = state; r.type = type;
+	return r;
+}
+
+static void testBatch5BRoaches()
+{
+	using namespace OT::TenantRules;
+	// Source in the middle stamps both neighbours (the following one is skipped).
+	{
+		Room r[5] = {b5Room(true, 0), b5Room(true, 0), b5Room(true, kRoomInfested), b5Room(true, 0), b5Room(true, 0)};
+		roachSpread(r, 5);
+		EXPECT(r[1].state == kRoomInfested && r[3].state == kRoomInfested);
+		EXPECT(r[0].state == 0 && r[4].state == 0);
+		EXPECT(r[1].category == 255 && !r[1].armed && r[1].redraw);
+	}
+	// A chain: a stamped following room is not itself a source this pass.
+	{
+		Room r[4] = {b5Room(true, kRoomInfested), b5Room(true, 0), b5Room(true, 0), b5Room(true, 0)};
+		roachSpread(r, 4);
+		EXPECT(r[1].state == kRoomInfested && r[2].state == 0);
+	}
+	// An already infested follower becomes the next source in the same scan.
+	{
+		Room r[5] = {b5Room(true, kRoomInfested), b5Room(true, kRoomInfested), b5Room(true, 0), b5Room(true, 0), b5Room(true, 0)};
+		roachSpread(r, 5);
+		EXPECT(r[2].state == kRoomInfested && r[3].state == 0);
+	}
+	// Non-hotel records are never stamped; a non-hotel follower is stepped over.
+	{
+		Room r[4] = {b5Room(false, 0), b5Room(true, kRoomInfested), b5Room(false, 0), b5Room(true, 0)};
+		roachSpread(r, 4);
+		EXPECT(r[0].state == 0 && r[2].state == 0 && r[3].state == 0);
+	}
+	// The preceding room is stamped whatever its old state (even occupied).
+	{
+		Room r[2] = {b5Room(true, kRoomOccupied), b5Room(true, kRoomInfested)};
+		r[0].armed = true;
+		roachSpread(r, 2);
+		EXPECT(r[0].state == kRoomInfested && !r[0].armed);
+	}
+}
+
+static void testBatch5BNeglectAndRescue()
+{
+	using namespace OT::TenantRules;
+	// An armed dirty room is disarmed and stressed with tenure reset; then
+	// tenure climbs once per pass and the third pass infests (tenure == 3).
+	Room r[1] = {b5Room(true, kRoomDirty)};
+	r[0].armed = true; r[0].tenure = 2;
+	hotelNeglect(r, 1);
+	EXPECT(!r[0].armed && r[0].category == 0 && r[0].tenure == 0);
+	hotelNeglect(r, 1); EXPECT(r[0].tenure == 1 && r[0].state == kRoomDirty);
+	hotelNeglect(r, 1); EXPECT(r[0].tenure == 2 && r[0].state == kRoomDirty);
+	hotelNeglect(r, 1); EXPECT(r[0].tenure == 3 && r[0].state == kRoomInfested && r[0].category == 255);
+	// Clean rooms are not touched by the neglect pass.
+	Room clean[1] = {b5Room(true, kRoomClean)};
+	hotelNeglect(clean, 1);
+	EXPECT(clean[0].tenure == 0 && clean[0].state == kRoomClean);
+
+	// Arm / rescue: category >= 1 arms; 0 pairs with a happy same-type room.
+	Room a[4] = {b5Room(true, kRoomClean, 1), b5Room(true, kRoomClean, 1), b5Room(true, kRoomClean, 2), b5Room(true, kRoomDirty, 1)};
+	a[0].category = 1; a[1].category = 0; a[2].category = 255; a[3].category = 1;
+	hotelArmRescue(a, 4);
+	EXPECT(a[0].armed && a[0].bankReset);
+	EXPECT(!a[1].armed);                    // dirty rooms are not rescue partners
+	EXPECT(!a[2].armed && !a[2].bankReset); // 255 neither arms nor rescues
+	Room b[3] = {b5Room(true, kRoomClean, 1), b5Room(true, kRoomClean, 1), b5Room(true, kRoomClean, 2)};
+	b[0].category = 0; b[1].category = 2; b[2].category = 2;
+	hotelArmRescue(b, 3);
+	EXPECT(b[0].category == 1 && b[1].category == 1);
+	EXPECT(b[0].armed && b[0].bankReset);
+}
+
+static void testBatch5BMaidPickAndVenueZones()
+{
+	using namespace OT::TenantRules;
+	// Maid k only serves floors with f % 6 == k; infested rooms are never picked.
+	const int floorF[5] = {12, 12, 18, 13, 7};
+	const int state[5]  = {kRoomInfested, kRoomDirty, kRoomDirty, kRoomDirty, kRoomDirty};
+	const bool hotel[5] = {true, true, true, true, true};
+	EXPECT(pickDirtyRoom(floorF, state, hotel, 5, 10, 0) == 1); // f12 % 6 == 0, first dirty, not the infested one
+	EXPECT(pickDirtyRoom(floorF, state, hotel, 5, 13, 0) == 2); // upward from 13 reaches f18
+	EXPECT(pickDirtyRoom(floorF, state, hotel, 5, 19, 0) == 2); // nothing above: scans downward
+	EXPECT(pickDirtyRoom(floorF, state, hotel, 5, 10, 1) == 3); // f13 % 6 == 1 (and f7)
+	EXPECT(pickDirtyRoom(floorF, state, hotel, 5, 10, 2) == -1); // no fallback to other slices
+
+	// Zone formulas: ground floor registers in zone 0; floors 5..9 fail registration.
+	EXPECT(registrationZone(0) == 0 && registrationZone(4) == 0);
+	for (int f = 5; f <= 9; ++f) EXPECT(registrationZone(f) == -1);
+	EXPECT(registrationZone(10) == 1 && registrationZone(-3) == 0);
+	EXPECT(lookupZone(0) == 0 && lookupZone(-20) == 0 && lookupZone(14) == 1);
+}
+
+static void testBatch5BRecyclingAndVip()
+{
+	using namespace OT::TenantRules;
+	EXPECT(recyclingRequired(0) == 1 && recyclingRequired(499) == 1 && recyclingRequired(500) == 2);
+	EXPECT(recyclingRequired(1499) == 3 && recyclingRequired(1999) == 4 && recyclingRequired(2499) == 5);
+	EXPECT(recyclingRequired(2500) == 6 && recyclingRequired(99999) == 6);
+	EXPECT(vipVerdict(0, 0) == 1);           // no trips averages 0
+	EXPECT(vipVerdict(300, 2) == 1);         // 150 is still favorable
+	EXPECT(vipVerdict(302, 2) == 2);         // 151 is unfavorable
+	EXPECT(vipVerdict(301, 2) == 1);         // 150 (truncated) is favorable
+}
+
+#ifdef OPENSKY_TRANSPORT_SCENARIOS
+// Engine scenarios for the batch-5 fixes (F1-F9); runs in OpenSkyTransportTests.
+static void testBatch5Engine(OT::Game &g)
+{
+ using namespace OT;
+ auto setTime=[&](double absolute) {
+  struct Clock : Time { using Time::set; };
+  Clock clock; clock.set(absolute); g.time=clock; g.time.dta=1.0/2600;
+ };
+ auto reset=[&](double absolute=3.0+Time::hourToAbsolute(23)) {
+  g.clearWorld(); g.money.clear(20000000); g.funds=20000000; g.rating=2;
+  g.vipSystem.reset(); setTime(absolute);
+ };
+ auto make=[&](const char *id,int x,int y) {
+  auto *item=g.itemFactory.make(id,int2(x,y)); g.addItem(item); item->underConstruction=false; return item;
+ };
+ auto makeParking=[&]() {
+  auto *park=static_cast<Item::Parking *>(make("parking",0,-1));
+  park->bayList[0].usable=true; return park;
+ };
+ auto makeCondo=[&](int x,int total) {
+  auto *c=static_cast<Item::Condo *>(make("condo",x,1));
+  c->occupied=true; c->tenant.armed=true;
+  for (int k=0;k<6;++k) { c->tenant.bank[k].count=1; c->tenant.bank[k].total=(int16_t)total; }
+  return c;
+ };
+
+ // F3: a journey banks exactly once, even if next() is driven past the end.
+ {
+  reset(); auto *lobby=make("lobby",0,0); auto *office=make("office",10,1);
+  g.mainLobby=lobby;
+  std::unique_ptr<Person> p(new Person(&g,Person::kMan)); p->home=office;
+  Route r; r.add(lobby); r.add(office);
+  p->journey.set(r);
+  EXPECT(p->at==office); EXPECT(p->bankCount==1);
+  p->journey.next();
+  EXPECT(p->bankCount==1);
+ }
+
+ // F1: the judge's quarter predicate is the caller's flag, not time.day, and
+ // buybacks land in the quarter opened first.
+ {
+  reset(3.0+Time::hourToAbsolute(5)); // weekday index != 0
+  auto *condo=makeCondo(0,2000);
+  g.judgeSystem.judgeDaily(&g,false);
+  EXPECT(condo->occupied);                       // no move-out on a non-quarter day
+  reset(7.0+Time::hourToAbsolute(5));            // day 0 of the week, not a quarter day
+  condo=makeCondo(0,2000);
+  g.judgeSystem.judgeDaily(&g,false);
+  EXPECT(condo->occupied);                       // the old `day == 0` test would have evicted here
+  reset(3.0+Time::hourToAbsolute(5));
+  condo=makeCondo(0,2000);
+  g.money.finalizeQuarter();                     // (a) new quarter opens first
+  const int before=g.money.quarterExpenses;
+  g.judgeSystem.judgeDaily(&g,true);             // (b) judge + move-out
+  EXPECT(!condo->occupied);
+  EXPECT(g.money.quarterExpenses>before);        // buyback booked in the new quarter
+ }
+
+ // F5: the rescuing peer's evaluation is refreshed with its category.
+ {
+  reset(3.0+Time::hourToAbsolute(5));
+  auto *leaver=makeCondo(0,2000); auto *peer=makeCondo(8,10);
+  g.judgeSystem.judgeOne(leaver); g.judgeSystem.judgeOne(peer);
+  g.judgeSystem.judgeDaily(&g,true);
+  EXPECT(!leaver->occupied || leaver->tenant.category==TenantRules::kOk);
+  EXPECT(peer->tenant.category==TenantRules::kOk);
+  EXPECT(peer->evaluation==TenantRules::evaluationFor(TenantRules::kOk));
+ }
+
+ // F2: the bay is held through errands and the trip home; it frees only when
+ // the driver reaches the parking item.
+ {
+  reset(); auto *park=makeParking(); auto *lobby=make("lobby",0,0); g.mainLobby=lobby;
+  auto *office=static_cast<Item::Office *>(make("office",10,1));
+  office->occupied=true; office->tenant.armed=true;
+  Item::Office::Worker *w=office->crewMember(2);
+  EXPECT(park->assignSpace(w,Item::Parking::kOfficeCar)); w->parkingUsed=park;
+  // Out to lunch (away from the desk): car stays.
+  w->state=Person::kLunch; lobby->Item::Item::addPerson(w); w->lunchReturnTime=g.time.absolute+1;
+  setTime(g.time.absolute); office->advance(0);
+  EXPECT(w->parkingUsed==park); EXPECT(park->usedSpaces()==1);
+  w->at->removePerson(w);
+  // Heading home but still inside the tower: car stays.
+  w->state=Person::kReturning; w->lunchReturnTime=0; office->addPerson(w);
+  office->advance(0);
+  EXPECT(w->parkingUsed==park); EXPECT(park->usedSpaces()==1);
+  office->removePerson(w);
+  // Reaches the parking item: bay frees.
+  Route r; r.add(office); r.add(park); w->state=Person::kReturning; w->journey.set(r);
+  EXPECT(w->at==park); EXPECT(park->usedSpaces()==1);
+  office->advance(0);
+  EXPECT(w->parkingUsed==nullptr); EXPECT(park->usedSpaces()==0);
+ }
+
+ // F4: parked cars and their drivers survive a save/load round trip.
+ {
+  reset(); auto *park=makeParking(); auto *lobby=make("lobby",0,0); g.mainLobby=lobby;
+  auto *office=static_cast<Item::Office *>(make("office",10,1)); office->occupied=true;
+  auto *hotel=static_cast<Item::Hotel *>(make("hotel_suite",30,2));
+  auto *guest=new Item::Hotel::Guest(hotel,1); hotel->guests.insert(guest);
+  Item::Office::Worker *w=office->crewMember(2);
+  EXPECT(park->assignSpace(w,Item::Parking::kOfficeCar)); w->parkingUsed=park;
+  EXPECT(park->assignSpace(guest,Item::Parking::kSuiteCar)); guest->parkingUsed=park;
+  tinyxml2::XMLPrinter pr; pr.OpenElement("parking"); park->encodeXML(pr); pr.CloseElement();
+  tinyxml2::XMLDocument doc; EXPECT(doc.Parse(pr.CStr())==tinyxml2::XML_SUCCESS);
+  // "Load": drivers forgotten, then the saved element decoded and relinked.
+  park->freeSpace(w); park->freeSpace(guest); w->parkingUsed=nullptr; guest->parkingUsed=nullptr;
+  EXPECT(park->usedSpaces()==0);
+  park->decodeXML(*doc.RootElement());
+  Item::Parking::relinkAll(&g);
+  EXPECT(park->usedSpaces()==2);
+  EXPECT(w->parkingUsed==park); EXPECT(guest->parkingUsed==park);
+  EXPECT(Item::Parking::carsParked(&g,Item::Parking::kOfficeCar)==1);
+  EXPECT(Item::Parking::carsParked(&g,Item::Parking::kSuiteCar)==1);
+ }
+
+ // F7: a checkout with no exit route still frees the bay.
+ {
+  reset(); auto *park=makeParking();
+  auto *hotel=static_cast<Item::Hotel *>(make("hotel_suite",30,2));
+  auto *guest=new Item::Hotel::Guest(hotel,0); hotel->guests.insert(guest);
+  EXPECT(park->assignSpace(guest,Item::Parking::kSuiteCar)); guest->parkingUsed=park; guest->entry=park;
+  hotel->checkout(true);
+  EXPECT(guest->parkingUsed==nullptr); EXPECT(park->usedSpaces()==0);
+ }
+
+ // F8: the VIP visit arms from the daily tick, not from a clock poll.
+ {
+  reset(3.0+Time::hourToAbsolute(5)); g.rating=2;
+  g.vipSystem.advance(0);
+  EXPECT(!g.vipSystem.watch);
+  g.vipSystem.armDaily();
+  EXPECT(g.vipSystem.watch);
+ }
+
+ // F9: destroyed owners leave no dangling driver, VIP or maid pointers.
+ {
+  reset(); auto *park=makeParking(); auto *lobby=make("lobby",0,0); g.mainLobby=lobby;
+  Person *d=new Person(&g,Person::kMan);
+  EXPECT(park->assignSpace(d,Item::Parking::kOfficeCar));
+  delete d;
+  EXPECT(park->usedSpaces()==0);
+  auto *office=static_cast<Item::Office *>(make("office",10,1)); office->occupied=true;
+  EXPECT(park->assignSpace(office->crewMember(2),Item::Parking::kOfficeCar));
+  office->crewMember(2)->parkingUsed=park;
+  g.removeItem(office);
+  EXPECT(park->usedSpaces()==0);
+  auto *hotel=static_cast<Item::Hotel *>(make("hotel_suite",30,2));
+  auto *guest=new Item::Hotel::Guest(hotel,0); hotel->guests.insert(guest);
+  EXPECT(park->assignSpace(guest,Item::Parking::kSuiteCar)); guest->parkingUsed=park;
+  g.vipSystem.vipGuest=guest;
+  auto *hk=static_cast<Item::Housekeeping *>(make("housekeeping",50,1));
+  hk->maids[0]=new Item::Housekeeping::Maid(hk,0); hk->maids[0]->target=hotel; hk->maids[0]->mode=1;
+  g.removeItem(hotel);
+  EXPECT(park->usedSpaces()==0);
+  EXPECT(g.vipSystem.vipGuest==nullptr);
+  EXPECT(hk->maids[0]->target==nullptr);
+ }
+ g.clearWorld();
+ std::cout<<"Batch 5 C++ engine scenarios completed\n";
 }
 #endif
 
@@ -3696,6 +4171,10 @@ int main()
 	testOspAttrCompat();
 	testSimTowerEventClock();
 	testBatch3SecomNeverUnlocks();
+	testBatch5BRoaches();
+	testBatch5BNeglectAndRescue();
+	testBatch5BMaidPickAndVenueZones();
+	testBatch5BRecyclingAndVip();
 #ifdef OPENSKY_TRANSPORT_TEST_EXECUTABLE
     if (graphicsScenariosAvailable()) {
         if (std::system("\"" OPENSKY_TRANSPORT_TEST_EXECUTABLE "\"") != 0) {

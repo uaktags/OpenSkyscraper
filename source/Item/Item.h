@@ -8,6 +8,7 @@
 #include "../Math/Rect.h"
 #include "../Person.h"
 #include "../Route.h"
+#include "../TenantRules.h"
 #include "../Sprite.h"
 #include "../Path.h"
 #include "Prototype.h"
@@ -71,6 +72,10 @@ namespace OT {
 			}
 
 		virtual void advance(double dt) {}
+		/// Number of EXE "visits" (ft % period == phase) crossed by the last
+		/// clock advance, capped at 8. Venues and tenants roll their per-visit
+		/// dice that many times per tick (batch 5 T26/T32/T36).
+		static int visitsThisTick(Game * game, int period = 16, int phase = 0);
 		virtual void evacuateForDisaster() {}
 		virtual int disasterSaleReversal() const { return 0; }
 		bool survivesDisaster() const;
@@ -80,6 +85,33 @@ namespace OT {
 		/// Condo::isAttractive() consult this when deciding move-in/vacation.
 		double evaluation;
 		virtual double getEvaluation() const { return evaluation; }
+
+		/// EXE tenant record (batch 5 T1): armed/category/tenure/class/redraw
+		/// plus six per-member banked-wait counters. The rent class of
+		/// office, condo, shop and hotel lives only here.
+		struct TenantRecord
+		{
+			bool    armed = false;
+			uint8_t category = 255;  ///< 0 stressed, 1 OK, 2 happy, 255 unjudged (food: 3)
+			uint8_t tenure = 0;      ///< 0..120
+			uint8_t rentClass = 1;   ///< 0 high .. 3 very low
+			bool    redraw = false;
+			TenantRules::Bank bank[6];
+		};
+		TenantRecord tenant;
+		/// True for office, condo, hotel rooms, shop, restaurant, fast food.
+		bool hasTenantRecord() const;
+		/// Change the rent class (clamped 0..3); office/condo/shop rejudge at once.
+		virtual void setRentClass(int c);
+		/// Derived display score from the tenant category.
+		void refreshEvaluation() { evaluation = TenantRules::evaluationFor(tenant.category); }
+		void resetTenantBanks();
+		/// Reset the record banks and the owner persons' own counters.
+		virtual void resetMemberBanks() { resetTenantBanks(); }
+		/// CountT category and current contribution subtracted on demolition
+		/// (-1 / 0 = none). Overridden by office and condo.
+		virtual int populationCategory() const { return -1; }
+		virtual int populationContribution() const { return 0; }
 
 		/// Construction animation state. Set by Factory::make on fresh
 		/// placement; cleared by Game::advance once time.absolute reaches

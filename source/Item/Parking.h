@@ -5,34 +5,7 @@
 
 namespace OT {
 	namespace Item {
-		/** Parking structure item (EXE "Parking Space", sheets 0x86A8+0x86A9).
-		 *
-		 * Each 4-cell (32 px) horizontal bay is ONE parking space, drawn from
-		 * the merged 15-frame sheet "simtower/parking/space": frame 0 = empty
-		 * bay, frame 1 = red X (space off the ramp chain), frames 2-14 = the
-		 * 13 parked-car variants (per-space deterministic pick 2 + id%13,
-		 * bays filled in ordinal order).
-		 *
-		 * Usability (ParkingT CheckAllParking): a bay is usable iff its floor
-		 * is underground and ramp-chained to B1 - ramps stacked at the same x
-		 * on consecutive basement floors, anchored at B1 - and the drive path
-		 * from the ramp to the bay is not cut by another item or a >= 4-cell
-		 * bare gap. Recomputed on layout changes and hourly (the EXE sweeps
-		 * daily at 7AM; the finer cadence also catches construction
-		 * completions, which the EXE handles by recomputing on build).
-		 *
-		 * Cars are admitted against the EXE per-category quota of 2 x usable
-		 * spaces (office drivers and hotel-suite guests each get the full
-		 * quota; ParkingT SetupGateCount). Parking earns $0 per car
-		 * (InParkingCar 1198:031a makes zero MoneyT calls) and only RAMP
-		 * items cost upkeep ($10k/quarter, rampUpkeepPerQuarter()).
-		 *
-		 * Divergence (ORIGINAL-BUGS B2): the EXE's InParkingCar never checks
-		 * whether a space already holds a car, so two cars can share one
-		 * physical space. We refuse that - an occupied bay is never
-		 * assignable - so our physical capacity is one car per bay even
-		 * though the admission quota stays the EXE's 2 x usable.
-		 */
+		// One 4-cell bay; quota accounting retains every driver, including double parking.
 		class Parking : public Item
 		{
 		public:
@@ -41,7 +14,7 @@ namespace OT {
 				p->id    = "parking";
 				p->name  = "Parking";
 				p->price = 3000;
-				p->size  = int2(8, 1);
+				p->size  = int2(4, 1);
 				// Authentic toolbox cell: the "P" sign (17). The old value
 				// 20 pointed at the church dome.
 				p->icon  = 17;
@@ -94,7 +67,9 @@ namespace OT {
 			static int usableSpaceCount(Game * game);
 			/// Admission quota PER CATEGORY: 2 x usable spaces
 			/// (ParkingT SetupGateCount; double-parking is real in the EXE).
-			static int carQuota(Game * game);
+			static int carQuota(Game * game, CarCategory cat = kOfficeCar);
+			static Parking *claim(Game*, Item *destination, Person *driver, CarCategory);
+			static void recomputeAllChains(Game *game);
 			/// Cars currently parked in category `cat`; kNoCar sums both.
 			static int carsParked(Game * game, CarCategory cat = kNoCar);
 			/// True iff a driver of `cat` may park right now: the category
@@ -102,6 +77,13 @@ namespace OT {
 			/// who cannot park cancels the stay (and voids an armed VIP
 			/// visit) - that integration consumes this query.
 			static bool canPark(Game * game, CarCategory cat);
+
+			/// A destroyed person leaves every driver map (no dangling owners).
+			static void forgetDriver(Person * driver);
+			/// After a load, re-bind saved cars to their drivers (F4).
+			static void relinkAll(Game * game);
+			/// The category a given driver is parked under (kNoCar if none).
+			CarCategory driverCategory(Person * driver) const;
 
 			/// Per-bay state, maintained by the chain sweep and the
 			/// assign/free calls.
@@ -122,6 +104,10 @@ namespace OT {
 
 		private:
 			std::vector<Bay> bayList;
+			std::map<Person*, CarCategory> drivers;
+			/// Saved cars awaiting relink: owner item cell, member, category.
+			struct PendingCar { int x, y, member; CarCategory category; };
+			std::vector<PendingCar> pendingCars;
 			std::vector<Sprite> baySprites;
 			bool wasUnderConstruction;
 
@@ -133,7 +119,6 @@ namespace OT {
 			/// Rebuild the ramp chain and recompute every Parking item's
 			/// bay usability + ordinals (CheckAllParking sweep). Runs from
 			/// advance() on layout changes and on the sim-hour tick.
-			static void recomputeAllChains(Game * game);
 		};
 	}
 }

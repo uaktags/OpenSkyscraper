@@ -7,6 +7,7 @@
 #include <vector>
 #include <algorithm>
 #include <cmath>
+#include <string>
 
 using namespace OT;
 using namespace OT::Item;
@@ -18,9 +19,7 @@ static const double kFramesPerDay      = 2600.0;
 static const int    kTrainToggleOdds   = 100;
 static const double kTrainFirstHour    = 10.0;
 
-// Dwell window the visitor spends at a commercial venue before heading back.
-static const double kVisitorMinDwell = Time::hourToAbsolute(0.25);
-static const double kVisitorMaxDwell = Time::hourToAbsolute(0.75);
+// Dwell is owned by the venue (8 or 9 pumps of 8 frames = 64/72 frames).
 
 
 Metro::~Metro()
@@ -37,6 +36,7 @@ void Metro::init()
 	trainPresent = false;
 	trainSound.setBuffer(App->sounds["simtower/metro"]);
 	visitorsToday = 0;
+	for (bool &used : slotUsed) used = false;
 	lastVisitorDay = static_cast<int>(std::floor(game->time.absolute));
 	station.setTexture(App->bitmaps["simtower/metro/station"]);
 	// The 3-floor station art is one 240x96 column (3*36 - 12, like the
@@ -63,6 +63,7 @@ void Metro::encodeXML(tinyxml2::XMLPrinter &xml)
 	xml.PushAttribute("trainPresent", trainPresent);
 	xml.PushAttribute("visitorsToday", visitorsToday);
 	xml.PushAttribute("lastVisitorDay", lastVisitorDay);
+	{ std::string slots; for (bool used : slotUsed) slots += used ? '1' : '0'; xml.PushAttribute("slots", slots.c_str()); }
 	for (std::set<Visitor *>::iterator it = visitors.begin(); it != visitors.end(); ++it) {
 		Visitor *v = *it;
 		xml.OpenElement("visitor");
@@ -72,6 +73,9 @@ void Metro::encodeXML(tinyxml2::XMLPrinter &xml)
 		xml.PushAttribute("type", v->type);
 		xml.PushAttribute("state", v->state);
 		xml.PushAttribute("stress", v->stress);
+		xml.PushAttribute("bankCount", int(v->bankCount));
+		xml.PushAttribute("bankTotal", int(v->bankTotal));
+		xml.PushAttribute("slot", v->slot);
 		xml.PushAttribute("eval", v->eval);
 		xml.PushAttribute("name", v->name.c_str());
 		xml.PushAttribute("from", v->from.c_str());
@@ -88,6 +92,10 @@ void Metro::decodeXML(tinyxml2::XMLElement &xml)
 	visitorsToday = std::max(0, xml.IntAttribute("visitorsToday", 0));
 	lastVisitorDay = xml.IntAttribute("lastVisitorDay", static_cast<int>(std::floor(game->time.absolute)));
 	clearAllVisitors();
+	{
+		std::string slots = xml.Attribute("slots", "");
+		for (int k = 0; k < kPoolSize; ++k) slotUsed[k] = k < int(slots.size()) && slots[k] == '1';
+	}
 	for (tinyxml2::XMLElement *e = xml.FirstChildElement("visitor"); e; e = e->NextSiblingElement("visitor")) {
 		Visitor *v = new Visitor(this);
 		v->arrivalTime = e->DoubleAttribute("arrivalTime");
@@ -96,6 +104,10 @@ void Metro::decodeXML(tinyxml2::XMLElement &xml)
 		v->type = (Person::Type)e->IntAttribute("type", Person::kMan);
 		v->state = (Person::State)e->IntAttribute("state", Person::kWandering);
 		v->stress = e->DoubleAttribute("stress", 0.0);
+		v->bankCount = e->IntAttribute("bankCount", 0);
+		v->bankTotal = e->IntAttribute("bankTotal", 0);
+		v->slot = e->IntAttribute("slot", -1);
+		v->member = v->slot;
 		v->eval = e->DoubleAttribute("eval", 0.0);
 		v->name = e->Attribute("name", "");
 		v->from = e->Attribute("from", "");
@@ -119,47 +131,36 @@ void Metro::updateSprite()
 	platform.setPosition({static_cast<float>(getPositionPixels().x), static_cast<float>(-getPositionPixels().y)});
 }
 
-OT::Item::Item * Metro::pickDestinationFor(Visitor *v)
+OT::Item::Item * Metro::pickDestination()
 {
-	// Target underground commercial venues specifically.
-	static const char *typeIds[] = {"fastfood", "restaurant", "shop", "cinema", "partyhall"};
-	std::vector<OT::Item::Item *> reachable;
-
-	for (size_t i = 0; i < sizeof(typeIds) / sizeof(typeIds[0]); ++i)
-	{
-		Game::ItemSetByString::const_iterator bucket = game->itemsByType.find(typeIds[i]);
-		if (bucket == game->itemsByType.end()) continue;
-		for (Game::ItemSet::const_iterator it = bucket->second.begin(); it != bucket->second.end(); ++it)
-		{
-			Item *item = *it;
-			if (item->position.y < 0 && !game->findRoute(this, item).empty())
-				reachable.push_back(item);
-		}
-	}
-
-	if (reachable.empty()) return NULL;
-	return reachable[rand() % reachable.size()];
+	// Zone 0 list of a random kind (shop 0, restaurant 1, fast food 2).
+	const std::vector<OT::Item::Item *> & list = game->venueLists[0][rand() % 3];
+	if (list.empty()) return NULL;
+	OT::Item::Item * dest = list[rand() % list.size()];
+	if (!game->items.count(dest) || game->findRoute(this, dest).empty()) return NULL;
+	return dest;
 }
 
-void Metro::spawnVisitors(int count)
+void Metro::rollPool()
 {
-	if (lobbyRoute.empty() || visitorsToday >= 240) return;
-	if (count < 0) count = 0;
-	count = std::min(count, 240 - visitorsToday);
-	for (int i = 0; i < count; ++i) {
-		Item *dest = pickDestinationFor(NULL);
+	if (lobbyRoute.empty()) return;
+	for (int k = 0; k < kPoolSize; ++k) {
+		if (slotUsed[k] || rand() % 36 != 0) continue;
+		slotUsed[k] = true; // consumed until the day reset unless the rider returns
+		++visitorsToday;
+		Item *dest = pickDestination();
 		if (!dest) continue;
 		const Route &r = game->findRoute(this, dest);
 		if (r.empty()) continue;
 		Visitor *v = new Visitor(this);
+		v->slot = k;
+		v->member = k;
 		v->arrivalTime = game->time.absolute;
-		v->departTime = game->time.absolute + randd(kVisitorMinDwell, kVisitorMaxDwell);
 		v->state = Person::kCommuting;
 		v->goingTo = dest->prototype->name;
 		v->from = "Metro";
 		v->journey.set(r);
 		visitors.insert(v);
-		++visitorsToday;
 	}
 }
 
@@ -190,6 +191,7 @@ void Metro::advance(double dt)
 	if (day != lastVisitorDay) {
 		lastVisitorDay = day;
 		visitorsToday = 0;
+		for (bool &used : slotUsed) used = false;
 	}
 	// SimTower opens the station at frame 0 (07:00) and closes it at frame 1600
 	// (17:00); trains only run from 10:00 until closing.
@@ -204,7 +206,7 @@ void Metro::advance(double dt)
 	}
 	if (open) {
 		// The toggle's first gate is the fire/bomb flag: no trains during an emergency.
-		if (game->time.hour >= kTrainFirstHour && !game->eventSystem.isActive()) {
+		if (game->time.hour >= kTrainFirstHour && !game->emergencyActive()) {
 			const long frames = game->time.ticksCrossed(1.0 / kFramesPerDay);
 			for (long i = 0; i < frames; ++i) {
 				if (rand() % kTrainToggleOdds != 0) continue;
@@ -212,23 +214,11 @@ void Metro::advance(double dt)
 				else { trainPresent = false; spriteNeedsUpdate = true; boardReturnedVisitors(); }
 			}
 		}
-		// The station admits a bounded visitor pool during the 10:00-17:00
-		// commercial window.  One 1/36 roll is made per 16 simulation ticks;
-		// no commuter population or fare income is fabricated here.
-		if (game->time.hour >= 10.0 && game->time.hour < 17.0 && !game->eventSystem.isActive() &&
-			visitorsToday < 240 && game->time.checkTick(16.0 / 2600.0) &&
-			rand() % 36 == 0) spawnVisitors(1);
-		for (std::set<Visitor *>::iterator it = visitors.begin(); it != visitors.end(); ++it) {
-			Visitor *v = *it;
-			if (v->state == Person::kCommuting && v->at && v->at != this) {
-				v->state = Person::kShopping;
-			}
-			if (v->state == Person::kShopping && game->time.absolute >= v->departTime) {
-				Item *from = v->at ? v->at : game->mainLobby;
-				const Route &r = game->findRoute(from, this);
-				if (!r.empty()) { v->state = Person::kReturning; v->goingTo = "Metro"; v->journey.set(r); }
-				else v->returnedToMetro = true;
-			}
+		// 10:00-17:00: every free slot rolls 1/36 per 16-frame visit. No fare
+		// is charged and no commuter population is fabricated.
+		if (game->time.hour >= 10.0 && game->time.hour < 17.0 && !game->emergencyActive()) {
+			const long visits = visitsThisTick(game, 16, 0);
+			for (long v = 0; v < visits; ++v) rollPool();
 		}
 	}
 	if (spriteNeedsUpdate) updateSprite();
@@ -241,6 +231,7 @@ void Metro::addPerson(Person *p)
 	if (v && v->state == Person::kReturning) {
 		v->returnedToMetro = true;
 		v->state = Person::kIdle;
+		if (v->slot >= 0 && v->slot < kPoolSize) slotUsed[v->slot] = false; // recycle the same day
 		if (visitorsToday > 0) --visitorsToday;
 	}
 }
@@ -253,6 +244,7 @@ void Metro::removePerson(Person *p)
 Metro::Visitor::Visitor(Metro *m)
 	: Person(m->game)
 {
+	station = m;
 	arrivalTime = 0;
 	departTime = 0;
 	returnedToMetro = false;
@@ -264,7 +256,7 @@ Metro::Visitor::Visitor(Metro *m)
 
 void Metro::evacuateForDisaster()
 {
- clearAllVisitors(); open = true; trainPresent = false; visitorsToday = 0;
+ clearAllVisitors(); open = true; trainPresent = false; visitorsToday = 0; for (bool &used : slotUsed) used = false;
  trainSound.Stop();
  spriteNeedsUpdate = true;
  updateSprite();

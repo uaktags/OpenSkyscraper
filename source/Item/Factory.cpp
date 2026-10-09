@@ -19,6 +19,8 @@
 #include "Metro.h"
 #include "Office.h"
 #include "Parking.h"
+#include "ParkingRamp.h"
+#include "Housekeeping.h"
 #include "Condo.h"
 #include "YootCondo.h"
 #include "Security.h"
@@ -52,6 +54,8 @@ void Factory::loadPrototypes()
 	register_item(Elevator::Service);
 	register_item(Elevator::Standard);
 	register_item(FastFood);
+	register_item(Restaurant);
+	register_item(Housekeeping);
 	register_item(Shop);
 	prototypes.push_back(Hotel::makeSinglePrototype());
 	prototypes.push_back(Hotel::makeDoublePrototype());
@@ -61,6 +65,7 @@ void Factory::loadPrototypes()
 	register_item(Metro);
 	register_item(Office);
 	register_item(Parking);
+	register_item(ParkingRamp);
 	register_item(Condo);
 	register_item(YootCondo);
 	register_item(Security);

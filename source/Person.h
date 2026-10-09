@@ -1,5 +1,6 @@
 #pragma once
 #include <cstddef>
+#include <cstdint>
 #include <queue>
 #include <string>
 #include <tinyxml2.h>
@@ -59,6 +60,16 @@ namespace OT {
 		/// deposited once when Journey reaches its final node.
 		void addJourneyStress(double amount);
 		void deliverJourneyStress();
+		/// Bank the finished trip's pending wait (batch 5 T2): count++ / total +=
+		/// round(pending) with EXE int8/int16 wrap, written through to the
+		/// owner's tenant record. Housekeepers and security never bank.
+		void bankTrip();
+		/// Individual mean of banked trips (signed, truncated), 0 without trips.
+		int bankedMean() const;
+		int8_t  bankCount = 0;
+		int16_t bankTotal = 0;
+		Item::Item * home = nullptr; ///< owning tenant (null for visitors/staff)
+		int8_t member = -1;          ///< member slot on the owner record
 		double journeyStress() const { return pendingJourneyStress; }
 		bool isServicePerson() const { return type == kHousekeeper || type == kSecurity; }
 		double waitStartFrame = 0;
@@ -84,6 +95,11 @@ namespace OT {
 			void queueRejected();
 			void queueAccepted();
 			void failWaiting();
+			/// True once the person stands in the final non-transport node of the
+			/// current route (the trip is complete and already banked).
+			bool atFinalNode() const;
+			/// A journey banks exactly once (F3).
+			bool banked = false;
 			Item::Item *waitingAt = nullptr;
 			bool retryPending = false;
 			double retryFrame = 0;

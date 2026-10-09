@@ -105,6 +105,7 @@ void Queue::applyWatchdog()
 		if (frame - p->waitStartFrame + 1e-7 < kQueueWatchdogFrames) continue;
 		bankWait(p);
 		p->journey.failWaiting();
+		p->bankTrip(); // watchdog removal banks the felt wait (batch 5 T2)
 		ejected = true;
 	}
 	if (ejected) {

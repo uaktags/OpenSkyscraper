@@ -13,7 +13,7 @@ namespace OT {
                 p->id = "medicalcenter";
                 p->name = "Medical Center";
                 p->price = 500000;
-                p->size = int2(32,1);
+                p->size = int2(26,1);
                 p->icon = 22;
             }
             virtual ~MedicalCenter();
@@ -23,6 +23,12 @@ namespace OT {
             virtual void advance(double dt);
 
             int variant;
+            int patients=0;
+            struct Treatment { Person *person; Item *origin; double until; };
+            std::vector<Treatment> treatments;
+            bool admitPatient(Person*);
+            void addPerson(Person*) override;
+            void evacuateForDisaster() override;
 
             Sprite sprite;
             bool spriteNeedsUpdate;

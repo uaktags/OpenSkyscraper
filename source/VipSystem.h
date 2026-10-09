@@ -33,7 +33,7 @@ namespace OT
 		void reset();
 
 		/// Is a VIP currently on the premises?
-		bool isVisiting() const { return visiting; }
+		bool isVisiting() const { return visiting != 0; }
 
 		/// Absolute-time at which the next visit will trigger. 0 if none.
 		double nextVisitAt() const { return nextVisitTime; }
@@ -43,7 +43,7 @@ namespace OT
 		void decodeXML(tinyxml2::XMLElement & xml);
 
 		/// Favorable verdicts on hand, consumed by promotion ceremonies.
-		int positiveReviews() const { return goodReviews; }
+		int positiveReviews() const { return gameIsYoot() ? goodReviews : (favorable ? 1 : 0); }
 
 		/// Consume exactly one favorable verdict without clearing history.
 		void clearApproval();
@@ -58,30 +58,31 @@ namespace OT
 		Item::Item * findYootDestination(const std::vector<std::string> & prototypes) const;
 		bool liveItem(Item::Item * item) const;
 
-		bool promotionNeedsVisit() const;
-		void armVisit();
-		void beginVisit();
-		void advanceGuest();
-		void endVisit(bool favorable);
-		Item::Hotel * firstBookableSuite() const;
-		bool liveSuite(Item::Hotel * suite) const;
-		bool liveGuest(Person * guest) const;
-
-		double nextVisitTime;   ///< absolute time of the next 17:00 arm
-		double visitEndTime;    ///< fallback timeout for a malformed stay
-		bool   visiting;        ///< a scheduled VIP stay is active
-		bool   forcedVisit;     ///< scheduleNow() bypasses the calendar gate
-		bool   guestArrived;    ///< a suite guest claimed a car space
-		bool   guestCheckedIn;  ///< the selected guest reached the suite
-		bool   visitVoided;     ///< failed parking/route voided this stay
-		int    armedDay;        ///< day already armed; prevents per-frame re-arm
-		int    suiteFloor;      ///< reservation dialog floor, 0 when unavailable
-		double stressTotal;     ///< selected guest's banked felt-wait stress
-		int    stressTrips;     ///< number of banked stress samples
-		Item::Hotel * bookedSuite;
-		Person * vipGuest;
-		int    goodReviews;
-		int    badReviews;
+        bool gameIsYoot() const;
+        void armVisit();
+        bool liveGuest(Person*) const;
+        int visiting = 0;
+        int lastDay = -1;
+        bool watch = false;
+        Person *vipGuest = nullptr;
+        int vipTotal = 0, vipTrips = 0, result = 0;
+        int goodReviews = 0, badReviews = 0; // Yoot path only
+        double nextVisitTime = 0;
+        int pendingHomeX = 0, pendingHomeY = 0, pendingMember = -1;
+    public:
+        bool favorable = false;
+        void bankTrip(Person*, int wait);
+        void bindGuest(Person*);
+        void checkout(Person*, bool normal);
+        void voidPerson(Person*);
+        /// Clear the bound guest if it is this (about to be destroyed) person.
+        void forgetPerson(Person*);
+        /// Arm the VIP visit from the shared daily judge tick.
+        void armDaily();
+        void dayCheck();
+        /// Re-find the bound guest once items have been decoded.
+        void relink();
+    private:
 
 		// --- YootTower VIP state ---
 		int    yootPendingVip;    ///< index into RulesProfile::vips, -1 = none

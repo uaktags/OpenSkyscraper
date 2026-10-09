@@ -2,12 +2,14 @@
 /* Copyright (c) 2026 OpenSkyscraper contributors */
 #include <cmath>
 #include <cassert>
+#include <algorithm>
 #include <chrono>
 #include <TGUI/Widgets/Label.hpp>
 #include <TGUI/Widgets/Button.hpp>
 #include "Application.h"
 #include "Game.h"
 #include "SaveHash.h"
+#include "NameManager.h"
 #include "Item/FastFood.h"
 #include "Item/Lobby.h"
 #include "Item/Office.h"
@@ -16,9 +18,11 @@
 #include "Item/Condo.h"
 #include "Item/Elevator/Elevator.h"
 #include "Item/Parking.h"
+#include "Item/Housekeeping.h"
 #include "Item/Shop.h"
 #include "Item/Security.h"
 #include "Item/Recycling.h"
+#include "Item/MedicalCenter.h"
 #include "Item/Metro.h"
 #include "Item/Escalator.h"
 #include "Item/Cathedral.h"
@@ -114,7 +118,8 @@ static void settleQuarterlyAccounting(Game *game)
 	// The EXE opens a new quarter at 4:59AM, then processes departures,
 	// rent and infrastructure. Never perform this more than once for the
 	// same three-day financial cycle.
-	game->money.finalizeQuarter();
+	// (finalizeQuarter() has already run, before the tenant judge, so
+	// buybacks from move-outs land in the new quarter.)
 	for (Game::ItemSet::const_iterator it = game->items.begin();
 	     it != game->items.end(); ++it)
 	{
@@ -143,12 +148,11 @@ static void settleQuarterlyAccounting(Game *game)
 		{
 			Item::Shop *shop = dynamic_cast<Item::Shop *>(item);
 			if (!shop || !shop->let) continue;
-			cls = shop->rentClass;
+			cls = shop->tenant.rentClass;
 		}
 		else if (id == "office")
 		{
-			Item::Office *office = dynamic_cast<Item::Office *>(item);
-			if (office) cls = office->rentClass;
+			cls = item->tenant.rentClass;
 		}
 		const int rent = openSkyQuarterlyRent(id, cls);
 		if (rent > 0)
@@ -364,6 +368,7 @@ Game::Game(Application & app)
 	money.setBalance(funds);
 	rating = activeRules.profile().startRating;
 	population = 0;
+	countT = TenantRules::CountT();
 	populationNeedsUpdate = false;
 	yootVipFlags = 0;
 	lastAutosaveDay = (int)floor(time.absolute);
@@ -374,6 +379,7 @@ Game::Game(Application & app)
 	else
 		time.set(7/78.0);
 	lastAccountingDay = (int)floor(time.absolute);
+	lastJudgeDay = (int)floor(time.absolute) - (time.hour < 5.0 ? 1 : 0);
 	// Store the absolute three-day financial cycle, not Time::quarter's
 	// presentation value. This survives year wrap without duplicate billing.
 	lastAccountingQuarter = (int)floor(time.absolute / 3.0);
@@ -444,7 +450,10 @@ void Game::clearWorld()
 	mainLobby = NULL;
 	metroStation = NULL;
 	itemBelowCursor = NULL;
+	for (auto &zone : venueLists) for (auto &list : zone) list.clear();
+	medicalAdequate = true; recyclingAdequate = true; recyclingDisplayStage = 0;
 	population = 0;
+	countT = TenantRules::CountT();
 	populationNeedsUpdate = false;
 	visualizeRoute.clear();
 	gameMap.clear();
@@ -913,6 +922,7 @@ void Game::advanceSimTick(double dt)
     eventSystem.advance(dt);
     const bool frozen = eventWasActive || eventSystem.isActive();
     if (!frozen) vipSystem.advance(dt);
+    if (!frozen) Item::Recycling::advanceAll(this);
 
 	for (ItemSet::iterator i = items.begin(); i != items.end(); i++) {
 		Item::Item * item = *i;
@@ -936,11 +946,26 @@ void Game::advanceSimTick(double dt)
     if (!frozen) for (PersonSet::iterator p = people.begin(); p != people.end(); p++) {
         (*p)->advance(dt);
     }
+	bool quarterFinalized = false;
 	// Quarterly accounting is committed after the item/person pass. Office and
 	// Condo use this boundary frame to remove unattractive tenants first, so
 	// leavers do not pay the rent that follows.
+	// Daily tenant judge on the 04:59 settle tick (first tick at/after 05:00
+	// each day): per-floor judge, quarter-day move-out/settle or the arm
+	// pass. It runs just BEFORE the quarterly rent loop so leavers do not pay.
+	if (time.hour >= 5.0 && (int)floor(time.absolute) > lastJudgeDay)
+	{
+		lastJudgeDay = (int)floor(time.absolute);
+		// Quarter day: open the new quarter FIRST so move-out buybacks are
+		// booked in it, then judge (same predicate as the settlement), then
+		// bill the survivors below.
+		if (quarterlySettlementDue) { money.finalizeQuarter(); quarterFinalized = true; }
+		judgeSystem.judgeDaily(this, quarterlySettlementDue);
+		vipSystem.armDaily();
+	}
 	if (quarterlySettlementDue)
 	{
+		if (!quarterFinalized) money.finalizeQuarter();
 		settleQuarterlyAccounting(this);
 		lastAccountingQuarter = financialCycle;
 		// The original pops its financial report right after the
@@ -948,13 +973,27 @@ void Game::advanceSimTick(double dt)
 		showReport();
 	}
 
+	// Batch 5 hotel pass (T16). The restaurants open from their own advance();
+	// then roach spread, JudgeAllHotel, the VIP day check and the hotel name purge.
+	if (!frozen && time.checkHour(17)) {
+		Item::Hotel::spreadRoaches(this);
+		Item::Hotel::judgeAll(this);
+		vipSystem.dayCheck();
+		NameManager::purgeClass(NameManager::kNameHotel); // 17:00 hotel name purge (T47)
+	}
+	// ft 2500: visitor names are purged (T47).
+	if (!frozen && Item::Item::visitsThisTick(this, 2600, 2500) > 0)
+		NameManager::purgeClass(NameManager::kNameVisitor);
+	// 07:00: venue zone lists are rebuilt and the medical flag is re-armed.
+	if (!frozen && time.checkHour(7)) {
+		rebuildVenueLists();
+		if (rating >= 2) medicalAdequate = true;
+	}
+
 	if (populationNeedsUpdate) {
 		populationNeedsUpdate = false;
-		int p = 0;
-		for (ItemSet::iterator i = items.begin(); i != items.end(); i++) {
-			p += (*i)->population;
-		}
-		setPopulation(p);
+		// CountT is incremental (batch 5 T14): the global is countT.population.
+		setPopulation(countT.population);
 	}
 
 	//Play sounds. checkHour reads the clock transition of the last
@@ -1293,6 +1332,7 @@ void Game::addItem(Item::Item * item)
 	assert(item);
 	items.insert(item);
 	itemsByType[item->prototype->id].insert(item);
+	rebuildVenueLists();
 
 	if (item->canHaulPeople()) {
 		itemsByType["canHaulPeople"].insert(item);
@@ -1359,6 +1399,10 @@ void Game::addItem(Item::Item * item)
 void Game::removeItem(Item::Item * item)
 {
     if (!item || !items.count(item)) return;
+    NameManager::removeTenant(item);
+    // Demolition removes an occupied office (6) / condo (3) from CountT.
+    if (item->populationCategory() >= 0 && item->populationContribution() != 0)
+        addPopulation(item->populationCategory(), -item->populationContribution());
     // Cancel current and queued trips while virtual detach hooks are live.
     for (Person *p : people)
         if (p->journey.references(item)) p->journey.cancel();
@@ -1372,6 +1416,12 @@ void Game::removeItem(Item::Item * item)
                 if (g->parkingUsed == item) g->parkingUsed = NULL;
         }
     }
+    // Maids must not keep a target that is about to be deleted.
+    if (Item::Hotel *hotel = dynamic_cast<Item::Hotel *>(item))
+        for (Item::Item *hk : itemsByType["housekeeping"])
+            if (Item::Housekeeping *center = dynamic_cast<Item::Housekeeping *>(hk))
+                for (Item::Housekeeping::Maid *maid : center->maids)
+                    if (maid && maid->target == hotel) { maid->target = nullptr; if (maid->mode == 1) maid->mode = 0; }
     visualizeRoute.clear();
     inspectorDialog.close();
     elevatorDialog.close();
@@ -1390,6 +1440,7 @@ void Game::removeItem(Item::Item * item)
 	if (rq != routeBuildQueue.end()) routeBuildQueue.erase(rq);
 	items.erase(item);
 	itemsByType[item->prototype->id].erase(item);
+	rebuildVenueLists();
 
 	if (item->canHaulPeople()) {
 		itemsByType["canHaulPeople"].erase(item);
@@ -1608,6 +1659,7 @@ void Game::applyNewTowerProfile()
 	money.clear(funds);
 	rating = profile.startRating;
 	population = 0;
+	countT = TenantRules::CountT();
 	populationNeedsUpdate = false;
 	yootVipFlags = 0;
 	// YootTower doc init: T2DateTime(1, worldDef+0x74, 7:00).
@@ -1616,6 +1668,7 @@ void Game::applyNewTowerProfile()
 	else
 		time.set(7/78.0);
 	lastAccountingDay = (int)floor(time.absolute);
+	lastJudgeDay = (int)floor(time.absolute) - (time.hour < 5.0 ? 1 : 0);
 	lastAccountingQuarter = (int)floor(time.absolute / 3.0);
 	timeWindow.updateFunds();
 	timeWindow.updateRating();
@@ -1659,6 +1712,18 @@ void Game::encodeXML(tinyxml2::XMLPrinter & xml)
 
 	xml.PushAttribute("x", (int)poi.x);
 	xml.PushAttribute("y", (int)poi.y);
+
+	{
+		char counts[160];
+		snprintf(counts, sizeof(counts), "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d",
+			countT.cat[0], countT.cat[1], countT.cat[2], countT.cat[3], countT.cat[4],
+			countT.cat[5], countT.cat[6], countT.cat[7], countT.cat[8], countT.cat[9]);
+		xml.PushAttribute("countT", counts);
+		xml.PushAttribute("countPopulation", countT.population);
+		xml.PushAttribute("medicalAdequate", medicalAdequate);
+		xml.PushAttribute("recyclingAdequate", recyclingAdequate);
+		xml.PushAttribute("recyclingDisplayStage", recyclingDisplayStage);
+	}
 
 	// Persist VIP scheduling state so visits don't reset on save/reload.
 	vipSystem.encodeXML(xml);
@@ -1807,6 +1872,7 @@ void Game::decodeXML(tinyxml2::XMLDocument & xml)
 	yootVipFlags = root->UnsignedAttribute("yootVipFlags", 0);
 	time.set(root->DoubleAttribute("time"));
 	lastAccountingDay = (int)floor(time.absolute);
+	lastJudgeDay = (int)floor(time.absolute) - (time.hour < 5.0 ? 1 : 0);
 	const int currentCycle = (int)floor(time.absolute / 3.0);
 	lastAccountingQuarter = root->IntAttribute("accountingCycle",
 		currentCycle - (time.hour < 5.0 ? 1 : 0));
@@ -1824,12 +1890,31 @@ void Game::decodeXML(tinyxml2::XMLDocument & xml)
 	// Restore event scheduling state (no-op on older saves).
 	eventSystem.decodeXML(*root);
 
+	const char * savedCountT = root->Attribute("countT");
+	if (savedCountT) {
+		int v[10] = {0};
+		sscanf(savedCountT, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d",
+			&v[0], &v[1], &v[2], &v[3], &v[4], &v[5], &v[6], &v[7], &v[8], &v[9]);
+		countT = TenantRules::CountT();
+		int sum = 0;
+		for (int c = 0; c < 10; ++c) { countT.cat[c] = v[c]; sum += v[c]; }
+		countT.population = root->IntAttribute("countPopulation", sum);
+	}
+
 	tinyxml2::XMLElement * e = root->FirstChildElement("item");
 	while (e) {
 		Item::Item * item = itemFactory.make(*e);
 		addItem(item);
 		e = e->NextSiblingElement("item");
 	}
+	// Old saves carry no CountT: derive it once from item state.
+	if (!savedCountT) recomputeCountT();
+	medicalAdequate = root->BoolAttribute("medicalAdequate", true);
+	recyclingAdequate = root->BoolAttribute("recyclingAdequate", true);
+	recyclingDisplayStage = root->IntAttribute("recyclingDisplayStage", 0);
+	rebuildVenueLists();
+	vipSystem.relink();
+	Item::Parking::relinkAll(this);
 	populationNeedsUpdate = true;
 	// Self-heal missing floor slabs on load (OpenSkyWeb ISSUE-041): repairs
 	// towers saved by builds that minted floors with the off-by-one drag bug.
@@ -1842,9 +1927,9 @@ void Game::settleDailyAccounting()
 {
 	// Daily bookkeeping only closes the previous day and refreshes tenant
 	// evaluation. Maintenance and recurring rent are quarterly events at
-	// 4:59AM, handled by settleQuarterlyAccounting().
+	// 4:59AM, handled by settleQuarterlyAccounting(). The tenant judge runs on
+	// the 04:59 settle tick in advanceSimTick (batch 5 T5).
 	money.finalizeDay();
-	judgeSystem.evaluateAll(this);
 	timeWindow.updateMoneyStats();
 }
 
@@ -1899,6 +1984,115 @@ void Game::setRating(int r)
 	}
 }
 
+void Game::addPopulation(int category, int delta)
+{
+	countT.add(category, delta);
+	populationNeedsUpdate = true;
+}
+
+void Game::resetCategory(int category)
+{
+	countT.reset(category);
+	populationNeedsUpdate = true;
+}
+
+void Game::resetCategoryOnce(int category)
+{
+	if (countT.resetOnce(category, (int)floor(time.absolute)))
+		populationNeedsUpdate = true;
+}
+
+void Game::recomputeCountT()
+{
+	countT = TenantRules::CountT();
+	for (ItemSet::const_iterator it = items.begin(); it != items.end(); ++it) {
+		Item::Item * item = *it;
+		const int cat = item->populationCategory();
+		if (cat >= 0) countT.add(cat, item->populationContribution());
+	}
+	populationNeedsUpdate = true;
+}
+
+std::vector<Item::Item *> Game::slotOrder(int floor) const
+{
+	std::vector<Item::Item *> out;
+	ItemSetByInt::const_iterator it = itemsByFloor.find(floor);
+	if (it == itemsByFloor.end()) return out;
+	for (ItemSet::const_iterator i = it->second.begin(); i != it->second.end(); ++i)
+		if ((*i)->prototype->id != "floor") out.push_back(*i);
+	std::sort(out.begin(), out.end(), [](const Item::Item * a, const Item::Item * b) {
+		if (a->position.x != b->position.x) return a->position.x < b->position.x;
+		if (a->prototype->id != b->prototype->id) return a->prototype->id < b->prototype->id;
+		return a < b;
+	});
+	return out;
+}
+
+int Game::tenantSlotIndex(const Item::Item * item) const
+{
+	if (!item) return 0;
+	int count = 0;
+	ItemSetByInt::const_iterator it = itemsByFloor.find(item->position.y);
+	if (it == itemsByFloor.end()) return 0;
+	for (ItemSet::const_iterator i = it->second.begin(); i != it->second.end(); ++i) {
+		const Item::Item * o = *i;
+		if (o == item || o->position.x >= item->position.x) continue;
+		const std::string & id = o->prototype->id;
+		if (id == "floor" || id == "lobby" || id == "stairs" || id == "escalator" ||
+		    o->isElevator() || o->isLobby() || o->isStairlike()) continue;
+		++count;
+	}
+	return count;
+}
+
+bool Game::emergencyActive() const
+{
+	// Fire, bomb threat or disaster (EventSystem::Type != None).
+	return eventSystem.isActive();
+}
+
+void Game::rebuildVenueLists()
+{
+	for (auto &zone : venueLists) for (auto &list : zone) list.clear();
+	static const char * const ids[4] = {"shop", "restaurant", "fastfood", "medicalcenter"};
+	for (int kind = 0; kind < 4; ++kind) {
+		ItemSetByString::const_iterator bucket = itemsByType.find(ids[kind]);
+		if (bucket == itemsByType.end()) continue;
+		std::vector<Item::Item *> sorted(bucket->second.begin(), bucket->second.end());
+		std::sort(sorted.begin(), sorted.end(), [](const Item::Item *a, const Item::Item *b) {
+			if (a->position.y != b->position.y) return a->position.y < b->position.y;
+			if (a->position.x != b->position.x) return a->position.x < b->position.x;
+			return a < b;
+		});
+		for (Item::Item *item : sorted) {
+			const int f = item->position.y + 5;
+			const int z = f / 15;            // trunc toward zero (EXE band)
+			if (z < 0 || z > 6 || f % 15 > 9) continue; // negative remainders pass
+			venueLists[z][kind].push_back(item);
+		}
+	}
+}
+
+Item::Item * Game::pickVenue(int originFloor, int kind)
+{
+	if (kind < 0 || kind > 3) return NULL;
+	int z = (originFloor + 1) / 15;
+	if (z < 0) z = 0;
+	if (z > 6) z = 6;
+	std::vector<Item::Item *> *list = &venueLists[z][kind];
+	if (list->empty()) list = &venueLists[0][kind];
+	if (list->empty()) return NULL;
+	Item::Item *item = (*list)[rand() % list->size()];
+	return items.count(item) ? item : NULL;
+}
+
+Item::Item * Game::pickMedicalCenter(int originFloor)
+{
+	Item::Item *center = pickVenue(originFloor, 3);
+	if (!center) medicalAdequate = false; // sick worker found no center
+	return center;
+}
+
 void Game::setPopulation(int p)
 {
 	if (population != p) {
@@ -1935,19 +2129,18 @@ void Game::ratingMayIncrease()
 	ctx.metros = counts.metros;
 	Game::ItemSetByString::const_iterator suites = itemsByType.find("hotel_suite");
 	ctx.hotelSuites = (suites == itemsByType.end()) ? 0 : (int)suites->second.size();
-	Game::ItemSetByString::const_iterator recyclers = itemsByType.find("recycling");
-	const int recyclingCenters = (recyclers == itemsByType.end()) ? 0 : (int)recyclers->second.size();
-	ctx.recyclingAdequate = LevelUp::recyclingAdequate(population, recyclingCenters);
-	std::vector<int> servedFloors, medicalFloors;
+	// Adequacy flags are written by the scheduled recycling stages and the
+	// sick-worker lookup (T33/T42); with no completed center there is none.
+	int recyclingCenters = 0, medicalCenters = 0;
 	for (ItemSet::const_iterator i = items.begin(); i != items.end(); ++i)
 	{
+		if ((*i)->underConstruction) continue;
 		const std::string & id = (*i)->prototype->id;
-		if (id == "office" || id == "condo" || id == "yoot_condo")
-			servedFloors.push_back((*i)->position.y);
-		else if (id == "medicalcenter")
-			medicalFloors.push_back((*i)->position.y);
+		if (id == "recycling") ++recyclingCenters;
+		else if (id == "medicalcenter") ++medicalCenters;
 	}
-	ctx.medicalAdequate = LevelUp::medicalAdequate(servedFloors, medicalFloors);
+	ctx.recyclingAdequate = recyclingAdequate && recyclingCenters > 0;
+	ctx.medicalAdequate = medicalAdequate && medicalCenters > 0;
 	ctx.vipReviews = vipSystem.positiveReviews();
 	ctx.hour = time.hour;
 	ctx.day = time.day;
@@ -3089,7 +3282,7 @@ void Game::cancelTransientVip()
  xml.OpenElement("vip"); vipSystem.encodeXML(xml); xml.CloseElement();
  tinyxml2::XMLDocument doc;
  if (doc.Parse(xml.CStr()) == tinyxml2::XML_SUCCESS)
-  vipSystem.decodeXML(*doc.RootElement());
+  { vipSystem.decodeXML(*doc.RootElement()); vipSystem.relink(); }
 }
 
 void Game::destroyItemByDisaster(Item::Item *item)

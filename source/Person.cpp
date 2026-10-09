@@ -6,7 +6,9 @@
 #include <set>
 #include "Game.h"
 #include "Item/Item.h"
+#include "Item/Parking.h"
 #include "NameManager.h"
+#include "TenantRules.h"
 #include "Person.h"
 
 using namespace OT;
@@ -73,7 +75,7 @@ Person::Person(Game * game, Type type)
 	eval   = 0.0;
 	pendingJourneyStress = 0.0;
 	animOffset = (double)(rand() % 1000) / 1000.0;
-	name   = NameManager::makeName((int)type);
+	name.clear(); // generic labels come from NameManager::label; names are custom
 	if (game) game->people.insert(this);
 }
 
@@ -83,7 +85,12 @@ Person::~Person()
 		LOG(DEBUG, "forcefully removed from %s", at->desc().c_str());
 		at->removePerson(this);
 	}
-	if (game) game->people.erase(this);
+	if (game) {
+		// Owners must not keep a dangling handle to a destroyed person (F9).
+		game->vipSystem.forgetPerson(this);
+		Item::Parking::forgetDriver(this);
+		game->people.erase(this);
+	}
 }
 
 void Person::addStress(double amount)
@@ -106,10 +113,38 @@ void Person::deliverJourneyStress()
 	pendingJourneyStress = 0.0;
 }
 
+void Person::bankTrip()
+{
+	if (type == kHousekeeper || type == kSecurity) return;
+	TenantRules::Bank b;
+	b.count = bankCount;
+	b.total = bankTotal;
+	TenantRules::bankAdd(b, pendingJourneyStress);
+	bankCount = b.count;
+	bankTotal = b.total;
+	if (home && member >= 0 && member < 6)
+	{
+		home->tenant.bank[member].count = bankCount;
+		home->tenant.bank[member].total = bankTotal;
+	}
+	if (game)
+		game->vipSystem.bankTrip(this, TenantRules::roundInt(pendingJourneyStress));
+	// The old stress scalar survives only for queue priority / colouring.
+	deliverJourneyStress();
+	pendingJourneyStress = 0.0;
+}
+
+int Person::bankedMean() const
+{
+	return TenantRules::bankedMean(bankCount, bankTotal);
+}
+
 void Person::recordNoRoute(int from, int to)
 {
-	addStress(kMaxStress);
-	pendingJourneyStress = 0.0;
+	// An unreachable destination banks the worst possible trip.
+	pendingJourneyStress = kMaxStress;
+	bankTrip();
+	if (game) game->vipSystem.voidPerson(this);
 	if (!game) return;
 	std::set<FloorPair> &latched = noRouteMessages[game];
 	if (latched.insert(FloorPair(from, to)).second)
@@ -137,6 +172,8 @@ void Person::encodeXML(tinyxml2::XMLPrinter &xml)
 	xml.PushAttribute("name", name.c_str());
 	xml.PushAttribute("from", from.c_str());
 	xml.PushAttribute("goingTo", goingTo.c_str());
+	xml.PushAttribute("bankCount", (int)bankCount);
+	xml.PushAttribute("bankTotal", (int)bankTotal);
 }
 
 void Person::decodeXML(tinyxml2::XMLElement &xml)
@@ -149,6 +186,10 @@ void Person::decodeXML(tinyxml2::XMLElement &xml)
 	eval    = xml.DoubleAttribute("eval", 0.0);
 	pendingJourneyStress = 0.0;
 	name    = xml.Attribute("name", "");
+	// Older saves stored generated "Man #3" style names; those are not custom.
+	if (name.find(" #") != std::string::npos) name.clear();
+	bankCount = (int8_t)xml.IntAttribute("bankCount", 0);
+	bankTotal = (int16_t)xml.IntAttribute("bankTotal", 0);
 	from    = xml.Attribute("from", "");
 	goingTo = xml.Attribute("goingTo", "");
 }
@@ -164,6 +205,7 @@ Person::Journey::Journey(Person * p)
 void Person::Journey::set(const Route & r)
 {
 	retryPending = replanPending = false;
+	banked = false;
 	waitingAt = nullptr;
 	destination = r.empty() ? nullptr : r.nodes.back().item;
 	destinationFloor = r.empty() ? fromFloor : r.nodes.back().toFloor;
@@ -198,7 +240,8 @@ void Person::Journey::next()
 		destination = nullptr;
 		replanPending = false;
 		toFloor = fromFloor;
-		person->deliverJourneyStress();
+		if (!banked) person->bankTrip();
+		banked = true;
 		return;
 	}
 	item = nodes.front().item;
@@ -213,7 +256,18 @@ void Person::Journey::next()
 		if (waitingAt) waitingAt->Item::Item::addPerson(person);
 	}
 	if (!item->isElevator() && person->at) person->at->removePerson(person);
+	// Reaching the final tenant node completes the trip: bank first so the
+	// destination's arrival logic (venue grading) sees the updated mean.
+	if (nodes.size() == 1 && !item->canHaulPeople() && !item->isLobby() && !banked) {
+		person->bankTrip();
+		banked = true;
+	}
 	item->addPerson(person);
+}
+
+bool Person::Journey::atFinalNode() const
+{
+	return item && person->at == item && nodes.size() == 1 && !item->canHaulPeople();
 }
 
 void Person::Journey::queueRejected()
@@ -261,7 +315,7 @@ void Person::Journey::failWaiting()
 	waitingAt = nullptr;
 	fromFloor = floor;
 	if (destination) toFloor = destinationFloor;
-	person->deliverJourneyStress();
+	// The watchdog (Queue::applyWatchdog) banks the ejected trip.
 	person->state = Person::kPlanning;
 	// Keep the intended destination and re-plan from the landing until a
 	// route becomes available or the owning item sets a new journey.

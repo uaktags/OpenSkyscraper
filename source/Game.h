@@ -116,6 +116,32 @@ namespace OT {
 		void setPopulation(int p);
 		void ratingMayIncrease();
 
+		/// EXE CountT (batch 5 T14): ten category totals plus the global.
+		/// `population` mirrors countT.population.
+		TenantRules::CountT countT;
+		void addPopulation(int category, int delta);
+		void resetCategory(int category);
+		/// resetCategory at most once per simulation day: every shop / fast food /
+		/// restaurant / cinema / party hall calls this when it opens, the first
+		/// call of the day clears the category and later calls only add.
+		void resetCategoryOnce(int category);
+		/// Recompute countT once from item state (old saves without it).
+		void recomputeCountT();
+		/// Items on `floor` in slot order (ascending x, ties by id); floor slabs excluded.
+		std::vector<Item::Item *> slotOrder(int floor) const;
+		/// Count of non-infrastructure items strictly left of `item` on its floor.
+		int tenantSlotIndex(const Item::Item * item) const;
+
+		// batch 5 agent B state/APIs (declared here, defined in Game.cpp by B).
+		bool medicalAdequate = true;
+		bool recyclingAdequate = true;
+		int  recyclingDisplayStage = 0;
+		bool emergencyActive() const;
+		void rebuildVenueLists();
+		Item::Item *pickVenue(int originFloor, int kind);
+		Item::Item *pickMedicalCenter(int originFloor);
+		std::vector<Item::Item *> venueLists[7][4];
+
 		/// YootTower VIP-visited bits (T2TowerDoc +0xa0). Each grade row's
 		/// vipFlag must be set before population can promote.
 		uint32_t yootVipFlags;
@@ -287,6 +313,7 @@ namespace OT {
 		void advanceSimTick(double dt);
 		void settleDailyAccounting();
 		int lastAccountingDay;
+		int lastJudgeDay = -1000000; ///< last day the 04:59 tenant judge ran
 		/// Autosave bookkeeping (OpenSkyWeb autosave.js policy): last in-game
 		/// day and wall-clock second we wrote a crash-recovery snapshot.
 		int lastAutosaveDay;

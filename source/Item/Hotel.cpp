@@ -6,6 +6,8 @@
 #include "Hotel.h"
 #include "Parking.h"
 #include <cmath>
+#include <algorithm>
+#include <vector>
 #include <string>
 
 using namespace OT;
@@ -14,47 +16,9 @@ using namespace OT::Item;
 extern int openSkyQuarterlyRent(const std::string &prototypeId, int rentClass);
 extern int openSkyDefaultRentClass(const std::string &prototypeId);
 
-// Find a reachable Parking with a free slot and assign it. Mirrors the
-// FastFood/Restaurant iteration pattern. Returns the claimed Parking or NULL.
-static Parking * claimReachableParking(Game * game, OT::Item::Item * origin)
-{
-	const Game::ItemSet &parkings = game->itemsByType["parking"];
-	for (Game::ItemSet::const_iterator it = parkings.begin(); it != parkings.end(); ++it)
-	{
-		Parking *park = dynamic_cast<Parking *>(*it);
-		if (!park || !park->hasSpace()) continue;
-		if (game->findRoute(origin, park).empty()) continue;
-		if (park->assignSpace())
-		{
-			park->spriteNeedsUpdate = true;
-			return park;
-		}
-	}
-	return NULL;
-}
-
-static void releaseParking(Parking * park)
-{
-	if (!park) return;
-	park->freeSpace();
-	park->spriteNeedsUpdate = true;
-}
-
-Hotel::~Hotel()
-{
-	clearAll();
-}
-
-int Hotel::capacity() const
-{
-	switch (variant)
-	{
-		case kSingle: return 1;
-		case kDouble: return 2;
-		case kSuite:  return 3;
-	}
-	return 1;
-}
+Hotel::~Hotel() { clearAll(false); } // Game::removeItem already took the hosted CountT contribution
+int Hotel::capacity() const { return variant == kSingle ? 1 : 2; }
+void Hotel::setRentClass(int c) { tenant.rentClass = std::max(0, std::min(3, c)); }
 
 AbstractPrototype * Hotel::makeSinglePrototype()
 {
@@ -90,7 +54,7 @@ AbstractPrototype * Hotel::makeSuitePrototype()
 	p->id             = "hotel_suite";
 	p->name           = "Hotel Suite";
 	p->price          = 100000;
-	p->size           = int2(7, 1);
+	p->size           = int2(10, 1);
 	p->icon           = ICON_HOTEL_SUITE;
 	p->variant        = kSuite;
 	p->entrance_offset = 0;
@@ -108,7 +72,7 @@ void Hotel::applyVariant()
 	{
 		case kSingle: sz = int2(4, 1); tex = "simtower/single"; edition = "hotel_single"; frameWidth = 32; break;
 		case kDouble: sz = int2(6, 1); tex = "simtower/double"; edition = "hotel_double"; frameWidth = 48; break;
-		case kSuite:  sz = int2(7, 1); tex = "simtower/suite";  edition = "hotel_suite";  frameWidth = 80; break;
+		case kSuite:  sz = int2(10, 1); tex = "simtower/suite";  edition = "hotel_suite";  frameWidth = 80; break;
 	}
 	size = sz;
 	sprite.setTexture(App->bitmaps.editionTexture(edition, tex));
@@ -125,7 +89,8 @@ void Hotel::init()
 	subVariant = rand() % 2;
 	roomState = kClean;
 	dirtySince = 0;
-	housekeeper = NULL;
+	hosted = 0;
+	dinnerSent = evacuated = false;
 
 	applyVariant();
 	addSprite(&sprite);
@@ -175,429 +140,234 @@ void Hotel::updateSprite()
 	sprite.setTextureRect(sf::IntRect({col * frameWidth, row * 24}, {frameWidth, 24}));
 }
 
-void Hotel::scheduleGuest(Guest *g)
+void Hotel::resetBanks()
 {
-	double today = floor(game->time.absolute);
-
-	// Arrival between 17:00 and 18:00.
-	double arrivalHour = Math::randd(Time::hourToAbsolute(17), Time::hourToAbsolute(18));
-	g->arrivalTime = today + arrivalHour;
-
-	// Dinner: leave ~0.5h after arrival, return ~1h later.
-	g->dinnerLeaveTime = g->arrivalTime + Time::hourToAbsolute(0.5);
-	g->dinnerReturnTime = g->dinnerLeaveTime + Time::hourToAbsolute(1.0);
-
-	// Sleep: between 23:00 and 1:30 next day.
-	double nextDay = today + 1.0;
-	g->sleepTime = today + Math::randd(Time::hourToAbsolute(23), 1.0 + Time::hourToAbsolute(1.5));
-
-	// Wake between 6:00 and 8:00 next morning.
-	g->wakeTime = nextDay + Math::randd(Time::hourToAbsolute(6), Time::hourToAbsolute(8));
-
-	// Checkout between 8:00 and 10:00 next morning.
-	g->checkoutTime = nextDay + Math::randd(Time::hourToAbsolute(8), Time::hourToAbsolute(10));
-
-	g->atHotel = false;
+ for (auto &b : tenant.bank) { b.count = 0; b.total = 0; }
+ for (Guest *g : guests) g->bankCount = g->bankTotal = 0;
 }
-void Hotel::clearAll()
+void Hotel::clearAll(bool adjustPopulation)
 {
-	for (std::set<Guest *>::iterator it = guests.begin(); it != guests.end(); ++it)
-	{
-		Guest *guest = *it;
-		releaseParking(guest->parkingUsed);
-		guest->parkingUsed = NULL;
-		if (guest->at == this)
-			Item::removePerson(guest);
-		delete guest;
-	}
-	guests.clear();
-	while (!arrivingGuests.empty())
-		arrivingGuests.pop();
-	if (housekeeper)
-	{
-		if (housekeeper->at == this)
-			Item::removePerson(housekeeper);
-		delete housekeeper;
-		housekeeper = NULL;
-	}
-	roomState = kClean;
+ if (hosted) { if (adjustPopulation) game->addPopulation(variant + 1, -hosted); hosted = population = 0; }
+ for (Guest *g : guests) {
+  game->vipSystem.voidPerson(g);
+  if (g->parkingUsed) g->parkingUsed->freeSpace(g);
+  g->journey.cancel(); delete g;
+ }
+ guests.clear();
 }
 
-void Hotel::advance(double dt)
+bool Hotel::checkIn()
 {
-	// Open at 17:00 — clean up yesterday's leftovers and spawn new guests.
-	if (game->time.checkHour(17))
-	{
-		clearAll();
-		roomState = kClean;
-		spriteNeedsUpdate = true;
-
-		if (!lobbyRoute.empty())
-		{
-			int n = capacity();
-			for (int i = 0; i < n; i++)
-			{
-				Guest *g = new Guest(this);
-				scheduleGuest(g);
-				guests.insert(g);
-				arrivingGuests.push(g);
-			}
-		}
-	}
-
-	// Dispatch arriving guests whose time has come.
-	while (!arrivingGuests.empty())
-	{
-		Guest *g = arrivingGuests.top();
-		if (game->time.absolute > g->arrivalTime && !lobbyRoute.empty())
-		{
-			arrivingGuests.pop();
-			g->journey.set(lobbyRoute);
-			// Drive in: claim a reachable parking slot for the car.
-			if (!g->parkingUsed)
-				g->parkingUsed = claimReachableParking(game, this);
-		}
-		else
-			break;
-	}
-
-	// Process guest schedules.
-	double t = game->time.absolute;
-	for (std::set<Guest *>::iterator it = guests.begin(); it != guests.end(); )
-	{
-		Guest *g = *it;
-
-		// Return from dinner.
-		if (!g->atHotel && t >= g->dinnerReturnTime && t < g->sleepTime)
-		{
-			if (g->at == NULL)
-			{
-				Item::addPerson(g);
-				g->atHotel = true;
-				g->state = Person::kHome;
-				g->eval = 50;
-				roomState = kOccupied;
-				spriteNeedsUpdate = true;
-			}
-		}
-		// Leave for dinner.
-		else if (g->atHotel && g->state == Person::kHome && t >= g->dinnerLeaveTime && t < g->dinnerReturnTime)
-		{
-			Item::removePerson(g);
-			g->atHotel = false;
-			g->state = Person::kShopping;
-			g->from = prototype->name;
-			g->goingTo = "Restaurant";
-
-			Route bestRoute;
-			int bestScore = 0;
-			const Game::ItemSet &restaurants = game->itemsByType["restaurant"];
-			for (Game::ItemSet::const_iterator i = restaurants.begin(); i != restaurants.end(); i++)
-			{
-				Route candidate = game->findRoute(this, *i);
-				if (!candidate.empty() && (bestRoute.empty() || candidate.score() < bestScore))
-				{
-					bestRoute = candidate;
-					bestScore = candidate.score();
-				}
-			}
-			if (!bestRoute.empty())
-			{
-				g->journey.set(bestRoute);
-			}
-			else
-			{
-				// No restaurant reachable - they leave the tower
-				const Route &r = game->findRoute(this, game->mainLobby);
-				if (!r.empty())
-				{
-					g->state = Person::kReturning;
-					g->goingTo = "Exit";
-					g->journey.set(r);
-				}
-			}
-		}
-		// Go to sleep.
-		else if (g->atHotel && g->state == Person::kHome && t >= g->sleepTime && t < g->wakeTime)
-		{
-			g->state = Person::kResting;
-		}
-		// Wake up.
-		else if (g->atHotel && g->state == Person::kResting &&
-		         t >= g->wakeTime && t < g->checkoutTime)
-		{
-			g->state = Person::kHome;
-		}
-		// Checkout is the hotel's revenue boundary. Charge exactly once even
-		// if the guest is already out at dinner or a route is temporarily
-		// unavailable; a negative checkoutTime is the durable latch.
-		else if (g->checkoutTime >= 0 && t >= g->checkoutTime)
-		{
-			const int stay = openSkyQuarterlyRent(prototype->id, openSkyDefaultRentClass(prototype->id));
-			game->transferFunds(stay, "hotel_income", "Hotel room checkout");
-			g->checkoutTime = -1;
-			const Route &r = game->findRoute(this, game->mainLobby);
-			if (g->at == this)
-				Item::removePerson(g);
-			g->atHotel = false;
-			g->state = Person::kReturning;
-			g->from = prototype->name;
-			g->goingTo = "Exit";
-			if (!r.empty())
-				g->journey.set(r);
-			releaseParking(g->parkingUsed);
-			g->parkingUsed = NULL;
-			roomState = kDirty;
-			dirtySince = t;
-			spriteNeedsUpdate = true;
-		}
-		// Retire checked-out guests once their exit journey reaches the lobby.
-		// Keeping them in the room set would make the hotel population grow
-		// without bound and would retain stale evaluation records.
-		if (g->checkoutTime < 0 && !g->atHotel && !g->at)
-		{
-			it = guests.erase(it);
-			delete g;
-		}
-		else
-		{
-			++it;
-		}
-	}
-
-	// Housekeepers are service staff: they must use service elevators and
-	// stairs-only paths rather than the passenger lobby route.
-	if (roomState == kDirty && housekeeper == NULL && !lobbyRoute.empty())
-	{
-		Route serviceRoute = game->findRoute(game->mainLobby, this, true);
-		if (!serviceRoute.empty())
-		{
-			Housekeeper *h = new Housekeeper(this);
-			housekeeper = h;
-			h->journey.set(serviceRoute);
-		}
-	}
-
-	// Housekeeper finished cleaning?
-	if (housekeeper && housekeeper->at == this && housekeeper->cleaning)
-	{
-		if (game->time.absolute >= housekeeper->cleaningUntil)
-		{
-			roomState = kClean;
-			spriteNeedsUpdate = true;
-			Route r = game->findRoute(this, game->mainLobby, true);
-			if (!r.empty())
-			{
-				Item::removePerson(housekeeper);
-				housekeeper->state = Person::kReturning;
-				housekeeper->from = prototype->name;
-				housekeeper->goingTo = "Exit";
-				housekeeper->journey.set(r);
-			}
-			// Keep the pointer until the journey completes; it will be
-			// deleted by clearAll() on the next opening or when the item is
-			// destroyed.
-		}
-	}
-
-	if (spriteNeedsUpdate || roomFrameIndex != hotelRoomFrame(roomState, game->time.hour))
-		updateSprite();
+ if (!tenant.armed || roomState != kClean || hosted || evacuated || !guests.empty()) return false;
+ std::vector<Guest*> arrivals;
+ for (int k=0; k<capacity(); ++k) {
+  Guest *g = new Guest(this, k);
+  arrivals.push_back(g);
+  g->entry = game->mainLobby;
+  if (variant == kSuite && game->rating >= 2) {
+   g->parkingUsed = Parking::claim(game, this, g, Parking::kSuiteCar);
+   if (g->parkingUsed) g->entry = g->parkingUsed;
+   else {
+    for (Guest *a : arrivals) { if (a->parkingUsed) a->parkingUsed->freeSpace(a); delete a; }
+    return false;
+   }
+  }
+  Route route = game->findRoute(g->entry, this);
+  if (route.empty()) {
+   g->recordNoRoute(g->entry ? g->entry->position.y : 0, position.y);
+   for (Guest *a : arrivals) { if (a->parkingUsed) a->parkingUsed->freeSpace(a); delete a; }
+   return false;
+  }
+ }
+ dinnerSent = false;
+ for (Guest *g : arrivals) guests.insert(g);
+ // Bind before the first completed inbound trip is banked.
+ for (Guest *g : arrivals) {
+  game->vipSystem.bindGuest(g);
+  g->state = Person::kCommuting;
+  g->journey.set(game->findRoute(g->entry, this));
+ }
+ return true;
 }
 
+void Hotel::checkout(bool paid)
+{
+ if (hosted) {
+  game->addPopulation(variant + 1, -hosted);
+  hosted = population = 0;
+  if (paid) game->transferFunds(openSkyQuarterlyRent(prototype->id, tenant.rentClass), "hotel_income", "Hotel room checkout");
+ }
+ tenant.armed = false;
+ roomState = kDirty;
+ dirtySince = game->time.absolute;
+ spriteNeedsUpdate = true;
+ for (Guest *g : guests) {
+  if (g->leaving) continue;
+  game->vipSystem.checkout(g, paid);
+  Item *origin = g->at ? g->at : this;
+  Item *exit = g->entry && game->items.count(g->entry) ? g->entry : game->mainLobby;
+  Route route = game->findRoute(origin, exit);
+  g->journey.cancel(); g->leaving = true; g->atHotel = false;
+  g->state = Person::kReturning; g->goingTo = g->parkingUsed ? "Parking Space" : "Lobby to go home";
+  if (!route.empty()) g->journey.set(route);
+  else {
+   // No way out: the guest still leaves, so the bay must not leak (F7).
+   if (g->parkingUsed) { g->parkingUsed->freeSpace(g); g->parkingUsed = nullptr; }
+   game->vipSystem.voidPerson(g);
+  }
+ }
+}
+
+void Hotel::stampInfested()
+{
+ if (hosted || !guests.empty()) { checkout(false); clearAll(); }
+ roomState = kInfested; tenant.category = 255; tenant.armed = false;
+ tenant.redraw = true; spriteNeedsUpdate = true;
+}
+
+namespace {
+std::vector<OT::Item::Item*> hotelSlots(const Game::ItemSet &items)
+{
+ std::vector<OT::Item::Item*> slots;
+ for (auto *item : items) if (!item->isElevator()) slots.push_back(item);
+ std::sort(slots.begin(), slots.end(), [](auto *a, auto *b) {
+  if (a->position.x != b->position.x) return a->position.x < b->position.x;
+  return a->prototype->id < b->prototype->id;
+ });
+ return slots;
+}
+}
+void Hotel::spreadRoaches(Game *game)
+{
+ for (auto &floor : game->itemsByFloor) {
+  auto slots = hotelSlots(floor.second);
+  for (size_t i=0; i<slots.size();) {
+   auto *h = dynamic_cast<Hotel*>(slots[i]);
+   if (!h || h->roomState < kInfested) { ++i; continue; }
+   if (i && dynamic_cast<Hotel*>(slots[i-1])) static_cast<Hotel*>(slots[i-1])->stampInfested();
+   ++i;
+   if (i >= slots.size()) break;
+   auto *next = dynamic_cast<Hotel*>(slots[i]);
+   if (!next) ++i;
+   else if (next->roomState < kInfested) { next->stampInfested(); ++i; }
+  }
+ }
+}
+void Hotel::judgeAll(Game *game)
+{
+ for (auto &floor : game->itemsByFloor) {
+  auto slots = hotelSlots(floor.second);
+  std::vector<Hotel*> hotels;
+  for (auto *item : slots) if (auto *h = dynamic_cast<Hotel*>(item)) if (!h->underConstruction) hotels.push_back(h);
+  for (auto *h : hotels) game->judgeSystem.judgeOne(h);
+  for (auto *h : hotels) if (h->roomState >= kDirty) {
+   if (h->tenant.armed) { h->tenant.armed = false; h->tenant.category = 0; h->tenant.tenure = 0; }
+   else h->tenant.tenure = static_cast<unsigned char>(h->tenant.tenure + 1);
+   if (h->tenant.tenure == 3) h->stampInfested();
+  }
+  for (auto *h : hotels) if (h->roomState < kDirty) {
+   if (static_cast<signed char>(h->tenant.category) >= 1) { h->tenant.armed = true; h->resetBanks(); }
+   else if (h->tenant.category == 0) {
+    Hotel *peer = nullptr;
+    for (auto *p : hotels) if (p != h && p->prototype->id == h->prototype->id && p->tenant.category == 2) { peer=p; break; }
+    h->tenant.armed = peer != nullptr;
+    if (peer) { h->tenant.category = peer->tenant.category = 1; h->resetBanks(); }
+   }
+  }
+ }
+}
+void Hotel::advance(double)
+{
+ if ((game->time.checkHour(5) || (game->time.hour >= 5 && game->time.hour < 7)) && hosted) checkout(true);
+ const long visits = visitsThisTick(game, 16, 0);
+ for (long v=0; v<visits; ++v) {
+  if (game->time.hour >= 17 && game->time.hour < 21) {
+   if (tenant.armed && roomState == kClean && hosted == 0 && guests.empty() && !evacuated && rand()%8 == 0) checkIn();
+   if (hosted && !dinnerSent && game->tenantSlotIndex(this)%2 == 0 && rand()%6 == 0) {
+    dinnerSent = true;
+    for (Guest *g : guests) if (g->at == this && !g->leaving) {
+     Item *venue = game->pickVenue(position.y, 1);
+     if (venue) {
+      Route r = game->findRoute(this, venue);
+      if (!r.empty()) { g->state = Person::kShopping; g->goingTo="Restaurant"; g->journey.set(r); }
+     }
+     break;
+    }
+   }
+  }
+ }
+ for (auto it=guests.begin(); it!=guests.end();) {
+  Guest *g = *it;
+  if (g->leaving && (!g->at || g->at == g->entry) && (!g->journey.item || g->journey.atFinalNode())) {
+   if (g->parkingUsed) g->parkingUsed->freeSpace(g);
+   g->journey.cancel(); it=guests.erase(it); delete g;
+  } else {
+   if (!g->leaving && g->at == this) g->state = (game->time.hour >= 23 || game->time.hour < 6) ? Person::kResting : Person::kHome;
+   ++it;
+  }
+ }
+ if (spriteNeedsUpdate || roomFrameIndex != hotelRoomFrame(roomState, game->time.hour)) updateSprite();
+}
 void Hotel::addPerson(Person *p)
 {
-	Item::addPerson(p);
-
-	Guest *g = dynamic_cast<Guest *>(p);
-	if (g)
-	{
-		g->atHotel = true;
-		g->state = Person::kHome;
-		g->eval = 50;
-		roomState = kOccupied;
-		spriteNeedsUpdate = true;
-		return;
-	}
-
-	Housekeeper *h = dynamic_cast<Housekeeper *>(p);
-	if (h)
-	{
-		h->state = Person::kWorking;
-		h->cleaning = true;
-		h->cleaningUntil = game->time.absolute + Time::hourToAbsolute(0.5);
-		spriteNeedsUpdate = true;
-		return;
-	}
+ Item::addPerson(p);
+ if (auto *g = dynamic_cast<Guest*>(p)) {
+  if (g->hotel != this || g->leaving) return;
+  g->atHotel=true; g->state=Person::kHome;
+  if (!hosted) { hosted=capacity(); population=hosted; game->addPopulation(variant+1, hosted); }
+  roomState=kOccupied; spriteNeedsUpdate=true;
+ }
 }
-
 void Hotel::removePerson(Person *p)
 {
-	Item::removePerson(p);
-
-	Guest *g = dynamic_cast<Guest *>(p);
-	if (g)
-	{
-		g->atHotel = false;
-	}
-
-	Housekeeper *h = dynamic_cast<Housekeeper *>(p);
-	if (h)
-	{
-		h->cleaning = false;
-	}
-
-	spriteNeedsUpdate = true;
+ Item::removePerson(p);
+ if (auto *g=dynamic_cast<Guest*>(p)) g->atHotel=false;
+ spriteNeedsUpdate=true;
 }
-
 void Hotel::encodeXML(tinyxml2::XMLPrinter &xml)
 {
-	Item::encodeXML(xml);
-	xml.PushAttribute("variant", variant);
-	xml.PushAttribute("subVariant", subVariant);
-	xml.PushAttribute("roomState", roomState);
-	xml.PushAttribute("dirtySince", dirtySince);
-
-	for (std::set<Guest *>::iterator it = guests.begin(); it != guests.end(); ++it)
-	{
-		Guest *g = *it;
-		xml.OpenElement("guest");
-		xml.PushAttribute("arrivalTime", g->arrivalTime);
-		xml.PushAttribute("dinnerLeaveTime", g->dinnerLeaveTime);
-		xml.PushAttribute("dinnerReturnTime", g->dinnerReturnTime);
-		xml.PushAttribute("sleepTime", g->sleepTime);
-		xml.PushAttribute("wakeTime", g->wakeTime);
-		xml.PushAttribute("checkoutTime", g->checkoutTime);
-		xml.PushAttribute("atHotel", g->atHotel);
-		xml.PushAttribute("type", g->type);
-		xml.PushAttribute("state", g->state);
-		xml.PushAttribute("stress", g->stress);
-		xml.PushAttribute("eval", g->eval);
-		xml.PushAttribute("name", g->name.c_str());
-		xml.PushAttribute("from", g->from.c_str());
-		xml.PushAttribute("goingTo", g->goingTo.c_str());
-		xml.CloseElement();
-	}
-
-	if (housekeeper)
-	{
-		xml.OpenElement("housekeeper");
-		xml.PushAttribute("cleaningUntil", housekeeper->cleaningUntil);
-		xml.PushAttribute("cleaning", housekeeper->cleaning);
-		xml.PushAttribute("atHotel", (housekeeper->at == this));
-		xml.PushAttribute("state", housekeeper->state);
-		xml.PushAttribute("stress", housekeeper->stress);
-		xml.PushAttribute("eval", housekeeper->eval);
-		xml.PushAttribute("name", housekeeper->name.c_str());
-		xml.PushAttribute("from", housekeeper->from.c_str());
-		xml.PushAttribute("goingTo", housekeeper->goingTo.c_str());
-		xml.CloseElement();
-	}
+ Item::encodeXML(xml);
+ xml.PushAttribute("variant",variant); xml.PushAttribute("subVariant",subVariant);
+ xml.PushAttribute("roomState",roomState); xml.PushAttribute("hosted",hosted);
+ xml.PushAttribute("dirtySince",dirtySince); xml.PushAttribute("dinnerSent",dinnerSent);
+ for (Guest *g : guests) {
+  xml.OpenElement("guest"); g->encodeXML(xml);
+  xml.PushAttribute("member",g->member); xml.PushAttribute("atHotel",g->atHotel);
+  xml.PushAttribute("leaving",g->leaving);
+  xml.CloseElement();
+ }
 }
-
 void Hotel::decodeXML(tinyxml2::XMLElement &xml)
 {
-	Item::decodeXML(xml);
-	variant = xml.IntAttribute("variant", prototype->variant);
-	subVariant = xml.IntAttribute("subVariant", rand() % 2);
-	roomState = xml.IntAttribute("roomState", kClean);
-	dirtySince = xml.DoubleAttribute("dirtySince", 0.0);
-	clearAll();
-	applyVariant();
-
-	for (tinyxml2::XMLElement *e = xml.FirstChildElement("guest"); e; e = e->NextSiblingElement("guest"))
-	{
-		Guest *g = new Guest(this);
-		g->arrivalTime = e->DoubleAttribute("arrivalTime");
-		g->dinnerLeaveTime = e->DoubleAttribute("dinnerLeaveTime");
-		g->dinnerReturnTime = e->DoubleAttribute("dinnerReturnTime");
-		g->sleepTime = e->DoubleAttribute("sleepTime");
-		g->wakeTime = e->DoubleAttribute("wakeTime");
-		g->checkoutTime = e->DoubleAttribute("checkoutTime");
-		g->atHotel = e->BoolAttribute("atHotel", false);
-		g->type = (Person::Type)e->IntAttribute("type", Person::kMan);
-		g->state = (Person::State)e->IntAttribute("state", Person::kWandering);
-		g->stress = e->DoubleAttribute("stress", 0.0);
-		g->eval = e->DoubleAttribute("eval", 0.0);
-		g->name = e->Attribute("name", "");
-		g->from = e->Attribute("from", "");
-		g->goingTo = e->Attribute("goingTo", "");
-		guests.insert(g);
-		if (g->atHotel)
-		{
-			Item::addPerson(g);
-			g->atHotel = true;
-			// NOTE(Phase 2.2): parkingUsed is not persisted across save/reload.
-			// Parking::used IS persisted, so the tower-wide slot count stays
-			// correct, but the per-guest back-pointer is lost. This means a
-			// guest who checks out post-reload won't call freeSpace() on their
-			// slot, leaving it claimed until the parking is rebuilt. Proper
-			// fix: persist the parking item's position as a guest attribute
-			// and re-link the pointer here without calling assignSpace().
-		}
-		else
-		{
-			arrivingGuests.push(g);
-		}
-	}
-
-	if (tinyxml2::XMLElement *e = xml.FirstChildElement("housekeeper"))
-	{
-		Housekeeper *h = new Housekeeper(this);
-		h->cleaningUntil = e->DoubleAttribute("cleaningUntil");
-		h->cleaning = e->BoolAttribute("cleaning", false);
-		h->state = (Person::State)e->IntAttribute("state", Person::kWandering);
-		h->stress = e->DoubleAttribute("stress", 0.0);
-		h->eval = e->DoubleAttribute("eval", 0.0);
-		h->name = e->Attribute("name", "");
-		h->from = e->Attribute("from", "");
-		h->goingTo = e->Attribute("goingTo", "");
-		housekeeper = h;
-		if (e->BoolAttribute("atHotel", false))
-		{
-			Item::addPerson(h);
-		}
-	}
-
-	updateSprite();
+ clearAll(); Item::decodeXML(xml);
+ variant=xml.IntAttribute("variant",prototype->variant); subVariant=xml.IntAttribute("subVariant",0);
+ roomState=xml.IntAttribute("roomState",kClean); hosted=xml.IntAttribute("hosted",0); population=hosted;
+ dirtySince=xml.DoubleAttribute("dirtySince",0); dinnerSent=xml.BoolAttribute("dinnerSent",false);
+ applyVariant();
+ int k=0;
+ for (auto *e=xml.FirstChildElement("guest"); e; e=e->NextSiblingElement("guest")) {
+  Guest *g=new Guest(this,e->IntAttribute("member",k++)); g->decodeXML(*e);
+  g->atHotel=e->BoolAttribute("atHotel",false); g->leaving=e->BoolAttribute("leaving",false);
+  g->entry=game->mainLobby;
+  guests.insert(g);
+  if (g->atHotel) Item::addPerson(g);
+ }
+ spriteNeedsUpdate=true; updateSprite();
 }
-
+Hotel::Guest::Guest(Hotel *item, int memberIndex) : Person(item->game, kMan), hotel(item)
+{
+ home=item; member=memberIndex;
+ bankCount=item->tenant.bank[memberIndex].count; bankTotal=item->tenant.bank[memberIndex].total;
+ from="City"; goingTo=item->prototype->name;
+}
 Path Hotel::getRandomBackgroundSoundPath()
 {
-	return "";
+ return roomState == kOccupied ? Path("simtower/hotel") : Path("");
 }
-
-Hotel::Guest::Guest(Hotel *item)
-	: Person(item->game), hotel(item)
-{
-	arrivalTime = 0;
-	dinnerLeaveTime = 0;
-	dinnerReturnTime = 0;
-	sleepTime = 0;
-	wakeTime = 0;
-	checkoutTime = 0;
-	atHotel = false;
-	Type types[] = {kMan, kWoman1, kWoman2, kWomanWithChild1};
-	type = types[rand() % 4];
-	from = "City";
-	goingTo = item->prototype->name;
-}
-
-Hotel::Housekeeper::Housekeeper(Hotel *item)
-	: Person(item->game, kHousekeeper)
-{
-	cleaningUntil = 0;
-	cleaning = false;
-	from = "Hotel Staff";
-	goingTo = item->prototype->name;
-}
-
 void Hotel::evacuateForDisaster()
 {
- const int previousState = roomState;
- clearAll();
- roomState = previousState == kOccupied ? kDirty : previousState;
- if (previousState == kOccupied) dirtySince = game->time.absolute;
- population = 0;
- spriteNeedsUpdate = true;
- updateSprite();
+ const bool occupied=hosted != 0;
+ clearAll(); evacuated=true;
+ if (occupied) { roomState=kDirty; dirtySince=game->time.absolute; }
+ spriteNeedsUpdate=true; updateSprite();
 }

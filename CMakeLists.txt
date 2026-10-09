@@ -13,7 +13,7 @@ add_compile_definitions(
 # Tests
 enable_testing()
 
-# Gather the source files
+# Gather the source files (includes batch5 Housekeeping.cpp and ParkingRamp.cpp)
 file(GLOB_RECURSE sources CONFIGURE_DEPENDS
   ${PROJECT_SOURCE_DIR}/source/*.cpp
   ${PROJECT_SOURCE_DIR}/src/*.cpp
@@ -237,6 +237,20 @@ if(WIN32)
   target_link_libraries(OpenSkyTransportTests PRIVATE Comdlg32)
 endif()
 add_dependencies(OpenSkyTests OpenSkyTransportTests)
+# Disaster/economy scenario harness (opt-in define, same engine link).
+add_executable(OpenSkyDisasterTests tests/test_main.cpp ${test_engine_sources})
+target_include_directories(OpenSkyDisasterTests PRIVATE source)
+target_compile_definitions(OpenSkyDisasterTests PRIVATE OPENSKY_DISASTER_SCENARIOS)
+target_link_libraries(OpenSkyDisasterTests PRIVATE
+  SFML::Audio SFML::Graphics SFML::Window SFML::System
+  TGUI::TGUI tinyxml2::tinyxml2 Freetype::Freetype OpenGL::GL
+)
+if(MSPACK_FOUND)
+  target_link_libraries(OpenSkyDisasterTests PRIVATE ${MSPACK_LIBRARIES})
+endif()
+if(WIN32)
+  target_link_libraries(OpenSkyDisasterTests PRIVATE Comdlg32)
+endif()
 target_compile_definitions(OpenSkyTests PRIVATE
   OPENSKY_TRANSPORT_TEST_EXECUTABLE="$<TARGET_FILE:OpenSkyTransportTests>"
 )

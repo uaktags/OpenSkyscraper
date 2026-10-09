@@ -57,6 +57,7 @@ namespace
 		{ "elevator-service", 1 },
 		{ "hotel_single",     1 },
 		{ "security",         1 },
+		{ "housekeeping",     1 },
 		// 3 stars (rating >= 2)
 		{ "shop",            2 },
 		{ "escalator",       2 },
@@ -69,6 +70,7 @@ namespace
 		{ "medicalcenter",   2 },
 		{ "recycling",       2 },
 		{ "parking",         2 },
+		{ "parkingramp",     2 },
 		// 4 stars (rating >= 3)
 		{ "metro",          3 },
 		// SECOM is never offered by the EXE build menu at any star level

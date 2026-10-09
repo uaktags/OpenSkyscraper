@@ -20,292 +20,75 @@
 
 using namespace OT;
 
-namespace
-{
-	// Game::rating is zero-based: displayed 3 stars is rating 2. The EXE
-	// arms only at displayed star 3, and the approval is read by the 3->4 gate.
-	const int kVipRating = 2;
-	const int kVipScheduleDay = 3;       // day % 9 == 3 (VipT 1240)
-	const double kVipArrivalHour = 17.0;
-	const double kVipTimeoutHour = 12.0;
-	const double kVipParkingGraceHours = 0.25;
-	const double kVipApprovalStress = 150.0; // tuning judge-moderate bar
-}
-
-VipSystem::VipSystem(Game * game)
-: GameObject(game)
-{
-	reset();
-}
-
+VipSystem::VipSystem(Game *game) : GameObject(game) { reset(); }
+bool VipSystem::gameIsYoot() const { return game->activeRules.profile().yootWorld; }
 void VipSystem::reset()
 {
-	nextVisitTime = 0.0;
-	visitEndTime = 0.0;
-	visiting = false;
-	forcedVisit = false;
-	guestArrived = false;
-	guestCheckedIn = false;
-	visitVoided = false;
-	armedDay = -1;
-	suiteFloor = 0;
-	stressTotal = 0.0;
-	stressTrips = 0;
-	bookedSuite = NULL;
-	vipGuest = NULL;
-	goodReviews = 0;
-	badReviews = 0;
-	yootPendingVip = -1;
-	yootArrivalTime = 0.0;
-	yootLastDay = -1;
-	yootDestination = NULL;
+ visiting=0; lastDay=-1; watch=false; vipGuest=nullptr; favorable=false;
+ vipTotal=vipTrips=result=goodReviews=badReviews=0; nextVisitTime=0;
+ yootPendingVip=-1; yootArrivalTime=0; yootLastDay=-1; yootDestination=nullptr;
 }
-
-void VipSystem::clearApproval()
-{
-	// Consume exactly one favorable verdict. Lifetime bad reviews and any
-	// future approval remain untouched (concilia LevelUp 1148:004f).
-	if (goodReviews > 0)
-		--goodReviews;
-}
-
-void VipSystem::scheduleNow()
-{
-	// Dev/test hook: retain the same arrival, parking and stress state machine,
-	// but bypass the calendar and star gate.
-	forcedVisit = true;
-	nextVisitTime = game->time.absolute;
-	armedDay = static_cast<int>(std::floor(game->time.absolute));
-}
-
-bool VipSystem::promotionNeedsVisit() const
-{
-	// VIP is a 3->4 prerequisite only. Once the favorable latch exists, the
-	// day cadence must not arm another guest.
-	return game->rating == kVipRating && goodReviews == 0;
-}
-
-Item::Hotel * VipSystem::firstBookableSuite() const
-{
-	Game::ItemSetByString::const_iterator bucket = game->itemsByType.find("hotel_suite");
-	if (bucket == game->itemsByType.end())
-		return NULL;
-
-	std::vector<Item::Hotel *> suites;
-	for (Game::ItemSet::const_iterator it = bucket->second.begin(); it != bucket->second.end(); ++it)
-	{
-		Item::Hotel *suite = dynamic_cast<Item::Hotel *>(*it);
-		if (!suite || suite->underConstruction || suite->roomState != Item::Hotel::kClean)
-			continue;
-		// A route not computed yet is still bookable; the lazy route pump may
-		// finish it between reservation and the 17:00 arrival window.
-		if (suite->lobbyRouteComputed && suite->lobbyRoute.empty())
-			continue;
-		suites.push_back(suite);
-	}
-	std::sort(suites.begin(), suites.end(), [](Item::Hotel *a, Item::Hotel *b) {
-		if (a->position.y != b->position.y) return a->position.y < b->position.y;
-		return a->position.x < b->position.x;
-	});
-	return suites.empty() ? NULL : suites.front();
-}
-
-bool VipSystem::liveSuite(Item::Hotel *suite) const
-{
-	if (!suite)
-		return false;
-	for (Game::ItemSet::const_iterator it = game->items.begin(); it != game->items.end(); ++it)
-		if (*it == suite)
-			return true;
-	return false;
-}
-
-bool VipSystem::liveGuest(Person *guest) const
-{
-	if (!guest)
-		return false;
-	for (Game::PersonSet::const_iterator it = game->people.begin(); it != game->people.end(); ++it)
-		if (*it == guest)
-			return true;
-	return false;
-}
-
+// F8: armed from the shared daily 04:59 judge tick (Game::advanceSimTick).
+void VipSystem::armDaily() { if (!gameIsYoot()) armVisit(); }
+void VipSystem::clearApproval() { favorable=false; if (goodReviews>0) --goodReviews; }
+// Retain the dev-key API without bypassing the calendar.
+void VipSystem::scheduleNow() { armVisit(); }
+bool VipSystem::liveGuest(Person *p) const { return p && game->people.count(p); }
 void VipSystem::armVisit()
 {
-	if (visiting || nextVisitTime > 0.0 || !promotionNeedsVisit())
-		return;
-	const int day = static_cast<int>(std::floor(game->time.absolute));
-	if (day % 9 != kVipScheduleDay)
-		return;
-	if (armedDay == day)
-		return;
-
-	armedDay = day;
-	bookedSuite = firstBookableSuite();
-	if (!bookedSuite)
-	{
-		// A VIP cannot be reserved without a suite. Leave the day consumed;
-		// the next deterministic day-3 cadence will retry.
-		suiteFloor = 0;
-		return;
-	}
-	suiteFloor = bookedSuite->position.y;
-	nextVisitTime = std::floor(game->time.absolute) + Time::hourToAbsolute(kVipArrivalHour);
-	game->timeWindow.showMessage("VIP reservation: Hotel Suite on floor " + std::to_string(suiteFloor));
-	LOG(IMPORTANT, "VIP reservation armed for suite floor %d on day %d", suiteFloor, day);
+ const int day=int(std::floor(game->time.absolute));
+ if (day%9!=3 || game->rating!=2 || favorable || visiting || lastDay==day) return;
+ visiting=-1; lastDay=day; watch=true; vipTotal=vipTrips=result=0; vipGuest=nullptr;
+ nextVisitTime=std::floor(game->time.absolute)+Time::hourToAbsolute(17);
+ std::vector<Item::Hotel*> suites;
+ for (auto *item : game->itemsByType["hotel_suite"]) if (auto *h=dynamic_cast<Item::Hotel*>(item))
+  if (h->tenant.armed && !h->underConstruction) suites.push_back(h);
+ std::sort(suites.begin(),suites.end(),[](auto *a,auto *b) {
+  if (a->position.y!=b->position.y) return a->position.y<b->position.y;
+  return a->position.x<b->position.x;
+ });
+ int floor=suites.empty()?0:suites.front()->position.y;
+ game->timeWindow.showMessage("VIP reservation: Hotel Suite on floor "+std::to_string(floor));
 }
-
-void VipSystem::beginVisit()
+void VipSystem::bindGuest(Person *p)
 {
-	if (visiting)
-		return;
-
-	// Re-resolve the reservation because construction/demolition may have
-	// changed the item set since the 17:00 announcement.
-	Item::Hotel *suite = liveSuite(bookedSuite) ? bookedSuite : firstBookableSuite();
-	if (!suite || suite->underConstruction || suite->roomState != Item::Hotel::kClean)
-	{
-		nextVisitTime = 0.0;
-		forcedVisit = false;
-		bookedSuite = NULL;
-		return;
-	}
-
-	bookedSuite = suite;
-	suiteFloor = suite->position.y;
-	visiting = true;
-	guestArrived = false;
-	guestCheckedIn = false;
-	visitVoided = false;
-	stressTotal = 0.0;
-	stressTrips = 0;
-	vipGuest = NULL;
-	visitEndTime = std::floor(game->time.absolute) + 1.0 + Time::hourToAbsolute(kVipTimeoutHour);
-	nextVisitTime = 0.0;
-	forcedVisit = false;
-	game->timeWindow.showMessage("A VIP is arriving by car at the Hotel Suite on floor " + std::to_string(suiteFloor));
-	LOG(IMPORTANT, "VIP suite visit begins on floor %d at abs=%.4f", suiteFloor, game->time.absolute);
+ if (gameIsYoot() || !watch || visiting!=-1 || !p || p->member!=1) return;
+ auto *guest=dynamic_cast<Item::Hotel::Guest*>(p);
+ if (!guest || guest->hotel->variant!=Item::Hotel::kSuite) return;
+ watch=false; vipGuest=p; p->name="VIP";
+ visiting=int(std::distance(game->people.begin(),game->people.find(p)))+1;
 }
-
-void VipSystem::endVisit(bool favorable)
+void VipSystem::bankTrip(Person *p,int wait)
 {
-	if (!visiting)
-		return;
-	visiting = false;
-	nextVisitTime = 0.0;
-	forcedVisit = false;
-	bookedSuite = NULL;
-	vipGuest = NULL;
-	guestArrived = false;
-	guestCheckedIn = false;
-
-	if (favorable && !visitVoided && stressTotal <= kVipApprovalStress)
-	{
-		// Exactly one consumable approval per favorable checkout. No cash is
-		// awarded by the EXE VIP path.
-		++goodReviews;
-		game->timeWindow.showMessage("VIP approved the tower's Hotel Suite.");
-		LOG(IMPORTANT, "VIP verdict: favorable (banked stress=%.1f)", stressTotal);
-		game->ratingMayIncrease();
-	}
-	else
-	{
-		++badReviews;
-		game->timeWindow.showMessage(visitVoided
-			? "VIP visit voided: the suite guest could not park."
-			: "VIP was not satisfied with the tower.");
-		LOG(IMPORTANT, "VIP verdict: unfavorable (void=%d, banked stress=%.1f)", visitVoided ? 1 : 0, stressTotal);
-	}
-	visitVoided = false;
+ if (!gameIsYoot() && p==vipGuest && visiting>0) { vipTotal+=wait; ++vipTrips; }
 }
-
-void VipSystem::advanceGuest()
+void VipSystem::checkout(Person *p,bool normal)
 {
-	if (!liveSuite(bookedSuite))
-	{
-		visitVoided = true;
-		endVisit(false);
-		return;
-	}
-
-	const double now = game->time.absolute;
-	if (!guestArrived)
-	{
-		Item::Hotel::Guest *candidate = NULL;
-		double latestArrival = 0.0;
-		for (std::set<Item::Hotel::Guest *>::const_iterator it = bookedSuite->guests.begin(); it != bookedSuite->guests.end(); ++it)
-		{
-			Item::Hotel::Guest *guest = *it;
-			latestArrival = std::max(latestArrival, guest->arrivalTime);
-			if (guest->arrivalTime <= now && guest->parkingUsed &&
-				(!candidate || guest->arrivalTime < candidate->arrivalTime))
-				candidate = guest;
-		}
-		if (candidate)
-		{
-			vipGuest = candidate;
-			vipGuest->name = "VIP";
-			guestArrived = true;
-			game->timeWindow.showMessage("VIP arrived by car.");
-		}
-		else if (!bookedSuite->guests.empty() && latestArrival > 0.0 &&
-		         now >= latestArrival + Time::hourToAbsolute(kVipParkingGraceHours))
-		{
-			const bool parkingAvailable = Item::Parking::canPark(game, Item::Parking::kSuiteCar);
-			visitVoided = true;
-			LOG(DEBUG, "VIP arrival voided: %s",
-			    parkingAvailable ? "suite guest did not reach the hotel" : "no usable parking bay");
-			endVisit(false);
-			return;
-		}
-	}
-
-	if (!guestArrived || !liveGuest(vipGuest))
-	{
-		if (now >= visitEndTime)
-		{
-			visitVoided = true;
-			endVisit(false);
-		}
-		return;
-	}
-	Item::Hotel::Guest *hotelGuest = dynamic_cast<Item::Hotel::Guest *>(vipGuest);
-	if (!hotelGuest)
-	{
-		visitVoided = true;
-		endVisit(false);
-		return;
-	}
-
-
-	if (!guestCheckedIn)
-	{
-		if (vipGuest->at == bookedSuite)
-			guestCheckedIn = true;
-		else if (now >= hotelGuest->checkoutTime)
-		{
-			visitVoided = true;
-			endVisit(false);
-			return;
-		}
-	}
-	if (!guestCheckedIn)
-		return;
-
-	// Person::stress is the current port's banked felt-wait value. Keep the
-	// largest observed bank so temporary recovery cannot improve the verdict.
-	stressTotal = std::max(stressTotal, vipGuest->stress);
-	stressTrips = 1;
-	if (!vipGuest->at && now >= hotelGuest->checkoutTime)
-	{
-		const bool favorable = !visitVoided && stressTrips > 0 && stressTotal <= kVipApprovalStress;
-		endVisit(favorable);
-	}
-	else if (now >= visitEndTime)
-	{
-		visitVoided = true;
-		endVisit(false);
-	}
+ if (p!=vipGuest || visiting<=0) return;
+ if (!normal) { voidPerson(p); return; }
+ result=(vipTrips==0 ? 0 : vipTotal/vipTrips)<=150 ? 1 : 2;
+ vipGuest=nullptr;
+}
+void VipSystem::forgetPerson(Person *p)
+{
+ if (p && p==vipGuest) { favorable=false; result=2; watch=false; vipGuest=nullptr; }
+}
+void VipSystem::voidPerson(Person *p)
+{
+ if (!p || p!=vipGuest) return;
+ favorable=false; result=2; watch=false; vipGuest=nullptr;
+}
+void VipSystem::dayCheck()
+{
+ if (gameIsYoot()) return;
+ const int day=int(std::floor(game->time.absolute));
+ if (visiting && day>lastDay) {
+  if (result==1) { favorable=true; game->timeWindow.showMessage("VIP approved the tower's Hotel Suite."); }
+  else if (visiting!=-1) { favorable=false; game->timeWindow.showMessage("VIP was not satisfied with the tower."); }
+  visiting=0; watch=false; vipGuest=nullptr; nextVisitTime=0;
+  game->ratingMayIncrease();
+ }
+ if (day%9!=3) { watch=false; vipGuest=nullptr; }
 }
 
 bool VipSystem::liveItem(Item::Item *item) const
@@ -426,77 +209,42 @@ void VipSystem::advanceYoot()
 	}
 }
 
-void VipSystem::advance(double dt)
+void VipSystem::advance(double)
 {
-	(void)dt;
-	if (game->activeRules.profile().yootWorld)
-	{
-		advanceYoot();
-		return;
-	}
-	if (visiting)
-	{
-		advanceGuest();
-		return;
-	}
-	if (nextVisitTime > 0.0 && game->time.absolute >= nextVisitTime)
-	{
-		beginVisit();
-		return;
-	}
-	if (forcedVisit)
-	{
-		// Absolute time zero is a valid fresh-tower clock value; do not use
-		// nextVisitTime's zero sentinel to strand scheduleNow().
-		beginVisit();
-		return;
-	}
-	armVisit();
+ if (gameIsYoot()) { advanceYoot(); return; }
+ if (vipGuest && !liveGuest(vipGuest)) { favorable=false; result=2; watch=false; vipGuest=nullptr; }
 }
-
-void VipSystem::encodeXML(tinyxml2::XMLPrinter & xml) const
+void VipSystem::encodeXML(tinyxml2::XMLPrinter &xml) const
 {
-	xml.PushAttribute("vipNextVisit", nextVisitTime);
-	xml.PushAttribute("vipVisiting", visiting);
-	xml.PushAttribute("vipVisitEnd", visitEndTime);
-	xml.PushAttribute("vipGoodReviews", goodReviews);
-	xml.PushAttribute("vipBadReviews", badReviews);
-	xml.PushAttribute("vipArmedDay", armedDay);
-	xml.PushAttribute("vipSuiteFloor", suiteFloor);
-	xml.PushAttribute("vipStressTotal", stressTotal);
-	xml.PushAttribute("vipStressTrips", stressTrips);
-	xml.PushAttribute("yootVipLastDay", yootLastDay);
+ xml.PushAttribute("vipVisiting",visiting); xml.PushAttribute("vipLastDay",lastDay);
+ xml.PushAttribute("vipFavorable",favorable); xml.PushAttribute("vipTotal",vipTotal);
+ xml.PushAttribute("vipTrips",vipTrips); xml.PushAttribute("vipResult",result);
+ xml.PushAttribute("vipWatch",watch);
+ if (auto *guest=dynamic_cast<Item::Hotel::Guest*>(vipGuest)) {
+  xml.PushAttribute("vipHomeX",guest->hotel->position.x); xml.PushAttribute("vipHomeY",guest->hotel->position.y);
+  xml.PushAttribute("vipMember",guest->member);
+ }
+ xml.PushAttribute("vipGoodReviews",goodReviews); xml.PushAttribute("vipBadReviews",badReviews);
+ xml.PushAttribute("yootVipLastDay",yootLastDay);
 }
-
-void VipSystem::decodeXML(tinyxml2::XMLElement & xml)
+void VipSystem::decodeXML(tinyxml2::XMLElement &xml)
 {
-	nextVisitTime = xml.DoubleAttribute("vipNextVisit", 0.0);
-	visitEndTime = xml.DoubleAttribute("vipVisitEnd", 0.0);
-	goodReviews = std::max(0, xml.IntAttribute("vipGoodReviews", 0));
-	badReviews = std::max(0, xml.IntAttribute("vipBadReviews", 0));
-	armedDay = xml.IntAttribute("vipArmedDay", -1);
-	suiteFloor = xml.IntAttribute("vipSuiteFloor", 0);
-	stressTotal = std::max(0.0, xml.DoubleAttribute("vipStressTotal", 0.0));
-	stressTrips = std::max(0, xml.IntAttribute("vipStressTrips", 0));
-	// A pending YootTower reservation is transient (item pointer); drop it.
-	yootPendingVip = -1;
-	yootDestination = NULL;
-	yootArrivalTime = 0.0;
-	yootLastDay = xml.IntAttribute("yootVipLastDay", -1);
-
-	// Guest pointers are transient. A mid-stay reload voids the EXE visit;
-	// preserve the approval/review counters and let the next cadence retry.
-	const bool savedVisiting = xml.BoolAttribute("vipVisiting", false);
-	visiting = false;
-	forcedVisit = false;
-	guestArrived = false;
-	guestCheckedIn = false;
-	visitVoided = savedVisiting;
-	bookedSuite = NULL;
-	vipGuest = NULL;
-	if (savedVisiting)
-	{
-		nextVisitTime = 0.0;
-		armedDay = static_cast<int>(std::floor(game->time.absolute));
-	}
+ visiting=xml.IntAttribute("vipVisiting",0); lastDay=xml.IntAttribute("vipLastDay",-1);
+ favorable=xml.BoolAttribute("vipFavorable",false); vipTotal=xml.IntAttribute("vipTotal",0);
+ vipTrips=xml.IntAttribute("vipTrips",0); result=xml.IntAttribute("vipResult",0);
+ watch=xml.BoolAttribute("vipWatch",visiting==-1); vipGuest=nullptr;
+ goodReviews=xml.IntAttribute("vipGoodReviews",0); badReviews=xml.IntAttribute("vipBadReviews",0);
+ yootPendingVip=-1; yootDestination=nullptr; yootArrivalTime=0; yootLastDay=xml.IntAttribute("yootVipLastDay",-1);
+ pendingMember=visiting>0 && xml.FindAttribute("vipHomeX") ? xml.IntAttribute("vipMember",1) : -1;
+ pendingHomeX=xml.IntAttribute("vipHomeX",0); pendingHomeY=xml.IntAttribute("vipHomeY",0);
+}
+void VipSystem::relink()
+{
+ if (visiting>0 && pendingMember>=0) {
+  for (auto *item : game->itemsByType["hotel_suite"]) if (auto *h=dynamic_cast<Item::Hotel*>(item))
+   if (h->position.x==pendingHomeX && h->position.y==pendingHomeY)
+    for (auto *g : h->guests) if (g->member==pendingMember) vipGuest=g;
+ }
+ pendingMember=-1;
+ if (visiting>0 && !vipGuest && result==0) { result=2; favorable=false; watch=false; }
 }

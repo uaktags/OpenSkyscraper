@@ -1,5 +1,7 @@
 #include "../Game.h"
 #include "Parking.h"
+#include "Office.h"
+#include "Hotel.h"
 #include <algorithm>
 #include <map>
 #include <set>
@@ -133,7 +135,7 @@ void Parking::recomputeAllChains(Game * game)
 			const Item * item = *it;
 			int kind;
 			if (item->prototype->id == "parking") kind = kCellParking;
-			else if (item->isElevator())         kind = kCellBare; // shafts: no floor-map record
+			else if (item->isElevator() || item->prototype->id == "floor")         kind = kCellBare; // shafts: no floor-map record
 			else                                 kind = kCellBlocker;
 			for (int cx = item->position.x; cx < item->position.x + item->size.x; ++cx) {
 				std::map<int, int>::iterator k = row.find(cx);
@@ -197,7 +199,27 @@ void Parking::recomputeAllChains(Game * game)
 // Parking
 // =============================================================================
 
-Parking::~Parking() {}
+namespace {
+// Parking items that currently hold at least one driver. A person's
+// destructor consults only this live set, never Game::itemsByType (which
+// can still list already-deleted items while the world is torn down).
+std::set<Parking *> & activeParkings() { static std::set<Parking *> s; return s; }
+}
+
+Parking::~Parking() { activeParkings().erase(this); }
+
+void Parking::forgetDriver(Person * driver)
+{
+ if (!driver) return;
+ std::vector<Parking *> live(activeParkings().begin(), activeParkings().end());
+ for (Parking * p : live) p->freeSpace(driver);
+}
+
+Parking::CarCategory Parking::driverCategory(Person * driver) const
+{
+ std::map<Person*, CarCategory>::const_iterator it = drivers.find(driver);
+ return it == drivers.end() ? kNoCar : it->second;
+}
 
 void Parking::init()
 {
@@ -212,116 +234,61 @@ void Parking::init()
 	updateSprite();
 }
 
-int Parking::totalSpaces() const
+int Parking::totalSpaces() const { return 1; }
+int Parking::usedSpaces() const { return static_cast<int>(drivers.size()); }
+int Parking::usableSpaces() const { return !bayList.empty() && bayList[0].usable ? 1 : 0; }
+bool Parking::hasSpace() const { return usableSpaces() != 0; }
+bool Parking::assignSpace(Person *driver, CarCategory cat)
 {
-	return std::max(1, (size.x + kBayWidthCells - 1) / kBayWidthCells);
+ if (!driver || !hasSpace() || !canPark(game,cat)) return false;
+ if (drivers.count(driver)) return true;
+ drivers[driver]=cat; activeParkings().insert(this);
+ Bay &bay=bayList[0]; bay.occupied=true; bay.person=driver; bay.category=cat;
+ spriteNeedsUpdate=true; return true;
 }
-
-int Parking::usedSpaces() const
+void Parking::freeSpace(Person *driver)
 {
-	int used = 0;
-	for (std::vector<Bay>::const_iterator b = bayList.begin(); b != bayList.end(); ++b)
-		if (b->occupied) ++used;
-	return used;
+ if (!driver || !drivers.erase(driver)) return;
+ Bay &bay=bayList[0];
+ // An overwritten bay belongs to its latest driver. Earlier owners only
+ // release their own category count, never somebody else's displayed car.
+ if (bay.person == driver) { bay.occupied=false; bay.person=nullptr; bay.category=kNoCar; }
+ if (drivers.empty()) activeParkings().erase(this);
+ spriteNeedsUpdate=true;
 }
-
-int Parking::usableSpaces() const
+int Parking::usableSpaceCount(Game *game)
 {
-	int usable = 0;
-	for (std::vector<Bay>::const_iterator b = bayList.begin(); b != bayList.end(); ++b)
-		if (b->usable) ++usable;
-	return usable;
+ int n=0;
+ for (auto *item : game->itemsByType["parking"]) if (auto *p=dynamic_cast<Parking*>(item)) if (!p->underConstruction) n+=p->usableSpaces();
+ return n;
 }
-
-bool Parking::hasSpace() const
+int Parking::carQuota(Game *game, CarCategory cat)
 {
-	for (std::vector<Bay>::const_iterator b = bayList.begin(); b != bayList.end(); ++b)
-		if (b->usable && !b->occupied) return true;
-	return false;
+ return usableSpaceCount(game) * (cat == kOfficeCar || cat == kSuiteCar ? 2 : 1);
 }
-
-bool Parking::assignSpace(Person * driver, CarCategory cat)
+int Parking::carsParked(Game *game, CarCategory cat)
 {
-	if (!hasSpace()) return false;
-	// EXE admission valve: the category quota of 2 x usable spaces
-	// tower-wide (ParkingT SetupGateCount). With the B2 fix the free-bay
-	// check above is usually the tighter constraint.
-	if (cat != kNoCar && carsParked(game, cat) >= carQuota(game)) return false;
-	for (int b = 0; b < (int)bayList.size(); ++b) {
-		Bay & bay = bayList[b];
-		// B2 divergence: an occupied bay (person != none) is never
-		// assignable - the EXE would double-park the physical space.
-		if (!bay.usable || bay.occupied) continue;
-		bay.occupied = true;
-		bay.person = driver;
-		bay.category = cat;
-		spriteNeedsUpdate = true;
-		return true;
-	}
-	return false;
+ int n=0;
+ for (auto *item : game->itemsByType["parking"]) if (auto *p=dynamic_cast<Parking*>(item))
+  for (auto &driver : p->drivers) if (cat == kNoCar || driver.second == cat) ++n;
+ return n;
 }
-
-void Parking::freeSpace(Person * driver)
+bool Parking::canPark(Game *game, CarCategory cat)
 {
-	for (int b = 0; b < (int)bayList.size(); ++b) {
-		Bay & bay = bayList[b];
-		if (!bay.occupied) continue;
-		if (driver && bay.person != driver) continue;
-		bay.occupied = false;
-		bay.person = NULL;
-		bay.category = kNoCar;
-		spriteNeedsUpdate = true;
-		return;
-	}
+ return cat != kNoCar && usableSpaceCount(game)>0 && carsParked(game,cat)<carQuota(game,cat);
 }
-
-int Parking::usableSpaceCount(Game * game)
+Parking *Parking::claim(Game *game, Item *destination, Person *driver, CarCategory cat)
 {
-	int usable = 0;
-	if (const Game::ItemSet * parkingItems = itemsOfType(game, "parking")) {
-		for (Game::ItemSet::const_iterator it = parkingItems->begin(); it != parkingItems->end(); ++it) {
-			const Parking * park = dynamic_cast<const Parking *>(*it);
-			if (park && !park->underConstruction) usable += park->usableSpaces();
-		}
-	}
-	return usable;
-}
-
-int Parking::carQuota(Game * game)
-{
-	// 2 x usable spaces PER CATEGORY (office and suite each; concilia
-	// people.c people_parking_assign, EXE SetupGateCount quota table).
-	return 2 * usableSpaceCount(game);
-}
-
-int Parking::carsParked(Game * game, CarCategory cat)
-{
-	int cars = 0;
-	if (const Game::ItemSet * parkingItems = itemsOfType(game, "parking")) {
-		for (Game::ItemSet::const_iterator it = parkingItems->begin(); it != parkingItems->end(); ++it) {
-			const Parking * park = dynamic_cast<const Parking *>(*it);
-			if (!park) continue;
-			const std::vector<Bay> & bays = park->bays();
-			for (std::vector<Bay>::const_iterator b = bays.begin(); b != bays.end(); ++b)
-				if (b->occupied && (cat == kNoCar || b->category == cat)) ++cars;
-		}
-	}
-	return cars;
-}
-
-bool Parking::canPark(Game * game, CarCategory cat)
-{
-	if (cat == kNoCar) return false;
-	// Quota room AND a physical free usable bay (the B2 fix makes the bay
-	// the binding scarcity once a category fills the usable spaces 1:1).
-	if (carsParked(game, cat) >= carQuota(game)) return false;
-	if (const Game::ItemSet * parkingItems = itemsOfType(game, "parking")) {
-		for (Game::ItemSet::const_iterator it = parkingItems->begin(); it != parkingItems->end(); ++it) {
-			const Parking * park = dynamic_cast<const Parking *>(*it);
-			if (park && !park->underConstruction && park->hasSpace()) return true;
-		}
-	}
-	return false;
+ recomputeAllChains(game);
+ if (!canPark(game,cat)) return nullptr;
+ std::vector<Parking*> candidates;
+ for (auto *item : game->itemsByType["parking"]) if (auto *p=dynamic_cast<Parking*>(item)) {
+  if (!p->underConstruction && p->hasSpace() && game->mainLobby &&
+      !game->findRoute(p,game->mainLobby).empty() && !game->findRoute(p,destination).empty()) candidates.push_back(p);
+ }
+ if (candidates.empty()) return nullptr;
+ Parking *p=candidates[rand()%candidates.size()];
+ return p->assignSpace(driver,cat) ? p : nullptr;
 }
 
 void Parking::advance(double dt)
@@ -357,23 +324,67 @@ void Parking::encodeXML(tinyxml2::XMLPrinter &xml)
 {
 	Item::encodeXML(xml);
 	xml.PushAttribute("used", usedSpaces());
+	// Driver association (F4): the owning item's cell + member + category.
+	for (std::map<Person*, CarCategory>::const_iterator d = drivers.begin(); d != drivers.end(); ++d) {
+		Person * p = d->first;
+		if (!p || !p->home) continue;
+		xml.OpenElement("car");
+		xml.PushAttribute("x", p->home->position.x);
+		xml.PushAttribute("y", p->home->position.y);
+		xml.PushAttribute("member", p->member);
+		xml.PushAttribute("category", (int)d->second);
+		xml.CloseElement();
+	}
+}
+
+void Parking::relinkAll(Game * game)
+{
+	if (!game) return;
+	std::vector<Item *> parks(game->itemsByType["parking"].begin(), game->itemsByType["parking"].end());
+	for (Item * item : parks) {
+		Parking * park = dynamic_cast<Parking *>(item);
+		if (!park) continue;
+		for (const PendingCar & car : park->pendingCars) {
+			Person * driver = NULL;
+			if (car.category == kOfficeCar) {
+				for (Item * o : game->itemsByType["office"])
+					if (o->position.x == car.x && o->position.y == car.y)
+						if (Office * office = dynamic_cast<Office *>(o))
+							driver = office->crewMember(car.member);
+				if (Office::Worker * w = dynamic_cast<Office::Worker *>(driver)) w->parkingUsed = park;
+			} else if (car.category == kSuiteCar) {
+				for (Item * h : game->itemsByType["hotel_suite"])
+					if (h->position.x == car.x && h->position.y == car.y)
+						if (Hotel * hotel = dynamic_cast<Hotel *>(h))
+							for (Hotel::Guest * g : hotel->guests)
+								if (g->member == car.member) { driver = g; g->parkingUsed = park; g->entry = park; }
+			}
+			if (!driver || park->drivers.count(driver)) continue;
+			park->drivers[driver] = car.category;
+			activeParkings().insert(park);
+			Bay & bay = park->bayList[0];
+			bay.occupied = true; bay.person = driver; bay.category = car.category;
+		}
+		park->pendingCars.clear();
+		park->spriteNeedsUpdate = true;
+	}
 }
 
 void Parking::decodeXML(tinyxml2::XMLElement &xml)
 {
 	Item::decodeXML(xml);
 	ensureBays();
-	// Legacy "used": older saves stored an anonymous occupied-slot count
-	// against the retired 2-spaces-per-tile model. Clamp to the bay count
-	// and park that many cars; the driver handle is lost with the old
-	// model, so the bays are released by the ordinal fallback in
-	// freeSpace(NULL). Category is unknown - count them as office cars.
-	int used = xml.IntAttribute("used");
-	if (used > (int)bayList.size()) used = (int)bayList.size();
-	for (int b = 0; b < used; ++b) {
-		bayList[b].occupied = true;
-		bayList[b].person = NULL;
-		bayList[b].category = kOfficeCar;
+	// Saved cars are re-bound to their drivers by relinkAll() once the items
+	// and people exist.
+ drivers.clear(); activeParkings().erase(this);
+ for (auto &bay : bayList) { bay.occupied=false; bay.person=nullptr; bay.category=kNoCar; }
+	pendingCars.clear();
+	for (tinyxml2::XMLElement * e = xml.FirstChildElement("car"); e; e = e->NextSiblingElement("car")) {
+		PendingCar car;
+		car.x = e->IntAttribute("x"); car.y = e->IntAttribute("y");
+		car.member = e->IntAttribute("member");
+		car.category = (CarCategory)e->IntAttribute("category", kOfficeCar);
+		pendingCars.push_back(car);
 	}
 	updateSprite();
 }
@@ -428,6 +439,7 @@ void Parking::updateSprite()
 
 void Parking::evacuateForDisaster()
 {
+ drivers.clear(); activeParkings().erase(this);
  for (Bay &bay : bayList) {
   bay.occupied = false; bay.person = NULL; bay.category = kNoCar;
  }

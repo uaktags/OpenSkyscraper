@@ -45,11 +45,15 @@ namespace OT
 			int walkinsYesterday;
 			int lastDemandDay;
 			bool revenueSettled;
+            bool dispatched[40] = {};
+            void openDay();
 
 			class Customer : public Person
 			{
 			public:
 				Customer(FastFood *item);
+                FastFood *owner;
+                int poolSlot=-1;
 				virtual ~Customer() { LOG(DEBUG, "fastfood customer %p killed", this); }
 				double arrivalTime; // when the customer arrives at the lobby of the tower
 

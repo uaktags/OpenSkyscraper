@@ -29,7 +29,10 @@ namespace OT {
 
 			bool open;
 			bool trainPresent;
-			// The EXE's station pool is per-day and bounded at 240 riders.
+			// 240-slot station pool (one slot per rider); a failed venue pick
+			// consumes the slot until the day reset, a completed return frees it.
+			static const int kPoolSize = 240;
+			bool slotUsed[kPoolSize];
 			int visitorsToday;
 			int lastVisitorDay;
 
@@ -43,6 +46,8 @@ namespace OT {
 				Visitor(Metro *m);
 				virtual ~Visitor() { LOG(DEBUG, "metro visitor %p killed", this); }
 
+				Metro *station = nullptr; ///< home station (return destination)
+				int slot = -1;            ///< pool slot index
 				double arrivalTime;     ///< absolute time the visitor entered the tower
 				double departTime;      ///< absolute time the visitor should head back
 				bool   returnedToMetro; ///< true once the visitor is back at the platform
@@ -71,10 +76,10 @@ namespace OT {
 		private:
 			Sound trainSound;
 
-			void spawnVisitors(int count);
+			void rollPool();
 			void boardReturnedVisitors();
 			void clearAllVisitors();
-			Item * pickDestinationFor(Visitor *v);
+			Item * pickDestination();
 		};
 	}
 }

@@ -175,13 +175,8 @@ static bool isAbandonedUnit(Item::Item * item)
 // InspectorDialog default.
 static int rentClassFor(Item::Item * item)
 {
-	const std::string & id = item->prototype->id;
-	if (id == "shop")
-	{
-		Item::Shop * shop = dynamic_cast<Item::Shop *>(item);
-		if (shop) return shop->rentClass;
-	}
-	return openSkyDefaultRentClass(id);
+	if (item->hasTenantRecord()) return item->tenant.rentClass;
+	return openSkyDefaultRentClass(item->prototype->id);
 }
 
 static bool isPricedUnitId(const std::string & id)

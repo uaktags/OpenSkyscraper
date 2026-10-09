@@ -1,6 +1,8 @@
 #pragma once
 #include "../Sprite.h"
 #include "Item.h"
+#include <map>
+#include <set>
 
 namespace OT
 {
@@ -47,8 +49,8 @@ namespace OT
 			bool open; ///< Inside the 10:00-21:00 window (false = shutters).
 			int patrons; ///< Current patron count driving the fill tier.
 			// Retail record fields used by the daily street pool.  Quarterly
-			// rent is settled by Game, not by this item.
-			int rentClass;
+			// rent is settled by Game, not by this item. The rent class lives
+			// on Item::tenant.rentClass.
 			int serviceScore[3];
 			int dailyQuota;
 			int quotaRemaining;
@@ -61,6 +63,29 @@ namespace OT
 			void setPatrons(int p);
 			/// The EXE retail state byte the current fields map to.
 			int stateByte() const;
+
+			/// Real walk-in person (T27): rides the elevators from the ground
+			/// floor like a fast-food customer. Visitors have no home record.
+			class Customer : public Person
+			{
+			public:
+				Customer(Shop *item);
+				virtual ~Customer() {}
+				bool visited = false; ///< has entered the shop at least once
+			};
+			typedef std::set<Customer *> Customers;
+			Customers customers;
+			/// Absolute time each person inside leaves (>= 60 frames after entry).
+			std::map<Person *, double> leaveAt;
+			void clearCustomers();
+
+			/// Tenant leaves on a quarter day (T6): the unlet storefront shows.
+			/// CountT is deliberately NOT decremented (EXE leak, T14).
+			void vacate();
+			/// First walk-in of an armed unlet shop re-lets it (T9).
+			void relet();
+			virtual void addPerson(Person *p) override;
+			virtual void removePerson(Person *p) override;
 
 			Sprite sprite;
 			bool spriteNeedsUpdate;

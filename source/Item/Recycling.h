@@ -23,8 +23,14 @@ namespace OT {
             virtual void advance(double dt);
 
             int variant;
+            int upperStage=0, lowerStage=0;
+            static void advanceAll(Game*);
+            static int required(int ratio);
+            void encodeXML(tinyxml2::XMLPrinter&) override;
+            void decodeXML(tinyxml2::XMLElement&) override;
 
             Sprite sprite;
+            Sprite lower;
             bool spriteNeedsUpdate;
             void updateSprite();
         };
