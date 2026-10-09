@@ -33,6 +33,7 @@ MapNode* GameMap::addNode(const MapNode::Point &p, Item::Item *item) {
 		floorNodes[p.y] = f;
 		f->position.x = INT_MIN;
 		f->position.y = p.y;
+		f->walkableBetween = &horizontalWalkable;
 	} else f = floorNodes[p.y];
 
 	if(!item->canHaulPeople()) {
@@ -131,6 +132,7 @@ MapNode *GameMap::ensureNode(const MapNode::Point &p) {
 		floorNodes[p.y] = f;
 		f->position.x = INT_MIN;
 		f->position.y = p.y;
+		f->walkableBetween = &horizontalWalkable;
 	}
 
 
@@ -160,14 +162,20 @@ MapNode *GameMap::ensureNode(const MapNode::Point &p) {
 
 			if(left) {
 				if(!right) mapNodesByFloor[p.y].push_back(n); // Insert node as last node in list
-				n->neighbours[MapNode::LEFT] = left;
-				left->neighbours[MapNode::RIGHT] = n;
+				// YootTower floor holes: only link across a span that is
+				// actually covered by floor (SimTower/OpenSky: always).
+				if (spanWalkable(p.y, left->position.x, n->position.x)) {
+					n->neighbours[MapNode::LEFT] = left;
+					left->neighbours[MapNode::RIGHT] = n;
+				}
 			}
 
 
 			if(right) {
-				n->neighbours[MapNode::RIGHT] = right;
-				right->neighbours[MapNode::LEFT] = n;
+				if (spanWalkable(p.y, n->position.x, right->position.x)) {
+					n->neighbours[MapNode::RIGHT] = right;
+					right->neighbours[MapNode::LEFT] = n;
+				}
 			}
 		}
 
@@ -219,10 +227,10 @@ void GameMap::unlinkLobbyAtrium(const MapNode::Point &p, Item::Item *lobby) {
 		// Drop the extension node unless another transport still uses it.
 		if(!chain->hasElevator && !chain->hasServiceElevator
 		   && !chain->transportItems[MapNode::UP] && !chain->transportItems[MapNode::DOWN]) {
-			if(chain->neighbours[MapNode::LEFT])
-				chain->neighbours[MapNode::LEFT]->neighbours[MapNode::RIGHT] = chain->neighbours[MapNode::RIGHT];
-			if(chain->neighbours[MapNode::RIGHT])
-				chain->neighbours[MapNode::RIGHT]->neighbours[MapNode::LEFT] = chain->neighbours[MapNode::LEFT];
+			MapNode *cl = chain->neighbours[MapNode::LEFT];
+			MapNode *cr = chain->neighbours[MapNode::RIGHT];
+			if(cl) cl->neighbours[MapNode::RIGHT] = (cr && spanWalkable(chain->position.y, cl->position.x, cr->position.x)) ? cr : NULL;
+			if(cr) cr->neighbours[MapNode::LEFT] = (cl && spanWalkable(chain->position.y, cl->position.x, cr->position.x)) ? cl : NULL;
 			gameMap.erase(chain->position);
 			for(std::list<MapNode *>::iterator i = mapNodesByFloor[chain->position.y].begin(); i != mapNodesByFloor[chain->position.y].end(); i++) {
 				if(*i == chain) {
@@ -251,8 +259,10 @@ void GameMap::removeNode(const MapNode::Point &p, Item::Item *item) {
 					if (slot->transportItems[MapNode::UP] != item) continue;
 					slot->transportItems[MapNode::UP] = NULL;
 					if (!slot->hasElevator && !slot->hasServiceElevator && !slot->transportItems[MapNode::DOWN] && !slot->neighbours[MapNode::UP] && !slot->neighbours[MapNode::DOWN]) {
-						if (slot->neighbours[MapNode::LEFT]) slot->neighbours[MapNode::LEFT]->neighbours[MapNode::RIGHT] = slot->neighbours[MapNode::RIGHT];
-						if (slot->neighbours[MapNode::RIGHT]) slot->neighbours[MapNode::RIGHT]->neighbours[MapNode::LEFT] = slot->neighbours[MapNode::LEFT];
+						MapNode *sl = slot->neighbours[MapNode::LEFT];
+						MapNode *sr = slot->neighbours[MapNode::RIGHT];
+						if (sl) sl->neighbours[MapNode::RIGHT] = (sr && spanWalkable(p.y, sl->position.x, sr->position.x)) ? sr : NULL;
+						if (sr) sr->neighbours[MapNode::LEFT] = (sl && spanWalkable(p.y, sl->position.x, sr->position.x)) ? sl : NULL;
 						gameMap.erase(slot->position);
 						mapNodesByFloor[p.y].erase(it);
 						delete slot;
@@ -307,12 +317,14 @@ void GameMap::removeNode(const MapNode::Point &p, Item::Item *item) {
 	if( !n->hasElevator && !n->hasServiceElevator &&
 		!n->transportItems[MapNode::UP] && !n->transportItems[MapNode::DOWN]) {
 		//LOG(DEBUG, "Deleting node at %dx%d", p.x, p.y);
-		if(n->neighbours[MapNode::LEFT]) {
-			n->neighbours[MapNode::LEFT]->neighbours[MapNode::RIGHT] = n->neighbours[MapNode::RIGHT];
+		MapNode *nl = n->neighbours[MapNode::LEFT];
+		MapNode *nr = n->neighbours[MapNode::RIGHT];
+		if(nl) {
+			nl->neighbours[MapNode::RIGHT] = (nr && spanWalkable(p.y, nl->position.x, nr->position.x)) ? nr : NULL;
 		}
 
-		if(n->neighbours[MapNode::RIGHT]) {
-			n->neighbours[MapNode::RIGHT]->neighbours[MapNode::LEFT] = n->neighbours[MapNode::LEFT];
+		if(nr) {
+			nr->neighbours[MapNode::LEFT] = (nl && spanWalkable(p.y, nl->position.x, nr->position.x)) ? nl : NULL;
 		}
 
 		gameMap.erase(p);
@@ -324,6 +336,33 @@ void GameMap::removeNode(const MapNode::Point &p, Item::Item *item) {
 		}
 		delete n;
 	}
+}
+
+/// Rebuilds one floor's LEFT/RIGHT links: adjacent nodes (x-sorted list)
+/// link only when horizontalWalkable covers the span between them. Without
+/// a test installed this reproduces the previous link-everything graph.
+void GameMap::revalidateFloorLinks(int floor) {
+	std::map<int, std::list<MapNode*> >::iterator fi = mapNodesByFloor.find(floor);
+	if(fi == mapNodesByFloor.end()) return;
+	std::list<MapNode *> &nodes = fi->second;
+	for(std::list<MapNode *>::iterator n = nodes.begin(); n != nodes.end(); ++n) {
+		(*n)->neighbours[MapNode::LEFT] = NULL;
+		(*n)->neighbours[MapNode::RIGHT] = NULL;
+	}
+	MapNode *prev = NULL;
+	for(std::list<MapNode *>::iterator n = nodes.begin(); n != nodes.end(); ++n) {
+		MapNode *node = *n;
+		if(prev && spanWalkable(floor, prev->position.x, node->position.x)) {
+			prev->neighbours[MapNode::RIGHT] = node;
+			node->neighbours[MapNode::LEFT] = prev;
+		}
+		prev = node;
+	}
+}
+
+void GameMap::revalidateAllFloorLinks() {
+	for(std::map<int, std::list<MapNode*> >::iterator i = mapNodesByFloor.begin(); i != mapNodesByFloor.end(); ++i)
+		revalidateFloorLinks(i->first);
 }
 
 MapNode* GameMap::findNode(const MapNode::Point &p, Item::Item *item) {

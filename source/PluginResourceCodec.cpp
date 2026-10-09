@@ -301,6 +301,11 @@ namespace OT
 			case ResourceCodec::SubPluginPeopleParam: return "SubPluginPeopleParam";
 			case ResourceCodec::StringBlock:          return "StringBlock";
 			case ResourceCodec::VersionInfo:          return "VersionInfo";
+			case ResourceCodec::WorldRecord:          return "WorldRecord";
+			case ResourceCodec::BkgndInfo:            return "BkgndInfo";
+			case ResourceCodec::FloorInfoMask:        return "FloorInfoMask";
+			case ResourceCodec::PaletteAnime:         return "PaletteAnime";
+			case ResourceCodec::Palette:              return "Palette";
 		}
 		return "?";
 	}
@@ -340,6 +345,15 @@ namespace OT
 		if (t == "ADDF") return ResourceCodec::Advertise;
 		if (t == "RT_STRING") return ResourceCodec::StringBlock;
 		if (t == "RT_VERSION") return ResourceCodec::VersionInfo;
+		if (container == ResourceContainer::PE)
+		{
+			WorldSchema ws;
+			if (worldSchemaForType(t, ws)) return ResourceCodec::WorldRecord;
+			if (t == "BINF") return ResourceCodec::BkgndInfo;
+			if (t == "FINF") return ResourceCodec::FloorInfoMask;
+			if (t == "PTDF") return ResourceCodec::PaletteAnime;
+			if (t == "PALETTE") return ResourceCodec::Palette;
+		}
 		if (isTextType(t)) return ResourceCodec::Text;
 		return ResourceCodec::Raw;
 	}
@@ -391,6 +405,22 @@ namespace OT
 				break;
 			case ResourceCodec::StringBlock: done = tryTyped(r, want, data, length, &decodeStringBlock); break;
 			case ResourceCodec::VersionInfo: done = tryTyped(r, want, data, length, &decodeVersionInfo); break;
+			case ResourceCodec::WorldRecord:
+			{
+				WorldSchema ws = WorldSchema::Event;
+				Json rec;
+				if (worldSchemaForType(type, ws) && decodeWorldSchemaResource(ws, type, data, length, rec))
+				{
+					r.codec = want;
+					r.value = std::move(rec);
+					done = true;
+				}
+				break;
+			}
+			case ResourceCodec::BkgndInfo:     done = tryTyped(r, want, data, length, &decodeBkgndInfoDef); break;
+			case ResourceCodec::FloorInfoMask: done = tryTyped(r, want, data, length, &decodeFloorInfoMaskDef); break;
+			case ResourceCodec::PaletteAnime:  done = tryTyped(r, want, data, length, &decodePaletteAnimeDef); break;
+			case ResourceCodec::Palette:       done = tryTyped(r, want, data, length, &decodePaletteDef); break;
 			case ResourceCodec::Text:
 				r.codec = ResourceCodec::Text;
 				r.bytes.assign(data, length);
@@ -434,6 +464,16 @@ namespace OT
 				return encodeSubPluginPeopleParamDef(std::get<SubPluginPeopleParamDef>(r.value), out);
 			case ResourceCodec::StringBlock: return encodeStringBlock(std::get<StringBlock>(r.value), out);
 			case ResourceCodec::VersionInfo: return encodeVersionInfo(std::get<VersionInfo>(r.value), out);
+			case ResourceCodec::WorldRecord:
+			{
+				WorldSchema ws = WorldSchema::Event;
+				return worldSchemaForType(r.type, ws)
+				    && encodeWorldSchemaResource(ws, r.type, std::get<Json>(r.value), out);
+			}
+			case ResourceCodec::BkgndInfo:     return encodeBkgndInfoDef(std::get<BkgndInfoDef>(r.value), out);
+			case ResourceCodec::FloorInfoMask: return encodeFloorInfoMaskDef(std::get<FloorInfoMaskDef>(r.value), out);
+			case ResourceCodec::PaletteAnime:  return encodePaletteAnimeDef(std::get<PaletteAnimeDef>(r.value), out);
+			case ResourceCodec::Palette:       return encodePaletteDef(std::get<PaletteDef>(r.value), out);
 		}
 		return false;
 	}

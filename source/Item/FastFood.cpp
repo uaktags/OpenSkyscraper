@@ -1,6 +1,7 @@
 /* Copyright © 2013 Fabian Schuiki */
 #include "../Game.h"
 #include "../XmlUtil.h"
+#include "../YootRules.h"
 #include "../Math/Rand.h"
 #include "FastFood.h"
 #include "Office.h"
@@ -129,11 +130,11 @@ void FastFood::decodeXML(tinyxml2::XMLElement &xml)
         c->bankCount=e->IntAttribute("bankCount",0); c->bankTotal=e->IntAttribute("bankTotal",0);
         c->poolSlot=e->IntAttribute("poolSlot",-1);
 		c->eval = e->DoubleAttribute("eval", 0.0);
-		c->name = xmlAttrOr(*e, "name", "");
-		c->from = xmlAttrOr(*e, "from", "");
-		c->goingTo = xmlAttrOr(*e, "goingTo", "");
+		c->name = xmlAttributeOr(*e, "name", "");
+		c->from = xmlAttributeOr(*e, "from", "");
+		c->goingTo = xmlAttributeOr(*e, "goingTo", "");
 		customers.insert(c);
-		if (std::string(xmlAttrOr(*e, "phase", "arriving")) == "eating") {
+		if (std::string(xmlAttributeOr(*e, "phase", "arriving")) == "eating") {
 			addPerson(c);
 			customerMetadata[c].arrivalTime = e->DoubleAttribute("itemArrival");
 		} else arrivingCustomers.push(c);
@@ -185,6 +186,14 @@ void FastFood::advance(double dt)
 		population = walkinsToday;
 		// Closing changes the inspector display only; CountT rotates on opening.
 		spriteNeedsUpdate = true;
+		if (!revenueSettled && prototype->yoot) {
+			// YootTower E6 (T2Tenant::CalcInMoney 0x1005f620): paid at close,
+			// customers x inMoney / 100 - the daily outMoney.
+			const YootItemStats &y = *prototype->yoot;
+			game->yootBook(Yoot::commercialIncome(customersToday, y), "retail_income", "Income from Fast Food");
+			yootEstimate = Yoot::profitEstimate(customersToday, y.inMoneyFor(0) / kYootMoneyUnit, y.outMoney / kYootMoneyUnit);
+			revenueSettled = true;
+		}
 		if (!revenueSettled) {
 			int amount = customersToday >= 50 ? 5000 : customersToday >= 35 ? 3000
 				: customersToday >= 25 ? 2000 : -3000;

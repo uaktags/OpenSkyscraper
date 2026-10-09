@@ -27,12 +27,15 @@
 #include <memory>
 
 #include "Application.h"
+#include "YootWorldArt.h"
 #include "Game.h"
 #include "MainMenu.h"
 #include "NativeFileDialog.h"
 #include "SaveHash.h"
 #include "SimTowerLoader.h"
 #include "TdtLoader.h"
+#include "BldImport.h"
+#include "BldLoader.h"
 #include "OpenGL.h"
 #include "tinyxml2.h"
 
@@ -118,6 +121,8 @@ Application::Application(int argc, char *argv[])
     bool uiScaleExplicit = settingsLoaded;
     for (int i = 1; i < argc; i++)
     {
+        if (Sim::parseArg(argc, argv, i, m_sim))
+            continue;
         if (strcmp(argv[i], "--debug") == 0)
         {
             logger.setLevel(Logger::DEBUG);
@@ -232,6 +237,14 @@ Application::Application(int argc, char *argv[])
             startupMousePosition.x = atoi(argv[++i]);
             startupMousePosition.y = atoi(argv[++i]);
         }
+        if (strcmp(argv[i], "--qa-build") == 0 && i + 3 < argc)
+        {
+            QaBuild b;
+            b.id = argv[++i];
+            b.x = atoi(argv[++i]);
+            b.floor = atoi(argv[++i]);
+            startupBuilds.push_back(b);
+        }
         if (strcmp(argv[i], "--qa-tool") == 0)
         {
             assert(i + 1 < argc && "--qa-tool is missing tool id");
@@ -244,6 +257,23 @@ Application::Application(int argc, char *argv[])
             startupViewportScrollHorizontal = atof(argv[++i]);
             startupViewportScrollVertical = atof(argv[++i]);
         }
+        if (strcmp(argv[i], "--qa-outside") == 0)
+            startupOutside = true;
+        if (strcmp(argv[i], "--qa-zoom") == 0)
+        {
+            // Viewport zoom factor for captures (2 = the original games' 1:1 scale).
+            assert(i + 1 < argc && "--qa-zoom is missing factor");
+            startupZoomFactor = atof(argv[++i]);
+        }
+    }
+
+    // Headless sim: seed every rand() consumer before any Game exists and
+    // switch the wall-clock dependent paths to their deterministic form.
+    if (m_sim.enabled)
+    {
+        startNewGame = true;
+        Sim::setDeterministic(true);
+        srand(m_sim.seed);
     }
 
     // The skin defaults to the ruleset's own era unless --skin was given.
@@ -281,6 +311,8 @@ int Application::run()
 
     if (exitCode == 0)
         init();
+    if (exitCode == 0 && m_sim.enabled)
+        return runSim();
     if (exitCode == 0)
         loop();
     if (exitCode == 0)
@@ -432,6 +464,22 @@ void Application::loadGameFromFile(const std::string &filename)
         for (size_t i = 0; i < report.size(); i++)
             LOG(INFO, "TDT import: %s", report[i].c_str());
         LOG(IMPORTANT, "SimTower save imported from %s", filename.c_str());
+        if (createdNewGame)
+        {
+            popState();
+            pushState(game);
+        }
+        return;
+    }
+    // YootTower .bld saves ('002T' magic): converted to native XML in
+    // YootTower mode by BldLoader; the .bld is never written back.
+    if (OT::Bld::looksLikeBld(filename))
+    {
+        if (!OT::importBldSave(*game, filename))
+        {
+            if (createdNewGame) delete game;
+            return;
+        }
         if (createdNewGame)
         {
             popState();
@@ -770,12 +818,6 @@ void Application::init()
         m_skin = Skin::OpenSky;
         bitmaps.setSkin(m_skin);
     }
-    if (selectedSkin() == Skin::Yoot && !hasSkinAssets(Skin::Yoot))
-    {
-        LOG(WARNING, "YootTower skin assets not found in data/bitmaps/yoottower; falling back to OpenSky art");
-        m_skin = Skin::OpenSky;
-        bitmaps.setSkin(m_skin);
-    }
     // A user-selected YootTower plugin folder (Settings dialog) is
     // cataloged alongside the automatic search-path Plugins/ dirs, so
     // SIMTOWER.EXE and YootTower media can both be provided at once.
@@ -794,6 +836,14 @@ void Application::init()
     LOG(INFO, "cataloged %zu first-party and %zu optional external plugin(s)",
         openTowerPluginCount, externalPluginCount);
 
+    // The YootTower skin draws from the world plugin and Floor.t2p, so it
+    // can only be judged once the catalog exists.
+    if (selectedSkin() == Skin::Yoot && !hasSkinAssets(Skin::Yoot))
+    {
+        LOG(WARNING, "YootTower skin needs %s and %s in a Plugins folder; falling back to OpenSky art",
+            yootWorldPluginFile(selectedWorld()), YootWorldArt::floorPluginFor(selectedWorld()));
+        m_skin = Skin::OpenSky;
+    }
     // Activate the selected skin once every art provider is cataloged, so
     // BitmapManager knows which provider wins for each texture key.
     bitmaps.setSkin(selectedSkin());
@@ -825,6 +875,8 @@ void Application::init()
     {
         window.create(videoMode, "OpenSkyscraper SFML");
     }
+    if (m_sim.enabled)
+        window.setVisible(false);
     window.setVerticalSyncEnabled(true);
 
     gui.setWindow(window);
@@ -832,6 +884,11 @@ void Application::init()
     if (startNewGame)
     {
         Game *game = new Game(*this);
+        // Headless sim: seed again once the window and the audio device are
+        // up; the audio backend (PulseAudio client) calls rand() a
+        // host-dependent number of times while it connects.
+        if (m_sim.enabled)
+            srand(m_sim.seed);
         game->saveFilename = "";
         game->isDirty = false;
         if (startOfficeLunchQa)
@@ -843,8 +900,14 @@ void Application::init()
             loadGameFromFile(startupLoadPath);
         if (!startupTool.empty())
             game->selectTool(startupTool.c_str());
+        for (const QaBuild & b : startupBuilds)
+            game->qaBuild(b.id, int2(b.x, b.floor));
         if (setViewportScrollAtStartup)
             game->qaSetViewportScrollFractions(startupViewportScrollHorizontal, startupViewportScrollVertical);
+        if (startupZoomFactor > 0.0)
+            game->zoomBy(startupZoomFactor);
+        if (startupOutside && game->skin == Skin::Yoot)
+            game->statusMode = Game::kOutside;
         if (setMouseAtStartup)
             sf::Mouse::setPosition(startupMousePosition, window);
     }
@@ -1024,7 +1087,9 @@ void Application::loop()
         // window.draw(bg);
         // window.draw(rateIndicator);
 
-        if (captureFrameAtStartup)
+        // OPENSKY_CAPTURE_FRAMES=n delays the --capture-frame shot by n frames.
+        static int captureDelay = std::getenv("OPENSKY_CAPTURE_FRAMES") ? std::atoi(std::getenv("OPENSKY_CAPTURE_FRAMES")) : 0;
+        if (captureFrameAtStartup && captureDelay-- <= 0)
         {
             sf::Texture frame(window.getSize());
             frame.update(window);
@@ -1052,6 +1117,28 @@ void Application::cleanup()
     statesToDelete.clear();
 
     window.close();
+}
+
+/** Runs the headless --sim session on the startup game, then tears the
+ *  states down without the interactive loop or a settings write. */
+int Application::runSim()
+{
+    Game *game = states.empty() ? NULL : dynamic_cast<Game *>(states.top());
+    int code = 2;
+    if (!game)
+        LOG(ERROR, "sim: no game state to simulate");
+    else if (loadGameAtStartup && game->saveFilename.empty())
+        LOG(ERROR, "sim: could not load %s", startupLoadPath.c_str());
+    else
+        code = Sim::run(*game, m_sim);
+    while (!states.empty())
+        popState();
+    for (State *state : statesToDelete)
+        delete state;
+    statesToDelete.clear();
+    window.close();
+    running = false;
+    return code;
 }
 
 /** Pushes the given State ontop of the state stack, causing it to receive events. */
@@ -1496,10 +1583,11 @@ bool Application::hasSkinAssets(Skin skin) const
                data.exists("SIMTOWER.EXE") || data.exists("simtower.exe") ||
                data.exists("SIMTOWER.EX_") || data.exists("simtower.ex_");
     case Skin::Yoot:
-        // YootTower standalone skin requires base environmental art (sky, ground, lobby)
-        // which has not yet been produced. Until complete drop-ins exist (e.g. bitmaps/yoottower/sky.png),
-        // the skin is gated as incomplete.
-        return data.exists("bitmaps/yoottower/sky.png");
+        // Sky, ground, slabs and sides come from the world plugin, lobbies
+        // and empty floors from Floor.t2p (KFloor.t2p in Kegon); anything
+        // else falls back to OpenSky art per key.
+        return pluginManager.has(yootWorldPluginFile(selectedWorld())) &&
+               pluginManager.has(YootWorldArt::floorPluginFor(selectedWorld()));
     }
     return true;
 }
@@ -1580,6 +1668,7 @@ BuildRules Application::makeBuildRules(BuildRules::Ruleset ruleset, YootWorld::I
         RulesProfile::Unlock unlock;
         unlock.available = u->second.available;
         unlock.minRating = u->second.minGrade > 0 ? u->second.minGrade - 1 : 0;
+        unlock.secret = u->second.secret;
         profile.unlocks[u->first] = unlock;
     }
     for (size_t i = 0; i < profile.vips.size(); ++i)
@@ -1734,7 +1823,7 @@ void Application::showNewTowerDialog()
             skinBtn->setText(std::string("🔒 Skin: ") + skinDisplayName(selectedSkin()) + " (Locked)");
             skinBtn->getRenderer()->setBorderColor(sf::Color(190, 110, 45));
             startBtn->setEnabled(false);
-            startBtn->setText("Skin Incomplete (Locked)");
+            startBtn->setText("Skin Unavailable (Locked)");
             auto r = startBtn->getRenderer();
             r->setBackgroundColor(sf::Color(48, 52, 60));
             r->setTextColor(sf::Color(140, 145, 155));
@@ -1743,7 +1832,8 @@ void Application::showNewTowerDialog()
             r->setBorders(1);
             r->setRoundedBorderRadius(4 * uiScale);
             if (selectedSkin() == Skin::Yoot)
-                warnSkinLabel->setText("⚠️ YootTower base assets (sky/ground) in development. Select OpenSky.");
+                warnSkinLabel->setText(std::string("⚠️ YootTower skin needs ") + yootWorldPluginFile(selectedWorld()) +
+                                       " and " + YootWorldArt::floorPluginFor(selectedWorld()) + ". Select OpenSky.");
             else
                 warnSkinLabel->setText("⚠️ SIMTOWER.EXE not found. Select OpenSky or provide in Settings.");
             warnSkinLabel->setVisible(true);
@@ -1759,10 +1849,11 @@ void Application::showNewTowerDialog()
         updateSkinState();
     });
 
-    worldBtn->onPress([this, worldBtn] {
+    worldBtn->onPress([this, worldBtn, updateSkinState] {
         YootWorld::Id next = static_cast<YootWorld::Id>((static_cast<int>(selectedWorld()) + 1) % 3);
         setWorldOverride(next);
         worldBtn->setText(std::string("World: ") + yootWorldDisplayName(next));
+        updateSkinState(); // Kegon needs KFloor.t2p
     });
 
     skinBtn->onPress([this, updateSkinState] {
@@ -1783,7 +1874,9 @@ void Application::showNewTowerDialog()
             if (selectedSkin() == Skin::Yoot)
             {
                 showMessageDialog("Skin Unavailable",
-                    "The YootTower skin is currently in development and lacks base environmental assets (sky, ground, and lobby).\n\nPlease select the OpenSky skin to play YootTower mode.");
+                    std::string("The YootTower skin draws its sky, ground and lobby from the YootTower plugins ") +
+                    yootWorldPluginFile(selectedWorld()) + " and " + YootWorldArt::floorPluginFor(selectedWorld()) +
+                    ", which were not found.\n\nAdd the YootTower Plugins folder in Settings or select the OpenSky skin.");
             }
             else if (selectedSkin() == Skin::Classic)
             {

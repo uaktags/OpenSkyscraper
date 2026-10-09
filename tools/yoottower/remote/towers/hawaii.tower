@@ -1,0 +1,15 @@
+<tower funds="4321000" rating="1" time="13.5" speed="1" rainy="0" tool="inspector" ruleset="yoottower" world="hawaii" x="0" y="100">
+<item type="lobby" x="-20" y="0" width="40" height="1"/>
+<item type="floor" x="-20" y="1" width="40"/>
+<item type="floor" x="-20" y="2" width="40"/>
+<item type="floor" x="-20" y="3" width="40"/>
+<item type="floor" x="-20" y="4" width="40"/>
+<item type="office" x="-20" y="1" occupied="0"/>
+<item type="office" x="-11" y="1" occupied="0"/>
+<item type="office" x="11" y="1" occupied="0"/>
+<item type="shop" x="-20" y="2" let="1"/>
+<item type="restroom" x="11" y="2"/>
+<item type="condo" x="-20" y="3"/>
+<item type="condo" x="-20" y="4"/>
+<item type="elevator-standard" x="5" y="0" height="5"><car altitude="0.0" homeFloor="0"/></item>
+</tower>

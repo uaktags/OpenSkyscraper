@@ -99,4 +99,13 @@ void Lighting::advance(double dt)
 	current.g = static_cast<uint8_t>(std::max(0.0, std::min(255.0, gg)));
 	current.b = static_cast<uint8_t>(std::max(0.0, std::min(255.0, bb)));
 	current.a = 255;
+
+	// The YootTower skin has no global tint: the original only animates the
+	// palette (sky, windows, signs; YootItemArt) and darkens blacked-out
+	// tenants (PowerSystem).
+	if (game->skin == Skin::Yoot)
+	{
+		current = sf::Color(255, 255, 255, 255);
+		currentBrightness = 1.0;
+	}
 }

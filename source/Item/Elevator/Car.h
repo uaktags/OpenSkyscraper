@@ -1,4 +1,5 @@
 #pragma once
+#include <set>
 #include "../../GameObject.h"
 #include "../../Sound.h"
 #include "Elevator.h"
@@ -70,13 +71,29 @@ namespace OT {
 				bool isFull();
 				Person * nextPassengerToUnmount() const;
 
-				void moveTo(int floor);
+			void moveTo(int floor);
+			void yootDrive();
+			/// YootTower dispatch (StdElev FUN_1000cf90/cda0/d070): the
+			/// floors this car is appointed to pick up (SetOnStop), the
+			/// sweep cost of serving a call, the sweep decision
+			/// (SetNextStop/ChangeTurnPos) and the end-of-window unappoint
+			/// (ClearOnStop).
+			std::set<int> yootPickups;
+			int yootSweepCost(int floor, Elevator::Direction dir) const;
+			void yootDecide();
+			void yootEndStop();
+			Queue *yootServedQueue();
 
 				/// Door timer is the authentic five-tick countdown. The
 				/// legacy State values remain serialized-compatible.
 				int doorTicks;
 				int holdTicks;
 				int moveTicks;
+				/// YootTower StdElev/BigElev drive (FUN_1000c200/c3b0/c590):
+				/// the gear 0..2 (MVDF speed index) and the car's offset
+				/// inside a floor, 36 units a floor.
+				int yootGear;
+				int yootOffset;
 
 			};
 		}

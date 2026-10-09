@@ -61,7 +61,7 @@ namespace OT {
 				};
 			};
 
-			std::set<Visitor *> visitors;
+			std::set<Visitor *, SimLess> visitors;
 
 			Sprite station;
 			Sprite platform;
@@ -73,13 +73,22 @@ namespace OT {
 			virtual void addPerson(Person *p) override;
 			virtual void removePerson(Person *p) override;
 
+		protected:
+			/// Absolute time at which the next train event (arrival if the
+			/// train is currently absent, departure otherwise) is due.
+			double nextTrainTime;
+
 		private:
 			Sound trainSound;
 
 			void rollPool();
-			void boardReturnedVisitors();
 			void clearAllVisitors();
 			Item * pickDestination();
+			/// Boarding the returned visitors on the departing train; the
+			/// YootTower Subway (YootVenueItems) reuses it from its own
+			/// train flow.
+		protected:
+			void boardReturnedVisitors();
 		};
 	}
 }

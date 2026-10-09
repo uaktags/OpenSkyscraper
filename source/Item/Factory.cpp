@@ -27,6 +27,12 @@
 #include "MedicalCenter.h"
 #include "Recycling.h"
 #include "Cathedral.h"
+#include "PowerRoom.h"
+#include "YootFacilityItems.h"
+#include "YootVenueItems.h"
+#include "YootTenant.h"
+#include "YootSpecialItems.h"
+#include "YootMiscItems.h"
 
 using namespace OT;
 using namespace Item;
@@ -73,7 +79,33 @@ void Factory::loadPrototypes()
 	register_item(MedicalCenter);
 	register_item(Recycling);
 	register_item(Cathedral);
+	register_item(PowerRoom); // YootTower-only (BuildRules hides it elsewhere)
+	register_item(TrashFacility); // YootTower-only facilities (plan step 12)
+	register_item(Restroom);
+	register_item(DoctorsOffice);
+	register_item(Theater); // YootTower-only venues (plan step 14 part B)
+	register_item(ClassicTheater);
+	register_item(EventCenter);
+	register_item(Billboard);
+	register_item(Stadium);
+	register_item(YootCathedral);
+	register_item(Attraction);
+	register_item(Observatory);
+	register_item(TicketBooth);
+	register_item(GatheringArea);
+	register_item(BoatDeck);
+	register_item(Subway);
+	register_item(FrontDesk); // YootTower-only special items (plan step 14)
+	register_item(ParkingGate);
+	register_item(ParkingLot);
+	register_item(FireDepartment);
+	register_item(Apartment);
+	register_item(School); // YootTower-only, closed after step 14
+	register_item(SkyBridge);
 	#undef register_item
+	// YootTower-only: one prototype per shop / restaurant / vending /
+	// service tenant plugin found in the catalog (YootTenants.h).
+	registerYootTenantPrototypes(prototypes, game->app.pluginManager);
 	
 	for (int i = 0; i < prototypes.size(); i++) {
 		prototypesById[prototypes[i]->id] = prototypes[i];
@@ -89,6 +121,9 @@ OT::Item::Item * Factory::make(AbstractPrototype * prototype, int2 position)
 	// Mark fresh placements as under construction. Saved games call
 	// make() too, but their decodeXML() run immediately afterwards and
 	// restore the persisted underConstruction flag, overriding this.
+	// YootTower InitEquip: build day = CalcTotalDays (saved items restore theirs).
+	if (game->activeRules.profile().yootWorld)
+		item->yootBuildDay = (int)floor(game->time.absolute);
 	double duration = item->constructionDuration();
 	if (duration > 0.0)
 	{
@@ -106,6 +141,7 @@ OT::Item::Item * Factory::make(AbstractPrototype * prototype, int2 position)
 OT::Item::Item * Factory::make(std::string prototypeID, int2 position)
 {
 	AbstractPrototype * prototype = prototypesById[prototypeID];
+	if (!prototype) LOG(ERROR, "Factory::make: no prototype registered for id '%s'", prototypeID.c_str());
 	return make(prototype, position);
 }
 
@@ -131,6 +167,17 @@ OT::Item::Item * Factory::make(tinyxml2::XMLElement & xml)
 	// the sprite and spatial indexes share the preserved bottom-left anchor.
 	if (type == "cathedral")
 		position.x = game->activeRules.clampHorizontalPosition(position.x, prototypesById.at(type)->size.x);
+	// YootTower-only prototypes stay registered for every ruleset (the
+	// build UI hides them via minRatingToBuild), but a save from another
+	// ruleset must not resurrect them: their advance()/decode paths run
+	// ungated YootTower logic. Reject and let the caller skip the element.
+	if (game->activeRules.ruleset() != BuildRules::Ruleset::YootTower &&
+	    BuildRules::isYootOnlyPrototype(type))
+	{
+		LOG(WARNING, "skipping YootTower-only item '%s' in a %s save",
+		    type.c_str(), game->activeRules.displayName());
+		return NULL;
+	}
 	Item * item = make(type, position);
 	assert(item);
 	item->decodeXML(xml);

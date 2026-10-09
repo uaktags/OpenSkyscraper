@@ -2,6 +2,7 @@
 #include "BuildRules.h"
 
 #include "LevelUp.h"
+#include "YootTenants.h"
 #include "YootWorld.h"
 
 #include <climits>
@@ -91,6 +92,20 @@ RulesProfile RulesProfile::yootTower(const YootWorld & world)
 		g.population = world.grades[i].population;
 		p.grades.push_back(g);
 	}
+
+	// T2EV events: the plugin's list, or the decoded built-in one when the
+	// world came from builtinYootWorld() (no plugin, so no events).
+	p.worldWidth = world.width;
+	p.facilities.dustOnGrade = world.dustOnAt;
+	p.facilities.toiletGrade = world.toiletAt;
+	p.facilities.toiletDenomi = world.toiletDenomi;
+	p.facilities.hasColdTable = world.hasColdTable && world.coldMonthly.size() == 12;
+	p.facilities.coldMinGrade = world.coldMinGrade;
+	if (p.facilities.hasColdTable)
+		for (int k = 0; k < 12; ++k) p.facilities.coldMonthly[k] = world.coldMonthly[k];
+	p.events = yootEventSpecs(world);
+	if (!world.fromPlugin && p.events.empty())
+		p.events = builtinYootEventSpecs((int)world.id);
 
 	if (const YootEvent * viev = world.findEvent("VIEV"))
 	{
@@ -196,6 +211,95 @@ int BuildRules::clampHorizontalPosition(int x, int width) const
 	return (int)std::max<long long>(left, std::min<long long>(x, last));
 }
 
+bool RulesProfile::allowsBuildAreaCell(int x, int floor) const
+{
+	if (!hasBuildArea) return false;
+	if (x < buildMinX || x >= buildMaxX) return false;
+	const int row = rowForFloor(floor);
+	if (row < buildTopRow || row >= buildBottomRow) return false;
+	if (!unbuildable.empty())
+	{
+		const int unit = unitForX(x);
+		if (unit >= 0 && row >= 0 && unit < maskWidth && row < maskHeight &&
+		    unbuildable[(size_t)row * maskWidth + unit] != 0)
+			return false;
+	}
+	return true;
+}
+
+bool BuildRules::allowsSpecialFootprint(int x, int floor, int width, int height) const
+{
+	if (!m_profile.yootWorld) return allowsFootprint(x, floor, width, height);
+	if (!allowsHorizontalFootprint(x, width)) return false;
+	if (height < 1 || floor > INT_MAX - height) return false;
+	for (int f = floor; f < floor + height; ++f)
+		for (int cx = x; cx < x + width; ++cx)
+			if (!m_profile.allowsBuildAreaCell(cx, f)) return false;
+	return true;
+}
+
+namespace {
+	struct YootOnly { const char * id; int defaultRating; const char * plugin; };
+	// ATTR mGameLevel - 1 when no world unlock data is loaded.
+	const YootOnly kYootOnly[] = {
+		{"powerroom", 2, "PowerRoom.t2p"},          // grade 3
+		{"trashfacility", 2, "TrashFacility.t2p"},  // / KTrashFacility.t2p, grade 3
+		{"restroom", 0, "Restroom.t2p"},            // / KRestroom.t2p, grade 1
+		{"doctor", 2, "Doctor's.t2p"},              // grade 3
+		// Plan step 14.
+		{"frontdesk", 1, "Front.t2p"},              // / RFront.t2p (grade 3), grade 2
+		{"housekeeping", 1, "Maintenance.t2p"},     // / RMaintenance.t2p (grade 3), grade 2
+		{"parkinglot", 2, "Parking.t2p"},          // grade 3
+		{"parkinggate", 2, "Parking.t2p"},         // grade 3
+		{"firedept", 3, "FireDepartment.t2p"},     // Kegon, grade 4
+		{"apartment", 0, "Apartment.t2p"},         // Tokyo, grade 1
+		// Venues, final items and transport (plan step 14 part B).
+		{"theater", 2, "Theater.t2p"},        // Theater.t2p, grade 3
+		{"classictheater", 2, "ClassicTheater.t2p"}, // ClassicTheater.t2p, grade 3
+		{"eventcenter", 2, "EventCenter.t2p"},    // EventCenter.t2p, grade 3
+		{"billboard", 0, "Billboard.t2p"},      // Billboard.t2p, grade 1
+		{"stadium", 3, "Stadium.t2p"},        // Stadium.t2p, grade 4 (Tokyo final item)
+		{"yootcathedral", 3, "Cathedral.t2p"},  // Cathedral.t2p, grade 4 (Hawaii final item)
+		{"attraction", 3, "Attraction.t2p"},     // Attraction.t2p, grade 4 (Kegon final item)
+		{"observatory", 2, "Observatory.t2p"},    // Observatory.t2p, grade 3
+		{"ticketbooth", 2, "Ticket.t2p"},    // Ticket.t2p, grade 3
+		{"gatheringarea", 3, "GatheringArea.t2p"},  // GatheringArea.t2p, grade 4
+		{"boatdeck", 2, "Boatdeck.t2p"},       // Boatdeck.t2p, grade 3
+		{"subway", 1, "Subway.t2p"},         // Subway.t2p, grade 2
+		{"school", 3, "School.t2p"},         // School.t2p, grade 4 (Tokyo)
+		{"skybridge", 0, "SkyBrdge.t2p"},    // SkyBrdge.t2p, grade 1
+	};
+}
+
+bool BuildRules::isYootOnlyPrototype(const std::string & prototypeId)
+{
+	for (const YootOnly & y : kYootOnly)
+		if (prototypeId == y.id) return true;
+	// Plugin-backed tenants (YootTenants.h): one prototype per plugin.
+	return isYootTenantPrototypeId(prototypeId);
+}
+
+bool BuildRules::isReplacedInYoot(const std::string & prototypeId)
+{
+	// The YootTower plugins behind them are the Trash Facility and the
+	// Doctor's Office, the Theater, Event Center, Subway and Cathedral,
+	// which are native items there. The generic shop, restaurant and fast
+	// food give way to one plugin-backed prototype per shop / restaurant
+	// plugin (YootTenants.h).
+	return prototypeId == "recycling" || prototypeId == "medicalcenter" ||
+	       prototypeId == "cinema" || prototypeId == "partyhall" ||
+	       prototypeId == "metro" || prototypeId == "cathedral" ||
+	       prototypeId == "shop" || prototypeId == "restaurant" || prototypeId == "fastfood" ||
+	       prototypeId == "parking"; // native Parking Gate + Parking Lot
+}
+
+const char * BuildRules::yootOnlyPlugin(const std::string & prototypeId)
+{
+	for (const YootOnly & y : kYootOnly)
+		if (prototypeId == y.id) return y.plugin;
+	return nullptr;
+}
+
 bool BuildRules::allowsFootprint(int x, int floor, int width, int height) const
 {
 	if (!allowsHorizontalFootprint(x, width)) return false;
@@ -210,9 +314,26 @@ bool BuildRules::allowsFootprint(int x, int floor, int width, int height) const
 
 int BuildRules::minRatingToBuild(const std::string & prototypeId) const
 {
+	// Power Room, Trash Facility, Restroom and Doctor's Office exist only in
+	// YootTower; without world unlock data they keep their ATTR mGameLevel.
+	for (const YootOnly & y : kYootOnly)
+	{
+		if (prototypeId != y.id) continue;
+		if (m_ruleset != Ruleset::YootTower) return kUnavailable;
+		if (m_profile.unlocks.find(prototypeId) == m_profile.unlocks.end()) return y.defaultRating;
+	}
+	if (isYootTenantPrototypeId(prototypeId))
+	{
+		if (m_ruleset != Ruleset::YootTower) return kUnavailable;
+		// Without world unlock data the plugin's ATTR level is unknown here.
+		if (m_profile.unlocks.find(prototypeId) == m_profile.unlocks.end()) return 0;
+	}
+	if (m_ruleset == Ruleset::YootTower && isReplacedInYoot(prototypeId))
+		return kUnavailable;
 	std::map<std::string, RulesProfile::Unlock>::const_iterator u = m_profile.unlocks.find(prototypeId);
 	if (u == m_profile.unlocks.end())
 		return LevelUp::minRatingToBuild(prototypeId);
+	if (u->second.secret && !m_secretUnlocked) return kUnavailable;
 	return u->second.available ? u->second.minRating : kUnavailable;
 }
 

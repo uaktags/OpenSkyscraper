@@ -1,6 +1,8 @@
 /* Copyright © 2013 Fabian Schuiki */
 #include "Office.h"
 #include "../Game.h"
+#include "../PeopleSystem.h"
+#include "../YootRules.h"
 #include "../Math/Rand.h"
 #include "../Time.h"
 #include "MedicalCenter.h"
@@ -51,6 +53,10 @@ void Office::init()
 	tenant.rentClass = 1;
 
 	sprite.setTexture(App->bitmaps.editionTexture("office", "simtower/office"));
+	// Skin::Yoot: the Office.t2p sheet, its windows keyed to the backdrop.
+	yootView = game->skin == Skin::Yoot
+		? yootPluginView(game->app, prototype->yoot ? prototype->yoot->plugin : "Office.t2p", kYootWindowKey) : nullptr;
+	if (yootView) sprite.setTexture(yootView->texture);
 	sprite.setOrigin({0.f, 24.f});
 	sprite.setPosition({static_cast<float>(position.x * 8), static_cast<float>(position.y * -36)});
 	addSprite(&sprite);
@@ -120,6 +126,7 @@ void Office::releaseCar(Worker *w)
 	w->parkingUsed->freeSpace(w);
 	w->parkingUsed->spriteNeedsUpdate = true;
 	w->parkingUsed = NULL;
+	if (prototype->yoot) game->eventSystem.specials.driveOut(w);
 }
 
 /// Office member 2 drives when (floor + tenant slot) & 3 == 1 at 3+ stars (T40).
@@ -142,6 +149,7 @@ void Office::arrive(Worker *w)
 		{
 			w->parkingUsed = park;
 			park->spriteNeedsUpdate = true;
+			if (prototype->yoot) game->eventSystem.specials.driveIn(w, this); // YootTower lots (I6)
 			const Route fromCar = game->findRoute(park, this);
 			if (!fromCar.empty()) route = fromCar;
 		}
@@ -288,16 +296,48 @@ void Office::visit()
 
 void Office::advance(double dt)
 {
+	// Tenant idles are frozen during the YootTower blackout (EventSystem::tenantIdleFrozen).
+	if (prototype->yoot && game->eventSystem.tenantIdleFrozen()) return;
+
 	const int visits = visitsThisTick(game);
 	const bool weekday = !game->time.isHoliday();
 	const double h = game->time.hour;
+	// YootTower (Office.t2p FUN_1000c0c0, status 10/11): a vacant office
+	// tries CollectEmployee in the first 8 minutes of each hour from 08:00
+	// to 16:59, on any day.
+	const bool yootHireWindow = prototype->yoot && game->time.hour >= 8 && game->time.hour < 17 &&
+		std::fmod(game->time.hour, 1.0) * 60.0 < 8.0;
 
+	// YootTower: the workers come out of the pool (Office.t2p TMDF 1,
+	// CollectEmployee 0x1005f5a0); no workers, no tenant. SetKind pays
+	// inMoney once on occupancy (oracle: 9 offices paid 9 x $3,000).
+	if (!occupied && yootHireWindow && game->eventSystem.people.enabled() &&
+	    !game->eventSystem.people.pool.empty() &&
+	    yootKeepsTenants(false) && game->eventSystem.people.belongOf(this).empty() &&
+	    game->eventSystem.people.hireBelong(this))
+	{
+		moveIn();
+	}
 	// Movers (T9): an armed vacant unit is re-let on weekday mornings,
 	// 1/12 per visit. Unarmed units are never re-let.
-	if (!occupied && tenant.armed && weekday && h >= 7.0 && h < 12.0)
+	else if (!occupied && !prototype->yoot && tenant.armed && weekday && h >= 7.0 && h < 12.0)
 	{
 		for (int v = 0; v < visits; ++v)
 			if (rand() % 12 == 0) { moveIn(); break; }
+	}
+
+	// YootTower: a let office with nobody hired yet (a .bld office of
+	// status 10/11, vacant in Office.t2p, with or without a kind) hires at
+	// the next window and pays SetKind's inMoney once, like a vacant one.
+	if (occupied && population == 0 && yootHireWindow && game->eventSystem.people.enabled() &&
+	    !game->eventSystem.people.pool.empty() &&
+	    yootKeepsTenants(false) && game->eventSystem.people.belongOf(this).empty() &&
+	    game->eventSystem.people.hireBelong(this))
+	{
+		population = workers.size();
+		game->populationNeedsUpdate = true;
+		game->transferFunds(prototype->yoot->inMoneyFor(game->yootPriceSelection(this)),
+			"deposit_income", "Income from office rentals just came in.");
 	}
 
 	if (occupied)
@@ -338,7 +378,15 @@ void Office::moveIn()
 	newDay();
 	population = 6;
 	game->addPopulation(TenantRules::kCountOffice, 6);
-	game->transferFunds(openSkyQuarterlyRent("office", tenant.rentClass), "rent_income", "Office rent");
+	if (prototype->yoot)
+	{
+		// YootTower: SetKind pays inMoney once on occupancy (Office.t2p
+		// FUN_1000c0c0; oracle: 9 offices paid 9 x $3,000).
+		game->transferFunds(prototype->yoot->inMoneyFor(game->yootPriceSelection(this)),
+			"deposit_income", "Income from office rentals just came in.");
+	}
+	else
+		game->transferFunds(openSkyQuarterlyRent("office", tenant.rentClass), "rent_income", "Office rent");
 }
 
 void Office::vacate()
@@ -355,6 +403,7 @@ void Office::vacate()
 	spriteNeedsUpdate = true;
 	population = 0;
 	game->addPopulation(TenantRules::kCountOffice, -6);
+	if (prototype->yoot) game->eventSystem.people.releaseBelong(this);
 	updateSprite();
 }
 

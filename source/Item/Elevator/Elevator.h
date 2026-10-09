@@ -1,5 +1,6 @@
 #pragma once
 #include "../Item.h"
+#include "../../YootItemArt.h"
 
 namespace OT {
 	namespace Item {
@@ -28,6 +29,9 @@ namespace OT {
 			static const int kMaxCarsPerShaft = 8;
 			static const int kMaxElevatorShafts = kMaxShafts;
 			static const int kNonExpressMaxSpan = 30;
+			/// Metro clearance: shaft bottoms stop this many floors above
+			/// the station (placement-time check in Game).
+			static const int kMetroClearanceFloors = 1;
 			static const int kShaftClearanceCells = 8;
 			static const int kScheduleDays = 2;
 			static const int kSchedulePeriods = 6;
@@ -48,6 +52,12 @@ namespace OT {
 				Sprite shaft;
 				Sprite topMotor;
 				Sprite bottomMotor;
+
+				/// Skin::Yoot art of the linked mover plugin (StdElev/BigElev/
+				/// ServElev...): RT_BITMAP 1000 View 0 shaft, 1 machine room,
+				/// 2 pit; RT_BITMAP 200 Box 0..4 cars. Null = OpenSky art.
+				const YootPluginView * yootShaft = nullptr;
+				const YootPluginView * yootCars = nullptr;
 
 				void updateSprite();
 				virtual void render(sf::RenderTarget & target) const;
@@ -73,6 +83,10 @@ namespace OT {
 				SchedulePeriod schedules[kScheduleDays][kSchedulePeriodCount];
 				static int schedulePeriod(double absolute);
 				int scheduleMode() const;
+				/// True when the current schedule period permits serving dir
+				/// (express-up / express-down shuttling); gates the YootTower
+				/// call path. Inert under the default kScheduleFull table.
+				bool scheduleAllows(Direction dir) const;
 				bool hasWork(const Car *car) const;
 				void finishStop(Car *car);
 				int scheduleThreshold() const;
@@ -82,13 +96,24 @@ namespace OT {
 				bool isService() const { return prototype->icon == 5; }
 				bool canAddCar(int floor) const;
 				bool canResizeTo(int bottom, int height) const;
+
+				/// YootTower MVDF limits (prototype->yoot, plan step 4); without
+				/// a catalog entry they return the SimTower constants.
+				/// maxSpan: 0 = unlimited (Large / Service Elevator).
+				int maxSpan() const;
+				int maxCars() const;
+				/// Stop cap (Large Elevator maxStop 8); 0 = every floor.
+				int maxStops() const;
+				int servicedFloorCount() const;
+				/// False when enabling one more stop would exceed maxStops().
+				bool canAddStop() const;
 				void reassignCalls(Car *car);
 
 				/// Shaft visibility toggle ("Show: Yes/No" in the elevator
 				/// dialog). When false the shaft interior is transparent.
 				bool showShaft = true;
 
-				typedef std::set<Car *> Cars;
+				typedef std::set<Car *, SimLess> Cars;
 				Cars cars;
 				void clearCars();
 				virtual void evacuateForDisaster() override;
@@ -102,18 +127,27 @@ namespace OT {
 				virtual void addPerson(Person * p);
 				virtual void removePerson(Person * p);
 
-				typedef std::set<Queue *> Queues;
-				Queues queues;
-				Queue * getQueue(int floor, Direction dir);
-				void cleanQueues();
+			typedef std::set<Queue *, SimLess> Queues;
+			Queues queues;
+			Queue * getQueue(int floor, Direction dir);
+			/// Lookup without creating (getQueue creates on miss).
+			Queue * findQueue(int floor, Direction dir) const;
+			void cleanQueues();
 
-				void called(Queue * queue);
-				void respondToCalls();
-				Queue * getMostUrgentQueue();
-				Car * getIdleCar(int floor);
+			void called(Queue * queue);
+			void respondToCalls();
+			Queue * getMostUrgentQueue();
+			Car * getIdleCar(int floor);
 
-				void decideCarDestination(Car * car);
-			};
+			void decideCarDestination(Car * car);
+
+			/// YootTower appointment dispatch (StdElev FUN_1000cf90 ->
+			/// FUN_1000cda0): every waiting, unappointed call is given to
+			/// the car with the least sweep cost, scanning the cars from a
+			/// rotating index so equal cars share the load.
+			void yootAppoint();
+			int yootDispatchCursor = 0;
+		};
 		}
 	}
 }

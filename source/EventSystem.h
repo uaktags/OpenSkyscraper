@@ -1,7 +1,14 @@
 #pragma once
 
 #include "GameObject.h"
+#include "FacilitySystem.h"
+#include "PowerSystem.h"
+#include "VenueSystem.h"
+#include "SpecialSystem.h"
+#include "YootExtrasSystem.h"
+#include "PeopleSystem.h"
 #include "Sprite.h"
+#include "YootEvents.h"
 #include "Math/Vector2D.h"
 #include "Math/Rect.h"
 
@@ -46,6 +53,13 @@ namespace OT
 	 * a wider floor's front can no longer slip past the sweep alive.
 	 *
 	 * The burglar event was retired (row 13): it does not exist in the EXE.
+	 *
+	 * YootTower (--ruleset yoottower) replaces the calendar with the world's
+	 * T2EV list (YootEventScheduler; EventSystemYoot.cpp): fire, terrorist,
+	 * Santa and the daily blackout check reuse the paths below with the
+	 * FBEV/TREV/SAEV/BOEV parameters; Uncle Reggae and the rooftop
+	 * decorations are native; the world X-events are hooks (game-parity.md
+	 * V1-V7). Buried treasure is SimTower-only.
 	 */
 	class EventSystem : public GameObject, public sf::Drawable
 	{
@@ -97,6 +111,30 @@ namespace OT
 		void debugTriggerTerror();
 		void debugTriggerTreasure();
 
+		/// YootTower power and blackout (BOEV). Inert in other rulesets.
+		PowerSystem power;
+		/// YootTower: tenants stop idling while the exclusive blackout runs. The
+		/// original's T2TowerEvent::Idle returns 1 for an exclusive event that is
+		/// executing, and FUN_0041dc40 then skips T2TenantArrayList::DispatchIdle
+		/// (and the OutObj/template dispatch). Inert in other rulesets.
+		bool tenantIdleFrozen() const { return yoot && power.isBlackOut(); }
+		/// YootTower trash, restrooms and doctors (plan step 12). Inert elsewhere.
+		FacilitySystem facilities;
+		/// YootTower venues, final items and the subway (plan step 14 B). Inert elsewhere.
+		VenueSystem venues;
+		/// YootTower front desk, housekeeping, parking, fire dept (step 14).
+		SpecialSystem specials;
+		/// YootTower school, kite/dolphins, Mr. Maru, hot spring, traffic map.
+		YootExtrasSystem extras;
+		/// Layer-1 world sprites (the Kegon kite), drawn before the tower.
+		void drawBehindTower(sf::RenderTarget & target) const { if (yoot) extras.drawBehindTower(target); }
+		void drawUnderMovers(sf::RenderTarget & target) const { if (yoot) venues.drawTrains(target); }
+		/// YootTower visitor pool and walking visitors (P4). Inert elsewhere.
+		PeopleSystem people;
+		/// True while the YootTower T2EV scheduler drives the calendar.
+		bool yootMode() const { return yoot; }
+		const YootEventScheduler & yootScheduler() const { return scheduler; }
+
 	protected:
 		void draw(sf::RenderTarget & target, sf::RenderStates states) const;
 
@@ -104,9 +142,28 @@ namespace OT
 		struct Guard;
 		struct GuardOffice;
 
+	public:
+		/// Drop the under-construction tracking entry for a dying item
+		/// (pointer-keyed; SimLess dereferences keys in deterministic runs).
+		void forgetItem(const Item::Item * item);
+
+	private:
+
 		// --- calendar ---
 		void dailyDispatch();
 		void launchSanta();
+
+		// --- YootTower T2EV scheduler (EventSystemYoot.cpp) ---
+		void syncRuleset();
+		void yootDispatch();
+		void yootBegin(int index);
+		void yootSyncRunning();
+		void yootAdvanceSanta(double frames);
+		void startReggae(int index);
+		void stepReggae(int minute);
+		void endReggae(bool caught);
+		void drawOutDecorations(sf::RenderTarget & target) const;
+		sf::Texture * outDecorationTexture(int imageId) const;
 
 		// --- fire (FireT seg_10e8) ---
 		void startFire();
@@ -150,6 +207,30 @@ namespace OT
 		int  nextGuardFloor(GuardOffice & office, const Guard & g) const;
 
 		Type   type;
+
+		// --- ruleset parameters (SimTower defaults; YootTower from T2EV) ---
+		bool   yoot;
+		std::string yootKey;     ///< world id the scheduler was built for
+		YootEventScheduler scheduler;
+		int    chopperCost;      ///< dollars
+		int    fireEndFrame;     ///< unfought fires stop here
+		int    bombDetonateFrame;
+		int    yootFireIdx, yootTerrorIdx, yootBlackoutIdx, yootSantaIdx;
+		int    santaStartMinute; ///< YootTower: minutes flown since launch
+		double santaMinutes;
+
+		// --- Uncle Reggae (T2Maru_Reggae) ---
+		struct Reggae {
+			bool active = false;
+			int  index = -1;
+			Item::Item * target = nullptr;
+			int  counter = 0;      ///< +0x54: one tick per 3 minutes
+			int  nextMinute = 0;   ///< +0x50
+			int  guardMinute = -1; ///< security arrival (approximation)
+			YootReggaeDef def;
+			YootVisitor * walker = nullptr; ///< the pool VIP who walks (PeopleSystem)
+		} reggae;
+		mutable std::map<int, sf::Texture> outDecoTextures;
 
 		// --- calendar state ---
 		double prevAbsolute;    ///< cumulative day fraction of the previous advance
@@ -198,6 +279,7 @@ namespace OT
 
 		// --- buried treasure state ---
 		bool   treasureLatched; ///< true = paid/forfeited for this tier
+		std::set<Item::Item *, SimLess> pendingBuilds; ///< items seen under construction
 
 		// --- rubble ---
 		std::set<long> rubble;

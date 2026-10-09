@@ -78,6 +78,14 @@ namespace OT {
 		/// diagnostic itself is latched per game/floor pair.
 		void recordNoRoute(int fromFloor, int toFloor);
 
+		/// True under the YootTower profile (stress model P1/P2).
+		bool yootRules() const;
+		/// T2People::IdleWaitMover 0x10048880 for one people-idle tick (2
+		/// game minutes) in a mover queue: +5 stress; at 300 the person
+		/// gives up, jumps to the destination and loses 50 estimate.
+		/// Returns true when the person gave up.
+		bool yootWaitTick();
+
 		virtual void encodeXML(tinyxml2::XMLPrinter &xml);
 		virtual void decodeXML(tinyxml2::XMLElement &xml);
 
@@ -106,6 +114,13 @@ namespace OT {
 			State retryState = kWandering;
 			void cancel();
 			bool references(const Item::Item * target) const;
+			/// T2People::JumpToDestination: leave the current mover and
+			/// arrive at the final node directly.
+			void jumpToDestination();
+			/// Drop the remaining nodes without arriving anywhere.
+			void clear();
+			/// The next node is the end of the route.
+			bool atLastNode() const { return nodes.size() == 1; }
 			int fromFloor;
 			Item::Item * item;
 			int toFloor;
@@ -120,6 +135,23 @@ namespace OT {
 		Journey journey;
 		double stress;
 		double eval;
+		/// YootTower people estimate (T2People +0x84, 1..300) and completed
+		/// trips (+0x80, max 4); plan step 8 (P2).
+		int yootEstimate;
+		int yootTrips;
+		/// T2People::CalcCurrEstimate with the current stress.
+		int yootCurrentEstimate() const;
+		/// T2People::UpdateEstimation at the end of a trip.
+		void yootFinishTrip();
+		/// T2People special flags (+0x78): Yoot::kPeopleNeedsToilet,
+		/// Yoot::kPeopleSick (plan step 12, P5/P6).
+		int yootFlags = 0;
+		/// Arrival at the end of a trip (T2Tenant::EnterTenant hooks).
+		void yootArrived(Item::Item * destination);
+		/// YootTower visitors walk along `floor` to the next route node
+		/// before they enter it (T2People::IsReachDestination); true when
+		/// the person walks and enters the node on arrival.
+		virtual bool yootWalkTo(Item::Item * next, int floor) { (void)next; (void)floor; return false; }
 		double pendingJourneyStress;
 		Type type;
 		State state;

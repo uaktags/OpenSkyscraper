@@ -1,4 +1,5 @@
 #include "MainMenu.h"
+#include "YootWorldArt.h"
 #include "Game.h"
 
 using namespace OT;
@@ -172,7 +173,7 @@ void MainMenu::reloadGUI()
             skinButton->setText(std::string("🔒 Skin: ") + skinDisplayName(app.selectedSkin()) + " (Locked)");
             skinButton->getRenderer()->setBorderColor(sf::Color(190, 110, 45));
             newButton->setEnabled(false);
-            newButton->setText("Skin Incomplete (Locked)");
+            newButton->setText("Skin Unavailable (Locked)");
             auto r = newButton->getRenderer();
             r->setBackgroundColor(sf::Color(45, 48, 56));
             r->setTextColor(sf::Color(140, 145, 155));
@@ -183,7 +184,8 @@ void MainMenu::reloadGUI()
             r->setRoundedBorderRadius(5 * app.uiScale);
             if (skinWarningLabel) {
                 if (app.selectedSkin() == Skin::Yoot)
-                    skinWarningLabel->setText("⚠️ YootTower base assets in development. Select OpenSky.");
+                    skinWarningLabel->setText(std::string("⚠️ YootTower skin needs ") + yootWorldPluginFile(app.selectedWorld()) +
+                                              " and " + YootWorldArt::floorPluginFor(app.selectedWorld()) + ". Select OpenSky.");
                 else
                     skinWarningLabel->setText("⚠️ SIMTOWER.EXE not found. Select OpenSky or provide in Settings.");
                 skinWarningLabel->setVisible(true);
@@ -245,7 +247,9 @@ void MainMenu::onNewGamePress()
         if (app.selectedSkin() == Skin::Yoot)
         {
             app.showMessageDialog("Skin Unavailable",
-                "The YootTower skin is currently in development and lacks base environmental assets (sky, ground, and lobby).\n\nPlease select the OpenSky skin to play YootTower mode.");
+                std::string("The YootTower skin draws its sky, ground and lobby from the YootTower plugins ") +
+                yootWorldPluginFile(app.selectedWorld()) + " and " + YootWorldArt::floorPluginFor(app.selectedWorld()) +
+                ", which were not found.\n\nAdd the YootTower Plugins folder in Settings or select the OpenSky skin.");
         }
         else if (app.selectedSkin() == Skin::Classic)
         {

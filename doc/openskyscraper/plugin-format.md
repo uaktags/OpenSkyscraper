@@ -1,21 +1,22 @@
-# OpenSkyscraper Plugin Format (OSP) — v2
+# OpenSkyscraper Plugin Format (OSP) — v3
 
-**Status:** Implemented (Tenant slice). Spec is the source of truth for the
-`PluginEditor` and the `source/OspPlugin.{h,cpp}` reader/writer.
+**Status:** Implemented for every YootTower plugin class (Tenant, Mover,
+OuterObj, ToolPalette, World, Movie, HallEvent, Advertise). This spec is the
+source of truth for the `PluginEditor` and `source/OspPlugin.{h,cpp}`.
 
-The OSP format is OpenSkyscraper's native, editable plugin format. It is the
-**only** format the editor saves to. YootTower `.t2p` files are read-only and
-must be *converted* to OSP (via the editor's Convert / Save As) before they
-can be re-saved.
+The OSP format is OpenSkyscraper's native, editable plugin format. The
+editor saves to it, and since v3 it carries every resource of a converted
+YootTower `.t2p` losslessly, so an OSP plugin can be exported back to a real
+`.t2p` (`source/PluginT2pExport.h`) that the original game loads.
 
 ## Design goals
 
 - **Human-readable & diff-friendly.** A loose directory of small files, not an
   opaque binary blob. Sprites are PNG (not the source DIB) so they preview in
   any tool and survive version-control diffs.
-- **Round-trippable.** A t2p → OSP convert, then an OSP load, must reproduce
-  the same metadata, sprite dimensions, and OBJMAP layout (covered by
-  `testOspRoundTrip` in `tests/test_main.cpp`).
+- **Lossless.** t2p → OSP v3 → re-encoded resources are byte-identical to
+  the original for all 156 shipped plugins (3332 resources), and the exported
+  `.t2p` is byte-identical to the input file (`testOspV3Sweep`).
 - **Forward-compatible.** A `formatVersion` field gates loading; the editor
   refuses a version newer than it understands rather than silently corrupting.
 
@@ -33,7 +34,22 @@ Name.osp-plugin/
     objmap_100.txt       toolbox-icon rects (OBJMAP grammar; see objmap-format.md)
     objmap_1000.txt      primary sprite rects
     objmap_200.txt       mover walking-frame rects (Mover plugins only)
+  resources/             v3: one file per typed or text resource
+    TNDF/1.json          typed Json (PluginResourceJson.h field names)
+    OBJMAP/1000.txt      verbatim text (OBJMAP, T2DLG, TENANTDEF)
+    PGDF/128.bin         raw bytes (resources without a decoder)
+  bitmaps/               v3: every RT_BITMAP (PE) / DIB (SP)
+    1000.png             the pixels (opaque palette colours)
+    1000.dib.json        the original DIB header, palette, odd padding bytes
+  sounds/                v3: every WAVE resource
+    165.wav              the RIFF file, verbatim
+  pe/original.t2p        v3, PE plugins: the original DLL (code for export)
 ```
+
+The `sprites/` and `meta/` files are the v2 view. In a v3 plugin they are
+derived from the resources on every save (`syncOspLegacyFromResources`), so
+v2 readers and the game's folder-plugin loader (`DecompiledPlugin`) keep
+working; the editor edits the resources.
 
 Sheet files are named after their RT_BITMAP id (`100`/`1000`/`1100`/`200`).
 The loader also accepts the long names (`sprites/toolbox.png`,
@@ -49,7 +65,7 @@ Missing sprite sheets are tolerated: a plugin without occupants simply omits
 ```json
 {
   "format": "openskyscraper-plugin",
-  "formatVersion": 2,
+  "formatVersion": 3,
   "sourceFormat": "yoottower-t2p",
   "sourceFile": "Burger.t2p",
   "class": "Tenant",
@@ -72,7 +88,16 @@ Missing sprite sheets are tolerated: a plugin without occupants simply omits
     "occupants": { "present": true, "width": 16,  "height": 984, "transparentColor": [255,255,255], "maskDiscovery": "manual", "relPath": "sprites/1100.png" },
     "walking":   { "present": false, "width": 0,   "height": 0,   "transparentColor": null,         "maskDiscovery": "none" }
   },
-  "spriteLayout": { "toolbox": "meta/objmap_100.txt", "ingame": "meta/objmap_1000.txt", "walking": "meta/objmap_200.txt" }
+  "spriteLayout": { "toolbox": "meta/objmap_100.txt", "ingame": "meta/objmap_1000.txt", "walking": "meta/objmap_200.txt" },
+  "container": "PE",
+  "peImage": "pe/original.t2p",
+  "resources": [
+    {"type": "ATTR", "id": 128, "codec": "Attr", "file": "resources/ATTR/128.json"},
+    {"type": "TNDF", "id": 1, "codec": "TemplateDef", "file": "resources/TNDF/1.json"},
+    {"type": "OBJMAP", "id": 1000, "codec": "Text", "file": "resources/OBJMAP/1000.txt"},
+    {"type": "2", "id": 1000, "codec": "Raw", "file": "bitmaps/1000.png", "dib": "bitmaps/1000.dib.json"},
+    {"type": "WAVE", "id": 165, "codec": "Raw", "file": "sounds/165.wav"}
+  ]
 }
 ```
 
@@ -81,16 +106,19 @@ Missing sprite sheets are tolerated: a plugin without occupants simply omits
 | Field | Required | Notes |
 |---|---|---|
 | `format` | yes | Must be `"openskyscraper-plugin"`. |
-| `formatVersion` | yes | `2` is written; `1` and `2` are read (v1 key mapping below). |
+| `formatVersion` | yes | `3` is written; `1`, `2` and `3` are read (v1 key mapping below). |
 | `sourceFormat` | yes | `"yoottower-t2p"` (converted), `"openskyscraper-plugin"` (re-saved), or `"scratch"` (new). |
 | `sourceFile` | no | The original `.t2p` filename, when converted. Absent for scratch plugins. |
-| `class` | yes | One of `Tenant`, `Mover`, `ToolPalette`, `World`, `OuterObj`. |
+| `class` | yes | One of `Tenant`, `Mover`, `ToolPalette`, `World`, `OuterObj`, `Movie`, `HallEvent`, `Advertise`. |
 | `attr` | yes | ATTR id 128 (`PluginAttr` in `source/PluginResources.h`, doc/yoottower/plugin-schema.md §2.1). `pluginId` = mID, the plugin's unique 4cc in Mac order (`"BURG"`; the file bytes are `GRUB`). `itemType` = mItemType, the numeric item type (== the TNDF/MVDF mToolType). `attrib` = world-availability mask (Tokyo 0x1/0x2/0x4, Kegon 0x10, Hawai 0x100). `dependPluginId` = mDependID in Mac order (`"****"` none, `"FRON"` = needs a hotel Front). |
 | `dayParam` | no | DPDF id 128 (T2DayParamDef): `percent[EDay][EWhether]`, customer rate by weekday/holiday × fine/rain. |
 | `placeParam` | no | PLDF id 128 (T2PlaceParamDef): `[percent, score]` for EPlace 0 floor, 1 tenant, 2 pool. `score` is the full 4-byte slot (the engine reads its low 16 bits). |
-| `transport` | no | Mover plugins: the first MVDF variation's `priceString` (e.g. `"$150000:$50000/car"`), `outMoneyString` (e.g. `"$12000/Q"`) and `name`. The full MVDF is decoded by `TemplateDef` (`source/PluginDefs.h`) but is not yet part of the manifest. |
+| `transport` | no | Mover plugins: the first MVDF variation's `priceString` (e.g. `"$150000:$50000/car"`), `outMoneyString` (e.g. `"$12000/Q"`) and `name`. In v3 the full MVDF is in `resources/MVDF/1.json`. |
 | `bitmaps` | yes | Per-sheet dimensions + transparency. `transparentColor` is `null` or `[r,g,b]`. `relPath` (optional) points at the sheet PNG relative to the plugin dir; the loader falls back to the numeric then canonical names when absent. `walking` is present only on Mover plugins. |
 | `spriteLayout` | yes | Relative paths to the OBJMAP text files under `meta/`. `walking` (`objmap_200.txt`) is present only on Mover plugins. |
+| `container` | v3 | `"PE"` (DLL plugins) or `"SP"` (the `SP` sub-plugin container of movies, hall events and ads). |
+| `peImage` | v3, PE | Path of the original DLL. Only its code and headers are used by the export; resources always come from `resources`. |
+| `resources` | v3 | Every resource in container order: `type` (the resource type key: a name such as `"TNDF"`, or the decimal RT_* number, `"2"` = RT_BITMAP, `"16"` = RT_VERSION; SP files use the CResFile tag name and `"BITMAP"` for DIBs), `id`, `codec` (`resourceCodecName`), `file`, `dib` (bitmaps) and `spType` (SP: the u32 tag constant, 0 = DIB). |
 
 ### Reading v1 manifests
 
@@ -108,7 +136,9 @@ OpenTower plugins under `data/Plugins/OpenTower/` still ship v1 manifests:
 | `price` `{f1, basePrice, f2, f3, f4, f5}` | PLDF slots 0..5 | `placeParam.places` `[[f1, basePrice], [f2, f3], [f4, f5]]` |
 | `transport.quarterlyString` | MVDF mOutMoneyString | `transport.outMoneyString` |
 
-Saving always writes v2.
+Saving always writes v3. A v1/v2 plugin opened in the editor gets typed
+ATTR/DESC/DPDF/PLDF resources synthesized from its manifest
+(`synthesizeOspResources`); its `sprites/` PNGs are kept as they are.
 
 ### `maskDiscovery`
 
@@ -120,49 +150,120 @@ Records how the transparent color was chosen, so a reload can re-evaluate:
 | `"manual"` | Hand-picked via the editor's eyedropper, or known from the source plugin (e.g. Condo's magenta `105,33,104`). |
 | `"corner"` | Auto-discovered by sampling the sheet's top-left pixel. A heuristic; flagged so it can be reviewed. |
 
+## The v3 resource store
+
+Each resource is stored in the most useful lossless form:
+
+| Codec | Stored as | Notes |
+|---|---|---|
+| typed (`Attr`, `Desc`, `TemplateDef`, `MemberTable`, `DayParam`, `PlaceParam`, `PeopleAnime`, `Silhouettes`, `People`, `Words`, `StringTable`, `Movie`, `HallEvent`, `Advertise`, `SubPluginPeopleParam`, `StringBlock`, `VersionInfo`, `WorldRecord`, `BkgndInfo`, `FloorInfoMask`, `PaletteAnime`, `Palette`) | `resources/<TYPE>/<id>.json` | `source/PluginResourceJson.h`. Keys are the struct field names (engine names without `m`); `skip*`/`unread*`/`unk*` fields are kept. Plugin strings are code-page bytes mapped through Latin-1 (any byte survives); 4ccs are Mac-order strings (`"BURG"`, `"BoPI"`), `""` for 0. TemplateDef flattens the ToolDef and EquipDef per-variation records into one `variations` list. World records (WORLDDEF, WATR, PODF, CODF, SPDF, T2EV, VIPL, `*EV`) follow `tools/yoottower/world_sp.py` (`source/WorldResourceCodec.h`); stored counts are derived from list lengths. BINF/FINF grids are row-major `grid` arrays. |
+| `Text` (OBJMAP, T2DLG, TENANTDEF) | `resources/<TYPE>/<id>.txt` | Verbatim bytes. |
+| RT_BITMAP / SP DIB | `bitmaps/<id>.png` + `bitmaps/<id>.dib.json` | 4/8-bit uncompressed DIBs. The PNG holds the palette colours; the sidecar holds the 40-byte header (hex), the palette (`[r, g, b, reserved]`), any non-zero row padding (`rowPadding`, keyed by file row) and trailing bytes (`tailHex`). Every shipped bitmap maps each colour to its first palette slot, so re-encoding is exact. An edited PNG is mapped back onto the palette (exact colour, else nearest); a resized one gets a new header. |
+| WAVE | `sounds/<id>.wav` | The RIFF resource verbatim (some have a pad byte after an odd-length chunk). |
+| `Raw` (PGDF, PZDF, anything without a decoder) | `resources/<TYPE>/<id>.bin` | Raw bytes. |
+
+A typed file that does not encode (a string over 255 bytes, more than four
+variations, ...) is a load error naming the file and field.
+
+## Exporting to `.t2p`
+
+`exportOspToT2p` / `writeT2pFile` (`source/PluginT2pExport.h`) build a real
+YootTower plugin from the resource list:
+
+* **PE plugins** keep the code of `pe/original.t2p`; only `.rsrc` changes.
+  When the resource set (types and ids) is unchanged, the original section is
+  kept byte for byte and changed payloads are patched in place, or appended
+  at the end of the section when they outgrow their 8-byte-aligned slot (the
+  data entry's RVA and size are updated). The linkers that built the shipped
+  plugins left gaps and stale bytes in `.rsrc` (Condo's section has about 32 KB
+  of unused space after the last payload, and some alignment padding is not zero), so
+  regenerating the section would not be byte-identical; in-place patching
+  is. When resources are added or removed the section is rebuilt with the MS
+  linker layout: directory tables breadth first, data entries, the type-name
+  strings (original order first), then the payloads 8-byte aligned (original
+  order first). Either way `.reloc` and the debug data in the overlay are
+  moved, and the section table, the resource and base-relocation data
+  directories, `SizeOfImage`, `SizeOfInitializedData` and the debug
+  directory's file pointers are fixed up. The shipped plugins have a zero
+  checksum, which is kept; a non-zero checksum is recomputed.
+* **SP plugins** re-encode the `SP` container in directory order
+  (`encodeSpContainer`).
+
+**Result:** exporting an unedited plugin is byte-identical to the original
+file for all 156 plugins (105 PE + 51 SP). An edited Burger (new name, price
+777 = $77,700) loads in the original game under Wine: the toolbox shows the
+new name and building it takes exactly $77,700 from the funds.
+
+Only plugins converted from a `.t2p` can be exported (v1/v2 and scratch
+plugins have no code image).
+
 ## Converting from `.t2p`
 
-The `convertT2pToOsp` function (`source/OspPlugin.cpp`) is the read-only bridge
-from the YootTower format:
+`convertT2pToOsp` (`source/OspPlugin.cpp`) reads the plugin file, decodes
+every resource with `decodeResource` (PE: in resource-directory order; SP: in
+container order, with each entry's tag constant) into
+`OspPlugin::resources`, keeps the DLL bytes in `peImage`, and builds the v2
+view:
 
-1. Pulls `ATTR`/`DESC`, `DPDF` 128 and `PLDF` 128 through the typed
-   accessors (`getAttr`, `getDesc`, `getDayParamDef`, `getPlaceParamDef`), and
-   for movers the first `MVDF` variation through `getTemplateDef`.
-2. Rasterizes each `RT_BITMAP` (100/1000/1100/200) into an `sf::Image` via
-   `PluginBitmapLoader::decodeBitmapResource`. The `200` (walking) sheet is
-   pulled for Mover plugins; it's absent on tenants.
-3. Resolves the transparent color: a small known-per-plugin table first
-   (Condo ingame=magenta, Condo occupants=white), then corner discovery.
-4. Parses the matching `OBJMAP` (100/1000, plus 200 for movers) into
-   `ObjmapBlock` lists.
+1. `ATTR`/`DESC`, `DPDF` 128, `PLDF` 128 and, for movers, the first `MVDF`
+   variation.
+2. Each `RT_BITMAP` (100/1000/1100/200) rasterized into an `sf::Image`, with
+   the transparent color from a small known-per-plugin table (Condo
+   ingame=magenta, Condo occupants=white), else corner discovery, and the
+   matching `OBJMAP` parsed into `ObjmapBlock` lists.
 
-The result is an `OspPlugin` with `sourceFormat: "yoottower-t2p"`, ready to
-edit and Save As. Saving to `.t2p` is intentionally unsupported.
+## Plugin Editor guide
 
-## Scope of this version (Tenant + Mover slices)
+`PluginEditor` (target `PluginEditor`, `tools/PluginEditor/`) opens a `.t2p`
+or an `.osp-plugin` directory. The window has three panes:
 
-**Implemented:**
-- Full read/write of the `attr`, `dayParam` (DPDF), `placeParam` (PLDF),
-  `transport` (MVDF strings), and `bitmaps` sections.
-- **Tenant class** end-to-end: Condo/Burger/etc. convert, edit, save, reload.
-- **Mover class**: stairs/escalators/elevators convert (DESC class preserved,
-  MVDF price strings extracted), edit (price strings in the inspector),
-  save, reload. The walking-frames sheet (RT_BITMAP 200 + OBJMAP 200) round-
-  trips and is selectable in the preview canvas.
-- OBJMAP parse → write → parse identity (toolbox + ingame + walking layouts).
-- Transparent-color discovery (manual + corner) and the editor eyedropper.
+* **Resources** (left): the plugin's resources grouped as Identity
+  (ATTR/DESC), Definition (TNDF/MVDF/OODF, MODF/HEDF/ADDF), Tables
+  (TMDF/DPDF/PLDF/PADF/SLDF/PPDF/WODF/STRTABLE), World (WORLDDEF, WATR,
+  T2EV, events, BINF/FINF, PTDF, PALETTE, PODF/CODF/SPDF/VIPL, PGDF/PZDF),
+  Bitmaps, Sprite maps (OBJMAP), Sounds and Text and version. Tick
+  **Advanced fields** to also show fields the engine ignores or whose
+  meaning is unknown (named by key or position: `skip3`, `unk[0..5]`, ...).
+* **Fields** (middle): a form built from the resource's Json. Edits are
+  checked on Return or when the field loses focus: integer type and range,
+  4cc length, string length; a rejected value is reverted and the error is
+  shown in the status line. Enums (toolbox category, registry class, film
+  kind, word specials, ...) are dropdowns; bitmasks (tool attributes, world
+  mask, event grades, hall-event months, word sex/age/flags) are checkboxes;
+  minute-of-day fields show `hh:mm`. Tables (variations, member tables, the
+  WORLDDEF grade table, T2EV events, VIPs, speech lines, silhouettes, ...)
+  are a row list with Add (duplicates the selected row), Remove, Up and
+  Down, and the selected row's fields below. Text resources open in a text
+  editor (Apply text); PGDF/PZDF show their 4-byte slots; bitmaps offer
+  Import/Export PNG; sounds show their format and play.
+* **Preview** (right): the sprite sheet with its OBJMAP rects (for a
+  bitmap, its OBJMAP, or a template definition's sheet 1000). Pick a part in
+  the list or click it on the sheet; its rect can be edited and applied
+  (the OBJMAP text is updated in place). BINF draws the world backdrop from
+  bitmap 1000's Sky tiles (click to paint the value in *Paint value*); FINF
+  draws the build mask (click to toggle a unit). Palettes show as 16x16
+  swatches; the Sounds group lists every WAVE with Play/Stop.
 
-**Not yet (future iterations):**
-- **Other classes** (`World`, `OuterObj`, `ToolPalette`): the format records
-  their `class`, and convert still pulls their metadata, but the editor UI is
-  Tenant/Mover-focused.
-- **The full template definitions** (TNDF/MVDF/OODF, TMDF, PADF, SLDF, WODF):
-  every field is decoded and re-encoded byte-exactly by `source/PluginDefs.h`
-  and exposed through `AbstractPlugin` (`getTemplateDef`, `getMemberTables`,
-  ...), but the manifest does not carry them yet.
-- **Free-form rect drawing** on the canvas: rects arrive from convert and are
-  shown/overlaid; numeric editing of individual rects is a follow-up.
-- **Animation playback** in the canvas (frame scrubbing): static sheets only.
+File > **Save** / **Save As** write OSP v3; **Export .t2p** writes
+`<source file name>` into a chosen folder.
+
+Command line (also used for headless smoke tests and scripted edits):
+
+```
+PluginEditor <plugin> [--select TYPE:ID] [--part N] [--advanced]
+             [--set TYPE:ID:PATH=VALUE]... [--export-t2p out.t2p]
+             [--save-osp dir] [--capture shot.png]
+```
+
+`--set` takes a Json path, e.g. `--set ATTR:128:name=Burger` or
+`--set TNDF:1:variations[0].price=777`, and goes through the same
+validation as the form. `--capture` (alias `--screenshot`) saves the third
+rendered frame and exits.
+
+**Not editable:** RT_VERSION's node lengths are stored, so version strings
+are shown (`text`) but only the raw node values are editable (advanced);
+bitmaps are replaced by importing a PNG (no pixel painting); OBJMAP blocks
+are edited as text or by rect; PGDF/PZDF are slots of unknown meaning.
 
 ## Game integration — folder plugins (OpenTower edition)
 

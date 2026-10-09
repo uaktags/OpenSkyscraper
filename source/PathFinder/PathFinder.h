@@ -1,4 +1,5 @@
 #pragma once
+#include <memory>
 #include <stlastar.h>
 #include "MapSearchNode.h"
 #include "../Route.h"
@@ -14,7 +15,10 @@ namespace OT {
 		Route findRoute(const MapNode *start_mapnode, const MapNode *end_mapnode, Item::Item *start_item, Item::Item *end_item, bool serviceRoute);
 
 	private:
-		AStarSearch< MapSearchNode > astarsearch;
+		/// Recreated after an out-of-memory search: stlastar leaks the
+		/// node it had just popped, which would shrink the fixed node
+		/// pool until every later search fails to start.
+		std::unique_ptr< AStarSearch< MapSearchNode > > astarsearch;
 		unsigned int SearchState;
 
 		void clear();

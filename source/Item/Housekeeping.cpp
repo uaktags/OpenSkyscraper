@@ -11,7 +11,7 @@ Housekeeping::Maid::Maid(Housekeeping *center,int k) : Person(center->game,kHous
 }
 Housekeeping::~Housekeeping()
 {
- for (Maid *maid : maids) if (maid) { maid->journey.cancel(); delete maid; }
+ for (Maid *maid : maidStaff) if (maid) { maid->journey.cancel(); delete maid; }
 }
 void Housekeeping::init()
 {
@@ -59,9 +59,31 @@ void Housekeeping::goHome(Maid *maid)
  Route route=game->findRoute(maid->at ? maid->at : this,this,true);
  if (!route.empty()) { maid->mode=3; maid->goingTo="Housekeeping"; maid->journey.set(route); }
 }
+// YootTower Maintenance.t2p facility view (SpecialSystem::housekeepingTick).
+int Housekeeping::maids() const
+{
+ if (prototype->yoot && prototype->yoot->belongCapacity > 0) return prototype->yoot->belongCapacity;
+ return 6; // Maintenance.t2p TNDF belongCapacity (RMaintenance: 4)
+}
+
+int Housekeeping::openMinute() const
+{
+ if (prototype->yoot && prototype->yoot->closeMinute > 0) return prototype->yoot->openMinute;
+ return 420;
+}
+
+int Housekeeping::closeMinute() const
+{
+ if (prototype->yoot && prototype->yoot->closeMinute > 0) return prototype->yoot->closeMinute;
+ return 960;
+}
+
 void Housekeeping::advance(double)
 {
- for (int k=0;k<6;++k) if (!maids[k]) maids[k]=new Maid(this,k);
+ for (int k=0;k<6;++k) if (!maidStaff[k]) maidStaff[k]=new Maid(this,k);
+ // YootTower: the facility staff tick (SpecialSystem::housekeepingTick)
+ // owns maid dispatch; the EXE maid AI below is the SimTower path.
+ if (game->activeRules.profile().yootWorld) return;
  std::vector<Housekeeping*> centers;
  for (auto *item : game->itemsByType["housekeeping"]) if (auto *center=dynamic_cast<Housekeeping*>(item)) centers.push_back(center);
  std::sort(centers.begin(),centers.end(),[](auto *a,auto *b) {
@@ -72,7 +94,7 @@ void Housekeeping::advance(double)
  // Enumerate actual ft visits crossed, including large clock advances.
  const double now=game->time.absolute*Time::kSimFramesPerDay;
  const double before=now-game->time.dta*Time::kSimFramesPerDay;
- for (Maid *maid : maids) {
+ for (Maid *maid : maidStaff) {
   const int phase=(ordinal*6+maid->member)%16;
   for (long frame=long(std::floor(before+1e-7))+1; frame<=long(std::floor(now+1e-7)); ++frame) {
    const int ft=(frame-300+Time::kSimFramesPerDay)%Time::kSimFramesPerDay;
@@ -93,5 +115,5 @@ void Housekeeping::advance(double)
 }
 void Housekeeping::evacuateForDisaster()
 {
- for (Maid *maid : maids) if (maid) { maid->journey.cancel(); maid->target=nullptr; maid->mode=0; maid->currentFloor=position.y; Item::addPerson(maid); }
+ for (Maid *maid : maidStaff) if (maid) { maid->journey.cancel(); maid->target=nullptr; maid->mode=0; maid->currentFloor=position.y; Item::addPerson(maid); }
 }

@@ -2,50 +2,79 @@
 #include "../BitmapManager.h"
 #include "../Game.h"
 #include "../Math/Rand.h"
+#include "../YootCatalog.h"
+#include "../YootItemArt.h"
+
+#include <cmath>
+#include <map>
+#include <memory>
 
 using namespace OT;
 using namespace OT::Item;
 extern int openSkyQuarterlyRent(const std::string &prototypeId, int rentClass);
 
-sf::Texture YootCondo::emptyCondoTexture;
-sf::Texture YootCondo::residentTexture;
-bool YootCondo::texturesLoaded = false;
+namespace
+{
+	struct CondoArt
+	{
+		bool loaded = false;
+		sf::Texture empty;
+		sf::Texture resident;
+	};
+}
 
 YootCondo::~YootCondo()
 {
 	removeOccupants();
 }
 
-bool YootCondo::loadTextures(Game *game)
+const char * YootCondo::condoPlugin() const
 {
-	if (texturesLoaded)
-		return true;
+	// Condo.t2p in Tokyo, HawaianCondo.t2p in Hawaii (catalog link).
+	if (prototype->yoot && !prototype->yoot->plugin.empty())
+		return prototype->yoot->plugin.c_str();
+	return "Condo.t2p";
+}
 
+int YootCondo::residentsToCreate() const
+{
+	// Condo.t2p / HawaianCondo.t2p: every sold unit hires its TNDF belong capacity
+	// (3) of residents from the pool; the original's population shows 55 of 60 for 20 units.
+	if (prototype->yoot && prototype->yoot->belongCapacity > 0) return prototype->yoot->belongCapacity;
+	return Math::randi(1, 4);
+}
+
+bool YootCondo::loadTextures()
+{
 	// BitmapManager::loadFromPlugin is the canonical PE-bitmap loader
 	// (used to live here as YootCondo::loadPEBitmap). The plugin is
-	// resolved through PluginManager's catalog, so we no longer need to
-	// walk data search paths manually.
-	const std::string pluginName = "Condo.t2p";
-	LOG(INFO, "Loading YootTower Condo textures from plugin %s", pluginName.c_str());
-
-	if (!game->app.bitmaps.loadFromPlugin(pluginName, 1000, emptyCondoTexture, sf::Color(105, 33, 104))) {
-		LOG(ERROR, "Failed to load empty condo texture (1000) from %s", pluginName.c_str());
-		return false;
+	// resolved through PluginManager's catalog; art is cached per plugin.
+	static std::map<std::string, std::unique_ptr<CondoArt> > cache;
+	const std::string pluginName = condoPlugin();
+	std::unique_ptr<CondoArt> & slot = cache[pluginName];
+	if (!slot) {
+		slot.reset(new CondoArt);
+		LOG(INFO, "Loading YootTower residential textures from plugin %s", pluginName.c_str());
+		slot->loaded = game->app.bitmaps.loadFromPlugin(pluginName, 1000, slot->empty, sf::Color(105, 33, 104));
+		if (!slot->loaded)
+			LOG(ERROR, "Failed to load empty condo texture (1000) from %s", pluginName.c_str());
+		if (!game->app.bitmaps.loadFromPlugin(pluginName, 1100, slot->resident, sf::Color(255, 255, 255)))
+			LOG(ERROR, "Failed to load resident texture (1100) from %s", pluginName.c_str());
 	}
-	if (!game->app.bitmaps.loadFromPlugin(pluginName, 1100, residentTexture, sf::Color(255, 255, 255))) {
-		LOG(ERROR, "Failed to load resident texture (1100) from %s", pluginName.c_str());
-		return false;
-	}
-
-	texturesLoaded = true;
-	return true;
+	emptyCondoTexture = &slot->empty;
+	residentTexture = &slot->resident;
+	// Skin::Yoot: the shared plugin sheet, whose windows follow the sky.
+	if (game->skin == Skin::Yoot)
+		if (const YootPluginView * v = yootPluginView(game->app, pluginName, kYootWindowKey))
+			emptyCondoTexture = &v->texture;
+	return slot->loaded;
 }
 
 void YootCondo::init()
 {
 	Item::init();
 
-	loadTextures(game);
+	loadTextures();
 
 	variant = rand() % 3;
 	occupied = false;
@@ -53,11 +82,13 @@ void YootCondo::init()
 	rent = 5000;
 	rentDeposit = rent;
 
-	baseSprite.setTexture(emptyCondoTexture);
+	baseSprite.setTexture(*emptyCondoTexture);
 	baseSprite.setOrigin({0.f, 24.f});
-	baseSprite.setPosition({static_cast<float>(position.x * 8), static_cast<float>(-position.y * 36)});
+	// Skin::Yoot: the 24 px interior sits above the 4 px floor strip.
+	const int lift = game->skin == Skin::Yoot ? kYootInteriorLift : 0;
+	baseSprite.setPosition({static_cast<float>(position.x * 8), static_cast<float>(-position.y * 36 - lift)});
 
-	residentSprite.setTexture(residentTexture);
+	residentSprite.setTexture(*residentTexture);
 	residentSprite.setOrigin({8.f, 24.f});
 
 	updateSprite();
@@ -86,7 +117,9 @@ void YootCondo::decodeXML(tinyxml2::XMLElement &xml)
 	if (occupied)
 	{
 		createOccupants();
-		population = hasPopulation ? xml.IntAttribute("population") : population;
+		// An imported let home has an empty belong list (population 0);
+		// it is occupied, so keep the residents just created.
+		if (hasPopulation && xml.IntAttribute("population") > 0) population = xml.IntAttribute("population");
 	}
 	else
 	{
@@ -125,7 +158,7 @@ void YootCondo::updateSprite()
 	}
 
 	int frameIndex = variant * 5 + stateIndex;
-	baseSprite.setTextureRect(sf::IntRect({0, frameIndex * 24}, {128, 24}));
+	baseSprite.setTextureRect(sf::IntRect({0, frameIndex * 24}, {size.x * 8, 24}));
 }
 
 void YootCondo::render(sf::RenderTarget &target) const
@@ -156,16 +189,25 @@ void YootCondo::render(sf::RenderTarget &target) const
 
 void YootCondo::advance(double dt)
 {
-	if (!occupied && !game->time.isHoliday() && game->time.hour >= 7 && game->time.hour < 17 && isAttractive())
+	if (game->eventSystem.tenantIdleFrozen()) return;
+	// YootTower: Condo.t2p / HawaianCondo.t2p ChangeStatusOnIdle (Condo.dll decompile,
+	// rules-agent/out/plg2/Condo.dll.decomp.c, the CollectEmployee branch): at the top of
+	// the hour, 7:00 to 20:59, with the estimate above 200 (isAttractive), the residents
+	// come out of the pool (TNDF 1, CollectEmployee 0x1005f5a0 -> CollectEmployeeFromPool
+	// 0x10060a50) and the sale is collected. A unit whose hire fails stays empty, and a
+	// partial hire houses fewer residents.
+	const bool yootHireWindow = prototype->yoot && game->time.hour >= 7 && game->time.hour < 21 &&
+		std::fmod(game->time.hour, 1.0) * 60.0 < 8.0;
+	if (!occupied && (prototype->yoot ? yootHireWindow : (!game->time.isHoliday() && game->time.hour >= 7 && game->time.hour < 17)) &&
+	    isAttractive())
 	{
-		if (game->time.checkTick(0.002) && (rand() % 10) == 0)
+		if ((prototype->yoot || (game->time.checkTick(0.002) && (rand() % 10) == 0)) &&
+		    (!prototype->yoot || game->eventSystem.people.hireBelong(this)))
 		{
 			occupied = true;
 			variant = rand() % 3;
 			spriteNeedsUpdate = true;
-			rentDeposit = openSkyQuarterlyRent("yoot_condo", 1);
-			game->transferFunds(rentDeposit, "condo_sale", "Income from Yoot Condo sale");
-			createOccupants();
+			moveIn();			createOccupants();
 		}
 	}
 
@@ -175,11 +217,11 @@ void YootCondo::advance(double dt)
 		{
 			occupied = false;
 			removeOccupants();
+			if (prototype->yoot) game->eventSystem.people.releaseBelong(this);
 			spriteNeedsUpdate = true;
 			population = 0;
 			game->populationNeedsUpdate = true;
-			game->transferFunds(-rentDeposit, "condo_buyback", "Repurchased vacated Yoot Condo");
-		}
+			moveOut();		}
 	}
 
 	if (occupied && game->time.checkHour(3))
@@ -280,9 +322,29 @@ void YootCondo::addPerson(Person *p)
 	spriteNeedsUpdate = true;
 }
 
+void YootCondo::moveIn()
+{
+	// YootTower: the condo is sold for its inMoney[selection] (Condo.t2p
+	// $100,000..$200,000), like an office's occupancy payment (E4).
+	rentDeposit = prototype->yoot ? prototype->yoot->inMoneyFor(game->yootPriceSelection(this)) : 0;
+	if (rentDeposit <= 0) rentDeposit = prototype->price * 2;
+	game->transferFunds(rentDeposit, "condo_sale", "Income from Yoot Condo sale");
+}
+
+void YootCondo::moveOut()
+{
+	game->transferFunds(-prototype->price, "condo_buyback", "Repurchased vacated Yoot Condo");
+}
+
 void YootCondo::createOccupants()
 {
-	unsigned numAdults = Math::randi(1, 4);
+	unsigned numAdults = (unsigned)std::max(1, residentsToCreate());
+	if (prototype->yoot && game->eventSystem.people.enabled())
+	{
+		// One resident per type hired from the pool (a reloaded unit hires again).
+		if (game->eventSystem.people.belongOf(this).empty()) game->eventSystem.people.hireBelong(this);
+		numAdults = (unsigned)game->eventSystem.people.belongOf(this).size();
+	}
 	Person::Type adults[] = {
 		Person::kMan,
 		Person::kWoman1,
@@ -297,7 +359,7 @@ void YootCondo::createOccupants()
 		occupants.insert(new YootCondoOccupant(this, adults[gender], leavingTime, returnTime));
 	}
 
-	unsigned numKids = Math::randi(0, std::min(numAdults * 2, 6u));
+	unsigned numKids = (hasFamilies() && !prototype->yoot) ? Math::randi(0, std::min(numAdults * 2, 6u)) : 0;
 	Person::Type kids[] = {
 		Person::kChild,
 		Person::kWomanWithChild1,
@@ -321,8 +383,10 @@ void YootCondo::removeOccupants()
 {
 	for (Person *occupant : occupants)
 	{
-        if (occupant->at == this) Item::removePerson(occupant);
-		delete occupant;
+		// Residents out at work are not in this item (same rule as
+		// Hotel::clearAll); removePerson asserts p->at == this.
+		if (occupant->at == this)
+			removePerson(occupant);		delete occupant;
 	}
 	occupants.clear();
 }
@@ -335,6 +399,8 @@ void YootCondo::removePerson(Person *p)
 
 bool YootCondo::isAttractive()
 {
+	if (prototype->yoot)
+		return !lobbyRoute.empty() && yootKeepsTenants(occupied);
 	return !lobbyRoute.empty();
 }
 

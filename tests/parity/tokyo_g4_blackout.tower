@@ -1,0 +1,93 @@
+<tower funds="7877000" rating="3" time="0.020833" speed="1" rainy="0" tool="inspector" ruleset="yoottower" world="tokyo" yootVipFlags="0" x="-112" y="180">
+<money todayIncome="0" todayExpenses="0" yesterdayIncome="0" yesterdayExpenses="0" lastQuarterBalance="7877000" quarterIncome="0" quarterExpenses="0"/>
+<item type="lobby" x="-64" y="0" evaluation="50.0" width="120" height="3"/>
+<item type="floor" x="-64" y="-3" evaluation="50.0" width="124"/>
+<item type="floor" x="-64" y="-2" evaluation="50.0" width="124"/>
+<item type="floor" x="-64" y="-1" evaluation="50.0" width="124"/>
+<item type="floor" x="-140" y="3" evaluation="50.0" width="280"/>
+<item type="floor" x="-140" y="4" evaluation="50.0" width="280"/>
+<item type="floor" x="-140" y="5" evaluation="50.0" width="280"/>
+<item type="floor" x="-140" y="6" evaluation="50.0" width="280"/>
+<item type="floor" x="-140" y="7" evaluation="50.0" width="280"/>
+<item type="floor" x="-140" y="8" evaluation="50.0" width="280"/>
+<item type="floor" x="-140" y="9" evaluation="50.0" width="280"/>
+<item type="floor" x="-140" y="10" evaluation="50.0" width="280"/>
+<item type="floor" x="-140" y="11" evaluation="50.0" width="280"/>
+<item type="floor" x="-140" y="12" evaluation="50.0" width="280"/>
+<item type="floor" x="-140" y="13" evaluation="50.0" width="280"/>
+<item type="floor" x="-140" y="14" evaluation="50.0" width="280"/>
+<item type="floor" x="-140" y="15" evaluation="50.0" width="280"/>
+<item type="floor" x="-140" y="16" evaluation="50.0" width="280"/>
+<item type="floor" x="-140" y="17" evaluation="50.0" width="280"/>
+<item type="floor" x="-140" y="18" evaluation="50.0" width="280"/>
+<item type="floor" x="-140" y="19" evaluation="50.0" width="280"/>
+<item type="subway" x="-64" y="-3" evaluation="50.0"/>
+<item type="restroom" x="-24" y="-3" evaluation="50.0"/>
+<item type="yt_coffee" x="0" y="-3" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_burger" x="12" y="-3" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_flower" x="28" y="-3" evaluation="50.0" tenantStatus="9"/>
+<item type="office" x="0" y="-2" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="9" y="-2" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="18" y="-2" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="27" y="-2" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="36" y="-2" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="45" y="-2" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="0" y="-1" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="9" y="-1" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="18" y="-1" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="27" y="-1" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="36" y="-1" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="45" y="-1" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="theater" x="-140" y="3" evaluation="50.0"/>
+<item type="eventcenter" x="-100" y="3" evaluation="50.0" event="PlArt.t2p" startDay="0" span="3" today="PlArt.t2p"/>
+<item type="classictheater" x="40" y="3" evaluation="50.0" movie="MV_Cop.t2p"/>
+<item type="school" x="-133" y="6" evaluation="50.0"/>
+<item type="school" x="-95" y="6" evaluation="50.0"/>
+<item type="school" x="-57" y="6" evaluation="50.0"/>
+<item type="school" x="-19" y="6" evaluation="50.0"/>
+<item type="school" x="19" y="6" evaluation="50.0"/>
+<item type="school" x="57" y="6" evaluation="50.0"/>
+<item type="school" x="95" y="6" evaluation="50.0"/>
+<item type="school" x="-133" y="8" evaluation="50.0"/>
+<item type="school" x="-95" y="8" evaluation="50.0"/>
+<item type="school" x="-57" y="8" evaluation="50.0"/>
+<item type="school" x="-19" y="8" evaluation="50.0"/>
+<item type="school" x="19" y="8" evaluation="50.0"/>
+<item type="school" x="57" y="8" evaluation="50.0"/>
+<item type="school" x="95" y="8" evaluation="50.0"/>
+<item type="school" x="-133" y="10" evaluation="50.0"/>
+<item type="school" x="-95" y="10" evaluation="50.0"/>
+<item type="school" x="-57" y="10" evaluation="50.0"/>
+<item type="school" x="-19" y="10" evaluation="50.0"/>
+<item type="school" x="19" y="10" evaluation="50.0"/>
+<item type="school" x="57" y="10" evaluation="50.0"/>
+<item type="school" x="95" y="10" evaluation="50.0"/>
+<item type="school" x="-133" y="12" evaluation="50.0"/>
+<item type="school" x="-95" y="12" evaluation="50.0"/>
+<item type="school" x="-57" y="12" evaluation="50.0"/>
+<item type="school" x="-19" y="12" evaluation="50.0"/>
+<item type="school" x="19" y="12" evaluation="50.0"/>
+<item type="school" x="57" y="12" evaluation="50.0"/>
+<item type="school" x="95" y="12" evaluation="50.0"/>
+<item type="school" x="-133" y="14" evaluation="50.0"/>
+<item type="school" x="-95" y="14" evaluation="50.0"/>
+<item type="school" x="-57" y="14" evaluation="50.0"/>
+<item type="school" x="-19" y="14" evaluation="50.0"/>
+<item type="school" x="19" y="14" evaluation="50.0"/>
+<item type="school" x="57" y="14" evaluation="50.0"/>
+<item type="school" x="95" y="14" evaluation="50.0"/>
+<item type="school" x="-133" y="16" evaluation="50.0"/>
+<item type="school" x="-95" y="16" evaluation="50.0"/>
+<item type="school" x="-57" y="16" evaluation="50.0"/>
+<item type="school" x="-19" y="16" evaluation="50.0"/>
+<item type="school" x="19" y="16" evaluation="50.0"/>
+<item type="school" x="57" y="16" evaluation="50.0"/>
+<item type="school" x="95" y="16" evaluation="50.0"/>
+<item type="school" x="-133" y="18" evaluation="50.0"/>
+<item type="school" x="-95" y="18" evaluation="50.0"/>
+<item type="school" x="-57" y="18" evaluation="50.0"/>
+<item type="yt_record" x="-60" y="3" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_electric" x="-40" y="3" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_convenience" x="-60" y="4" evaluation="50.0" tenantStatus="9"/>
+<item type="elevator-standard" x="-4" y="-3" evaluation="50.0" height="4" showShaft="1"><car altitude="-3.0" homeFloor="-3"/><car altitude="-1.0" homeFloor="-1"/></item>
+</tower>

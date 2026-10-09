@@ -149,6 +149,10 @@ clicks relative to the window, not from the fixed numbers above.
 * There is no window manager, so windows have no real frames and cannot be moved with the
   mouse by title bar. The game's own palettes have captions.
 * Only one instance per display/prefix. `stop` uses `wineserver -k` for this prefix only.
+  For concurrent runs (e.g. several agents), give each caller its own instance:
+  `YOOT_INSTANCE=econ tools/yoottower/oracle/run_yoot.sh start ...`. That uses a private
+  prefix, game copy, state dir and X display under `$YOOT_ROOT/instances/econ/`, so one
+  caller's `stop` can't kill another's session or clobber its saves.
 * No sound. Movies and CD music are untested.
 * The Tools palette hides the File and Function menus on saves whose main window sits at
   x=114 (Yooooot.bld). `key alt+f` did **not** open the menu in testing, because keyboard

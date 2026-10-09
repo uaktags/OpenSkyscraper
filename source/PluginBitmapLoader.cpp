@@ -139,6 +139,8 @@ bool PluginBitmapLoader::loadFromPlugin(AbstractPlugin & plugin, int resourceId,
 	// plugins store bitmaps under this numeric id rather than a string
 	// name, which is why we look up "2" here.
 	const WindowsPEExecutable::Resource * res = plugin.getResource("2", resourceId);
+	// SP sub-plugins (MV_*, Pl*, ads) keep their DIBs as type-0 ("RAW") entries.
+	if (!res) res = plugin.getResource("RAW", resourceId);
 	if (!res || !res->data) return false;
 
 	// The backing store determines the byte format. PE plugins serve a

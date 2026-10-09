@@ -18,15 +18,25 @@
 #
 # Environment overrides: YOOT_ROOT (default ~/yoottower-decomp), YOOT_SRC (original
 # game dir, only read), YOOT_DISPLAY (:87), YOOT_SCREEN (1024x768x24), MFC42_DLL.
+#
+# Concurrent use: set YOOT_INSTANCE=<name> to get a private prefix, game copy,
+# state/log dir and X display under $YOOT_ROOT/instances/<name>/. Without it,
+# every caller shares one prefix and `stop` (wineserver -k) kills all of them.
 set -euo pipefail
 
 ROOT=${YOOT_ROOT:-$HOME/yoottower-decomp}
 SRC=${YOOT_SRC:-$HOME/Downloads/Yoot-Tower_Win_EN/YOOT}
+if [[ -n ${YOOT_INSTANCE:-} ]]; then
+    [[ $YOOT_INSTANCE =~ ^[A-Za-z0-9_-]+$ ]] || { echo "run_yoot: bad YOOT_INSTANCE" >&2; exit 1; }
+    ROOT=$ROOT/instances/$YOOT_INSTANCE
+    # Stable per-instance display in :100-:599 unless YOOT_DISPLAY is given.
+    DEFAULT_DISPLAY=:$(( 100 + $(printf '%s' "$YOOT_INSTANCE" | cksum | cut -d' ' -f1) % 500 ))
+fi
 GAME=$ROOT/game/YOOT
 STATE=$ROOT/oracle-state
 LOGS=$ROOT/logs
 export WINEPREFIX=$ROOT/wineprefix
-export DISPLAY=${YOOT_DISPLAY:-:87}
+export DISPLAY=${YOOT_DISPLAY:-${DEFAULT_DISPLAY:-:87}}
 SCREEN=${YOOT_SCREEN:-1024x768x24}
 export WINEDEBUG=${WINEDEBUG:--all}
 export WINEDLLOVERRIDES=${WINEDLLOVERRIDES:-"mscoree,mshtml="}

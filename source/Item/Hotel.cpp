@@ -1,10 +1,14 @@
 /* Copyright © 2024 */
 #include "../Game.h"
+#include "../PeopleSystem.h"
+#include "../YootRules.h"
+#include "../YootSpecials.h"
 #include "../Math/Rand.h"
 #include "../Time.h"
 #include "Factory.h"
 #include "Hotel.h"
 #include "Parking.h"
+#include "../XmlUtil.h"
 #include <cmath>
 #include <algorithm>
 #include <vector>
@@ -74,11 +78,24 @@ void Hotel::applyVariant()
 		case kDouble: sz = int2(6, 1); tex = "simtower/double"; edition = "hotel_double"; frameWidth = 48; break;
 		case kSuite:  sz = int2(10, 1); tex = "simtower/suite";  edition = "hotel_suite";  frameWidth = 80; break;
 	}
+	// YootTower: the plugin's TNDF footprint (Game::applyItemCatalog).
+	if (prototype->yoot) sz = prototype->size;
 	size = sz;
 	sprite.setTexture(App->bitmaps.editionTexture(edition, tex));
 	sprite.setOrigin({0.f, 24.f});
 	sprite.setPosition({static_cast<float>(getPosition().x * 8), static_cast<float>(-getPosition().y * 36)});
 	(void)frameWidth;
+	// Skin::Yoot: the room plugin's sheet, windows keyed to the sky colour,
+	// its 24 px interior above the 4 px floor strip.
+	yootView = nullptr;
+	if (game->skin == Skin::Yoot) {
+		const char * fallback = variant == kSingle ? "Singleroom.t2p" : variant == kDouble ? "Twinroom.t2p" : "Suiteroom.t2p";
+		yootView = yootPluginView(game->app, prototype->yoot ? prototype->yoot->plugin : fallback, kYootWindowKey);
+	}
+	if (yootView) {
+		sprite.setTexture(yootView->texture);
+		sprite.setPosition({static_cast<float>(getPosition().x * 8), static_cast<float>(-getPosition().y * 36 - kYootInteriorLift)});
+	}
 }
 
 void Hotel::init()
@@ -86,7 +103,11 @@ void Hotel::init()
 	Item::init();
 
 	variant = prototype->variant;
-	subVariant = rand() % 2;
+	// One draw feeds both looks, so the rand() sequence is unchanged:
+	// Skin::Yoot's View kind is SetKind's rand() % mNumOfKind at BuildFinish.
+	const int draw = rand();
+	subVariant = draw % 2;
+	yootKind = Yoot::roomKindRoll(draw);
 	roomState = kClean;
 	dirtySince = 0;
 	hosted = 0;
@@ -118,9 +139,48 @@ static int hotelRoomFrame(int roomState, double hour)
 	return night ? 4 : 3;
 }
 
+int Hotel::currentFrame() const
+{
+	if (!yootView) return hotelRoomFrame(roomState, game->time.hour);
+	int in = 0, asleep = 0, up = 0;
+	for (std::set<Guest *, SimLess>::const_iterator it = guests.begin(); it != guests.end(); ++it) {
+		const Guest * g = *it;
+		if (!g->atHotel) continue;
+		++in;
+		if (g->state == Person::kResting) ++asleep;
+		else if (game->time.absolute >= g->wakeTime) ++up;
+	}
+	game->eventSystem.people.roomLook(this, in, asleep, up);
+	const Yoot::RoomLook look = Yoot::roomLook(roomState == kOccupied, roomState == kDirty || roomState == kInfested, in, asleep, up);
+	const int kinds = std::max(1, (int)yootView->bands.size() / 5);
+	return Yoot::roomPatternIndex(look, yootKind, kinds);
+}
+
+void Hotel::scheduleGuest(Guest *g)
+{
+	// YootTower S6: the room plugin's TNDF open (check-in) and close
+	// (checkout) minutes give the stay windows.
+	const double checkIn = prototype->yoot && prototype->yoot->openMinute > 0 ? prototype->yoot->openMinute / 60.0 : 17.0;
+	const double checkOut = prototype->yoot && prototype->yoot->closeMinute > 0 ? prototype->yoot->closeMinute / 60.0 - 1.0 : 10.0;
+	double today = floor(game->time.absolute);
+	g->arrivalTime = today + Math::randd(Time::hourToAbsolute(checkIn), Time::hourToAbsolute(checkIn + 1.0));
+	g->dinnerLeaveTime = g->arrivalTime + Math::randd(0.25, 0.75);
+	g->dinnerReturnTime = g->dinnerLeaveTime + Math::randd(0.75, 1.25);
+	g->sleepTime = today + Math::randd(Time::hourToAbsolute(21), Time::hourToAbsolute(23));
+	const double nextDay = today + 1;
+	g->wakeTime = nextDay + Math::randd(Time::hourToAbsolute(6), Time::hourToAbsolute(8));
+	g->checkoutTime = nextDay + Math::randd(Time::hourToAbsolute(checkOut - 2.0), Time::hourToAbsolute(checkOut));
+	g->atHotel = false;
+}
+
 void Hotel::updateSprite()
 {
 	spriteNeedsUpdate = false;
+	if (yootView) {
+		roomFrameIndex = currentFrame();
+		sprite.setTextureRect(yootView->band(roomFrameIndex));
+		return;
+	}
 	int frameWidth = 48;
 	switch (variant)
 	{
@@ -148,6 +208,7 @@ void Hotel::resetBanks()
 void Hotel::clearAll(bool adjustPopulation)
 {
  if (hosted) { if (adjustPopulation) game->addPopulation(variant + 1, -hosted); hosted = population = 0; }
+ if (housekeeper) { if (housekeeper->at == this) Item::removePerson(housekeeper); delete housekeeper; housekeeper = nullptr; }
  for (Guest *g : guests) {
   game->vipSystem.voidPerson(g);
   if (g->parkingUsed) g->parkingUsed->freeSpace(g);
@@ -195,7 +256,9 @@ void Hotel::checkout(bool paid)
  if (hosted) {
   game->addPopulation(variant + 1, -hosted);
   hosted = population = 0;
-  if (paid) game->transferFunds(openSkyQuarterlyRent(prototype->id, tenant.rentClass), "hotel_income", "Hotel room checkout");
+  if (paid && !prototype->yoot) game->transferFunds(openSkyQuarterlyRent(prototype->id, tenant.rentClass), "hotel_income", "Hotel room checkout");
+ // YootTower E7: the room's inMoney was booked on its Front Desk at
+ // check-in (Front.t2p FUN_10015540), so no payment lands here.
  }
  tenant.armed = false;
  roomState = kDirty;
@@ -278,11 +341,14 @@ void Hotel::judgeAll(Game *game)
 }
 void Hotel::advance(double)
 {
+ // YootTower: the guests are pool people (PeopleSystem, YootHotelGuests.cpp);
+ // the room's stay is driven from outside while the pool supplies guests.
+ const bool poolGuests = prototype->yoot && game->eventSystem.people.enabled() && game->eventSystem.people.hotelGuests();
  if ((game->time.checkHour(5) || (game->time.hour >= 5 && game->time.hour < 7)) && hosted) checkout(true);
  const long visits = visitsThisTick(game, 16, 0);
  for (long v=0; v<visits; ++v) {
   if (game->time.hour >= 17 && game->time.hour < 21) {
-   if (tenant.armed && roomState == kClean && hosted == 0 && guests.empty() && !evacuated && rand()%8 == 0) checkIn();
+   if (!poolGuests && tenant.armed && roomState == kClean && hosted == 0 && guests.empty() && !evacuated && rand()%8 == 0) checkIn();
    if (hosted && !dinnerSent && game->tenantSlotIndex(this)%2 == 0 && rand()%6 == 0) {
     dinnerSent = true;
     for (Guest *g : guests) if (g->at == this && !g->leaving) {
@@ -311,11 +377,18 @@ void Hotel::advance(double)
 void Hotel::addPerson(Person *p)
 {
  Item::addPerson(p);
+ if (YootVisitor *v = dynamic_cast<YootVisitor*>(p)) { game->eventSystem.people.roomEnter(this, v); return; }
  if (auto *g = dynamic_cast<Guest*>(p)) {
   if (g->hotel != this || g->leaving) return;
   g->atHotel=true; g->state=Person::kHome;
   if (!hosted) { hosted=capacity(); population=hosted; game->addPopulation(variant+1, hosted); }
   roomState=kOccupied; spriteNeedsUpdate=true;
+  if (prototype->yoot && !yootStayBooked)
+  {
+   // E7: checked in; the desk books the room's inMoney.
+   yootStayBooked = true;
+   game->eventSystem.specials.onCheckIn(this);
+  }
  }
 }
 void Hotel::removePerson(Person *p)
@@ -330,6 +403,22 @@ void Hotel::encodeXML(tinyxml2::XMLPrinter &xml)
  xml.PushAttribute("variant",variant); xml.PushAttribute("subVariant",subVariant);
  xml.PushAttribute("roomState",roomState); xml.PushAttribute("hosted",hosted);
  xml.PushAttribute("dirtySince",dirtySince); xml.PushAttribute("dinnerSent",dinnerSent);
+ // YootTower-only attributes: SimTower/OpenSky saves stay byte-identical
+ // to the pre-YootTower format (decodeXML defaults yootKind).
+ if (game && game->activeRules.profile().yootWorld)
+ {
+  xml.PushAttribute("yootKind", yootKind);
+  if (yootStayBooked) xml.PushAttribute("yootStayBooked", true);
+  int stayStatus = pendingStayStatus;
+  std::vector<Yoot::PeopleType> party;
+  std::string stayParty = pendingStayParty;
+  if (game->eventSystem.people.liveStay(this, stayStatus, party)) stayParty = Yoot::encodeStayParty(party);
+  if (stayStatus >= 32 && stayStatus <= 34 && !stayParty.empty())
+  {
+   xml.PushAttribute("yootStayStatus", stayStatus);
+   xml.PushAttribute("yootStayParty", stayParty.c_str());
+  }
+ }
  for (Guest *g : guests) {
   xml.OpenElement("guest"); g->encodeXML(xml);
   xml.PushAttribute("member",g->member); xml.PushAttribute("atHotel",g->atHotel);
@@ -343,6 +432,11 @@ void Hotel::decodeXML(tinyxml2::XMLElement &xml)
  variant=xml.IntAttribute("variant",prototype->variant); subVariant=xml.IntAttribute("subVariant",0);
  roomState=xml.IntAttribute("roomState",kClean); hosted=xml.IntAttribute("hosted",0); population=hosted;
  dirtySince=xml.DoubleAttribute("dirtySince",0); dinnerSent=xml.BoolAttribute("dinnerSent",false);
+ yootKind = Yoot::roomKindRoll(xml.IntAttribute("yootKind", subVariant));
+ yootStayBooked = xml.BoolAttribute("yootStayBooked", false);
+ // Old saves have no stay attributes: the room is checked out on reload.
+ pendingStayStatus = xml.IntAttribute("yootStayStatus", 0);
+ pendingStayParty = xmlAttributeOr(xml, "yootStayParty", "");
  applyVariant();
  int k=0;
  for (auto *e=xml.FirstChildElement("guest"); e; e=e->NextSiblingElement("guest")) {
@@ -360,9 +454,35 @@ Hotel::Guest::Guest(Hotel *item, int memberIndex) : Person(item->game, kMan), ho
  bankCount=item->tenant.bank[memberIndex].count; bankTotal=item->tenant.bank[memberIndex].total;
  from="City"; goingTo=item->prototype->name;
 }
+bool Hotel::yootSendHousekeeper(Item * from)
+{
+	// RMaintenance FUN_1000bf70: the room goes 0x23 -> 0x24 and a maid
+	// walks over. FUN_1000c010 checks the route with routing table 1, whose
+	// mover mask is 0x2000000 (service movers only: Service Elevator, Stairs;
+	// the Simple Elevator is 0x1000000). Maids never ride passenger elevators,
+	// so a room on another floor without a service mover stays dirty.
+	if (housekeeper || roomState != kDirty || !from) return false;
+	Route serviceRoute = game->findRoute(from, this, true);
+	if (serviceRoute.empty()) return false;
+	Housekeeper *h = new Housekeeper(this);
+	h->from = from->prototype->name;
+	housekeeper = h;
+	h->journey.set(serviceRoute);
+	return true;
+}
+
 Path Hotel::getRandomBackgroundSoundPath()
 {
  return roomState == kOccupied ? Path("simtower/hotel") : Path("");
+}
+
+Hotel::Housekeeper::Housekeeper(Hotel *item)
+	: Person(item->game, kHousekeeper)
+{
+	cleaningUntil = 0;
+	cleaning = false;
+	from = "Hotel Staff";
+	goingTo = item->prototype->name;
 }
 void Hotel::evacuateForDisaster()
 {

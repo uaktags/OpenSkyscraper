@@ -11,6 +11,7 @@ namespace OT {
 	namespace Item {
 		namespace Elevator {
 			class Elevator;
+			class Car;
 			class Queue : public GameObject, public sf::Drawable
 			{
 			public:
@@ -32,6 +33,9 @@ namespace OT {
 				double callTime;
 				bool answered;
 				Car *assignedCar = nullptr;
+				/// YootTower: the car this call is appointed to (T2Request
+				/// +0x24; StdElev FUN_1000cf90 appoints one car per call).
+				Car *appointed = nullptr;
 				double getWaitDuration();
 
 				typedef std::list<Person *> People;
@@ -49,6 +53,11 @@ namespace OT {
 
 			private:
 				void bankWait(Person *p);
+				double fullRetryFrame;
+				double waitStartFrame;
+				/// YootTower: last people-idle tick (absolute minute / 2) that
+				/// charged wait stress.
+				long long yootIdleTick = -1;
 				void applyWatchdog();
 			};
 		}

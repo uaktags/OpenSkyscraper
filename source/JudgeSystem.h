@@ -82,14 +82,55 @@ namespace OT
 		};
 		const Counts & counts() const { return lastCounts; }
 
+		/// Drop tracking entries for an object that is being destroyed:
+		/// the maps are keyed by pointer and SimLess dereferences keys in
+		/// deterministic runs, so stale entries would be use-after-free.
+		void forget(const Person * p);
+		void forget(const Item::Item * item);
+
 	private:
 		bool moveOut(Game * game, Item::Item * item, const std::vector<Item::Item *> & floorTenants);
+
+		/// Per-item scoring helpers (YootTower ruleset). Each returns a
+		/// value in [0, 100].
+		double scoreOffice(Game * game, Item::Item * item);
+		double scoreCondo(Game * game, Item::Item * item);
+		double scoreHotel(Game * game, Item::Item * item);
+		double scoreCommercial(Game * game, Item::Item * item);
+
+		/// YootTower 1..300 estimate (plan step 8, J1-J3); 0 when the item
+		/// is not a YootTower-evaluated tenant.
+		int yootEstimate(Game * game, Item::Item * item);
+		/// T2TrafficInfo::GetRange stand-in (0..3) at a tenant's entrance.
+		static int yootTrafficRange(Game * game, Item::Item * item);
+
+		/// Aggregate hotel review (JudgeAllHotel equivalent). Returns
+		/// true if hotels are underperforming enough to surface a daily
+		/// complaint. Also updates lastCounts.hotelAvgEval.
 		bool reviewHotels(Game * game);
+
+		/// Per-tenant bad-day tracking (ExpandoBadHotel equivalent).
+		/// Bumps a counter for each tenant with evaluation < 25, decays
+		/// it otherwise, and returns the list of tenants that have been
+		/// unhappy long enough to warrant a targeted complaint.
+		void reviewUnderperformers(Game * game);
+
+		/// Shared metrics.
+		static double clampScore(double v);
+
+		/// Tower-wide parking coverage in [0, 1+]. Cached per evaluateAll()
+		/// pass so the per-item scorers can refer to it cheaply.
+		void computeParkingCoverage(Game * game);
+		double parkingCoverage;
 
 		Counts lastCounts;
 
 		/// Visitor pass de-duplication: a person contributes once per day even
 		/// when evaluateAll is also triggered by a rating/facility change.
-		std::map<Person *, int> visitorDaySeen;
+		std::map<Person *, int, SimLess> visitorDaySeen;
+		/// Item pointer -> consecutive bad days. Used by
+		/// reviewUnderperformers to only complain about persistently
+		/// unhappy tenants rather than transient dips.
+		std::map<Item::Item *, int, SimLess> badDayStreak;
 	};
 }

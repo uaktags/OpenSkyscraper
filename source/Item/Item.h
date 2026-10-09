@@ -87,6 +87,23 @@ namespace OT {
 		/// Condo::isAttractive() consult this when deciding move-in/vacation.
 		double evaluation;
 		virtual double getEvaluation() const { return evaluation; }
+		/// YootTower tenant estimate on the 1..300 scale (T2Tenant +0x90,
+		/// plan step 8); 0 = not evaluated yet / not YootTower.
+		int yootEstimate = 0;
+		/// YootTower T2Equip +0x4c: CalcTotalDays when built (-1 = unknown,
+		/// age 0). The residential estimate loses one point per year (J2).
+		int yootBuildDay = -1;
+		/// YootTower T2Tenant +0x8c: the residents' mean estimate, kept
+		/// while nobody is in (UpdateResidencialEstimate; 300 at InitTenant).
+		int yootPeopleEstimate = 300;
+		/// YootTower J3 (T2Tenant::DecideResidencialEstimation 0x10061380):
+		/// let tenants stay while the estimate is >= 70; a vacant tenant
+		/// fills only above 200. Unevaluated (0) passes.
+		bool yootKeepsTenants(bool occupied) const
+		{
+			if (yootEstimate == 0) return true;
+			return occupied ? yootEstimate >= 70 : yootEstimate > 200;
+		}
 
 		/// EXE tenant record (batch 5 T1): armed/category/tenure/class/redraw
 		/// plus six per-member banked-wait counters. The rent class of
@@ -115,6 +132,11 @@ namespace OT {
 		virtual int populationCategory() const { return -1; }
 		virtual int populationContribution() const { return 0; }
 
+		/// Per-item daily upkeep (YootTower venue income only; the
+		/// SimTower/OpenSky rulesets use the quarterly EXE charge in
+		/// Game::quarterlyMaintenanceCost and never call this).
+		virtual int dailyMaintenanceCost() const { return 0; }
+
 		/// Construction animation state. Set by Factory::make on fresh
 		/// placement; cleared by Game::advance once time.absolute reaches
 		/// constructionEndTime. While true, the item renders a placeholder
@@ -126,7 +148,7 @@ namespace OT {
 		/// size, in absolute-time units. Subclasses may override.
 		virtual double constructionDuration() const;
 
-		typedef std::set<Person *> People;
+		typedef std::set<Person *, SimLess> People;
 			People people;
 			virtual void addPerson(Person * p);
 			virtual void removePerson(Person * p);
@@ -145,6 +167,11 @@ namespace OT {
 			virtual bool isStairlike() const { return false; }
 			virtual bool isElevator()  const { return false; }
 			virtual bool isLobby()     const { return false; }
+			/// Skin::Yoot: how much of the floor under the item stays bare
+			/// (the backdrop shows through transparent art). 0: roof and
+			/// strips as usual; 1: none (the art fills the unit rect);
+			/// 2: none but the bottom row's floor strip.
+			virtual int yootFloorCover() const { return 0; }
 
 			virtual Path getRandomBackgroundSoundPath() { return ""; }
 		};

@@ -10,7 +10,9 @@
 #include "LevelUp.h"
 #include "Person.h"
 #include "Time.h"
+#include "XmlUtil.h"
 #include "TimeWindow.h"
+#include "XmlUtil.h"
 
 #include <algorithm>
 #include <cctype>
@@ -27,7 +29,7 @@ void VipSystem::reset()
  visiting=0; lastDay=-1; watch=false; vipGuest=nullptr; favorable=false;
  vipTotal=vipTrips=result=goodReviews=badReviews=0; nextVisitTime=0;
  yootPendingVip=-1; yootArrivalTime=0; yootLastDay=-1; yootDestination=nullptr;
-}
+ yootDestType.clear(); yootDestX=yootDestY=0;}
 // F8: armed from the shared daily 04:59 judge tick (Game::advanceSimTick).
 void VipSystem::armDaily() { if (!gameIsYoot()) armVisit(); }
 void VipSystem::clearApproval() { favorable=false; if (goodReviews>0) --goodReviews; }
@@ -88,8 +90,7 @@ void VipSystem::dayCheck()
   visiting=0; watch=false; vipGuest=nullptr; nextVisitTime=0;
   game->ratingMayIncrease();
  }
- if (day%9!=3) { watch=false; vipGuest=nullptr; }
-}
+ if (day%9!=3) { watch=false; vipGuest=nullptr; }}
 
 bool VipSystem::liveItem(Item::Item *item) const
 {
@@ -112,6 +113,41 @@ Item::Item * VipSystem::findYootDestination(const std::vector<std::string> & pro
 	return NULL;
 }
 
+void VipSystem::resolveSavedDestination()
+{
+	// The saved cell's item of the saved type. Without one the reservation
+	// keeps its key (a later save still has it) and the arrival finds the
+	// destination gone.
+	Game::ItemSetByString::const_iterator bucket = game->itemsByType.find(yootDestType);
+	if (bucket == game->itemsByType.end())
+		return;
+	for (Game::ItemSet::const_iterator it = bucket->second.begin(); it != bucket->second.end(); ++it)
+		if ((*it)->position.x == yootDestX && (*it)->position.y == yootDestY)
+		{
+			yootDestination = *it;
+			return;
+		}
+}
+
+int VipSystem::yootVisitEstimate(Item::Item *dest) const
+{
+	// T2People::VIPEstimation: the VIP's CalcCurrEstimate > 200. No VIP
+	// person is spawned, so use the people-estimates (P2) of the people at
+	// the destination, then its 1..300 tenant estimate (J1), and only as a
+	// last resort the 0..100 evaluation x 3.
+	int sum = 0, n = 0;
+	for (Item::Item::People::const_iterator p = dest->people.begin(); p != dest->people.end(); ++p)
+	{
+		sum += (*p)->yootCurrentEstimate();
+		++n;
+	}
+	if (n > 0)
+		return sum / n;
+	if (dest->yootEstimate > 0)
+		return dest->yootEstimate;
+	return LevelUp::yootEstimateFromEvaluation(dest->getEvaluation());
+}
+
 void VipSystem::resolveYootVisit()
 {
 	const std::vector<RulesProfile::Vip> & vips = game->activeRules.profile().vips;
@@ -119,6 +155,7 @@ void VipSystem::resolveYootVisit()
 	Item::Item *dest = yootDestination;
 	yootPendingVip = -1;
 	yootDestination = NULL;
+	yootDestType.clear();
 	if (index < 0 || index >= (int)vips.size())
 		return;
 	const RulesProfile::Vip & vip = vips[index];
@@ -128,7 +165,7 @@ void VipSystem::resolveYootVisit()
 		game->timeWindow.showMessage("The VIP's destination is gone; the visit was cancelled.");
 		return;
 	}
-	const int estimate = LevelUp::yootEstimateFromEvaluation(dest->getEvaluation());
+	const int estimate = yootVisitEstimate(dest);
 	if (LevelUp::yootVipSucceeds(estimate))
 	{
 		++goodReviews;
@@ -149,6 +186,8 @@ void VipSystem::advanceYoot()
 {
 	if (yootPendingVip >= 0)
 	{
+		if (!yootDestination && !yootDestType.empty())
+			resolveSavedDestination();
 		if (game->time.absolute >= yootArrivalTime)
 			resolveYootVisit();
 		return;
@@ -198,6 +237,9 @@ void VipSystem::advanceYoot()
 		}
 		yootPendingVip = (int)i;
 		yootDestination = dest;
+		yootDestType = dest->prototype->id;
+		yootDestX = dest->position.x;
+		yootDestY = dest->position.y;
 		yootArrivalTime = std::floor(game->time.absolute) + Time::hourToAbsolute(vip.arrivalMinute / 60.0);
 		const int h = vip.arrivalMinute / 60, m = vip.arrivalMinute % 60;
 		char when[32];
@@ -225,8 +267,19 @@ void VipSystem::encodeXML(tinyxml2::XMLPrinter &xml) const
   xml.PushAttribute("vipMember",guest->member);
  }
  xml.PushAttribute("vipGoodReviews",goodReviews); xml.PushAttribute("vipBadReviews",badReviews);
- xml.PushAttribute("yootVipLastDay",yootLastDay);
-}
+ // YootTower-only state (the golden validator rejects yoot* attrs in
+ // SimTower/OpenSky saves); decode defaults to -1.
+ if (game->activeRules.profile().yootWorld) xml.PushAttribute("yootVipLastDay",yootLastDay);
+ // YootTower-only reservation state: SimTower/OpenSky saves stay
+ // byte-identical to the pre-YootTower format (decode defaults to -1).
+ if (game->activeRules.profile().yootWorld && yootPendingVip>=0 && !yootDestType.empty())
+ {
+  xml.PushAttribute("yootVipPending",yootPendingVip);
+  xml.PushAttribute("yootVipArrival",yootArrivalTime);
+  xml.PushAttribute("yootVipDestType",yootDestType.c_str());
+  xml.PushAttribute("yootVipDestX",yootDestX);
+  xml.PushAttribute("yootVipDestY",yootDestY);
+ }}
 void VipSystem::decodeXML(tinyxml2::XMLElement &xml)
 {
  visiting=xml.IntAttribute("vipVisiting",0); lastDay=xml.IntAttribute("vipLastDay",-1);
@@ -234,7 +287,12 @@ void VipSystem::decodeXML(tinyxml2::XMLElement &xml)
  vipTrips=xml.IntAttribute("vipTrips",0); result=xml.IntAttribute("vipResult",0);
  watch=xml.BoolAttribute("vipWatch",visiting==-1); vipGuest=nullptr;
  goodReviews=xml.IntAttribute("vipGoodReviews",0); badReviews=xml.IntAttribute("vipBadReviews",0);
- yootPendingVip=-1; yootDestination=nullptr; yootArrivalTime=0; yootLastDay=xml.IntAttribute("yootVipLastDay",-1);
+ yootPendingVip=xml.IntAttribute("yootVipPending",-1); yootDestination=nullptr;
+ yootArrivalTime=xml.DoubleAttribute("yootVipArrival",0.0);
+ yootDestType = yootPendingVip>=0 ? std::string(xmlAttributeOr(xml,"yootVipDestType","")) : std::string();
+ yootDestX=xml.IntAttribute("yootVipDestX",0); yootDestY=xml.IntAttribute("yootVipDestY",0);
+ if (yootDestType.empty()) yootPendingVip=-1;
+ yootLastDay=xml.IntAttribute("yootVipLastDay",-1);
  pendingMember=visiting>0 && xml.FindAttribute("vipHomeX") ? xml.IntAttribute("vipMember",1) : -1;
  pendingHomeX=xml.IntAttribute("vipHomeX",0); pendingHomeY=xml.IntAttribute("vipHomeY",0);
 }
@@ -246,5 +304,4 @@ void VipSystem::relink()
     for (auto *g : h->guests) if (g->member==pendingMember) vipGuest=g;
  }
  pendingMember=-1;
- if (visiting>0 && !vipGuest && result==0) { result=2; favorable=false; watch=false; }
-}
+ if (visiting>0 && !vipGuest && result==0) { result=2; favorable=false; watch=false; }}

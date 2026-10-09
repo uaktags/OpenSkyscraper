@@ -1,0 +1,43 @@
+<tower funds="10000000" rating="0" time="2.4" speed="1" rainy="0" tool="inspector" ruleset="yoottower" world="tokyo" yootVipFlags="0" x="0" y="200">
+<item type="lobby" x="-40" y="0" width="80" height="3"/>
+<item type="floor" x="-40" y="3" width="80" holes="-20:20"/>
+<item type="floor" x="-40" y="4" width="80" holes="-20:20"/>
+<item type="floor" x="-40" y="5" width="80" holes="-20:20"/>
+<item type="floor" x="-40" y="6" width="80" holes="-20:20"/>
+<item type="floor" x="-40" y="7" width="80" holes="-20:20"/>
+<item type="floor" x="-40" y="8" width="80" holes="-20:20"/>
+<item type="floor" x="-40" y="9" width="80" holes="-20:20"/>
+<item type="floor" x="-40" y="10" width="80" holes="-20:20"/>
+<item type="floor" x="-40" y="11" width="80" holes="-20:20"/>
+<item type="floor" x="-40" y="12" width="80" holes="-20:20"/>
+<item type="floor" x="-40" y="13" width="80" holes="-20:20"/>
+<item type="floor" x="-40" y="14" width="80" holes="-20:20"/>
+<item type="office" x="-40" y="3" occupied="0"/>
+<item type="office" x="31" y="3" occupied="0"/>
+<item type="office" x="-40" y="4" occupied="0"/>
+<item type="office" x="31" y="4" occupied="0"/>
+<item type="office" x="-40" y="5" occupied="0"/>
+<item type="office" x="31" y="5" occupied="0"/>
+<item type="office" x="-40" y="6" occupied="0"/>
+<item type="office" x="31" y="6" occupied="0"/>
+<item type="office" x="-40" y="7" occupied="0"/>
+<item type="office" x="31" y="7" occupied="0"/>
+<item type="office" x="-40" y="8" occupied="0"/>
+<item type="office" x="31" y="8" occupied="0"/>
+<item type="office" x="-40" y="9" occupied="0"/>
+<item type="office" x="31" y="9" occupied="0"/>
+<item type="office" x="-40" y="10" occupied="0"/>
+<item type="office" x="31" y="10" occupied="0"/>
+<item type="office" x="-40" y="11" occupied="0"/>
+<item type="office" x="31" y="11" occupied="0"/>
+<item type="office" x="-40" y="12" occupied="0"/>
+<item type="office" x="31" y="12" occupied="0"/>
+<item type="office" x="-40" y="13" occupied="0"/>
+<item type="office" x="31" y="13" occupied="0"/>
+<item type="office" x="-40" y="14" occupied="0"/>
+<item type="office" x="31" y="14" occupied="0"/>
+<item type="elevator-standard" x="-28" y="0" height="15"><car altitude="0.0" homeFloor="0"/><car altitude="8.0" homeFloor="0"/></item>
+<item type="elevator-standard" x="24" y="0" height="15"><car altitude="0.0" homeFloor="0"/></item>
+<item type="skybridge" x="-20" y="8" width="40"/>
+<item type="billboard" x="-40" y="10" ad="GAMEWORKSAD.t2p" daysLeft="12"/>
+</tower>
