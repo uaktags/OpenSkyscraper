@@ -170,6 +170,9 @@ approximate or missing (see `doc/yoottower/game-parity.md` for the full audit):
 - **Visuals checked only at the logic level:** Mr. Maru turning back at the row end, rubble tiling (drawn per
   cell, not per tenant), the kite in Kegon, and the Billboard countdown differ from or are not confirmed
   against the original; clouds, kite and dolphins have not been compared pixel for pixel.
+- **Event Center:** booked events import from and export to `.bld` and open and settle on the original's
+  days and hours, but the audience runs ~10% high, the "full" status (31) is not shown, and the tenant
+  estimate stays at 0 during an event.
 - **Hotels:** OpenSky fills about half of the eligible rooms per day against the original's ~80% (funds stay
   within tolerance); room estimates run higher than the original's.
 - **Population detail:** Hawaii has one condo resident more than the original (55 vs 54) and a few more
