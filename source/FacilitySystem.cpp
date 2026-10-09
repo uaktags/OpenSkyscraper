@@ -112,6 +112,11 @@ void FacilitySystem::minuteTick(int minute, long long absMinute)
 	for (Game::ItemSet::const_iterator i = docs.begin(); i != docs.end(); ++i) {
 		Item::DoctorsOffice * d = dynamic_cast<Item::DoctorsOffice *>(*i);
 		if (!d || !built(d)) continue;
+		// FUN_1000be00: status 10 hires the TMDF 1 staff (CollectEmployee,
+		// retried hourly); status 0xd calls them in at [open-60, open-52).
+		int open = 480;
+		if (d->prototype->yoot && d->prototype->yoot->closeMinute > 0) open = d->prototype->yoot->openMinute;
+		game->eventSystem.people.staffFacility(d, absMinute, minute, open - 60, 8);
 		if (!d->isOpen(minute)) { d->leaveAt.clear(); d->setPattern(0); }
 		else if (d->pattern == 0) d->setPattern(1);
 	}

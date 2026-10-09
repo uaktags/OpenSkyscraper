@@ -666,6 +666,43 @@ int PeopleSystem::callStaff(Item::Item * tenant, long long now)
 	return sent;
 }
 
+int PeopleSystem::staffFacility(Item::Item * tenant, long long absMinute, int minuteOfDay,
+                                int callFromMinute, int spanMinutes)
+{
+	if (!enabled() || !tenant) return 0;
+	// Status 10 (built, hiring): CollectEmployee retries hourly until the
+	// pool supplies the member table. Until then the facility has no staff.
+	if (belongOf(tenant).empty())
+	{
+		const bool ok = hireBelong(tenant);
+		if (belongOf(tenant).empty())
+		{
+			// hireBelong's contract: true with no types means the plugin
+			// has no member table (or no pool), so the staff come at
+			// once -- the TNDF belong capacity, like YootTenant's staff.
+			if (!ok || !tenant->prototype->yoot || tenant->prototype->yoot->belongCapacity <= 0)
+				return 0;
+			if (tenant->population != tenant->prototype->yoot->belongCapacity)
+			{
+				tenant->population = tenant->prototype->yoot->belongCapacity;
+				game->populationNeedsUpdate = true;
+			}
+			return tenant->prototype->yoot->belongCapacity;
+		}
+	}
+	// CallBelongPeople in the plugin's call window. callStaff walks in
+	// everyone not already out, so the window fires once per staff member.
+	if (minuteOfDay >= callFromMinute && minuteOfDay < callFromMinute + spanMinutes)
+		callStaff(tenant, absMinute);
+	const int staff = (int)belongOf(tenant).size();
+	if (tenant->population != staff)
+	{
+		tenant->population = staff;
+		game->populationNeedsUpdate = true;
+	}
+	return staff;
+}
+
 void PeopleSystem::releaseBelong(Item::Item * tenant)
 {
 	std::map<Item::Item *, std::vector<Yoot::PeopleType> >::iterator b = belong.find(tenant);

@@ -189,6 +189,19 @@ namespace OT
 		/// not out walk to the tenant, each starting (rand() x 10) % 6
 		/// minutes after `now`. Returns how many are on their way or in.
 		int callStaff(Item::Item * tenant, long long now);
+		/// Facility staffing, the plugin ChangeStatusOnIdle machines of
+		/// Doctor's.t2p (FUN_1000be00), Maintenance.t2p (FUN_100133d0),
+		/// Front.t2p and Securityroom.t2p (FUN_1000be00): the tenant
+		/// hires its TMDF 1 belong people from the pool once built
+		/// (status 10, T2Tenant::CollectEmployee, retried hourly) and
+		/// calls them in for the opening -- Doctor's in
+		/// [open-60, open-52), Front/Maintenance in [open, open+8); the
+		/// Security Room never closes (its day and night shifts share the
+		/// same belong people, swapped at 05:00 and 17:00). The tenant's
+		/// population counts the hired staff, like an office's workers.
+		/// Returns the hired staff count.
+		int staffFacility(Item::Item * tenant, long long absMinute, int minuteOfDay,
+		                  int callFromMinute, int spanMinutes);
 		void vipLeave(YootVisitor * v, Item::Item * from);
 
 		/// Skin::Yoot: the people walking on the floors and the posing VIPs

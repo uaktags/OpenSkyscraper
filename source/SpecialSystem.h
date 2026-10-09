@@ -102,6 +102,7 @@ namespace OT
 		void linkRooms();
 		void deskTick(int minute);
 		void housekeepingTick(int minute);
+		void securityTick(int minute);
 		void parkingTick();
 	};
 }

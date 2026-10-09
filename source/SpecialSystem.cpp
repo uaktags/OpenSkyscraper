@@ -156,6 +156,7 @@ void SpecialSystem::minuteTick(int minute)
 	}
 	deskTick(minute);
 	housekeepingTick(minute);
+	securityTick(minute);
 	if (minute % 60 == 0 || prevMinute < 0 || minute / 60 != prevMinute / 60) parkingTick();
 }
 
@@ -190,12 +191,31 @@ void SpecialSystem::linkRooms()
 	LOG(DEBUG, "front desks link %zu hotel rooms", roomDesk.size());
 }
 
+void SpecialSystem::securityTick(int minute)
+{
+	// Securityroom.t2p FUN_1000be00: status 10 hires the 12 TMDF 1 guards
+	// (CollectEmployee, retried hourly); the room then runs day (06-17)
+	// and night shifts that share the same belong people, swapped at
+	// 05:00 and 17:00 (FUN_1000bf90), so the staff walk in once.
+	const long long absMinute = Yoot::absoluteMinute(game->time.absolute);
+	const Game::ItemSet & set = itemsOf(game, "security");
+	for (Game::ItemSet::const_iterator s = set.begin(); s != set.end(); ++s) {
+		if (!built(*s)) continue;
+		game->eventSystem.people.staffFacility(*s, absMinute, minute, 0, 1440);
+	}
+}
+
 void SpecialSystem::deskTick(int minute)
 {
+	const long long absMinute = Yoot::absoluteMinute(game->time.absolute);
 	const Game::ItemSet & desks = itemsOf(game, "frontdesk");
 	for (Game::ItemSet::const_iterator d = desks.begin(); d != desks.end(); ++d) {
 		Item::FrontDesk * desk = dynamic_cast<Item::FrontDesk *>(*d);
 		if (!desk || !built(desk)) continue;
+		// Front.t2p's ChangeStatusOnIdle (the Maintenance.t2p machine,
+		// FUN_100133d0): status 10 hires the 3 TMDF 1 staff; status 0xb
+		// calls them in at [open, open+8).
+		game->eventSystem.people.staffFacility(desk, absMinute, minute, desk->openMinute(), 8);
 		desk->setPattern(desk->isOpen(minute) ? 1 : 0);
 		// FUN_10015540 at 12:00 (once: the tenant idles every 8 minutes).
 		if (crossed(Yoot::kHotelPayMinute)) {
@@ -287,10 +307,14 @@ void SpecialSystem::onCheckIn(Item::Hotel * room)
 
 void SpecialSystem::housekeepingTick(int minute)
 {
+	const long long absMinute = Yoot::absoluteMinute(game->time.absolute);
 	const Game::ItemSet & offices = itemsOf(game, "housekeeping");
 	for (Game::ItemSet::const_iterator h = offices.begin(); h != offices.end(); ++h) {
 		Item::Housekeeping * hk = dynamic_cast<Item::Housekeeping *>(*h);
 		if (!hk || !built(hk)) continue;
+		// Maintenance.t2p FUN_100133d0: status 10 hires the 6 TMDF 1
+		// maids; status 0xb calls them in at [open, open+8).
+		game->eventSystem.people.staffFacility(hk, absMinute, minute, hk->openMinute(), 8);
 		const bool working = Yoot::housekeepingDispatchMinute(minute, hk->openMinute(), hk->closeMinute());
 		const bool open = minute >= hk->openMinute() && minute < hk->closeMinute();
 		hk->setPattern(open ? 1 : 0);
