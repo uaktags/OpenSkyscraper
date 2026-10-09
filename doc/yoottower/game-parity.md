@@ -1127,3 +1127,60 @@ checks (`T2PeopleType::Check`) are not yet compared with the pool types. The day
 **Lab outputs.** `hkG-cmb-before/` (combined baseline), `hkG-cmb-after/` (combined fix),
 `hkG-cmb-c/` (trigger only), `hkG-cmb-d/` (econo only). Older runs: `hkG-hawaii/` (pre-B
 baseline), `hkG-hawaii-econo/` (pre-rebase fix).
+
+
+#### 7.6.C Event Center
+
+**Status: not closed.** The export now writes the booked hall event, which is evidenced by
+the decompile, but the original still never opens the hall in the fixture, so the evening
+events remain unmeasured. No OpenSky change was made.
+
+**Decompile (EventCenter.dll).** `FUN_1000bec0` (the hall's status machine, called from
+`FUN_1000bd90` on every idle) moves the hall to status 30 only while the tenant's sub-plugin
+(`T2HaveOutViewObject::GetSubPlugin`, set by `T2Tenant::SetHallEventPlugin`) is non-null:
+- from open - 60 (`CallBelongPeople`, status 30);
+- at open (status 30 while open, `UpdateCommercialEstimate` each hour);
+- at close, `[close, close + 8)`: `DoPayTool(out - cost)`, which subtracts from funds, so
+  funds += cost - outMoney (matches `hallEventSettlement`), then status 10.
+Without a sub-plugin the status is 10 at every time of day, which is the fixture's state.
+Open and close come from the sub-plugin (+0xb8 / +0xbc) when booked, and from the tenant def
+(+0x174 / +0x178, `T2Tenant::GetOpenTime`) otherwise. OpenSky's `eventCenterTick` already
+uses those rules.
+
+**Save record.** `LoadExtraData` `FUN_1000e1f0` (save layout in `FUN_1000e4f0`) reads a u32
+booked id first, resolves it with `FUN_1000e680` against the tenant def's sub-plugin list
+(+0x10c, excluding tie-ups whose `IsTieupFinish` is set), and calls `SetHallEventPlugin`.
+The record is 64 + 9k bytes. A game-written snapshot (`c1/tokyo_g3_venues/oracle/snaps/snap_010`)
+has the record as 118 bytes (k = 6): a zero booked id, then six entries (u32 id, s16, s16,
+s8) for Art Exhibition (`strA` = 0x41727473), Car Show, Rock Live, Fashon Show, Plant Show and
+Tennis Match, then the 12 month slots. PlArt's id, read from its ATTR, is the same 0x41727473.
+
+**Export change (`BldExport.cpp`, `eventCenterRecord`).** An Event Center with an `event` attribute
+gets the record above with its booked id (k = 0, zero slots). Before this change the exporter
+wrote n = 0 for every Event Center.
+
+**Plugin table and gating.** The exported save's plugin table already lists the six `lPeH`
+hall events (`strA` among them, `fileName C:\YOOT\T2.exe`), the same as the game's samples.
+PlArt.t2p's ATTR: mAttrib 0x1 (Tokyo), mGameLevel 1, mSecretItem 0, mDependID `****`, so the
+level and world gates pass at grade 3. `IsTieupFinish` only applies to tie-ups (+0xb0 set).
+Neither the table nor the ATTR gate explains the null lookup.
+
+**Measured.** Lab tree `hkC`, `tokyo_g3_venues` (`parity.sh run hkC-ec1 3`), oracle with the export
+change. The original's hourly series has the Event Center at status 10 in every sample, with no
+audience and no status 30 at any time over 3 days. Funds and population peaks are unchanged
+from §7.4 item 5 (original 710 / 765 / 1049; OpenSky 770 / 921 / 1050). The day-end status
+column reads 10 by construction, since the hall closes before the day ends.
+
+**Ground truth.** No game-written save in the corpus has a booked Event Center: of 1,253
+Event Center records with extra data, only the exported input has a non-zero booked id. A
+booking needs the GUI (the hall dialog's event list, then save), which the oracle driver does not
+do yet (it only closes dialogs and saves).
+
+**Open.** The record is loaded, but the original does not resolve the booked id to a sub-plugin
+(`FUN_1000e680` against the def's list at +0x10c). Next steps: (1) GUI-book PlArt on an exported
+tower, save, and diff the record bytes against the export; (2) if the booked id stays zero, trace
+how the def's sub-plugin list (+0x10c) is built at plugin load and why PlArt is absent from it;
+(3) only then compare the evening window, audience and income against `eventCenterTick`.
+
+**Tests.** Lab `test hkC` after the rebase onto `fea6248`: 9/9. The `thirdparty/astar-search`
+submodule was copied into the lab tree `hkC` only.
