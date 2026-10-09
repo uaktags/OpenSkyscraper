@@ -923,3 +923,20 @@ and `Billboard::showAd` centres the 128 DIB on a 160x60 board.
 - Gotcha: a fresh worktree has empty `thirdparty/astar-search` and
   `thirdparty/tinyxml2` submodules, so the lab build fails at `PathFinder.h` until
   they are copied into the lab tree. `lab.sh sync` deletes them again on the next sync.
+
+#### 7.6.E Gathering Area export
+
+Problem: a `.bld` exported from a three-star tower with a Gathering Area (`tests/sim/yoot_visitors.tower`, rating 2) made the original show "Plugin Check Error" at load. The dialog lists "Gathering Area" under "Plugin files below were installed at saving, but they cannot be installed" (screenshot from oracle run hkE-repro, load, before fix).
+
+Cause (T2.exe, plugins-agent/out/t2exe.c): the load builds the installed list with FUN_00421f70, which keeps only plugins whose CFilePlugin+0x54 (ATTR lvl, game level) is at most the header level (+0x8c). The save table lists the Gathering Area (IOKI, itemType 1741, lvl 4), and the list check at 0x419d62 reports every save plugin missing from that installed list in the non-fatal 0x457 dialog (Continue). FUN_0041ca80 gates availability the same way (spec.level <= doc grade; mirrored by YootWorld.cpp yootPluginAvailable). The exporter wrote header level 3 (rating 2 + 1), so the plugin was refused. The plugin record itself already matched a game-written save (tk1.bld, vis3-agent/towers): lPnT IOKI, 1741, mustItem 0, name, C:\YOOT\PLUGINS\GATHERINGAREA.T2P, and the tenant record matched too; the level was the only difference.
+
+Fix (source/BldExport.cpp): after the plugin table is assembled, the star level is raised to the highest ATTR lvl of the plugins the export adds (when above the level it would otherwise write, and within the world grades), with a report note. BldLoader maps the level back to rating (level - 1), so OpenSky imports the same star level. Tokyo towers stay at their star level when every added plugin is grade 3 or lower.
+
+Test (tests/test_main.cpp, testBldExport section): a Hawaii rating-2 tower with a gatheringarea exports level 4 with the note "Star level 3 raised to 4"; lab test hkE: 9/9 passed.
+
+Measured on the lab (tree hkE, TAGs hkE-repro and hkE-fix):
+- before: export level 3, the original shows the Plugin Check Error dialog listing only Gathering Area at load.
+- after: export level 4, the original loads with no dialog and the status panel shows four stars (oracle dialogs/ empty, load.png).
+- one-day run (hkE-fix, 1 day): still running at the time of writing; the day-1 numbers, the report.md comparison and the Gathering Area survival are pending.
+
+Open: the star level change is a deliberate departure from the source rating (the tower is three stars in OpenSky); the alternative, dropping the Gathering Area, loses the building. The lead should choose. Lab note: an earlier oracle process for hkE-repro did not exit on `parity.sh stop`; it was left running and should be checked.
