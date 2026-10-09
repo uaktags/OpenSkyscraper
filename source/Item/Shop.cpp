@@ -189,3 +189,11 @@ Path Shop::getRandomBackgroundSoundPath()
 	snprintf(name, 128, "simtower/fastfood/%i", (rand() & 1) ? 0 : 2);
 	return name;
 }
+
+void Shop::evacuateForDisaster()
+{
+ open = false; patrons = 0;
+ quotaRemaining = customersToday = walkinsToday = 0;
+ spriteNeedsUpdate = true;
+ updateSprite();
+}

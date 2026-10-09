@@ -90,6 +90,7 @@ namespace OT {
 				typedef std::set<Car *> Cars;
 				Cars cars;
 				void clearCars();
+				virtual void evacuateForDisaster() override;
 				void addCar(int floor);
 				virtual int dailyMaintenanceCost() const override { return 100 + (int)cars.size() * 250 + size.y * 20; }
 

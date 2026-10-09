@@ -288,3 +288,10 @@ void Cathedral::decodeXML(tinyxml2::XMLElement & xml)
 	weddingPhase = kWeddingIdle;
 	weddingCounter = 0;
 }
+
+void Cathedral::evacuateForDisaster()
+{
+ clearGuests(); weddingPhase = kWeddingIdle; weddingCounter = 0;
+ weddingFrameAccumulator = 0; lastAdvancedAt = game->time.absolute;
+ updateCoupleSprites();
+}

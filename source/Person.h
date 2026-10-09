@@ -77,6 +77,8 @@ namespace OT {
 			void set(const Route & r);
 
 			void next();
+			void cancel();
+			bool references(const Item::Item * target) const;
 			int fromFloor;
 			Item::Item * item;
 			int toFloor;

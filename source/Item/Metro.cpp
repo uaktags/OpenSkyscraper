@@ -215,7 +215,7 @@ void Metro::advance(double dt)
 		// The station admits a bounded visitor pool during the 10:00-17:00
 		// commercial window.  One 1/36 roll is made per 16 simulation ticks;
 		// no commuter population or fare income is fabricated here.
-		if (game->time.hour >= 10.0 && game->time.hour < 17.0 &&
+		if (game->time.hour >= 10.0 && game->time.hour < 17.0 && !game->eventSystem.isActive() &&
 			visitorsToday < 240 && game->time.checkTick(16.0 / 2600.0) &&
 			rand() % 36 == 0) spawnVisitors(1);
 		for (std::set<Visitor *>::iterator it = visitors.begin(); it != visitors.end(); ++it) {
@@ -260,4 +260,12 @@ Metro::Visitor::Visitor(Metro *m)
 	type = types[rand() % 4];
 	from = "Metro";
 	goingTo = "Tower";
+}
+
+void Metro::evacuateForDisaster()
+{
+ clearAllVisitors(); open = true; trainPresent = false; visitorsToday = 0;
+ trainSound.Stop();
+ spriteNeedsUpdate = true;
+ updateSprite();
 }

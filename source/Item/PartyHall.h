@@ -17,6 +17,7 @@ namespace OT {
 				p->icon  = 15;
 			}
 			virtual ~PartyHall();
+			virtual void evacuateForDisaster() override;
 
 			virtual void init();
 

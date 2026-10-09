@@ -683,3 +683,13 @@ void Item::renderPeople(sf::RenderTarget & target, const sf::Color & statusTint,
 		game->drawnSprites++;
 	}
 }
+
+// Both fire and bomb use the EXE CanModify survivor set. SECOM is deliberately
+// excluded: unlike the security office its unused EXE tenant type is burnable.
+bool Item::survivesDisaster() const
+{
+ const std::string &id = prototype->id;
+ return underConstruction || isLobby() || canHaulPeople() ||
+        id == "floor" || id == "security" || id == "housekeeping" ||
+        id == "housekeeping_center" || id == "metro" || id == "cathedral";
+}

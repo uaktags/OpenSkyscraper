@@ -21,6 +21,8 @@
 #include "Item/Metro.h"
 #include "Item/Escalator.h"
 #include "Item/Cathedral.h"
+#include "Item/Elevator/Car.h"
+#include "Item/Elevator/Queue.h"
 #include "OpenGL.h"
 
 using namespace OT;
@@ -426,6 +428,11 @@ void Game::clearWorld()
 	financeWindow.close();
 	reportDialog.close();
 	routeBuildQueue.clear();
+    for (Person *p : people) {
+        p->journey.cancel();
+        if (Item::Office::Worker *w = dynamic_cast<Item::Office::Worker *>(p)) w->parkingUsed = NULL;
+        if (Item::Hotel::Guest *g = dynamic_cast<Item::Hotel::Guest *>(p)) g->parkingUsed = NULL;
+    }
 	for (ItemSet::iterator i = items.begin(); i != items.end(); i++) {
 		delete *i;
 	}
@@ -613,6 +620,13 @@ bool Game::handleEvent(sf::Event & event)
 					return true;
 			}
 
+            if ((selectedTool == "bulldozer" || selectedTool.find("item-") == 0) &&
+                rejectDisasterWorldEdit()) return true;
+            if (selectedTool == "bulldozer" && eventSystem.clearRubble(toolPosition.y, toolPosition.x)) {
+                playOnce("simtower/bulldozer");
+                timeWindow.showMessage("Burned area cleared.");
+                return true;
+            }
 			float2 mousePoint(mousePosition.x, mousePosition.y);
 			//rectf toolboxWindowRect(float2(toolboxWindow.window->getAbsolutePosition().x, toolboxWindow.window->getAbsolutePosition().y), float2(toolboxWindow.window->GetClientWidth(), toolboxWindow.window->GetClientHeight()));
 			// rectf timeWindowRect(float2(timeWindow.window->GetAbsoluteLeft(), timeWindow.window->GetAbsoluteTop()), float2(timeWindow.window->GetClientWidth(), timeWindow.window->GetClientHeight()));
@@ -682,6 +696,8 @@ bool Game::handleEvent(sf::Event & event)
 						if (toolPosition.y < itemBelowCursor->position.y) draggingMotor = -1;
 						if (toolPosition.y >= itemBelowCursor->position.y + itemBelowCursor->size.y) draggingMotor = 1;
 
+						// Shaft resizing is a world edit too: locked during a fire/bomb (EXE 1060:004E).
+						if (draggingMotor != 0 && rejectDisasterWorldEdit()) draggingMotor = 0;
 						if (draggingMotor != 0) {
 							LOG(DEBUG, "drag elevator %s motor %i", itemBelowCursor->desc().c_str(), draggingMotor);
 							draggingElevator = e;
@@ -876,6 +892,7 @@ void Game::advanceSimTick(double dt)
 	// Rebuild a slice of the invalidated lobby routes (see updateRoutes).
 	pumpRouteBuilds();
 
+    const bool eventWasActive = eventSystem.isActive();
 	// Advance the clock first. Financial quarters are three-day cycles, and
 	// settle at the 4:59AM/5:00AM boundary rather than at the midnight
 	// quarter-number transition. The cycle marker makes repeated frames and
@@ -891,8 +908,9 @@ void Game::advanceSimTick(double dt)
 	const bool quarterlySettlementDue =
 		financialCycle > lastAccountingQuarter && time.hour >= 5.0;
 
-	vipSystem.advance(dt);
-	eventSystem.advance(dt);
+    eventSystem.advance(dt);
+    const bool frozen = eventWasActive || eventSystem.isActive();
+    if (!frozen) vipSystem.advance(dt);
 
 	for (ItemSet::iterator i = items.begin(); i != items.end(); i++) {
 		Item::Item * item = *i;
@@ -908,12 +926,14 @@ void Game::advanceSimTick(double dt)
 				continue;
 			}
 		}
-		item->advance(dt);
-	}
+        // Empty transports still advance their cars, doors and timers; the metro
+        // keeps its 07:00/17:00 open-close sweep (trains and riders are gated inside).
+        if (!frozen || item->isElevator() || item->isStairlike() || item->prototype->id == "metro") item->advance(dt);
+    }
 
-	for (PersonSet::iterator p = people.begin(); p != people.end(); p++) {
-		(*p)->advance(dt);
-	}
+    if (!frozen) for (PersonSet::iterator p = people.begin(); p != people.end(); p++) {
+        (*p)->advance(dt);
+    }
 	// Quarterly accounting is committed after the item/person pass. Office and
 	// Condo use this boundary frame to remove unattractive tenants first, so
 	// leavers do not pay the rent that follows.
@@ -938,10 +958,12 @@ void Game::advanceSimTick(double dt)
 	//Play sounds. checkHour reads the clock transition of the last
 	// Time::set, so hour-boundary events belong to the sim tick: a Fast
 	// frame crosses up to three of them.
-	if (time.checkHour(5))  cockSound.Play(this);
-	if (time.checkHour(6))  morningSound.Play(this);
-	if (time.checkHour(9))  bellsSound.Play(this);
-	if (time.checkHour(18)) eveningSound.Play(this);
+    if (!frozen) {
+        if (time.checkHour(5))  cockSound.Play(this);
+        if (time.checkHour(6))  morningSound.Play(this);
+        if (time.checkHour(9))  bellsSound.Play(this);
+        if (time.checkHour(18)) eveningSound.Play(this);
+    }
 
 	// Promotion landing window (LevelUp): 3->4 and 4->5 only land 5PM-7AM on
 	// weekdays. Population/item events already re-evaluate; this catches a
@@ -1334,7 +1356,34 @@ void Game::addItem(Item::Item * item)
 
 void Game::removeItem(Item::Item * item)
 {
-	assert(item);
+    if (!item || !items.count(item)) return;
+    // Cancel current and queued trips while virtual detach hooks are live.
+    for (Person *p : people)
+        if (p->journey.references(item)) p->journey.cancel();
+    while (!item->people.empty()) (*item->people.begin())->journey.cancel();
+    // Owner parking reservations can outlive the parking item.
+    if (item->prototype->id == "parking") {
+        for (Person *p : people) {
+            if (Item::Office::Worker *w = dynamic_cast<Item::Office::Worker *>(p))
+                if (w->parkingUsed == item) w->parkingUsed = NULL;
+            if (Item::Hotel::Guest *g = dynamic_cast<Item::Hotel::Guest *>(p))
+                if (g->parkingUsed == item) g->parkingUsed = NULL;
+        }
+    }
+    visualizeRoute.clear();
+    inspectorDialog.close();
+    elevatorDialog.close();
+    if (draggingElevator == item) { draggingElevator = NULL; draggingMotor = 0; }
+    eventSystem.forgetItem(item);
+    if (item->prototype->id != "floor") cancelTransientVip();
+    // Cached owner routes also contain raw item pointers.
+    for (Item::Item *other : items) {
+        for (const Route::Node &node : other->lobbyRoute.nodes)
+            if (node.item == item) { other->lobbyRoute.clear(); break; }
+        for (const Route::Node &node : other->metroRoute.nodes)
+            if (node.item == item) { other->metroRoute.clear(); break; }
+    }
+    populationNeedsUpdate = true;
 	// Drop any pending route rebuild for this item before it is deleted.
 	std::vector<Item::Item *>::iterator rq = std::find(routeBuildQueue.begin(), routeBuildQueue.end(), item);
 	if (rq != routeBuildQueue.end()) routeBuildQueue.erase(rq);
@@ -1355,9 +1404,14 @@ void Game::removeItem(Item::Item * item)
 		for (int i = 0; i < item->size.y; i++) {
 			itemsByFloor[item->position.y + i].erase(item);
 			if (!item->canHaulPeople()) {
-				std::multiset<int> &interval = floorItems[item->position.y + i]->interval;
-				interval.erase(interval.find(item->position.x));
-				interval.erase(interval.find(item->getRect().maxX()));
+                FloorItems::iterator floor = floorItems.find(item->position.y + i);
+                if (floor != floorItems.end() && floor->second) {
+                    std::multiset<int> &interval = floor->second->interval;
+                    auto left = interval.find(item->position.x);
+                    if (left != interval.end()) interval.erase(left);
+                    auto right = interval.find(item->getRect().maxX());
+                    if (right != interval.end()) interval.erase(right);
+                }
 			}
 		}
 	}
@@ -2107,8 +2161,14 @@ void Game::toggleElevatorService(Item::Elevator::Elevator * e, int floor)
 
 bool Game::constructToolAt(int2 pos)
 {
+    if (rejectDisasterWorldEdit()) return false;
 	toolPosition = pos;
 	const int footprintHeight = toolPrototype->icon == ICON_LOBBY ? lobbyToolHeight() : toolPrototype->size.y;
+    if (eventSystem.rubbleIntersects(recti(pos, int2(toolPrototype->size.x, footprintHeight)))) {
+        playOnce("simtower/construction/impossible");
+        timeWindow.showMessage("Bulldoze the burned area before rebuilding.");
+        return false;
+    }
 	if (!activeRules.allowsFootprint(pos.x, pos.y, toolPrototype->size.x, footprintHeight)) {
 		const std::string reason = "Footprint is outside the " +
 			std::string(activeRules.displayName()) + " build boundary";
@@ -2681,6 +2741,10 @@ void Game::cancelBatchDrag()
 
 bool Game::validateBatchCell(Item::AbstractPrototype * proto, int x, int y, std::string & reason, const std::set<int> & simulatedSlabs) const
 {
+    if (eventSystem.isActive()) { reason = "Cannot build during an emergency"; return false; }
+    if (eventSystem.rubbleIntersects(recti(int2(x, y), proto->size))) {
+        reason = "Bulldoze the burned area before rebuilding"; return false;
+    }
 	if (!activeRules.allowsFootprint(x, y, proto->size.x, proto->size.y)) {
 		reason = "Footprint is outside the " +
 			std::string(activeRules.displayName()) + " build boundary";
@@ -2787,6 +2851,7 @@ void Game::playOnce(Path sound)
  * to have played back. */
 void Game::playRandomBackgroundSound()
 {
+    if (eventSystem.isActive()) return;
 	sf::RenderWindow &win = app.window;
 	const sf::View currentView = win.getView();
 	sf::FloatRect view(
@@ -2867,6 +2932,7 @@ void Game::pumpRouteBuilds()
  *  route is empty(), no path was found through the tower. */
 Route Game::findRoute(Item::Item * start, Item::Item * destination, bool serviceRoute)
 {
+    if (!start || !destination || !items.count(start) || !items.count(destination)) return Route();
 	MapNode::Point start_point(start->position.x + start->size.x/2, start->position.y + start->prototype->exit_offset);
 	MapNode::Point end_point(destination->position.x + destination->size.x/2, destination->position.y + destination->prototype->entrance_offset);
 
@@ -2879,4 +2945,65 @@ Route Game::findRoute(Item::Item * start, Item::Item * destination, bool service
 	MapNode *start_mapnode = gameMap.findNode(start_point, start);
 	MapNode *destination_mapnode = gameMap.findNode(end_point, destination);
 	return pathFinder.findRoute(start_mapnode, destination_mapnode, start, destination, serviceRoute);
+}
+
+void Game::cancelTransientVip()
+{
+ // The existing reload policy cancels reservations/guest pointers while
+ // preserving approvals and review history. Reuse it within owned Game code.
+ tinyxml2::XMLPrinter xml;
+ xml.OpenElement("vip"); vipSystem.encodeXML(xml); xml.CloseElement();
+ tinyxml2::XMLDocument doc;
+ if (doc.Parse(xml.CStr()) == tinyxml2::XML_SUCCESS)
+  vipSystem.decodeXML(*doc.RootElement());
+}
+
+void Game::destroyItemByDisaster(Item::Item *item)
+{
+ if (!item || !items.count(item) || item->survivesDisaster()) return;
+ const recti footprint = item->getRect();
+ const bool transport = item->canHaulPeople();
+ const int sale = item->disasterSaleReversal();
+ if (sale > 0) {
+  // Reverse income, rather than booking a new demolition expense.
+  money.balance -= sale; money.todayIncome -= sale; money.quarterIncome -= sale;
+  money.todayTotalsByCategory["condo_sale"] -= sale;
+  money.quarterTotalsByCategory["condo_sale"] -= sale;
+  setFunds(money.balance);
+ }
+ removeItem(item);
+ eventSystem.burnFootprint(footprint);
+ if (transport) updateRoutes();
+ populationNeedsUpdate = true;
+}
+
+void Game::evacuateForDisaster()
+{
+ cancelBatchDrag();
+ draggingElevator = NULL; draggingMotor = 0;
+ visualizeRoute.clear();
+ inspectorDialog.close(); elevatorDialog.close();
+ cancelTransientVip();
+ for (Item::Item *item : items) {
+  item->underConstruction = false;
+  item->constructionEndTime = time.absolute;
+ }
+ // Preserve owner records for permanent tenants, but park all persons outside
+ // the world before venue hooks delete transient guests/customers.
+ for (Person *p : people) p->journey.cancel();
+ for (Item::Item *item : items) item->evacuateForDisaster();
+ for (Item::Item *item : items)
+  if (Item::Stairlike *stairs = dynamic_cast<Item::Stairlike *>(item))
+   stairs->transitionTimes.clear();
+ cockSound.Stop(); morningSound.Stop(); bellsSound.Stop(); eveningSound.Stop();
+ for (Sound *sound : autoreleaseSounds) sound->Stop();
+ populationNeedsUpdate = true;
+}
+
+bool Game::rejectDisasterWorldEdit()
+{
+ if (!eventSystem.isActive()) return false;
+ playOnce("simtower/construction/impossible");
+ timeWindow.showMessage("Cannot build or bulldoze during an emergency.");
+ return true;
 }

@@ -3073,8 +3073,194 @@ static void testSimTowerEventClock()
 	EXPECT(t.eventFrame() == 108);
 }
 
+// Opt-in real-engine disaster scenarios. Compile this translation unit with
+// -DOPENSKY_DISASTER_SCENARIOS and link the OpenSkyscraper objects except main.
+// Run under Xvfb with a temporary writable cwd; normal seam tests are unchanged.
+#ifdef OPENSKY_DISASTER_SCENARIOS
+#include <queue>
+#include <list>
+#include <deque>
+#include <memory>
+#include <utility>
+#include <SFML/Graphics.hpp>
+#include <TGUI/TGUI.hpp>
+#include <TGUI/Backend/SFML-Graphics.hpp>
+#include <tinyxml2.h>
+// Test-only access to the real engine; no production debug hooks.
+#define private public
+#define protected public
+#include "Application.h"
+#include "Game.h"
+#include "Item/Condo.h"
+#include "Item/Hotel.h"
+#include "Item/Office.h"
+#include "Item/Restaurant.h"
+#include "Item/FastFood.h"
+#include "Item/Cinema.h"
+#include "Item/PartyHall.h"
+#include "Item/Metro.h"
+#include "Item/Cathedral.h"
+#include "Item/Parking.h"
+#include "Item/Shop.h"
+#include "Item/Stairlike.h"
+#include "Item/Elevator/Car.h"
+#include "Item/Elevator/Queue.h"
+#undef protected
+#undef private
+using namespace OT;
+static int disasterChecks=0;
+#define DISASTER_CHECK(x) do { ++disasterChecks; if (!(x)) { std::cerr << "FAIL line " << __LINE__ << ": " << #x << '\n'; std::exit(2); } } while (0)
+static Item::Item *makeDisasterItem(Game &g, const char *id, int x, int y) {
+ auto *item=g.itemFactory.make(id,int2(x,y)); g.addItem(item); item->underConstruction=false; return item;
+}
+struct DisasterScenarioClock : Time {
+ using Time::set;
+ void pace() { speed = speed_animated = 1; }
+};
+static void setDisasterTime(Game &g, double absolute) {
+ DisasterScenarioClock clock;
+ static_cast<Time &>(clock) = g.time;
+ clock.set(absolute); clock.pace(); g.time = clock;
+}
+static void resetDisasterScenario(Game &g) {
+ g.clearWorld(); g.money.clear(2000000);g.funds=2000000;g.rating=2;
+ setDisasterTime(g,83+Time::hourToAbsolute(10));
+ g.lastAccountingDay=83;g.lastAccountingQuarter=27;
+ g.eventSystem.prevAbsolute=g.time.absolute;
+}
+static int testDisasterScenarios() {
+ char exe[]="/tmp/b-codex-batch2/scenarios", rules[]="--ruleset", sky[]="opensky", log[]="--log", logpath[]="/tmp/audit/batch2_cpp_scenarios.log";
+ char *args[]={exe,rules,sky,log,logpath}; Application app(5,args);app.audioMuted=true;
+ app.window.create(sf::VideoMode({1280,768}),"disaster scenarios");app.window.setVisible(false);app.gui.setWindow(app.window);
+ app.data.addSearchPath("/home/tim/Projects/OpenSky-art-v2/data");
+ Game g(app);
+ // Restaurant exists as a class but is absent from the baseline factory catalog.
+ auto *restaurantProto=Item::Restaurant::makePrototype();
+ g.itemFactory.prototypes.push_back(restaurantProto);g.itemFactory.prototypesById["restaurant"]=restaurantProto;
+ resetDisasterScenario(g);
+ // Every registered prototype: common survivor predicate and whole footprint.
+ for (auto *proto:g.itemFactory.prototypes) {
+  resetDisasterScenario(g);auto *item=makeDisasterItem(g,proto->id.c_str(),0,1);
+  bool expected=proto->id=="lobby" || proto->id=="floor" || proto->id=="security" || proto->id=="metro" || proto->id=="cathedral" || item->canHaulPeople();
+  auto r=item->getRect();int before=g.funds;
+  g.destroyItemByDisaster(item);
+  DISASTER_CHECK((g.items.count(item)!=0)==expected);DISASTER_CHECK(g.funds==before);
+  if (!expected) {for(int f=r.minY();f<r.maxY();++f) for(int x=r.minX();x<r.maxX();++x)DISASTER_CHECK(g.eventSystem.hasRubble(f,x));g.destroyItemByDisaster(item);DISASTER_CHECK(!g.items.count(item));}
+  else {DISASTER_CHECK(!g.eventSystem.rubbleIntersects(r));DISASTER_CHECK(item->evaluation==50);}
+ }
+ // Construction protection independent of event-start completion.
+ resetDisasterScenario(g);auto *building=makeDisasterItem(g,"office",0,2);building->underConstruction=true;
+ g.destroyItemByDisaster(building);DISASTER_CHECK(g.items.count(building));DISASTER_CHECK(!g.eventSystem.hasRubble(2,0));
+ // Real front callback burns a multi-floor unit hit only on its upper floor.
+ resetDisasterScenario(g);auto *cinema=makeDisasterItem(g,"cinema",10,2);auto r=cinema->getRect();
+ auto *sec=makeDisasterItem(g,"security",10,2);sec->evaluation=73;
+ g.eventSystem.destroyFireCell(3,12);DISASTER_CHECK(!g.items.count(cinema));DISASTER_CHECK(g.items.count(sec));DISASTER_CHECK(sec->evaluation==73);
+ for(int f=r.minY();f<r.maxY();++f)for(int x=r.minX();x<r.maxX();++x)DISASTER_CHECK(g.eventSystem.hasRubble(f,x));
+ g.eventSystem.destroyFireCell(3,12);DISASTER_CHECK(g.items.count(sec));
+ // Exact sale reversal, including income rather than expense totals.
+ resetDisasterScenario(g);auto *condo=static_cast<Item::Condo *>(makeDisasterItem(g,"condo",0,2));
+ condo->occupied=true;condo->rentDeposit=160000;condo->createOccupants();
+ g.transferFunds(160000,"condo_sale","scenario sale");int n=g.people.size();DISASTER_CHECK(n>0);
+ auto *resident=*condo->occupants.begin();condo->addPerson(resident);
+ g.destroyItemByDisaster(condo);DISASTER_CHECK(g.people.empty());DISASTER_CHECK(g.funds==2000000);DISASTER_CHECK(g.money.todayIncome==0);DISASTER_CHECK(g.money.todayExpenses==0);DISASTER_CHECK(g.money.quarterIncome==0);
+ // Old saves without a sale/deposit field derive the exact move-in credit.
+ for (const char *id : {"condo", "yoot_condo"}) {
+  resetDisasterScenario(g);auto *oldCondo=makeDisasterItem(g,id,0,2);
+  tinyxml2::XMLDocument saleDoc;DISASTER_CHECK(saleDoc.Parse("<item occupied=\"true\"/>")==0);oldCondo->decodeXML(*saleDoc.RootElement());
+  const int credit=oldCondo->prototype->price*2;DISASTER_CHECK(oldCondo->disasterSaleReversal()==credit);g.transferFunds(credit,"condo_sale","");g.destroyItemByDisaster(oldCondo);DISASTER_CHECK(g.funds==2000000);DISASTER_CHECK(g.money.todayIncome==0);DISASTER_CHECK(g.people.empty());
+ }
+ // Parking deletion clears worker/guest pointers before their owners die.
+ resetDisasterScenario(g);auto *office=static_cast<Item::Office *>(makeDisasterItem(g,"office",0,2));
+ auto *hotel=static_cast<Item::Hotel *>(makeDisasterItem(g,"hotel_suite",15,2));auto *parking=static_cast<Item::Parking *>(makeDisasterItem(g,"parking",0,-1));
+ auto *worker=*office->workers.begin();auto *guest=new Item::Hotel::Guest(hotel);hotel->guests.insert(guest);
+ worker->parkingUsed=parking;guest->parkingUsed=parking;
+ g.destroyItemByDisaster(parking);DISASTER_CHECK(!worker->parkingUsed);DISASTER_CHECK(!guest->parkingUsed);g.destroyItemByDisaster(office);g.destroyItemByDisaster(hotel);DISASTER_CHECK(g.people.empty());
+ // Destination journey and UI/VIP handles are purged through silent deletion.
+ resetDisasterScenario(g);office=static_cast<Item::Office *>(makeDisasterItem(g,"office",0,2));building=makeDisasterItem(g,"restaurant",15,2);
+ worker=*office->workers.begin();Route route;route.add(office,2);route.add(building,2);worker->journey.set(route);
+ g.visualizeRoute=route;g.inspectorDialog.showForItem(building);g.vipSystem.yootDestination=building;g.eventSystem.pendingBuilds.insert(building);
+ g.destroyItemByDisaster(building);DISASTER_CHECK(!worker->at);DISASTER_CHECK(!worker->journey.item);DISASTER_CHECK(!worker->journey.references(building));DISASTER_CHECK(g.visualizeRoute.empty());DISASTER_CHECK(!g.inspectorDialog.isVisible());DISASTER_CHECK(!g.vipSystem.yootDestination);DISASTER_CHECK(!g.eventSystem.pendingBuilds.count(building));
+ // Evacuation parks permanent owner records, deletes transient patrons, and
+ // empties transport state through virtual detachment before resetting cars.
+ resetDisasterScenario(g);office=static_cast<Item::Office *>(makeDisasterItem(g,"office",0,2));office->occupied=true;office->population=6;
+ condo=static_cast<Item::Condo *>(makeDisasterItem(g,"condo",15,2));condo->occupied=true;condo->createOccupants();
+ hotel=static_cast<Item::Hotel *>(makeDisasterItem(g,"hotel_single",35,2));guest=new Item::Hotel::Guest(hotel);hotel->guests.insert(guest);hotel->addPerson(guest);
+ auto *food=static_cast<Item::Restaurant *>(makeDisasterItem(g,"restaurant",50,2));auto *customer=new Item::Restaurant::Customer(food);food->customers.insert(customer);food->addPerson(customer);food->open=true;food->customersToday=15;
+ auto *elevator=static_cast<Item::Elevator::Elevator *>(makeDisasterItem(g,"elevator-standard",90,0));elevator->size.y=5;
+ auto *stairs=static_cast<Item::Stairlike *>(makeDisasterItem(g,"stairs",105,1));
+ worker=*office->workers.begin();worker->journey.fromFloor=0;worker->journey.toFloor=2;elevator->addPerson(worker);worker->stress=81;
+ auto *car=*elevator->cars.begin();car->state=Item::Elevator::Car::kMoving;car->altitude=3;car->doorTicks=4;
+ resident=*condo->occupants.begin();stairs->addPerson(resident);building=makeDisasterItem(g,"shop",115,2);building->underConstruction=true;
+ g.eventSystem.type=EventSystem::Type::Fire;g.evacuateForDisaster();
+ DISASTER_CHECK(!building->underConstruction);DISASTER_CHECK(hotel->guests.empty());DISASTER_CHECK(hotel->roomState==Item::Hotel::kDirty);DISASTER_CHECK(food->customers.empty());DISASTER_CHECK(!food->open);DISASTER_CHECK(food->customersToday==0);DISASTER_CHECK(elevator->people.empty());DISASTER_CHECK(elevator->queues.empty());DISASTER_CHECK(car->state==Item::Elevator::Car::kIdle);DISASTER_CHECK(car->altitude==car->homeFloor);DISASTER_CHECK(car->doorTicks==0);DISASTER_CHECK(stairs->people.empty());DISASTER_CHECK(stairs->transitionTimes.empty());DISASTER_CHECK(condo->occupants.size()>0);DISASTER_CHECK(office->occupied);DISASTER_CHECK(condo->occupied);
+ for (auto *item : g.items) DISASTER_CHECK(item->people.empty());
+ for(auto *p:g.people){DISASTER_CHECK(!p->at);DISASTER_CHECK(!p->journey.item);DISASTER_CHECK(p->state==Person::kIdle);}DISASTER_CHECK(worker->stress==81);
+ // Other venue state mappings and temporary owner teardown.
+ auto *fast=static_cast<Item::FastFood *>(makeDisasterItem(g,"fastfood",130,2));
+ auto *fastCustomer=new Item::FastFood::Customer(fast); fast->customers.insert(fastCustomer); fast->addPerson(fastCustomer); fast->open=true; fast->customersToday=9;
+ auto *movie=static_cast<Item::Cinema *>(makeDisasterItem(g,"cinema",150,2));auto *movieCustomer=new Item::Cinema::Customer(movie);movie->customers.insert(movieCustomer);movie->addPerson(movieCustomer);movie->open=movie->playing=true;movie->patronsToday=7;
+ auto *hall=static_cast<Item::PartyHall *>(makeDisasterItem(g,"partyhall",185,2));auto *partyGuest=new Item::PartyHall::Visitor(hall);hall->visitors.insert(partyGuest);hall->addPerson(partyGuest);hall->open=true;hall->patronsToday=4;
+ auto *metro=static_cast<Item::Metro *>(makeDisasterItem(g,"metro",215,-3));auto *rider=new Item::Metro::Visitor(metro);metro->visitors.insert(rider);metro->addPerson(rider);metro->trainPresent=true;
+ auto *church=static_cast<Item::Cathedral *>(makeDisasterItem(g,"cathedral",250,2));auto *churchGuest=new Item::Cathedral::Guest(church);church->guests.insert(churchGuest);church->addPerson(churchGuest);church->weddingPhase=Item::Cathedral::kWeddingGuestsArriving;
+ auto *shop=static_cast<Item::Shop *>(building);shop->open=true;shop->patrons=12;shop->customersToday=12;
+ hotel->housekeeper=new Item::Hotel::Housekeeper(hotel);hotel->addPerson(hotel->housekeeper);
+ g.evacuateForDisaster();DISASTER_CHECK(fast->customers.empty());DISASTER_CHECK(!fast->open);DISASTER_CHECK(fast->customersToday==0);DISASTER_CHECK(movie->customers.empty());DISASTER_CHECK(!movie->playing);DISASTER_CHECK(movie->patronsToday==0);DISASTER_CHECK(hall->visitors.empty());DISASTER_CHECK(!hall->open);DISASTER_CHECK(hall->patronsToday==0);DISASTER_CHECK(metro->visitors.empty());DISASTER_CHECK(!metro->trainPresent);DISASTER_CHECK(church->guests.empty());DISASTER_CHECK(church->weddingPhase==Item::Cathedral::kWeddingIdle);DISASTER_CHECK(!shop->open);DISASTER_CHECK(shop->patrons==0);DISASTER_CHECK(!hotel->housekeeper);
+ // Real simulation freeze with an active bomb resolved but awaiting cleanup.
+ g.eventSystem.type=EventSystem::Type::Terror;g.eventSystem.bombArmed=false;g.eventSystem.bombCleanupAt=g.time.absolute+100.0/2600;
+ const double beforeTime=g.time.absolute;const int beforePeople=g.people.size();worker->state=Person::kHome;food->open=true;food->quotaRemaining=40;
+ car->moveTo(2);const double beforeAltitude=car->altitude;
+ g.advanceSimTick(2);DISASTER_CHECK(car->altitude!=beforeAltitude);DISASTER_CHECK(!metro->trainPresent);DISASTER_CHECK(!hotel->housekeeper);DISASTER_CHECK(g.time.absolute>beforeTime);DISASTER_CHECK(g.people.size()==beforePeople);DISASTER_CHECK(worker->stress==81);DISASTER_CHECK(food->customers.empty());DISASTER_CHECK(food->quotaRemaining==40);DISASTER_CHECK(g.eventSystem.isActive());
+ g.toolPrototype=g.itemFactory.prototypesById["office"];int beforeFunds=g.funds;DISASTER_CHECK(!g.constructToolAt(int2(140,2)));DISASTER_CHECK(g.funds==beforeFunds);
+ g.eventSystem.bombCleanupAt=g.time.absolute;g.advanceSimTick(0);DISASTER_CHECK(!g.eventSystem.isActive());DISASTER_CHECK(g.time.eventFrame()==1500);
+ worker->state=Person::kHome;g.advanceSimTick(1);DISASTER_CHECK(worker->stress<81);
+ // Real bomb box: floors -2..+3, cells -20..+19; linked units fully burn.
+ resetDisasterScenario(g);auto *left=makeDisasterItem(g,"shop",-20,1);auto *edge=makeDisasterItem(g,"shop",20,1);auto *tall=makeDisasterItem(g,"recycling",0,3);sec=makeDisasterItem(g,"security",0,1);
+ g.eventSystem.type=EventSystem::Type::Terror;g.eventSystem.bombFloor=0;g.eventSystem.bombSlot=0;g.eventSystem.bombArmed=true;
+ g.eventSystem.armBomb();g.eventSystem.guardOffices.clear();DISASTER_CHECK(g.eventSystem.isActive());g.eventSystem.detonateBomb();
+ DISASTER_CHECK(!g.items.count(left));DISASTER_CHECK(g.items.count(edge));DISASTER_CHECK(!g.items.count(tall));DISASTER_CHECK(g.eventSystem.hasRubble(4,0));DISASTER_CHECK(g.items.count(sec));DISASTER_CHECK(!g.eventSystem.hasRubble(1,20));DISASTER_CHECK(g.eventSystem.isActive());
+ setDisasterTime(g,g.eventSystem.bombCleanupAt-0.25/2600);g.eventSystem.advance(0);DISASTER_CHECK(g.eventSystem.isActive());setDisasterTime(g,g.eventSystem.bombCleanupAt);g.eventSystem.advance(0);DISASTER_CHECK(!g.eventSystem.isActive());
+ // Defuse keeps the lock for the same two-frame deadline.
+ resetDisasterScenario(g);sec=makeDisasterItem(g,"security",0,2);g.eventSystem.type=EventSystem::Type::Terror;g.eventSystem.bombFloor=2;g.eventSystem.bombSlot=0;g.eventSystem.armBomb();
+ auto &guard=g.eventSystem.guardOffices[0].g[0];guard.floor=2;guard.x=1;guard.pause=guard.transit=0;
+ g.advanceSimTick(1);DISASTER_CHECK(g.eventSystem.bombCaught);DISASTER_CHECK(g.eventSystem.isActive());DISASTER_CHECK(!g.eventSystem.bombArmed);
+ setDisasterTime(g,g.eventSystem.bombCleanupAt);g.eventSystem.advance(0);DISASTER_CHECK(!g.eventSystem.isActive());
+ // Persistent aftermath: save reload, both placement paths, player clearing.
+ resetDisasterScenario(g);building=makeDisasterItem(g,"office",0,2);g.destroyItemByDisaster(building);
+ tinyxml2::XMLPrinter xml;g.encodeXML(xml);tinyxml2::XMLDocument doc;DISASTER_CHECK(doc.Parse(xml.CStr())==0);g.decodeXML(doc);
+ DISASTER_CHECK(g.eventSystem.hasRubble(2,0));DISASTER_CHECK(g.itemsByType["office"].empty());g.toolPrototype=g.itemFactory.prototypesById["office"];DISASTER_CHECK(!g.constructToolAt(int2(0,2)));
+ std::string reason;DISASTER_CHECK(!g.validateBatchCell(g.toolPrototype,0,2,reason));DISASTER_CHECK(reason.find("burned")!=std::string::npos);
+ g.selectedTool="bulldozer";g.toolPosition=int2(0,2);g.itemBelowCursor=g.floorItems[2];sf::Event click=sf::Event::MouseButtonPressed{sf::Mouse::Button::Left,{1000,600}};
+ g.eventSystem.type=EventSystem::Type::Terror;g.eventSystem.bombCleanupAt=g.time.absolute+10;DISASTER_CHECK(g.handleEvent(click));DISASTER_CHECK(g.eventSystem.hasRubble(2,0));
+ g.eventSystem.type=EventSystem::Type::None;DISASTER_CHECK(g.handleEvent(click));DISASTER_CHECK(!g.eventSystem.hasRubble(2,0));DISASTER_CHECK(!g.eventSystem.rubbleIntersects(recti(int2(0,2),int2(9,1))));
+ // Adjacent burned tenant records remain separate through save/load.
+ resetDisasterScenario(g);auto *firstBurn=makeDisasterItem(g,"office",0,2);auto *secondBurn=makeDisasterItem(g,"office",9,2);g.destroyItemByDisaster(firstBurn);g.destroyItemByDisaster(secondBurn);
+ tinyxml2::XMLPrinter spansXml;g.encodeXML(spansXml);tinyxml2::XMLDocument spansDoc;DISASTER_CHECK(spansDoc.Parse(spansXml.CStr())==0);g.decodeXML(spansDoc);
+ DISASTER_CHECK(g.eventSystem.clearRubble(2,0));DISASTER_CHECK(!g.eventSystem.hasRubble(2,8));DISASTER_CHECK(g.eventSystem.hasRubble(2,9));DISASTER_CHECK(g.eventSystem.hasRubble(2,17));DISASTER_CHECK(g.eventSystem.clearRubble(2,9));DISASTER_CHECK(!g.eventSystem.hasRubble(2,17));
+ // Overlay-only legacy saves still load and can be bulldozed.
+ resetDisasterScenario(g);g.eventSystem.addRubble(2,0);g.eventSystem.addRubble(2,1);tinyxml2::XMLPrinter legacyXml;legacyXml.OpenElement("event");g.eventSystem.encodeXML(legacyXml);legacyXml.CloseElement();tinyxml2::XMLDocument legacyDoc;DISASTER_CHECK(legacyDoc.Parse(legacyXml.CStr())==0);legacyDoc.RootElement()->DeleteAttribute("eventBurnedSpans");g.eventSystem.decodeXML(*legacyDoc.RootElement());DISASTER_CHECK(g.eventSystem.hasRubble(2,0));DISASTER_CHECK(g.eventSystem.clearRubble(2,1));DISASTER_CHECK(!g.eventSystem.hasRubble(2,0));
+ // Population recount drops destroyed tenants; repeated destruction is silent.
+ resetDisasterScenario(g);office=static_cast<Item::Office *>(makeDisasterItem(g,"office",0,2));office->occupied=true;office->population=6;g.setPopulation(6);
+ g.destroyItemByDisaster(office);DISASTER_CHECK(g.populationNeedsUpdate);g.advanceSimTick(0);DISASTER_CHECK(g.population==0);DISASTER_CHECK(g.people.empty());
+ // Burned-only floors retain their extent and front movement after deletion.
+ resetDisasterScenario(g);building=makeDisasterItem(g,"shop",0,2);g.destroyItemByDisaster(building);int extentLeft,extentRight;DISASTER_CHECK(g.eventSystem.floorExtent(2,extentLeft,extentRight));DISASTER_CHECK(extentLeft==0);DISASTER_CHECK(extentRight==12);
+ g.eventSystem.type=EventSystem::Type::Fire;g.eventSystem.fireOriginFloor=2;g.eventSystem.fireOriginCell=0;g.eventSystem.fireLeft[2]=5;g.eventSystem.fireFrame=1;
+ g.eventSystem.stepFireFrame();DISASTER_CHECK(g.eventSystem.isActive());DISASTER_CHECK(g.eventSystem.fireLeft.count(2));
+ // Actual fire start finishes construction, evacuates, preserves ignition time.
+ resetDisasterScenario(g);makeDisasterItem(g,"lobby",0,0);sec=makeDisasterItem(g,"security",0,2);building=makeDisasterItem(g,"shop",30,2);building->underConstruction=true;g.rating=2;double ignition=g.time.absolute;
+ g.eventSystem.startFire();DISASTER_CHECK(g.eventSystem.getActiveType()==EventSystem::Type::Fire);DISASTER_CHECK(!building->underConstruction);DISASTER_CHECK(g.time.absolute==ignition);for(auto *p:g.people)DISASTER_CHECK(!p->at);
+ g.closeEventChoice();setDisasterTime(g,83+Time::hourToAbsolute(21));g.eventSystem.advance(0);DISASTER_CHECK(!g.eventSystem.isActive());DISASTER_CHECK(g.time.hour>=21);
+ std::cout<<"Batch 2 C++ scenarios: "<<disasterChecks<<" checks passed\n";
+ g.clearWorld();return 0;
+}
+
+#undef DISASTER_CHECK
+#endif
+
 int main()
 {
+#ifdef OPENSKY_DISASTER_SCENARIOS
+    return testDisasterScenarios();
+#else
 	testTdtLoader();
 	testTdtLoaderTruncated();
 	testSmoke();
@@ -3132,4 +3318,5 @@ int main()
     }
     std::cout << "All tests passed\n";
     return 0;
+#endif
 }

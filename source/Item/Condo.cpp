@@ -9,6 +9,7 @@ extern int openSkyQuarterlyRent(const std::string &prototypeId, int rentClass);
 
 Condo::~Condo()
 {
+	removeOccupants();
 }
 
 void Condo::init()
@@ -42,7 +43,7 @@ void Condo::decodeXML(tinyxml2::XMLElement &xml)
 {
 	rent = xml.IntAttribute("rent", 150000);
 	const bool hasPopulation = (xml.FindAttribute("population") != NULL);
-	rentDeposit = xml.IntAttribute("rentDeposit", rent);
+	rentDeposit = xml.IntAttribute("rentDeposit", xml.BoolAttribute("occupied") ? prototype->price * 2 : rent);
 	variant = xml.IntAttribute("variant");
 	lighting = (LightingConditions)xml.IntAttribute("lighting");
 	occupied = xml.BoolAttribute("occupied");
@@ -299,16 +300,8 @@ void Condo::removePerson(Person *p)
 {
 	assert(p);
 	Item::removePerson(p);
-	for (std::set<CondoOccupant *>::iterator it = occupants.begin(); it != occupants.end(); ++it)
-	{
-		if (*it == p)
-		{
-			occupants.erase(it);
-			break;
-		}
-	}
-	population = static_cast<int>(occupants.size());
-	game->populationNeedsUpdate = true;
+	// occupants owns the family, even when they leave the room or evacuate.
+	// Only removeOccupants deletes these records and changes tenancy.
 }
 
 /** Returns whether the item will be vacated at the next month. */
@@ -328,4 +321,14 @@ double Condo::CondoOccupant::actualReturnTime() const
 double Condo::CondoOccupant::actualDepartureTime() const
 {
 	return departureTime + departureJitter;
+}
+
+void Condo::evacuateForDisaster()
+{
+ departureQueue = decltype(departureQueue)();
+ returnQueue = decltype(returnQueue)();
+ for (auto *p : occupants) { p->state = Person::kIdle; p->atHome = false; }
+ lighting = DAYTIME;
+ spriteNeedsUpdate = true;
+ updateSprite();
 }

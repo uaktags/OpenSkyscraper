@@ -425,3 +425,12 @@ void Parking::updateSprite()
 		                           static_cast<float>(position.y * -36)});
 	}
 }
+
+void Parking::evacuateForDisaster()
+{
+ for (Bay &bay : bayList) {
+  bay.occupied = false; bay.person = NULL; bay.category = kNoCar;
+ }
+ spriteNeedsUpdate = true;
+ updateSprite();
+}

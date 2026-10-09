@@ -26,6 +26,7 @@ namespace OT
 				p->icon = 13;
 			}
 			virtual ~Shop();
+			virtual void evacuateForDisaster() override;
 
 			virtual void init();
 

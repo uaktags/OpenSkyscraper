@@ -275,3 +275,13 @@ Path Restaurant::getRandomBackgroundSoundPath()
 		return "";
 	return "simtower/restaurant";
 }
+
+void Restaurant::evacuateForDisaster()
+{
+ clearCustomers();
+ open = false;
+ quotaRemaining = customersToday = walkinsToday = 0;
+ revenueSettled = true;
+ spriteNeedsUpdate = true;
+ updateSprite();
+}

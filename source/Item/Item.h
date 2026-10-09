@@ -71,6 +71,9 @@ namespace OT {
 			}
 
 		virtual void advance(double dt) {}
+		virtual void evacuateForDisaster() {}
+		virtual int disasterSaleReversal() const { return 0; }
+		bool survivesDisaster() const;
 		virtual int dailyMaintenanceCost() const { return 0; }
 
 		/// Satisfaction score in [0, 100] maintained by JudgeSystem. Defaults

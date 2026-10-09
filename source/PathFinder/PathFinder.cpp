@@ -57,7 +57,9 @@ void PathFinder::buildRoute(Route &r, Item::Item *start_item, Item::Item *end_it
 	MapSearchNode *end_node = astarsearch.GetSolutionEnd();
 	MapSearchNode *start_node = astarsearch.GetSolutionStart();
 
-	if(start_node->IsSameState(*end_node)) {
+	// IsSameState also compares journey history, but the goal copies no
+	// owner/history when a zero-hop path is found. Compare map nodes here.
+	if(start_node->mapNode == end_node->mapNode) {
 		r.add(start_item, start_node->mapNode->position.y);
 		r.add(end_item, end_node->mapNode->position.y);
 	}

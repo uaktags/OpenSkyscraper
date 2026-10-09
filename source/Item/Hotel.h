@@ -18,6 +18,7 @@ namespace OT
 			static AbstractPrototype * makeDoublePrototype();
 			static AbstractPrototype * makeSuitePrototype();
 			virtual ~Hotel();
+			virtual void evacuateForDisaster() override;
 
 			enum RoomType { kSingle = 0, kDouble = 1, kSuite = 2 };
 			enum RoomState { kClean = 0, kOccupied = 1, kDirty = 2, kInfested = 3 };

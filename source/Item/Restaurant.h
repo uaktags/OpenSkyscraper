@@ -20,6 +20,7 @@ namespace OT
 				p->icon = 12;
 			}
 			virtual ~Restaurant();
+			virtual void evacuateForDisaster() override;
 
 			virtual void init();
 

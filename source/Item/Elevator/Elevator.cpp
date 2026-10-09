@@ -12,6 +12,12 @@ using namespace OT::Item::Elevator;
 
 Elevator::~Elevator()
 {
+    while (!people.empty()) removePerson(*people.begin());
+    while (!queues.empty()) {
+        Queue *queue = *queues.begin();
+        queues.erase(queues.begin());
+        delete queue;
+    }
 	clearCars();
 }
 
@@ -631,4 +637,25 @@ void Elevator::decideCarDestination(Car *car)
 	{
 		car->setState(Car::kIdle);
 	}
+}
+
+void Elevator::evacuateForDisaster()
+{
+ // Game parked passengers through virtual removePerson before this hook.
+ while (!queues.empty()) {
+  Queue *q = *queues.begin(); queues.erase(queues.begin());
+  q->people.clear(); delete q;
+ }
+ for (Car *c : cars) {
+  c->passengers.clear();
+  c->setAltitude(c->homeFloor);
+  c->startAltitude = c->homeFloor;
+  c->destinationFloor = c->homeFloor;
+  c->direction = kNone;
+  c->state = Car::kIdle;
+  c->journeyTime = 0;
+  c->doorTicks = c->holdTicks = c->moveTicks = 0;
+  c->arrivingPlayed = c->departingPlayed = false;
+  c->arrivingSound.Stop(); c->departingSound.Stop(); c->updateSprite();
+ }
 }

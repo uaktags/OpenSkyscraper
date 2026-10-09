@@ -206,3 +206,28 @@ int Person::getWidth()
 {
 	return (type >= kHousekeeper ? 16 : 8);
 }
+
+// Cancel without delivering wait/movement stress. Virtual detachment clears
+// elevator queues/cars and stair timers before any referenced item is deleted.
+void Person::Journey::cancel()
+{
+ if (person->at) person->at->removePerson(person);
+ while (!nodes.empty()) nodes.pop();
+ item = NULL;
+ fromFloor = toFloor = 0;
+ person->pendingJourneyStress = 0;
+ person->state = Person::kIdle;
+ person->from.clear();
+ person->goingTo.clear();
+}
+
+bool Person::Journey::references(const Item::Item * target) const
+{
+ if (item == target || person->at == target) return true;
+ std::queue<Route::Node> remaining = nodes;
+ while (!remaining.empty()) {
+  if (remaining.front().item == target) return true;
+  remaining.pop();
+ }
+ return false;
+}

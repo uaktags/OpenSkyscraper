@@ -589,3 +589,14 @@ Hotel::Housekeeper::Housekeeper(Hotel *item)
 	from = "Hotel Staff";
 	goingTo = item->prototype->name;
 }
+
+void Hotel::evacuateForDisaster()
+{
+ const int previousState = roomState;
+ clearAll();
+ roomState = previousState == kOccupied ? kDirty : previousState;
+ if (previousState == kOccupied) dirtySince = game->time.absolute;
+ population = 0;
+ spriteNeedsUpdate = true;
+ updateSprite();
+}

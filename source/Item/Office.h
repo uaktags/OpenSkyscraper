@@ -24,6 +24,7 @@ namespace OT
 				p->icon = 7;
 			}
 			virtual ~Office();
+			virtual void evacuateForDisaster() override;
 
 			virtual void init();
 

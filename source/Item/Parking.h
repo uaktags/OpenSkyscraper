@@ -47,6 +47,7 @@ namespace OT {
 				p->icon  = 17;
 			}
 			virtual ~Parking();
+			virtual void evacuateForDisaster() override;
 
 			/// Driving population a parked car's driver belongs to. The EXE
 			/// admits exactly two categories (ParkingT SetupGateCount):

@@ -317,3 +317,14 @@ void Cinema::clearCustomers()
 		delete *c;
 	customers.clear();
 }
+
+void Cinema::evacuateForDisaster()
+{
+ clearCustomers();
+ open = playing = intermission = false;
+ quotaMatinee = quotaEvening = patronsToday = 0;
+ revenueSettled = true;
+ soundtrack.Stop(); soundtrackPlaying = false;
+ spriteNeedsUpdate = true;
+ updateSprite();
+}

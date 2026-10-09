@@ -37,6 +37,7 @@ namespace OT {
 				p->icon  = 15;
 			}
 			virtual ~Cathedral();
+			virtual void evacuateForDisaster() override;
 
 			virtual void init();
 			virtual void advance(double dt);

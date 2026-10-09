@@ -19,6 +19,7 @@ namespace OT {
 				p->entrance_offset = 1;
 			}
 			virtual ~Cinema();
+			virtual void evacuateForDisaster() override;
 			
 			virtual void init();
 			

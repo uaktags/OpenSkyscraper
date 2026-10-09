@@ -293,3 +293,13 @@ Path FastFood::getRandomBackgroundSoundPath()
 	// completely random.
 	return name;
 }
+
+void FastFood::evacuateForDisaster()
+{
+ clearCustomers();
+ open = false;
+ quotaRemaining = customersToday = walkinsToday = 0;
+ revenueSettled = true;
+ spriteNeedsUpdate = true;
+ updateSprite();
+}

@@ -19,6 +19,8 @@
 
 #include <algorithm>
 #include <climits>
+#include <iterator>
+#include <sstream>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -48,6 +50,7 @@ namespace
 	const int kBombBlastFloorsDown = 2;  // DestroyTenants 10c8:02bd
 	const int kBombBlastFloorsUp   = 3;
 	const int kBombBlastHalfCells  = 20;
+	const int kBombCleanupDelayFrames = 2; // E64A, also the fire-offer delay
 	const int kBombDetonateFrame   = 1200; // EXE ft 0x4B0 = 13:00
 
 	// --- Guards (GuardT seg_10f8) ---
@@ -130,10 +133,12 @@ void EventSystem::reset()
 	bombRansom = 0;
 	bombArmed = false;
 	bombCaught = false;
+	bombCleanupAt = -1;
 
 	treasureLatched = false;
 	pendingBuilds.clear();
 	rubble.clear();
+    burnedSpans.clear();
 }
 
 // ---------------------------------------------------------------- calendar
@@ -168,29 +173,43 @@ bool EventSystem::hasSecurity() const
 	return it != game->itemsByType.end() && !it->second.empty();
 }
 
-bool EventSystem::floorExtent(int floor, int & left, int & right) const
+bool EventSystem::floorExtent(int floor, int &left, int &right) const
 {
-	Game::ItemSetByInt::const_iterator it = game->itemsByFloor.find(floor);
-	if (it == game->itemsByFloor.end() || it->second.empty()) return false;
-	left = INT_MAX;
-	right = INT_MIN;
-	for (Game::ItemSet::const_iterator i = it->second.begin(); i != it->second.end(); ++i) {
-		recti r = (*i)->getRect();
-		left  = std::min(left, r.minX());
-		right = std::max(right, r.maxX());
-	}
-	return right > left;
+    left = INT_MAX;
+    right = INT_MIN;
+    // Floor records and burned records survive tenant deletion. Fronts must
+    // keep marching over these extents instead of shrinking with live rooms.
+    Game::FloorItems::const_iterator slab = game->floorItems.find(floor);
+    if (slab != game->floorItems.end() && slab->second) {
+        left = slab->second->getRect().minX();
+        right = slab->second->getRect().maxX();
+    }
+    Game::ItemSetByInt::const_iterator it = game->itemsByFloor.find(floor);
+    if (it != game->itemsByFloor.end()) for (Item::Item *item : it->second) {
+        left = std::min(left, item->getRect().minX());
+        right = std::max(right, item->getRect().maxX());
+    }
+    auto first = rubble.lower_bound(encodeTile(floor, -1000));
+    auto end = rubble.lower_bound(encodeTile(floor + 1, -1000));
+    if (first != end) {
+        int f, x;
+        decodeTile(*first, f, x); left = std::min(left, x);
+        decodeTile(*std::prev(end), f, x); right = std::max(right, x + 1);
+    }
+    return right > left;
 }
 
 int EventSystem::topBuiltFloor() const
 {
-	int top = INT_MIN;
-	for (Game::ItemSetByInt::const_iterator ii = game->itemsByFloor.begin();
-	     ii != game->itemsByFloor.end(); ++ii) {
-		if (ii->second.empty()) continue;
-		if (ii->first > top) top = ii->first;
-	}
-	return top;
+    int top = INT_MIN;
+    if (!game->floorItems.empty()) top = game->floorItems.rbegin()->first;
+    for (const auto &floor : game->itemsByFloor)
+        if (!floor.second.empty()) top = std::max(top, floor.first);
+    if (!rubble.empty()) {
+        int floor, x; decodeTile(*rubble.rbegin(), floor, x);
+        top = std::max(top, floor);
+    }
+    return top;
 }
 
 int EventSystem::lobbyHeight() const
@@ -256,6 +275,7 @@ void EventSystem::startFire()
 	game->timeWindow.showMessage(buf);
 	LOG(IMPORTANT, "Fire started on floor %d at cell %d", floor, fireOriginCell);
 
+	game->evacuateForDisaster();
 	offerFireChopper();
 }
 
@@ -332,20 +352,14 @@ void EventSystem::deployFireGuards()
 
 void EventSystem::destroyFireCell(int floor, int x)
 {
-	// Destroyed cells become rubble until rebuilt (BurnT records). No
-	// cash damage charge (the EXE's fire never touches money) — the loss
-	// is the burned buildings themselves.
-	addRubble(floor, x);
-	Game::ItemSetByInt::const_iterator it = game->itemsByFloor.find(floor);
-	if (it == game->itemsByFloor.end()) return;
-	for (Game::ItemSet::const_iterator i = it->second.begin(); i != it->second.end(); ++i) {
-		Item::Item * item = *i;
-		recti r = item->getRect();
-		if (x < r.minX() || x >= r.maxX()) continue;
-		item->evaluation = std::max(0.0, item->evaluation - 20.0);
-		for (Item::Item::People::iterator p = item->people.begin(); p != item->people.end(); ++p)
-			(*p)->addStress(10.0);
-	}
+ Game::ItemSet victims;
+ Game::ItemSetByInt::const_iterator it = game->itemsByFloor.find(floor);
+ if (it == game->itemsByFloor.end()) return;
+ for (Item::Item *item : it->second) {
+  recti r = item->getRect();
+  if (x >= r.minX() && x < r.maxX()) victims.insert(item);
+ }
+ for (Item::Item *item : victims) game->destroyItemByDisaster(item);
 }
 
 void EventSystem::stepFireFrame()
@@ -533,6 +547,7 @@ void EventSystem::offerBomb()
 	bombRansom = ransom;
 	bombArmed = false;
 	bombCaught = false;
+	bombCleanupAt = -1;
 	guardOffices.clear();
 
 	// The floor is NEVER named (B9 dead code: guards don't know it either).
@@ -565,6 +580,7 @@ void EventSystem::resolveBombResponse(bool pay)
 void EventSystem::armBomb()
 {
 	bombArmed = true;
+	game->evacuateForDisaster();
 	deployBombGuards();
 	game->timeWindow.showMessage("Security forces are hunting for the bomb. Find it before 1 o'clock!");
 }
@@ -628,12 +644,11 @@ void EventSystem::stepBombGuards()
 				g.x--;
 				if (g.floor == bombFloor && g.x == bombSlot) {
 					bombCaught = true;
-					type = Type::None;
-					guardOffices.clear();
+                    bombArmed = false;
+                    bombCleanupAt = game->time.absolute + double(kBombCleanupDelayFrames) / Time::kSimFramesPerDay;
+                    guardOffices.clear();
 					game->timeWindow.showMessage("Security found the bomb! Crisis averted.");
 					LOG(IMPORTANT, "Security caught the bomb on floor %d", bombFloor);
-					game->time.advanceToEventFrame(kCleanupFrame);
-					prevAbsolute = game->time.absolute;
 					return;
 				}
 				g.pause = kGuardSweepFrames - 1;
@@ -653,35 +668,24 @@ void EventSystem::stepBombGuards()
 
 void EventSystem::detonateBomb()
 {
-	LOG(IMPORTANT, "Bomb detonated on floor %d cell %d", bombFloor, bombSlot);
-
-	// DestroyTenants (10c8:02bd): everything touching floors
-	// [t-2 .. t+3] x cells [t-20 .. t+20] becomes rubble. No cash charge.
-	const int minF = bombFloor - kBombBlastFloorsDown;
-	const int maxF = bombFloor + kBombBlastFloorsUp;
-	const int minX = bombSlot - kBombBlastHalfCells;
-	const int maxX = bombSlot + kBombBlastHalfCells;
-
-	for (int f = minF; f <= maxF; f++)
-		for (int x = minX; x <= maxX; x++)
-			addRubble(f, x);
-
-	for (Game::ItemSet::iterator i = game->items.begin(); i != game->items.end(); ++i) {
-		Item::Item * item = *i;
-		recti r = item->getRect();
-		if (r.maxY() <= minF || r.minY() > maxF) continue;
-		if (r.maxX() <= minX || r.minX() > maxX) continue;
-		item->evaluation = std::max(0.0, item->evaluation - 60.0);
-		for (Item::Item::People::iterator p = item->people.begin(); p != item->people.end(); ++p)
-			(*p)->addStress(60.0);
-	}
-
-	game->timeWindow.showMessage("BOMB DETONATED! Extensive damage reported.");
-	type = Type::None;
-	bombArmed = false;
-	guardOffices.clear();
-	game->time.advanceToEventFrame(kCleanupFrame);
-	prevAbsolute = game->time.absolute;
+ LOG(IMPORTANT, "Bomb detonated on floor %d cell %d", bombFloor, bombSlot);
+ const int minF = bombFloor - kBombBlastFloorsDown;
+ const int maxF = bombFloor + kBombBlastFloorsUp;
+ const int minX = bombSlot - kBombBlastHalfCells;
+ const int maxX = bombSlot + kBombBlastHalfCells; // exclusive: +20 survives
+ Game::ItemSet victims;
+ for (Item::Item *item : game->items) {
+  recti r = item->getRect();
+  if (r.maxY() <= minF || r.minY() > maxF) continue;
+  if (r.maxX() <= minX || r.minX() >= maxX) continue;
+  victims.insert(item);
+ }
+ for (Item::Item *item : victims) game->destroyItemByDisaster(item);
+ game->timeWindow.showMessage("BOMB DETONATED! Extensive damage reported.");
+ bombArmed = false;
+ guardOffices.clear();
+ // E64A is two EXE frames (also the fire-offer delay).
+ bombCleanupAt = game->time.absolute + double(kBombCleanupDelayFrames) / Time::kSimFramesPerDay;
 }
 
 // ---------------------------------------------------------------- treasure
@@ -803,7 +807,15 @@ void EventSystem::advance(double dt)
 
 	// --- Bomb deadline (checked before the guard sweep: a guard can't
 	// catch it on the deadline frame) ---
-	if (type == Type::Terror && clockFrame() >= kBombDetonateFrame) {
+    if (type == Type::Terror && bombCleanupAt >= 0 && game->time.absolute + 1e-12 >= bombCleanupAt) {
+        type = Type::None;
+        guardOffices.clear();
+        bombCleanupAt = -1;
+        game->time.advanceToEventFrame(kCleanupFrame);
+        prevAbsolute = game->time.absolute;
+        return;
+    }
+	if (type == Type::Terror && bombArmed && clockFrame() >= kBombDetonateFrame) {
 		detonateBomb();
 		return;
 	}
@@ -818,7 +830,7 @@ void EventSystem::advance(double dt)
 			if (clockFrame() >= kFireEndFrame) { endFire(); break; }
 			stepFireFrame();
 			if (type == Type::Fire && fireGuardsActive) stepFireGuards();
-		} else if (type == Type::Terror) {
+		} else if (type == Type::Terror && bombArmed) {
 			stepBombGuards();
 		}
 	}
@@ -924,6 +936,11 @@ void EventSystem::encodeXML(tinyxml2::XMLPrinter & xml) const
 		r += buf;
 	}
 	xml.PushAttribute("eventRubble", r.c_str());
+    std::ostringstream spans;
+    for (const auto &floor : burnedSpans)
+        for (const auto &span : floor.second)
+            spans << floor.first << ' ' << span.first << ' ' << span.second << ' ';
+    xml.PushAttribute("eventBurnedSpans", spans.str().c_str());
 	// Active events are not persisted mid-resolution; they end on reload.
 }
 
@@ -934,6 +951,11 @@ void EventSystem::decodeXML(tinyxml2::XMLElement & xml)
 	santaX = (float)xml.DoubleAttribute("eventSantaX", 0.0);
 	santaY = (float)xml.DoubleAttribute("eventSantaY", 0.0);
 
+    burnedSpans.clear();
+    std::istringstream spans(xml.Attribute("eventBurnedSpans") ? xml.Attribute("eventBurnedSpans") : "");
+    int floor, left, right;
+    while (spans >> floor >> left >> right)
+        if (left < right) burnedSpans[floor].insert(std::make_pair(left, right));
 	rubble.clear();
 	std::string r = xml.Attribute("eventRubble") ? xml.Attribute("eventRubble") : "";
 	size_t pos = 0;
@@ -951,10 +973,66 @@ void EventSystem::decodeXML(tinyxml2::XMLElement & xml)
 	guardOffices.clear();
 	bombArmed = false;
 	bombCaught = false;
+	bombCleanupAt = -1;
 	pendingBuilds.clear();
 	// Old saves contain positions/latches only, no elapsed-frame progress
 	// to convert. Active fire/bomb and cathedral ceremonies remain transient.
 	fireFrame = 0;
 	fireFrameAccum = 0;
 	prevAbsolute = game->time.absolute;
+}
+
+bool EventSystem::hasRubble(int floor, int x) const
+{
+ return rubble.count(encodeTile(floor, x)) != 0;
+}
+
+bool EventSystem::rubbleIntersects(const recti &rect) const
+{
+ for (int f = rect.minY(); f < rect.maxY(); ++f)
+  for (int x = rect.minX(); x < rect.maxX(); ++x)
+   if (hasRubble(f, x)) return true;
+ return false;
+}
+
+void EventSystem::burnFootprint(const recti &rect)
+{
+    for (int floor = rect.minY(); floor < rect.maxY(); ++floor) {
+        burnedSpans[floor].insert(std::make_pair(rect.minX(), rect.maxX()));
+        for (int x = rect.minX(); x < rect.maxX(); ++x) addRubble(floor, x);
+    }
+}
+
+bool EventSystem::clearRubble(int floor, int x)
+{
+    if (!hasRubble(floor, x)) return false;
+    auto row = burnedSpans.find(floor);
+    int left = x, right = x + 1;
+    bool recorded = false;
+    if (row != burnedSpans.end()) {
+        for (auto span = row->second.begin(); span != row->second.end(); ++span) {
+            if (span->first <= x && x < span->second) {
+                left = span->first; right = span->second;
+                row->second.erase(span);
+                recorded = true;
+                break;
+            }
+        }
+    }
+    const auto coveredByRecord = [&](int cell) {
+        if (row == burnedSpans.end()) return false;
+        for (const auto &span : row->second)
+            if (span.first <= cell && cell < span.second) return true;
+        return false;
+    };
+    if (!recorded) {
+        // Older overlay-only saves did not retain tenant boundaries. Clear
+        // their contiguous strip without crossing newly recorded burned units.
+        while (hasRubble(floor, left - 1) && !coveredByRecord(left - 1)) --left;
+        while (hasRubble(floor, right) && !coveredByRecord(right)) ++right;
+    }
+    for (int cell = left; cell < right; ++cell)
+        if (!coveredByRecord(cell)) rubble.erase(encodeTile(floor, cell));
+    if (row != burnedSpans.end() && row->second.empty()) burnedSpans.erase(row);
+    return true;
 }

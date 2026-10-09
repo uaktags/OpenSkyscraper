@@ -20,6 +20,7 @@ namespace OT {
 				p->exit_offset = 2;
 			}
 			virtual ~Metro();
+			virtual void evacuateForDisaster() override;
 
 			virtual void init();
 

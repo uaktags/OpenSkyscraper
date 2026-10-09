@@ -149,3 +149,10 @@ void PartyHall::clearVisitors()
 }
 
 } } // namespace OT::Item
+
+void OT::Item::PartyHall::evacuateForDisaster()
+{
+ clearVisitors(); open = false; patronsToday = 0; eventSettled = true;
+ spriteNeedsUpdate = true;
+ updateSprite();
+}

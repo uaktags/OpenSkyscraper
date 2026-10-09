@@ -91,6 +91,10 @@ namespace OT {
 		Item::Item * metroStation;
 		void addItem(Item::Item * item);
 		void removeItem(Item::Item * item);
+        void destroyItemByDisaster(Item::Item *item);
+        void evacuateForDisaster();
+        void cancelTransientVip();
+        bool rejectDisasterWorldEdit();
 		bool extendFloor(int floor, int minX, int maxX, bool free = false);
 		/// Mint free stub floor slabs where a loaded tower lost them
 		/// (OpenSkyWeb ISSUE-041 self-heal). Returns true when repaired.

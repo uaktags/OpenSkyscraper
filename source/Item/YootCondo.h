@@ -21,6 +21,8 @@ namespace OT
 				p->icon = 24;
 			}
 			virtual ~YootCondo();
+			virtual int disasterSaleReversal() const override { return occupied ? rentDeposit : 0; }
+			virtual void evacuateForDisaster() override;
 
 			enum LightingConditions
 			{

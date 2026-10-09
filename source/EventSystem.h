@@ -3,6 +3,7 @@
 #include "GameObject.h"
 #include "Sprite.h"
 #include "Math/Vector2D.h"
+#include "Math/Rect.h"
 
 #include <map>
 #include <set>
@@ -73,6 +74,11 @@ namespace OT
 		/// Persist / restore across save-reload.
 		void encodeXML(tinyxml2::XMLPrinter & xml) const;
 		void decodeXML(tinyxml2::XMLElement & xml);
+        bool hasRubble(int floor, int x) const;
+        bool rubbleIntersects(const recti &rect) const;
+        bool clearRubble(int floor, int x);
+        void burnFootprint(const recti &rect);
+        void forgetItem(Item::Item *item) { pendingBuilds.erase(item); }
 
 		/// Promotion-ceremony hook (LevelT @0047-004a): re-seed the buried
 		/// treasure latch with the NEW tier's dig condition, so a basement
@@ -188,6 +194,7 @@ namespace OT
 		int    bombRansom;
 		bool   bombArmed;
 		bool   bombCaught;
+		double bombCleanupAt; // absolute day fraction; -1 until resolved
 
 		// --- buried treasure state ---
 		bool   treasureLatched; ///< true = paid/forfeited for this tier
@@ -195,6 +202,9 @@ namespace OT
 
 		// --- rubble ---
 		std::set<long> rubble;
+        // Original tenant-record boundaries for independent bulldozer strokes.
+        // Tiles remain the canonical render/placement representation.
+        std::map<int, std::set<std::pair<int, int> > > burnedSpans;
 
 		// --- sprites ---
 		Sprite fireSprite;

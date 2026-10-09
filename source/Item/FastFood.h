@@ -21,6 +21,7 @@ namespace OT
 				p->icon = 11;
 			}
 			virtual ~FastFood();
+			virtual void evacuateForDisaster() override;
 
 			virtual void init();
 

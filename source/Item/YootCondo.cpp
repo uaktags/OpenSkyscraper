@@ -78,7 +78,7 @@ void YootCondo::decodeXML(tinyxml2::XMLElement &xml)
 	Item::decodeXML(xml);
 	const bool hasPopulation = (xml.FindAttribute("population") != NULL);
 	rent = xml.IntAttribute("rent");
-	rentDeposit = xml.IntAttribute("rentDeposit");
+	rentDeposit = xml.IntAttribute("rentDeposit", xml.BoolAttribute("occupied") ? prototype->price * 2 : rent);
 	variant = xml.IntAttribute("variant");
 	lighting = (LightingConditions)xml.IntAttribute("lighting");
 	occupied = xml.BoolAttribute("occupied");
@@ -320,7 +320,7 @@ void YootCondo::removeOccupants()
 {
 	for (Person *occupant : occupants)
 	{
-		removePerson(occupant);
+        if (occupant->at == this) Item::removePerson(occupant);
 		delete occupant;
 	}
 	occupants.clear();
@@ -345,4 +345,14 @@ double YootCondo::YootCondoOccupant::actualReturnTime() const
 double YootCondo::YootCondoOccupant::actualDepartureTime() const
 {
 	return returnTime + returnJitter;
+}
+
+void YootCondo::evacuateForDisaster()
+{
+ departureQueue = decltype(departureQueue)();
+ returnQueue = decltype(returnQueue)();
+ for (auto *p : occupants) { p->state = Person::kIdle; }
+ lighting = DAYTIME;
+ spriteNeedsUpdate = true;
+ updateSprite();
 }

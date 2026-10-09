@@ -490,3 +490,22 @@ void Office::rescheduleWorkers()
 			lunchQueue.push(w);
 	}
 }
+
+void Office::evacuateForDisaster()
+{
+ // occupied is tenancy, not arrival state; preserve it and standing population.
+ arrivalQueue = decltype(arrivalQueue)();
+ departureQueue = decltype(departureQueue)();
+ lunchQueue = decltype(lunchQueue)();
+ lunchReturnQueue = decltype(lunchReturnQueue)();
+ salesLeaveQueue = decltype(salesLeaveQueue)();
+ salesReturnQueue = decltype(salesReturnQueue)();
+ workersToArrive.clear(); workersToDepart.clear(); workersToHaveLunch.clear();
+ for (Worker *w : workers) {
+  releaseParking(w->parkingUsed); w->parkingUsed = NULL;
+  w->state = Person::kIdle;
+ }
+ lit = false;
+ spriteNeedsUpdate = true;
+ updateSprite();
+}
