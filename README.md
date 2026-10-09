@@ -154,16 +154,27 @@ Known gaps
 OpenSky approximates Yoot Tower closely but not exactly, and several subsystems remain
 approximate or missing (see `doc/yoottower/game-parity.md` for the full audit):
 
-- Event Center evening events unevidenced
-- Blackout 11:00-14:00 end and hotel income 12:00 unobserved
-- Large Elevator top gear unrun
-- Maru walk-back
-- Hotel guests and venue audiences inactive in the fixtures
-- Hawaii condo residents and facility staff counts
-- Per-car rider counts not re-measured
-- Rubble/clouds/kite/dolphins/Billboard visuals not compared
-- Tokyo visitors Gathering Area export rejected by the original
-- Hotel stays not saved across reload
+- **Elevator mechanics:** the Large Elevator's top gear has never been run against the original (it
+  strides 3 floors per frame, the original stepped 2); per-car rider counts have not been re-measured
+  since the appointed-queue dispatch.
+- **Routing & transit:** People walk along floors and ride movers, but pathing uses OpenSky's A* PathFinder
+  rather than original routing score tables; floor underneath Sky Bridges remains walkable in OpenSky routing.
+- **Facilities & services:** Restroom and doctor visits update tenant satisfaction and health, but people
+  do not visually walk to restrooms/clinics and back; clinic failure dialogs lack custom popups.
+- **Hotel stays across saves:** Hotel desk queues and check-in workflows are modelled, but active room stays
+  are not preserved across save/reload (reloaded occupied rooms check out).
+- **Disaster handling:** Power blackouts follow the 11:00–14:00 demand checks, but per-transformer individual
+  breaker toggles are omitted; fires use SimTower's 2-button response dialog rather than YootTower's 3-way
+  response and burn spread model.
+- **Media & cosmetics:** Movie theaters play soundtrack audio from `Movie/*.MOV` when present, but Cinepak
+  video decoding is not supported (video stills remain static); vehicles (subway trains, parking gate cars)
+  lack animated sprites.
+- **Unverified against the original:** Event Center evening events, the end of the 11:00-14:00 blackout,
+  hotel income at 12:00, Mr. Maru's walk back, rubble, and the clouds / kite / dolphins / Billboard visuals.
+- **Population detail:** hotel guests and venue audiences are inactive in the parity fixtures; Hawaii condo
+  residents and some facility staff counts are below the original's.
+- **Export:** a Tokyo visitors tower with a Gathering Area is rejected by the original game
+  ("Plugin Check Error") when exported to `.bld`.
 
 What is being tested?
 ---------------------
