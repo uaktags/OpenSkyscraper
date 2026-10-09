@@ -48,7 +48,7 @@ namespace
 	const int kBombBlastFloorsDown = 2;  // DestroyTenants 10c8:02bd
 	const int kBombBlastFloorsUp   = 3;
 	const int kBombBlastHalfCells  = 20;
-	const int kBombDetonateFrame   = 1300; // detonates at frame 1300 = 13:00
+	const int kBombDetonateFrame   = 1200; // EXE ft 0x4B0 = 13:00
 
 	// --- Guards (GuardT seg_10f8) ---
 	const int kGuardsPerOffice = 6;
@@ -65,9 +65,10 @@ namespace
 	const int kSantaTickPixels = 10; // x -= 10 px/tick
 	const float kSantaBaseY = -60.0f * 36.0f; // world altitude ~0x84c px up (floor ~60)
 
-	// Event clock jump: frame_time = 0x5DC = 1600 = 4:00 PM, conditionally
-	// (never backward) — fire ignition 10e8:02f2, bomb resolution 10c8:02ab.
-	const int kCleanupFrame = 1600;
+	// Event cleanup: EXE ft 0x5DC = 1500 = 16:00. ExtinguishFire
+	// (10f0:02ec) jumps only if earlier; bomb resolution (10d0:02ab)
+	// writes this frame unconditionally.
+	const int kCleanupFrame = 1500;
 
 	// Guard sweep range (concilia TOWER_MIN_FLOOR / TOWER_TOP_FLOOR).
 	const int kGuardMinFloor = -20;
@@ -106,7 +107,7 @@ EventSystem::EventSystem(Game * game)
 void EventSystem::reset()
 {
 	type = Type::None;
-	prevHour = game ? game->time.hour : 0.0;
+	prevAbsolute = game ? game->time.absolute : 0.0;
 	lastDispatchDay = -1;
 	santaActive = false;
 	santaX = 0;
@@ -254,14 +255,6 @@ void EventSystem::startFire()
 	snprintf(buf, sizeof(buf), "FIRE reported on floor %d!", floor);
 	game->timeWindow.showMessage(buf);
 	LOG(IMPORTANT, "Fire started on floor %d at cell %d", floor, fireOriginCell);
-
-	// The clock jumps to 4:00 PM if it is still earlier when the fire
-	// starts (10e8:02f2), handing back the dead hours. Re-sync prevHour
-	// so the jump is not counted as elapsed fire frames.
-	if (clockFrame() < kCleanupFrame) {
-		game->jumpToHour(16.0);
-		prevHour = game->time.hour;
-	}
 
 	offerFireChopper();
 }
@@ -504,6 +497,11 @@ void EventSystem::endFire()
 
 	game->timeWindow.showMessage("The fire was stopped. The tower is damaged.");
 	LOG(IMPORTANT, "Fire extinguished");
+
+	// ExtinguishFire (10f0:02ec): skip ahead only when ft is before 16:00.
+	if (clockFrame() < kCleanupFrame)
+		game->time.advanceToEventFrame(kCleanupFrame);
+	prevAbsolute = game->time.absolute;
 }
 
 // -------------------------------------------------------------------- bomb
@@ -634,7 +632,8 @@ void EventSystem::stepBombGuards()
 					guardOffices.clear();
 					game->timeWindow.showMessage("Security found the bomb! Crisis averted.");
 					LOG(IMPORTANT, "Security caught the bomb on floor %d", bombFloor);
-					if (clockFrame() < kCleanupFrame) game->jumpToHour(16.0);
+					game->time.advanceToEventFrame(kCleanupFrame);
+					prevAbsolute = game->time.absolute;
 					return;
 				}
 				g.pause = kGuardSweepFrames - 1;
@@ -681,7 +680,8 @@ void EventSystem::detonateBomb()
 	type = Type::None;
 	bombArmed = false;
 	guardOffices.clear();
-	if (clockFrame() < kCleanupFrame) game->jumpToHour(16.0);
+	game->time.advanceToEventFrame(kCleanupFrame);
+	prevAbsolute = game->time.absolute;
 }
 
 // ---------------------------------------------------------------- treasure
@@ -762,15 +762,15 @@ void EventSystem::debugTriggerTreasure()
 
 double EventSystem::elapsedFrames() const
 {
-	// hour h = frame 100h; 1 day = 2400 frames.
-	double d = game->time.hour - prevHour;
-	if (d < 0) d += 24.0; // midnight rollover
-	return d * 100.0;
+	// Absolute time is cumulative, so this also handles midnight rollover.
+	// Capped at one day so a hitch or loaded save cannot flood the steppers.
+	return std::min(static_cast<double>(Time::kSimFramesPerDay),
+	                std::max(0.0, game->time.eventFramesSince(prevAbsolute)));
 }
 
 int EventSystem::clockFrame() const
 {
-	return (int)(game->time.hour * 100.0);
+	return game->time.eventFrame();
 }
 
 // ---------------------------------------------------------------- advance
@@ -788,7 +788,7 @@ void EventSystem::advance(double dt)
 		launchSanta();
 
 	const double frames = elapsedFrames();
-	prevHour = game->time.hour;
+	prevAbsolute = game->time.absolute;
 
 	// --- Santa fly-by (SantaT seg_11b8) ---
 	if (santaActive) {
@@ -824,7 +824,7 @@ void EventSystem::advance(double dt)
 	}
 	if (type == Type::None) fireFrameAccum = 0;
 	// Re-sync after any clock jump the event performed (cleanup 4 PM).
-	prevHour = game->time.hour;
+	prevAbsolute = game->time.absolute;
 }
 
 bool EventSystem::handleClick(int2 tile)
@@ -952,4 +952,9 @@ void EventSystem::decodeXML(tinyxml2::XMLElement & xml)
 	bombArmed = false;
 	bombCaught = false;
 	pendingBuilds.clear();
+	// Old saves contain positions/latches only, no elapsed-frame progress
+	// to convert. Active fire/bomb and cathedral ceremonies remain transient.
+	fireFrame = 0;
+	fireFrameAccum = 0;
+	prevAbsolute = game->time.absolute;
 }

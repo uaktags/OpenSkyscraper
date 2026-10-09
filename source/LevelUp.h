@@ -18,9 +18,11 @@ namespace OT
 	 * consult `minRatingToBuild()`.
 	 *
 	 * Rating internally is 0..4 which displays as 1..5 stars. The 5-star ->
-	 * TOWER (rating 5) step is a special event (the cathedral wedding) and is
-	 * not granted by the ordinary gate; its row is kept so the table stays
-	 * complete.
+	 * TOWER (rating 5) step is the cathedral wedding special event: the EXE
+	 * never promotes from 5 stars in LevelUp (1150:014d-0154), so the row is
+	 * held shut by needsWedding until Cathedral::startWedding's mid-ceremony
+	 * ratingMayIncrease() crowns the tower (mirrors the web port's
+	 * Requirements.needsWedding / meetsRequirements(..., weddingCompleted)).
 	 *
 	 * The gates are ported from the EXE's LevelUp (seg_1148 FUN_1148_0000,
 	 * byte-verified 2026-07-09) via concilia-tower's scan_promotion_flags /
@@ -39,6 +41,7 @@ namespace OT
 			bool needsSuite;       ///< At least one hotel suite built (3->4).
 			bool needsRecycling;   ///< Recycling adequate for the population (3->4, 4->5).
 			bool needsWindow;      ///< Only lands in the weekday-evening window (3->4, 4->5).
+			bool needsWedding;     ///< A cathedral wedding has been held (the 5->TOWER latch).
 			const char * summary;  ///< Short human-readable description.
 		};
 
@@ -56,6 +59,7 @@ namespace OT
 			int    vipReviews        = 0;     ///< Favorable VIP verdicts on hand (0xB923).
 			double hour              = 0.0;   ///< Game-clock hour, 0..24.
 			int    day               = 0;     ///< Absolute day; the weekend is day % 3 == 2.
+			bool   weddingCompleted  = false; ///< A cathedral wedding has been held (Cathedral::weddingCompleted).
 		};
 
 		/// Requirements that must be met to ADVANCE from `currentRating`

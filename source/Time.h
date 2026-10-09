@@ -45,6 +45,13 @@ namespace OT {
 		/// IsHoliday (game-parity.md T4).
 		enum class Calendar { SimTower, YootTower };
 
+		/// SimTower EXE frames; ft 0 is 07:00 (our stage 300).
+		static const int kSimFramesPerDay = 2600;
+		int eventFrame() const;
+		double eventFramesSince(double previousAbsolute) const;
+		/// Jump forward to an EXE frame later today; no-op if it has already passed.
+		void advanceToEventFrame(int frame);
+
 		const static double kBaseSpeed;
 		static double absoluteToHour(double a);
 		static double hourToAbsolute(double a);

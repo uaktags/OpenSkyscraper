@@ -20,6 +20,7 @@
 #include "Item/Recycling.h"
 #include "Item/Metro.h"
 #include "Item/Escalator.h"
+#include "Item/Cathedral.h"
 #include "OpenGL.h"
 
 using namespace OT;
@@ -1894,6 +1895,11 @@ void Game::ratingMayIncrease()
 	ctx.vipReviews = vipSystem.positiveReviews();
 	ctx.hour = time.hour;
 	ctx.day = time.day;
+	// TOWER latch: the 5-star -> TOWER row only opens once a cathedral
+	// wedding has been held. Cathedral::startWedding re-runs this gate
+	// mid-ceremony; the EXE never promotes from 5 stars in LevelUp
+	// (1150:014d-0154), so population alone must not crown the tower.
+	ctx.weddingCompleted = Item::Cathedral::weddingCompleted(this);
 
 	while (true)
 	{

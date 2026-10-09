@@ -31,8 +31,8 @@ namespace OT
 	 *    first (TimeT @0357 before @0373);
 	 *  - Santa fly-by: every 12th day (day % 12 == 11) at 21:00.
 	 *
-	 * The fire model runs on EXE frames (1 day = 2400 frames of the
-	 * displayed clock, hour h = frame 100h): per-floor left/right fronts
+	 * The fire model runs on EXE frames (2600 frames/day, ft 0 at
+	 * 07:00), not displayed hours: per-floor left/right fronts
 	 * advance 1 cell every 7 frames, each floor above the origin ignites
 	 * on the origin cell 80 frames per floor later, never downward, and a
 	 * front dies at the floor extent. Unfought fires hard-stop at 21:00.
@@ -137,7 +137,7 @@ namespace OT
 		int  pickDisasterFloor() const;
 		bool hasSecurity() const;
 		double elapsedFrames() const;
-		/// Current EXE clock frame (hour h = frame 100h; 1 day = 2400).
+		/// Current EXE clock frame in [0, 2600), with ft 0 at 07:00.
 		int  clockFrame() const;
 		/// Next unsearched floor for a guard's frontier, or INT_MIN when
 		/// the search is exhausted (GuardT 10f8:0701).
@@ -146,7 +146,7 @@ namespace OT
 		Type   type;
 
 		// --- calendar state ---
-		double prevHour;        ///< displayed hour of the previous advance
+		double prevAbsolute;    ///< cumulative day fraction of the previous advance
 		int    lastDispatchDay; ///< day of the last 10:00 dispatch (idempotence)
 		bool   santaActive;
 		float  santaX;

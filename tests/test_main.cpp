@@ -437,14 +437,17 @@ static void testLevelUpRules()
 
 	const LevelUp::Requirements * rTower = LevelUp::advancementRequirements(4);
 
-	// 5 stars -> TOWER is a cathedral wedding special event; the retained
-	// row supplies the UI population/facility locks but is not the landing
-	// implementation.
+	// 5 stars -> TOWER is the cathedral wedding special event: the EXE
+	// never promotes from 5 stars in LevelUp (1150:014d-0154). The row IS
+	// the landing implementation, but needsWedding holds it shut until
+	// Cathedral::startWedding's mid-ceremony ratingMayIncrease crowns the
+	// tower (JS parity: Requirements.needsWedding).
 	EXPECT(rTower != nullptr);
 	EXPECT(rTower->population == 15000);
-	EXPECT(rTower->needsSecurity);
-	EXPECT(rTower->needsMedical);
-	EXPECT(rTower->needsMetro);
+	// The EXE reads no security/medical/metro flag on this step.
+	EXPECT(!rTower->needsSecurity && !rTower->needsMedical && !rTower->needsMetro);
+	EXPECT(rTower->needsWedding);
+	EXPECT(!rTower->needsWindow); // the wedding crown lands weekend midday
 
 	// TOWER (rating 5) is the max - no advancement from rating 5.
 	const LevelUp::Requirements * rMax = LevelUp::advancementRequirements(5);
@@ -480,6 +483,25 @@ static void testLevelUpRules()
 	ctx.day = 0;
 	ctx.vipReviews = 0;
 	EXPECT(!LevelUp::meetsRequirements(*r3to4, ctx)); // missing VIP
+
+	// 5 -> TOWER: every facility flag met is NOT enough - without a held
+	// wedding the row stays shut (the pre-fix bug crowned the tower at
+	// 15,000 population with no cathedral).
+	ctx = LevelUp::PromotionContext();
+	ctx.population = 15000;
+	ctx.securityOffices = 1;
+	ctx.medicalAdequate = true;
+	ctx.metros = 1;
+	ctx.weddingCompleted = false;
+	EXPECT(!LevelUp::meetsRequirements(*rTower, ctx)); // no wedding yet
+	ctx.weddingCompleted = true;
+	EXPECT(LevelUp::meetsRequirements(*rTower, ctx)); // crowned mid-ceremony
+	ctx.metros = 0;
+	ctx.securityOffices = 0;
+	ctx.medicalAdequate = false;
+	EXPECT(LevelUp::meetsRequirements(*rTower, ctx)); // no facility flag binds
+	ctx.population = 14999;
+	EXPECT(!LevelUp::meetsRequirements(*rTower, ctx)); // the population line does
 
 	// minRatingToBuild: authentic toolbox mapping, the rest 0.
 	// Retail shops gate at 3 stars (SimTower wiki star-rating table;
@@ -3002,6 +3024,55 @@ static void testYootGrades()
 	EXPECT(kegon.vips.size() == 3u && kegon.vips[2].vipFlag == 256u && kegon.vips[2].beginMinute == 600);
 }
 
+static void testSimTowerEventClock()
+{
+	using OT::Time;
+	struct TestTime : public Time { using Time::set; };
+	TestTime t;
+	EXPECT(!Time::linearClock());
+	EXPECT(Time::kSimFramesPerDay == 2600);
+
+	const int stages[] = {0, 299, 300, 540, 700, 1499, 1500, 1800, 2300, 2599, 2600, 2900};
+	const int frames[] = {2300, 2599, 0, 240, 400, 1199, 1200, 1500, 2000, 2299, 2300, 0};
+	for (unsigned i = 0; i < sizeof(stages) / sizeof(stages[0]); ++i) {
+		t.set((stages[i] + 0.25) / 2600.0);
+		EXPECT(t.eventFrame() == frames[i]);
+	}
+	t.set(Time::hourToAbsolute(10.0));
+	EXPECT(t.eventFrame() == 240);
+	const double ignition = t.absolute;
+	t.set(Time::hourToAbsolute(13.0));
+	EXPECT(t.eventFrame() == 1200);
+	EXPECT_NEAR(t.eventFramesSince(ignition), 960.0, 1e-9);
+	EXPECT_NEAR(t.eventFramesSince(Time::hourToAbsolute(12.0)), 800.0, 1e-9);
+	t.set(Time::hourToAbsolute(21.0));
+	EXPECT(t.eventFrame() == 2000);
+	EXPECT_NEAR(t.eventFramesSince(ignition), 1760.0, 1e-9);
+	t.set(Time::hourToAbsolute(7.0));
+	EXPECT_NEAR(t.eventFramesSince(Time::hourToAbsolute(1.0)), 200.0, 1e-9);
+	t.set(1.0 + 0.5 / 2600.0);
+	EXPECT_NEAR(t.eventFramesSince(1.0 - 0.5 / 2600.0), 1.0, 1e-9);
+	EXPECT_NEAR(t.eventFramesSince(t.absolute), 0.0, 1e-12);
+
+	// Cleanup preserves the disaster day and does not count its skip as a tick.
+	t.set(83.0 + Time::hourToAbsolute(10.0));
+	t.advanceToEventFrame(1500);
+	EXPECT_NEAR(t.absolute, 83.0 + Time::hourToAbsolute(16.0), 1e-12);
+	EXPECT_NEAR(t.hour, 16.0, 1e-9);
+	const double cleanup = t.absolute;
+	t.advanceToEventFrame(1500);
+	EXPECT_NEAR(t.absolute, cleanup, 1e-12);
+	EXPECT_NEAR(t.dta, 0.0, 1e-12);
+	// A cleanup after 16:00 never moves the clock (no 23-hour leap).
+	t.set(59.0 + Time::hourToAbsolute(17.0));
+	const double late = t.absolute;
+	t.advanceToEventFrame(1500);
+	EXPECT_NEAR(t.absolute, late, 1e-12);
+	// Compound float error at an hour anchor must not drop a frame.
+	t.set(Time::hourToAbsolute(8.35));
+	EXPECT(t.eventFrame() == 108);
+}
+
 int main()
 {
 	testTdtLoader();
@@ -3053,6 +3124,7 @@ int main()
 	testYootUnlocks();
 	testYootGrades();
 	testOspAttrCompat();
+	testSimTowerEventClock();
     if (g_failures > 0)
     {
         std::cerr << g_failures << " test(s) failed\n";

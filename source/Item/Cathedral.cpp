@@ -25,7 +25,7 @@ static const int    kCoupleGroomCell     = 27;    // the groom's start cell (28-
 static const int    kCoupleMeetCell      = 13;    // they meet at cell 13 and hold the ceremony there
 static const double kCoupleStepFrames    = 20.0;  // AnimateWeddingCouple: one script step per 20 frames
 static const int    kCoupleCounterMax    = 1000;  // held pose forever (EXE caps the counter)
-static const double kSimFramesPerDay     = 2400.0;// EXE clock: 2400 frames/day, 100 frames/hour
+static const double kSimFramesPerDay     = Time::kSimFramesPerDay; // EXE: 2600 frames/day
 
 Cathedral::~Cathedral()
 {

@@ -105,6 +105,32 @@ Time::Time()
 	calendar = Calendar::SimTower;
 }
 
+int Time::eventFrame() const
+{
+	// hourToAbsolute() accumulates a few ULPs of error, so an exact hour
+	// anchor can land just below its stage (e.g. 13:00 or 8:21). The JS port
+	// absorbs this with the same epsilon; fractional frames still floor.
+	const double stage = floor(absolute * kSimFramesPerDay + 1e-6);
+	const int frame = static_cast<int>(fmod(stage - 300, kSimFramesPerDay));
+	return frame < 0 ? frame + kSimFramesPerDay : frame;
+}
+
+double Time::eventFramesSince(double previousAbsolute) const
+{
+	return (absolute - previousAbsolute) * kSimFramesPerDay;
+}
+
+void Time::advanceToEventFrame(int frame)
+{
+	assert(frame >= 0 && frame < kSimFramesPerDay);
+	const double fraction = ((frame + 300) % kSimFramesPerDay) /
+	                        static_cast<double>(kSimFramesPerDay);
+	const double target = floor(absolute) + fraction;
+	// Forward only, same calendar day: the EXE rewrites its frame counter
+	// without touching the day, and every reachable caller runs before 16:00.
+	set(target > absolute ? target : absolute); // a skipped jump counts as no tick
+}
+
 int Time::dayOfYear() const
 {
 	const int d = (int)floor(absolute) % 12;

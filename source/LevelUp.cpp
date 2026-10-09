@@ -27,19 +27,23 @@ namespace
 	// Index 0 = advancing from 1 star to 2 stars (rating 0 -> 1).
 	// Population thresholds stay authentic (300/1000/5000/10000/15000).
 	// Field order: population, needsSecurity, needsMedical, needsMetro,
-	// needsVip, needsSuite, needsRecycling, needsWindow, summary.
+	// needsVip, needsSuite, needsRecycling, needsWindow, needsWedding,
+	// summary.
 	// 2->3: security only, any hour. 3->4: suite + recycling + medical +
 	// VIP, weekday evening. 4->5: metro + recycling + medical, weekday
 	// evening (no VIP/suite re-check — the EXE reads neither 0xB923 nor
-	// 0xB92B there). 5->TOWER is the cathedral wedding special event, not
-	// granted by this table; its row is retained for the lock/UI lookups.
+	// 0xB92B there). 5->TOWER is the cathedral wedding special event: the
+	// EXE never promotes from 5 stars in LevelUp (1150:014d-0154), so the
+	// row is held shut by needsWedding until Cathedral::startWedding's
+	// mid-ceremony ratingMayIncrease crowns the tower (JS parity:
+	// Requirements.needsWedding / meetsRequirements(..., weddingCompleted)).
 	const LevelUp::Requirements kAdvancement[] = {
-		{    0, false, false, false, false, false, false, false, "Starting tower"                        }, // rating 0 (1 star) - always
-		{  300, false, false, false, false, false, false, false, "Reach 300 population"                  }, // 1 -> 2 stars
-		{ 1000, true,  false, false, false, false, false, false, "1000 population + Security Office"     }, // 2 -> 3 stars
-		{ 5000, false, true,  false, true,  true,  true,  true,  "5000 population + Suite, Recycling & Medical adequacy + VIP approval (weekday evening)" }, // 3 -> 4 stars
-		{10000, false, true,  true,  false, false, true,  true,  "10000 population + Metro, Recycling & Medical adequacy (weekday evening)"             }, // 4 -> 5 stars
-		{15000, true,  true,  true,  false, false, false, false, "15,000 population + Cathedral (TOWER rating)" }, // 5 -> TOWER (wedding event; delegated)
+		{    0, false, false, false, false, false, false, false, false, "Starting tower"                        }, // rating 0 (1 star) - always
+		{  300, false, false, false, false, false, false, false, false, "Reach 300 population"                  }, // 1 -> 2 stars
+		{ 1000, true,  false, false, false, false, false, false, false, "1000 population + Security Office"     }, // 2 -> 3 stars
+		{ 5000, false, true,  false, true,  true,  true,  true,  false,  "5000 population + Suite, Recycling & Medical adequacy + VIP approval (weekday evening)" }, // 3 -> 4 stars
+		{10000, false, true,  true,  false, false, true,  true,  false,  "10000 population + Metro, Recycling & Medical adequacy (weekday evening)"             }, // 4 -> 5 stars
+		{15000, false, false, false, false, false, false, false, true,  "15,000 population + Cathedral wedding (TOWER rating)" }, // 5 -> TOWER (cathedral wedding only; the EXE reads no facility flags here)
 	};
 
 	struct ItemLock { const char * id; int minRating; };
@@ -154,6 +158,7 @@ bool LevelUp::meetsRequirements(const Requirements & req,
 	if (req.needsMetro     && ctx.metros          <= 0)  return false;
 	if (req.needsVip       && ctx.vipReviews      <= 0)  return false;
 	if (req.needsWindow    && !promotionWindowOpen(ctx.hour, ctx.day)) return false;
+	if (req.needsWedding   && !ctx.weddingCompleted)            return false;
 	return true;
 }
 
