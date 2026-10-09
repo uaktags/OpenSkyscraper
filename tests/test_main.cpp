@@ -2782,11 +2782,11 @@ static std::vector<uint8_t> buildTdtFixture()
 	std::vector<uint8_t> b;
 	// Header (560 bytes).
 	put16(b, 0x2400);      // version magic
-	put16(b, 2);           // level: 2 stars
-	put32(b, 2000000000L); // balance: stored x100 -> $20,000,000
+	put16(b, 5);           // level: 5 stars
+	put32(b, 946059L);     // balance: $100 units -> $94,605,900
 	putZeros(b, 12);       // otherIncome, constructionCosts, lastQuarterMoney
 	put16(b, 0);           // frameTime: 0 = 7:00 AM in TDT terms
-	put32(b, 5);           // currentDay
+	put32(b, 150);         // 1st WD / 3Q / year 13
 	put16(b, 0);           // unknown
 	put16(b, 0);           // lobbyHeight?
 	putZeros(b, 8);        // unknown x8
@@ -2846,8 +2846,8 @@ static std::vector<uint8_t> buildTdtFixture()
 	put8(b, 10); put8(b, 20); putZeros(b, 6); // 8 car homes (u8 each): 10,20,10,10,10,10,10,10
 	putZeros(b, 3140 + 324 * 21 + 348);          // built-shaft payload (spanned)
 	// Slot 1: built express, floors 10..100, stopping only at 10/15/30/100.
-	// The retail game sizes an express payload by STOPS, not span
-	// (harness-measured): 3140 + 324*4 + 348 here. A wrong rule desyncs slot 2.
+	// The EXE allocates express payload by geometric slots, even if disabled:
+	// 10,24,39,54,69,84,99 (7 slots), not the four enabled bitmap stops.
 	put8(b, 1);      // used
 	put8(b, 0);      // type: express
 	put8(b, 42);     // capacity byte
@@ -2858,10 +2858,14 @@ static std::vector<uint8_t> buildTdtFixture()
 	put8(b, 10);     // bottom floor
 	for (int f = 0; f < 120; f++) put8(b, (f == 10 || f == 15 || f == 30 || f == 100) ? 1 : 0);
 	put8(b, 10); putZeros(b, 7); // 8 car homes
-	putZeros(b, 3140 + 324 * 4 + 348);
+	putZeros(b, 3140 + 324 * 7 + 348);
 	for (int s = 2; s < 24; s++) putZeros(b, 194); // empty slots: header only
-	// Finance + parking blocks (not imported, walked past).
-	putZeros(b, 132);
+	// EXE c0ba block, then c112 accounting (ten categories + saved total).
+	putZeros(b, 88);
+	put32(b, 12210); put32(b, 65); put32(b, 348); put32(b, 28);
+	put32(b, 480); put32(b, 1961); put32(b, 140); put32(b, 50);
+	put32(b, 120); put32(b, 0); put32(b, 15402);
+	putZeros(b, 132 - 44);
 	putZeros(b, 2 + 512 * 2);
 	// Stairs table: one stairs flight, one escalator, one two-story escalator.
 	put8(b, 1); put8(b, 1); put16(b, 100); put16(b, 10); putZeros(b, 4);
@@ -2891,9 +2895,11 @@ static void testTdtLoader()
 	std::string error;
 	EXPECT(OT::Tdt::loadFile(path, tdt, error));
 	EXPECT(error.empty());
-	EXPECT(tdt.level == 2);
-	EXPECT(tdt.balance == 2000000000L);
-	EXPECT(tdt.frameTime == 0 && tdt.currentDay == 5);
+	EXPECT(tdt.level == 5);
+	EXPECT(tdt.balance == 946059L);
+	EXPECT(tdt.frameTime == 0 && tdt.currentDay == 150);
+	EXPECT(tdt.populationValid && tdt.population == 15402);
+	EXPECT(tdt.countT[0] == 12210 && tdt.countT[1] == 65);
 	EXPECT(tdt.elevatorsValid && tdt.stairsValid);
 	EXPECT(tdt.elevators.size() == 2);
 	EXPECT(tdt.elevators[0].type == 1 && tdt.elevators[0].cars == 2);
@@ -2904,11 +2910,24 @@ static void testTdtLoader()
 	std::vector<std::string> report;
 	const std::string xml = OT::Tdt::toTowerXml(tdt, report);
 
-	// Root attributes: funds /100, rating = level-1, time = day + (frame+300)/2600.
-	EXPECT(xml.find("funds=\"20000000\"") != std::string::npos);
-	EXPECT(xml.find("rating=\"1\"") != std::string::npos);
-	EXPECT(xml.find("time=\"5.115385\"") != std::string::npos);
+	// HUD regression uses the reported SCHMITT values in a synthetic save;
+	// the distributed real SCHMITT fixture is an earlier snapshot.
+	EXPECT(xml.find("funds=\"94605900\"") != std::string::npos);
+	EXPECT(xml.find("rating=\"4\"") != std::string::npos);
+	EXPECT(xml.find("time=\"150.11538461538461\"") != std::string::npos);
 	EXPECT(xml.find("tool=\"inspector\"") != std::string::npos);
+
+	{
+		OT::Tdt::TdtData state = tdt;
+		state.floors.clear();
+		OT::Tdt::FloorRec fr; fr.index=10; fr.leftEdge=187; fr.rightEdge=260;
+		fr.tenants = {{187,196,7,16,0,1}, {199,211,9,17,0,1}, {211,214,3,16,0,1}};
+		state.floors.push_back(fr);
+		const std::string rooms = OT::Tdt::toTowerXml(state, report);
+		EXPECT(rooms.find("occupied=\"0\"") != std::string::npos);
+		EXPECT(rooms.find("occupied=\"1\"") != std::string::npos);
+		EXPECT(rooms.find("hosted=\"1\" roomState=\"1\"") != std::string::npos);
+	}
 
 	// Ground lobby at checked coordinates: tile 180 -> x -7, TDT 10 -> y 0.
 	EXPECT(xml.find("type=\"lobby\" x=\"-7\" y=\"0\" evaluation=\"50.0\" width=\"20\" height=\"1\"") != std::string::npos);
@@ -3737,7 +3756,8 @@ static int testDisasterScenarios() {
  }
  // Batch 3 (harness only; not part of OpenSkyTests): credits clamp at INT_MAX,
  // disaster-offer days are day%60==59 or day%84==83.
- resetDisasterScenario(g);g.transferFunds(INT_MAX,"clamp","");DISASTER_CHECK(g.funds==INT_MAX);g.transferFunds(1000,"clamp","");DISASTER_CHECK(g.funds==INT_MAX);
+ resetDisasterScenario(g);g.transferFunds(9999999900LL,"clamp","");DISASTER_CHECK(g.funds==9999999900LL);g.transferFunds(1000,"clamp","");DISASTER_CHECK(g.funds==9999999900LL);
+ { tinyxml2::XMLPrinter p; g.encodeXML(p); tinyxml2::XMLDocument d; DISASTER_CHECK(d.Parse(p.CStr())==tinyxml2::XML_SUCCESS); g.decodeXML(d); DISASTER_CHECK(g.funds==9999999900LL); DISASTER_CHECK(g.money.balance==9999999900LL); DISASTER_CHECK(g.money.quarterIncome==9997999900LL); }
  setDisasterTime(g,59+Time::hourToAbsolute(10));DISASTER_CHECK(g.isDisasterOfferDay());
  setDisasterTime(g,83+Time::hourToAbsolute(10));DISASTER_CHECK(g.isDisasterOfferDay());
  setDisasterTime(g,10+Time::hourToAbsolute(10));DISASTER_CHECK(!g.isDisasterOfferDay());
@@ -4863,7 +4883,14 @@ static void testBatch6Placement(OT::Game &g)
  g.clearWorld(); EXPECT(g.lobbyHeightLock==0);
  // Real-fixture TDT load (only where the Concilia fixture exists; never copied into the repo).
  {
-  const std::string fixture="/tmp/concilia/repo/tests/fixtures/SCHMITT.TDT";
+  struct Snapshot { const char *name; int64_t funds; int population, rating, day, frame; };
+  const Snapshot snapshots[] = {
+   {"SCHMITT", 93560900LL, 15401, 4, 148, 2174},
+   {"BARKLE4D", 278104600LL, 5807, 3, 2675, 1439},
+   {"THEECSTA", 1419732100LL, 23176, 5, 66, 1256}
+  };
+  for (const Snapshot &snapshot : snapshots) {
+  const std::string fixture=std::string("/tmp/concilia/repo/tests/fixtures/")+snapshot.name+".TDT";
   std::ifstream probe(fixture.c_str(), std::ios::binary);
   if (!probe.good()) {
    std::cout << "SKIP: real-fixture TDT load (" << fixture << " not present)\n";
@@ -4880,12 +4907,36 @@ static void testBatch6Placement(OT::Game &g)
    const int ramps=occurrences("type=\"parkingramp\""), bays=occurrences("type=\"parking\"");
    tinyxml2::XMLDocument doc; EXPECT(doc.Parse(xml.c_str(), xml.size())==tinyxml2::XML_SUCCESS);
    reset(); g.decodeXML(doc);
+   EXPECT(g.funds==snapshot.funds && g.money.balance==snapshot.funds);
+   EXPECT(g.population==snapshot.population && g.countT.population==snapshot.population);
+   for (int c=0;c<10;++c) EXPECT(g.countT.cat[c]==tdt.countT[c]);
+   EXPECT(g.rating==snapshot.rating);
+   EXPECT(g.time.day==snapshot.day%3);
+   EXPECT(g.time.quarter==(snapshot.day/3)%4+1);
+   EXPECT(g.time.year==snapshot.day/12+1);
+   EXPECT(g.time.eventFrame()==snapshot.frame);
+   EXPECT(g.time.dta==0);
    EXPECT((int)g.itemsByType["parkingramp"].size()==ramps);
    Item::Parking::recomputeAllChains(&g);
    bool rampOnB1=false; for (auto *r : g.itemsByType["parkingramp"]) if (r->position.y==-1) rampOnB1=true;
    int usable=0; for (auto *p : g.itemsByType["parking"]) usable+=static_cast<Item::Parking *>(p)->usableSpaces();
-   std::cout << "SCHMITT.TDT: floors=" << tdtFloors << " tenants=" << tdtTenants << " ramps=" << ramps << " bays=" << bays << " usable=" << usable << "\n";
+   std::cout << snapshot.name << ".TDT: funds=" << g.funds << " pop=" << g.population << " stars=" << g.rating+1 << " day=" << snapshot.day << " frame=" << g.time.eventFrame() << " floors=" << tdtFloors << " tenants=" << tdtTenants << " ramps=" << ramps << " bays=" << bays << " usable=" << usable << "\n";
    if (ramps>0 && bays>0 && rampOnB1) EXPECT(usable>0);
+   if (std::string(snapshot.name)=="SCHMITT") {
+    // Same layout with the supplied HUD snapshot's accounting values.
+    // Do not rewrite the real fixture or special-case its name in the loader.
+    tdt.balance=946059; tdt.currentDay=150; tdt.frameTime=0;
+    tdt.countT[1]=65; tdt.population=15402;
+    const std::string hudXml=Tdt::toTowerXml(tdt,report);
+    tinyxml2::XMLDocument hudDoc; EXPECT(hudDoc.Parse(hudXml.c_str())==tinyxml2::XML_SUCCESS);
+    reset(); g.decodeXML(hudDoc);
+    EXPECT(g.funds==94605900 && g.money.balance==94605900);
+    EXPECT(g.population==15402 && g.countT.population==15402);
+    EXPECT(g.rating==4);
+    EXPECT(g.time.day==0 && g.time.quarter==3 && g.time.year==13);
+    EXPECT(g.time.eventFrame()==0);
+   }
+  }
   }
  }
  std::cout << "Batch 6 C++ placement scenarios completed\n";

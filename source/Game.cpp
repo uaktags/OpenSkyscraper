@@ -2,6 +2,7 @@
 /* Copyright (c) 2026 OpenSkyscraper contributors */
 #include <cmath>
 #include <cassert>
+#include <cstdlib>
 #include <algorithm>
 #include <chrono>
 #include <TGUI/Widgets/Label.hpp>
@@ -1911,7 +1912,7 @@ void Game::seedNewTower()
 	poi.x = 0;
 	poi.y = 200;
 	updateRoutes();
-	LOG(IMPORTANT, "seeded new tower (%s, funds $%d, %d stars)", activeRules.displayName(), funds, rating + 1);
+	LOG(IMPORTANT, "seeded new tower (%s, funds $%lld, %d stars)", activeRules.displayName(), (long long)funds, rating + 1);
 }
 
 void Game::applyNewTowerProfile()
@@ -2087,7 +2088,7 @@ void Game::encodeXML(tinyxml2::XMLPrinter & xml)
 {
 	xml.OpenElement("tower");
 	xml.PushAttribute("accountingCycle", lastAccountingQuarter);
-	xml.PushAttribute("funds", funds);
+	xml.PushAttribute("funds", std::to_string(funds).c_str());
 	xml.PushAttribute("rating", rating);
 	if (lobbyHeightLock > 0) xml.PushAttribute("lobbyHeightLock", lobbyHeightLock);
 	xml.PushAttribute("time", time.absolute);
@@ -2126,41 +2127,41 @@ void Game::encodeXML(tinyxml2::XMLPrinter & xml)
 	eventSystem.encodeXML(xml);
 
 	xml.OpenElement("money");
-	xml.PushAttribute("todayIncome", money.todayIncome);
-	xml.PushAttribute("todayExpenses", money.todayExpenses);
-	xml.PushAttribute("yesterdayIncome", money.yesterdayIncome);
-	xml.PushAttribute("yesterdayExpenses", money.yesterdayExpenses);
-	xml.PushAttribute("lastQuarterBalance", money.lastQuarterBalance);
-	xml.PushAttribute("quarterIncome", money.quarterIncome);
-	xml.PushAttribute("quarterExpenses", money.quarterExpenses);
-	for (std::map<std::string, int>::const_iterator i = money.todayTotalsByCategory.begin(); i != money.todayTotalsByCategory.end(); i++) {
+	xml.PushAttribute("todayIncome", std::to_string(money.todayIncome).c_str());
+	xml.PushAttribute("todayExpenses", std::to_string(money.todayExpenses).c_str());
+	xml.PushAttribute("yesterdayIncome", std::to_string(money.yesterdayIncome).c_str());
+	xml.PushAttribute("yesterdayExpenses", std::to_string(money.yesterdayExpenses).c_str());
+	xml.PushAttribute("lastQuarterBalance", std::to_string(money.lastQuarterBalance).c_str());
+	xml.PushAttribute("quarterIncome", std::to_string(money.quarterIncome).c_str());
+	xml.PushAttribute("quarterExpenses", std::to_string(money.quarterExpenses).c_str());
+	for (std::map<std::string, int64_t>::const_iterator i = money.todayTotalsByCategory.begin(); i != money.todayTotalsByCategory.end(); i++) {
 		xml.OpenElement("today");
 		xml.PushAttribute("category", i->first.c_str());
-		xml.PushAttribute("total", i->second);
+		xml.PushAttribute("total", std::to_string(i->second).c_str());
 		xml.CloseElement();
 	}
-	for (std::map<std::string, int>::const_iterator i = money.yesterdayTotalsByCategory.begin(); i != money.yesterdayTotalsByCategory.end(); i++) {
+	for (std::map<std::string, int64_t>::const_iterator i = money.yesterdayTotalsByCategory.begin(); i != money.yesterdayTotalsByCategory.end(); i++) {
 		xml.OpenElement("yesterday");
 		xml.PushAttribute("category", i->first.c_str());
-		xml.PushAttribute("total", i->second);
+		xml.PushAttribute("total", std::to_string(i->second).c_str());
 		xml.CloseElement();
 	}
 	for (std::vector<Money::DaySummary>::const_iterator i = money.recentDays.begin(); i != money.recentDays.end(); i++) {
 		xml.OpenElement("recentDay");
-		xml.PushAttribute("income", i->income);
-		xml.PushAttribute("expenses", i->expenses);
-		for (std::map<std::string, int>::const_iterator c = i->totalsByCategory.begin(); c != i->totalsByCategory.end(); c++) {
+		xml.PushAttribute("income", std::to_string(i->income).c_str());
+		xml.PushAttribute("expenses", std::to_string(i->expenses).c_str());
+		for (std::map<std::string, int64_t>::const_iterator c = i->totalsByCategory.begin(); c != i->totalsByCategory.end(); c++) {
 			xml.OpenElement("category");
 			xml.PushAttribute("name", c->first.c_str());
-			xml.PushAttribute("total", c->second);
+			xml.PushAttribute("total", std::to_string(c->second).c_str());
 			xml.CloseElement();
 		}
 		xml.CloseElement();
 	}
-	for (std::map<std::string, int>::const_iterator i = money.quarterTotalsByCategory.begin(); i != money.quarterTotalsByCategory.end(); i++) {
+	for (std::map<std::string, int64_t>::const_iterator i = money.quarterTotalsByCategory.begin(); i != money.quarterTotalsByCategory.end(); i++) {
 		xml.OpenElement("quarter");
 		xml.PushAttribute("category", i->first.c_str());
-		xml.PushAttribute("total", i->second);
+		xml.PushAttribute("total", std::to_string(i->second).c_str());
 		xml.CloseElement();
 	}
 	xml.CloseElement();
@@ -2172,6 +2173,12 @@ void Game::encodeXML(tinyxml2::XMLPrinter & xml)
 	}
 
 	xml.CloseElement();
+}
+
+static int64_t moneyAttribute(const tinyxml2::XMLElement *e, const char *name, int64_t fallback = 0)
+{
+	const char *value = e->Attribute(name);
+	return value ? std::strtoll(value, NULL, 10) : fallback;
 }
 
 void Game::decodeXML(tinyxml2::XMLDocument & xml)
@@ -2228,36 +2235,36 @@ void Game::decodeXML(tinyxml2::XMLDocument & xml)
 
 	clearWorld();
 
-	setFunds(root->IntAttribute("funds"));
+	setFunds(moneyAttribute(root, "funds"));
 	money.clear(funds);
 	if (tinyxml2::XMLElement * moneyElement = root->FirstChildElement("money")) {
-		money.todayIncome = moneyElement->IntAttribute("todayIncome");
-		money.todayExpenses = moneyElement->IntAttribute("todayExpenses");
-		money.yesterdayIncome = moneyElement->IntAttribute("yesterdayIncome");
-		money.yesterdayExpenses = moneyElement->IntAttribute("yesterdayExpenses");
-		money.lastQuarterBalance = moneyElement->IntAttribute("lastQuarterBalance", money.balance);
+		money.todayIncome = moneyAttribute(moneyElement, "todayIncome");
+		money.todayExpenses = moneyAttribute(moneyElement, "todayExpenses");
+		money.yesterdayIncome = moneyAttribute(moneyElement, "yesterdayIncome");
+		money.yesterdayExpenses = moneyAttribute(moneyElement, "yesterdayExpenses");
+		money.lastQuarterBalance = moneyAttribute(moneyElement, "lastQuarterBalance", money.balance);
 		money.quarterStartBalance = money.lastQuarterBalance;
-		money.quarterIncome = moneyElement->IntAttribute("quarterIncome", 0);
-		money.quarterExpenses = moneyElement->IntAttribute("quarterExpenses", 0);
+		money.quarterIncome = moneyAttribute(moneyElement, "quarterIncome", 0);
+		money.quarterExpenses = moneyAttribute(moneyElement, "quarterExpenses", 0);
 		for (tinyxml2::XMLElement * e = moneyElement->FirstChildElement("today"); e; e = e->NextSiblingElement("today")) {
 			const char * category = e->Attribute("category");
-			if (category) money.todayTotalsByCategory[category] = e->IntAttribute("total");
+			if (category) money.todayTotalsByCategory[category] = moneyAttribute(e, "total");
 		}
 		for (tinyxml2::XMLElement * e = moneyElement->FirstChildElement("yesterday"); e; e = e->NextSiblingElement("yesterday")) {
 			const char * category = e->Attribute("category");
-			if (category) money.yesterdayTotalsByCategory[category] = e->IntAttribute("total");
+			if (category) money.yesterdayTotalsByCategory[category] = moneyAttribute(e, "total");
 		}
 		for (tinyxml2::XMLElement * e = moneyElement->FirstChildElement("quarter"); e; e = e->NextSiblingElement("quarter")) {
 			const char * category = e->Attribute("category");
-			if (category) money.quarterTotalsByCategory[category] = e->IntAttribute("total");
+			if (category) money.quarterTotalsByCategory[category] = moneyAttribute(e, "total");
 		}
 		for (tinyxml2::XMLElement * e = moneyElement->FirstChildElement("recentDay"); e; e = e->NextSiblingElement("recentDay")) {
 			Money::DaySummary day;
-			day.income = e->IntAttribute("income");
-			day.expenses = e->IntAttribute("expenses");
+			day.income = moneyAttribute(e, "income");
+			day.expenses = moneyAttribute(e, "expenses");
 			for (tinyxml2::XMLElement * c = e->FirstChildElement("category"); c; c = c->NextSiblingElement("category")) {
 				const char * category = c->Attribute("name");
-				if (category) day.totalsByCategory[category] = c->IntAttribute("total");
+				if (category) day.totalsByCategory[category] = moneyAttribute(c, "total");
 			}
 			money.recentDays.push_back(day);
 		}
@@ -2269,6 +2276,9 @@ void Game::decodeXML(tinyxml2::XMLDocument & xml)
 	yootSecretItems = root->UnsignedAttribute("yootSecretItems", 0);
 	activeRules.setSecretUnlocked((yootSecretItems & 1) != 0);
 	time.set(root->DoubleAttribute("time"));
+	time.prev_absolute = time.absolute;
+	time.prev_hour = time.hour;
+	time.dta = 0;
 	lastAccountingDay = (int)floor(time.absolute);
 	lastJudgeDay = (int)floor(time.absolute) - (time.hour < 5.0 ? 1 : 0);
 	const int currentCycle = (int)floor(time.absolute / 3.0);
@@ -2292,6 +2302,15 @@ void Game::decodeXML(tinyxml2::XMLDocument & xml)
 	eventSystem.decodeXML(*root);
 
 	const char * savedCountT = root->Attribute("countT");
+
+	tinyxml2::XMLElement * e = root->FirstChildElement("item");
+	while (e) {
+		Item::Item * item = itemFactory.make(*e);
+		// YootTower-only types in a save loaded under another ruleset are
+		// rejected by the factory (NULL) and skipped here.
+		if (item) addItem(item);
+		e = e->NextSiblingElement("item");
+	}
 	if (savedCountT) {
 		int v[10] = {0};
 		sscanf(savedCountT, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d",
@@ -2302,14 +2321,6 @@ void Game::decodeXML(tinyxml2::XMLDocument & xml)
 		countT.population = root->IntAttribute("countPopulation", sum);
 	}
 
-	tinyxml2::XMLElement * e = root->FirstChildElement("item");
-	while (e) {
-		Item::Item * item = itemFactory.make(*e);
-		// YootTower-only types in a save loaded under another ruleset are
-		// rejected by the factory (NULL) and skipped here.
-		if (item) addItem(item);
-		e = e->NextSiblingElement("item");
-	}
 	// Old saves carry no CountT: derive it once from item state.
 	if (!savedCountT) recomputeCountT();
 	medicalAdequate = root->BoolAttribute("medicalAdequate", true);
@@ -2318,7 +2329,10 @@ void Game::decodeXML(tinyxml2::XMLDocument & xml)
 	rebuildVenueLists();
 	vipSystem.relink();
 	Item::Parking::relinkAll(this);
-	populationNeedsUpdate = true;
+	setRating(root->IntAttribute("rating"));
+	population = countT.population;
+	timeWindow.updatePopulation();
+	populationNeedsUpdate = false;
 	// Loaded floors decode their holes after the graph links were made;
 	// rebuild every level's horizontal links against the real coverage.
 	if (activeRules.profile().yootWorld)
@@ -2344,28 +2358,28 @@ void Game::settleDailyAccounting()
 	timeWindow.updateMoneyStats();
 }
 
-void Game::transferFunds(int f, std::string category, std::string message)
+void Game::transferFunds(int64_t f, std::string category, std::string message)
 {
 	if (f > 0) {
 		// EXE clamp 1180:13f2: every credit limits balance+credit to
 		// 99,999,999 internal $100 units ($9,999,999,900). Balances are held
-		// as 32-bit dollars here, so the effective ceiling is INT_MAX.
-		const long long cap = std::min<long long>(9999999900LL, (long long)INT_MAX);
+		// as 64-bit dollars here so the original ceiling is representable.
+		const long long cap = 9999999900LL;
 		const long long room = cap - (long long)money.balance;
-		f = room <= 0 ? 0 : (int)std::min<long long>((long long)f, room);
+		f = room <= 0 ? 0 : std::min<long long>((long long)f, room);
 	}
 	money.record(f, category);
 	setFunds(money.balance);
 	playOnce("simtower/cash");
 	if (!message.empty()) {
 		char c[32];
-		snprintf(c, 32, ": $%i", f);
+		snprintf(c, 32, ": $%lld", (long long)f);
 		timeWindow.showMessage(message + c);
 	}
 	timeWindow.updateMoneyStats();
 }
 
-void Game::setFunds(int f)
+void Game::setFunds(int64_t f)
 {
 	if (funds != f) {
 		funds = f;
@@ -2982,7 +2996,7 @@ bool Game::constructToolAt(int2 pos)
 	// breaks the exact-balance/virgin conditions and disarms it forever.
 	if (pos == int2(-187, -10) && items.empty() && funds == 2000000) {
 		transferFunds(funds, "easter_egg", "Corner-click windfall");
-		LOG(IMPORTANT, "corner-click doubler: funds doubled to %i", funds);
+		LOG(IMPORTANT, "corner-click doubler: funds doubled to %lld", (long long)funds);
 		return true; // click consumed (no item built)
 	}
 	const size_t itemsBefore = items.size();

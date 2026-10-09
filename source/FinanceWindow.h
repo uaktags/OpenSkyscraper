@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 #include "GameObject.h"
 #include <TGUI/Widgets/ChildWindow.hpp>
 #include <TGUI/Widgets/Label.hpp>
@@ -57,9 +58,9 @@ namespace OT
 		/// can be attributed to the given prototype id, splitting shared
 		/// money categories (e.g. retail_income between Fast Food and
 		/// Restaurant) proportionally by population.
-		int incomeForType(const std::string & protoId, int population,
+		int64_t incomeForType(const std::string & protoId, int population,
 		                  const std::map<std::string, int> & sharedPop) const;
 
-		std::string formatMoney(int amount) const;
+		std::string formatMoney(int64_t amount) const;
 	};
 }

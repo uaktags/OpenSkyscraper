@@ -61,9 +61,12 @@ namespace Tdt {
 	struct TdtData
 	{
 		int level;       ///< 1..5 stars, 6 = TOWER
-		int balance;     ///< stored funds (display dollars are x100)
+		int32_t balance;     ///< stored funds (display dollars are x100)
 		int frameTime;   ///< 0..2599 frames; 0 = 7:00 AM
-		int currentDay;  ///< days since WD 1 / Q 1 / Year 1
+		int currentDay;  ///< EXE calendar days since WD 1 / Q 1 / Year 1
+		int population = 0; ///< serialized CountT total (not the live people count)
+		int countT[10] = {0};
+		bool populationValid = false;
 		int viewX;       ///< saved view scroll, world px (0 = none stored)
 		int viewY;
 		std::vector<FloorRec> floors;

@@ -1,5 +1,6 @@
 /* Copyright (c) 2026 OpenSkyscraper contributors */
 #pragma once
+#include <cstdint>
 
 #include "GameObject.h"
 #include <TGUI/Widgets/Button.hpp>
@@ -54,7 +55,7 @@ namespace OT
 		/// Compose the report text from Money's quarterly accumulators.
 		void populate();
 
-		std::string formatMoney(int amount) const;
+		std::string formatMoney(int64_t amount) const;
 
 		void buildWindow();
 	};
