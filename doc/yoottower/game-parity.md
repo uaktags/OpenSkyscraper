@@ -1053,3 +1053,77 @@ to the upper rooms. The other goldens are unchanged.
 
 **Tests.** Lab `test hkB`: 9/9. The `thirdparty/astar-search` submodule is not checked out in this
 worktree; it was copied into the lab tree `hkB` only (`lab.sh sync` does not carry it).
+#### 7.6.G Hawaii night population
+
+Tower `hawaii_g3_boatdeck`, 3 game days, `pipeline.py --skip-oracle` on the original oracle
+copied from `/lab/out/parity/gp2-hotel-hawaii` (never modified). Code: `feature/yoottower-parity`
+(`fea6248`, which includes workstream B's maid and hotel changes) plus this branch's change.
+"Before" is the same tip without the change (lab tree `hkGb`); "after" is with it (`hkG`).
+Night means the 00:00-06:00 samples; OpenSky dumps every 30 game minutes.
+
+**Change (yoottower only).**
+1. `YootPool::callBelong` (`source/YootPool.cpp`) passes the same econo to every member's call.
+   `T2Pool::Find` (0x10050500) relaxes econo from member 1 on, but `CollectEmployeeFromPool`
+   (0x10060a50) calls `T2Pool::Call` with one econo for all members. OpenSky relaxed it in the
+   calls too, so every call succeeded. This is the reason for 60 residents against 54.
+2. `YootCondo::advance` / `createOccupants` (`source/Item/YootCondo.cpp`) hires residents
+   through `PeopleSystem::hireBelong` at the top of the hour, 07:00-20:59, as the Condo.dll
+   `ChangeStatusOnIdle` CollectEmployee branch does (`rules-agent/out/plg2/Condo.dll.decomp.c`,
+   about line 27330). The occupant count comes from the hired list. Move-out calls
+   `releaseBelong`. Keeps `tenantIdleFrozen` from workstream B.
+
+**Combined before / after (original in the first column):**
+
+| Metric | Original | Before | After |
+|---|---|---|---|
+| Residents | 54 | 60 | **55** |
+| Night pop d1 / d2 / d3 | 113 / 119 / 103 | 124 / 113 / 116 | **112 / 113 / 120** |
+| Night unhomed visitors (hotel guests, inferred) d1 / d2 / d3 | 16 / 22 / 6 | 21 / 10 / 13 | 14 / 15 / 22 |
+| Daily pop peak d0 / d1 / d2 / d3 | 580 / 648 / 910 / 103 | 594 / 798 / 983 / 116 | **560 / 685 / 1,009 / 120** |
+| Funds change d0 / d1 / d2 (original 2,990,800 / 37,100 / 53,300) | | 2,993,300 / 47,200 / 24,100 | 2,992,600 / 26,800 / 27,600 |
+
+All daily peaks are within the harness tolerance (`pop_max`, 20%). The combined baseline
+already has day 1 at 798 against 648; the change moves day 1 down to 685 and day 2 up by 26
+(983 to 1,009, original 910). Funds day 2 is outside tolerance in both runs (24,100 and
+27,600 against 53,300). That gap comes from B's hotel under-booking, not this change, which
+moves it slightly toward the original. Day 0 and day 1 funds are within tolerance in both.
+
+**Where the daytime people come from (day 2, 13:30 peak).** `T2Pool::RecoverPeople` counts
+the original's residents and staff in the pool counter (its population is 910 including 98
+belong people). OpenSky's `callBelong` does not increment the pool counter, and the tower
+population adds the belong people on top. So compare visitors only: the original has
+910 - 98 = 812 pool-counted visitors, while OpenSky has 880 before and 911 after. Deferred departures (shrink) are 788 in the original, 845 before, and 857 after.
+
+- *Release on move-out.* Not active in these runs: there are no condo sale-outs or
+  "Repurchased" events in three days. It cannot explain the peak.
+- *Trigger timing alone* (variant with the condo change but the original econo): day 2 pool
+  866, peaks 710 / 969. The trigger lowers the daytime count slightly.
+- *Econo fix alone* (variant with the fix but the original condo): reproduces the before
+  numbers exactly (983). The econo fix is therefore the source of the extra daytime visitors
+  (about +40 on day 2 and -25 on day 1 against the trigger-only variant). The mechanism is
+  likely that the econo-matched residents consume a different subset of the callable window
+  types, so visitors with other econo types stay callable. This is not proven.
+
+The change is kept: it fixes residents and night population on day 1, and the peaks stay
+within tolerance. The residual daytime excess (about 100 pool-called visitors on day 2
+against the original's 812) is not caused by the release or the hire timing, and it is
+present in B's baseline too.
+
+**Hotel guests (re-measured after the B merge).** The night unhomed-visitor count is now
+14 / 15 / 22 against the original's 16 / 22 / 6, versus 21 / 30 / 16 before B's merge. B's
+maid routing reduced guest bookings, so the night surplus of guests is gone. The guest
+counts remain the hotel workstream's to decide.
+
+**Not changed.** `callGuests` (`source/YootHotelGuests.cpp:97`) has the same econo relaxation
+(`onlyFirst && i > 0 ? -1 : econo`) in its pool calls. B found that OpenSky now under-books
+rooms, so tightening it needs measurement first. Left alone, as asked.
+
+**Open.** One resident (the original has 54, OpenSky 55): the members' silhouette and option
+checks (`T2PeopleType::Check`) are not yet compared with the pool types. The day-2 funds gap
+(see above) and the daytime visitor excess come from the hotel and window-consumption side.
+
+**Tests.** `lab.sh test hkG` 9/9 (100%). No goldens changed.
+
+**Lab outputs.** `hkG-cmb-before/` (combined baseline), `hkG-cmb-after/` (combined fix),
+`hkG-cmb-c/` (trigger only), `hkG-cmb-d/` (econo only). Older runs: `hkG-hawaii/` (pre-B
+baseline), `hkG-hawaii-econo/` (pre-rebase fix).

@@ -402,7 +402,9 @@ namespace OT
 				for (int n = 0; n < std::max(1, (int)table.members[i].numOfPeople); ++n)
 				{
 					PeopleType t;
-					if (callType(table.members[i], onlyFirst && i > 0 ? -1 : econo, routeMask, t, rng)) out.push_back(t);
+					// CollectEmployeeFromPool 0x10060a50 calls T2Pool::Call with the same econo for every
+					// member; only T2Pool::Find (0x10050500) relaxes it from member 1 on.
+					if (callType(table.members[i], econo, routeMask, t, rng)) out.push_back(t);
 				}
 			return !out.empty();
 		}

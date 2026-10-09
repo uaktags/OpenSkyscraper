@@ -5,6 +5,7 @@
 #include "../YootCatalog.h"
 #include "../YootItemArt.h"
 
+#include <cmath>
 #include <map>
 #include <memory>
 
@@ -188,9 +189,19 @@ void YootCondo::render(sf::RenderTarget &target) const
 void YootCondo::advance(double dt)
 {
 	if (game->eventSystem.tenantIdleFrozen()) return;
-	if (!occupied && !game->time.isHoliday() && game->time.hour >= 7 && game->time.hour < 17 && isAttractive())
+	// YootTower: Condo.t2p / HawaianCondo.t2p ChangeStatusOnIdle (Condo.dll decompile,
+	// rules-agent/out/plg2/Condo.dll.decomp.c, the CollectEmployee branch): at the top of
+	// the hour, 7:00 to 20:59, with the estimate above 200 (isAttractive), the residents
+	// come out of the pool (TNDF 1, CollectEmployee 0x1005f5a0 -> CollectEmployeeFromPool
+	// 0x10060a50) and the sale is collected. A unit whose hire fails stays empty, and a
+	// partial hire houses fewer residents.
+	const bool yootHireWindow = prototype->yoot && game->time.hour >= 7 && game->time.hour < 21 &&
+		std::fmod(game->time.hour, 1.0) * 60.0 < 8.0;
+	if (!occupied && (prototype->yoot ? yootHireWindow : (!game->time.isHoliday() && game->time.hour >= 7 && game->time.hour < 17)) &&
+	    isAttractive())
 	{
-		if (game->time.checkTick(0.002) && (rand() % 10) == 0)
+		if ((prototype->yoot || (game->time.checkTick(0.002) && (rand() % 10) == 0)) &&
+		    (!prototype->yoot || game->eventSystem.people.hireBelong(this)))
 		{
 			occupied = true;
 			variant = rand() % 3;
@@ -206,6 +217,7 @@ void YootCondo::advance(double dt)
 		{
 			occupied = false;
 			removeOccupants();
+			if (prototype->yoot) game->eventSystem.people.releaseBelong(this);
 			spriteNeedsUpdate = true;
 			population = 0;
 			game->populationNeedsUpdate = true;
@@ -328,6 +340,12 @@ void YootCondo::moveOut()
 void YootCondo::createOccupants()
 {
 	unsigned numAdults = (unsigned)std::max(1, residentsToCreate());
+	if (prototype->yoot && game->eventSystem.people.enabled())
+	{
+		// One resident per type hired from the pool (a reloaded unit hires again).
+		if (game->eventSystem.people.belongOf(this).empty()) game->eventSystem.people.hireBelong(this);
+		numAdults = (unsigned)game->eventSystem.people.belongOf(this).size();
+	}
 	Person::Type adults[] = {
 		Person::kMan,
 		Person::kWoman1,
