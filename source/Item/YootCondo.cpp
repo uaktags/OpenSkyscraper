@@ -36,6 +36,9 @@ const char * YootCondo::condoPlugin() const
 
 int YootCondo::residentsToCreate() const
 {
+	// Condo.t2p / HawaianCondo.t2p: every sold unit hires its TNDF belong capacity
+	// (3) of residents from the pool; the original's population shows 55 of 60 for 20 units.
+	if (prototype->yoot && prototype->yoot->belongCapacity > 0) return prototype->yoot->belongCapacity;
 	return Math::randi(1, 4);
 }
 
@@ -338,7 +341,7 @@ void YootCondo::createOccupants()
 		occupants.insert(new YootCondoOccupant(this, adults[gender], leavingTime, returnTime));
 	}
 
-	unsigned numKids = hasFamilies() ? Math::randi(0, std::min(numAdults * 2, 6u)) : 0;
+	unsigned numKids = (hasFamilies() && !prototype->yoot) ? Math::randi(0, std::min(numAdults * 2, 6u)) : 0;
 	Person::Type kids[] = {
 		Person::kChild,
 		Person::kWomanWithChild1,

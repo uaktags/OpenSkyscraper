@@ -944,7 +944,9 @@ namespace Bld {
 				std::string ls = lower(link.plugins[k]);
 				const size_t dot = ls.rfind('.');
 				if (dot != std::string::npos) ls = ls.substr(0, dot);
-				if (ls == s) return link.prototypeId;
+				// Condo.t2p / HawaianCondo.t2p are the YootTower condo: the toolbox places
+				// yoot_condo (inMoney sale, belong residents), so the import does too.
+				if (ls == s) return std::string(link.prototypeId) == "condo" ? std::string("yoot_condo") : std::string(link.prototypeId);
 			}
 		return "";
 	}

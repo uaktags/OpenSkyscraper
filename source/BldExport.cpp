@@ -603,7 +603,9 @@ namespace Bld {
 				// the station never leaves (closed, the dark band 300).
 				if (it.type == "subway") t.hdr.status = 8;
 				t.estimate = (int16_t)std::max(0, it.yootEstimate);
-				t.inMoneyIndex = 0;                     // single price
+				// Condo.t2p sells at inMoney[index]: OpenSky's default selection is the third
+				// price ($150,000), the same default as an office; every other tenant here has one.
+				t.inMoneyIndex = (it.type == "condo" || it.type == "yoot_condo") ? 2 : 0;
 				t.hasBelongList = staff > 0 ? 1 : 0;    // one empty place per staff member
 				t.belongList.assign(staff, 0);
 				// Stadium.t2p LoadExtraData 0x1000be40 leaves the game record
