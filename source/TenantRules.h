@@ -9,6 +9,13 @@ namespace OT
 {
 	namespace TenantRules
 	{
+		// EXE 1230:07cb (all.c:33438-33442): food/shop allocate 0x30
+		// people, independently of rating; the door's separate cap is 40.
+		constexpr int kRetailPoolSize = 48;
+		// Hotel state 0x20 handler, 1228:2c8c-2cb2, recovered from the
+		// jump table omitted at all.c:31996-32001: armed, period 4, rand%12.
+		constexpr int kHotelCheckInOdds = 12;
+
 		// ---- banked wait -------------------------------------------------
 		struct Bank
 		{

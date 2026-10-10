@@ -91,7 +91,7 @@ public:
 
 	void stampInfested();
 	void checkout(bool paid);
-	bool checkIn();
+	bool checkIn(int memberIndex = -1);
 	static void spreadRoaches(Game*);
 	static void judgeAll(Game*);
 
@@ -119,6 +119,7 @@ public:
 	Path getRandomBackgroundSoundPath() override;
 
 protected:
+	void sendGuestHome(Guest *g, bool paid);
 	void scheduleGuest(Guest *g);
 	void clearAll(bool adjustPopulation = true);
 	void applyVariant();

@@ -157,11 +157,13 @@ void Cinema::updateSprite()
 void Cinema::advance(double dt)
 {
 	if (game->time.checkHour(10)) {
-		if (movieAgeDays < 127) ++movieAgeDays;
+		// 1188:05af (all.c:21115-21128) computes both quotas before
+		// incrementing the age; boundary ages 5/8 retain their old tier.
 		patronsToday = 0;
 		quotaMatinee = (movieType >= 7 ? (movieAgeDays / 3 >= 3 ? 20 : movieAgeDays / 3 == 2 ? 40 : 60)
 			: (movieAgeDays / 3 >= 3 ? 20 : 40));
 		quotaEvening = quotaMatinee;
+		if (movieAgeDays < 127) ++movieAgeDays;
 		// CountT cinema category (T14): daily reset, then quota sum per hall.
 		game->resetCategoryOnce(TenantRules::kCountCinema);
 		game->addPopulation(TenantRules::kCountCinema, quotaMatinee + quotaEvening);

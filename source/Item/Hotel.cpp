@@ -217,11 +217,19 @@ void Hotel::clearAll(bool adjustPopulation)
  guests.clear();
 }
 
-bool Hotel::checkIn()
+bool Hotel::checkIn(int memberIndex)
 {
- if (!tenant.armed || roomState != kClean || hosted || evacuated || !guests.empty()) return false;
+ if (!tenant.armed || evacuated || memberIndex < -1 || memberIndex >= capacity()) return false;
+ if (memberIndex < 0) {
+  if (roomState != kClean || hosted || !guests.empty()) return false;
+ } else {
+  // 1228:0d64 dispatches each positive hotel pool member separately
+  // (all.c:31407-31412); a sibling may already be en route or hosted.
+  if (roomState != kClean && roomState != kOccupied) return false;
+  for (Guest *g : guests) if (g->member == memberIndex) return false;
+ }
  std::vector<Guest*> arrivals;
- for (int k=0; k<capacity(); ++k) {
+ for (int k=memberIndex < 0 ? 0 : memberIndex; k<(memberIndex < 0 ? capacity() : memberIndex+1); ++k) {
   Guest *g = new Guest(this, k);
   arrivals.push_back(g);
   g->entry = game->mainLobby;
@@ -240,7 +248,8 @@ bool Hotel::checkIn()
    return false;
   }
  }
- dinnerSent = false;
+ // Independently arriving siblings still share the existing once/stay dinner latch.
+ if (guests.empty()) dinnerSent = false;
  for (Guest *g : arrivals) guests.insert(g);
  // Bind before the first completed inbound trip is banked.
  for (Guest *g : arrivals) {
@@ -264,8 +273,12 @@ void Hotel::checkout(bool paid)
  roomState = kDirty;
  dirtySince = game->time.absolute;
  spriteNeedsUpdate = true;
- for (Guest *g : guests) {
-  if (g->leaving) continue;
+ for (Guest *g : guests) sendGuestHome(g, paid);
+}
+
+void Hotel::sendGuestHome(Guest *g, bool paid)
+{
+  if (g->leaving) return;
   game->vipSystem.checkout(g, paid);
   Item *origin = g->at ? g->at : this;
   Item *exit = g->entry && game->items.count(g->entry) ? g->entry : game->mainLobby;
@@ -278,7 +291,6 @@ void Hotel::checkout(bool paid)
    if (g->parkingUsed) { g->parkingUsed->freeSpace(g); g->parkingUsed = nullptr; }
    game->vipSystem.voidPerson(g);
   }
- }
 }
 
 void Hotel::stampInfested()
@@ -344,11 +356,36 @@ void Hotel::advance(double)
  // YootTower: the guests are pool people (PeopleSystem, YootHotelGuests.cpp);
  // the room's stay is driven from outside while the pool supplies guests.
  const bool poolGuests = prototype->yoot && game->eventSystem.people.enabled() && game->eventSystem.people.hotelGuests();
- if ((game->time.checkHour(5) || (game->time.hour >= 5 && game->time.hour < 7)) && hosted) checkout(true);
+ if (prototype->yoot && (game->time.checkHour(5) || (game->time.hour >= 5 && game->time.hour < 7)) && hosted) checkout(true);
  const long visits = visitsThisTick(game, 16, 0);
  for (long v=0; v<visits; ++v) {
+  // 1228:2c03-2c60 / 30bd-3123: wake at period 0, then each guest
+  // rolls 1/12 to leave in 07-12 (deterministic after that period).
+  // Only the last departure calls 1180:0f24, making the room dirty
+  // and settling its CountT/income. The missing jump bodies are owned
+  // by all.c:31995-31997 / 32047-32048; raw 1228:6c77 decrements
+  // the room occupancy byte (also absent from the decompiler output).
+  if (!prototype->yoot && hosted && game->time.hour >= 7 && game->time.hour < 17) {
+   for (Guest *g : guests) if (!g->leaving && g->at == this) {
+    if (g->state == Person::kResting) { g->state=Person::kHome; continue; }
+    if (game->time.hour >= 12 || rand()%12 == 0) sendGuestHome(g, true);
+   }
+   bool remaining=false;
+   for (Guest *g : guests) if (!g->leaving) remaining=true;
+   if (!remaining) checkout(true);
+  }
   if (game->time.hour >= 17 && game->time.hour < 21) {
-   if (!poolGuests && tenant.armed && roomState == kClean && hosted == 0 && guests.empty() && !evacuated && rand()%8 == 0) checkIn();
+   if (!poolGuests && tenant.armed && !evacuated) {
+    if (prototype->yoot) {
+     if (roomState == kClean && hosted == 0 && guests.empty() && rand()%8 == 0) checkIn();
+    } else if (roomState == kClean || roomState == kOccupied) {
+     for (int k=0; k<capacity(); ++k) {
+      bool dispatched=false;
+      for (Guest *g : guests) if (g->member==k) dispatched=true;
+      if (!dispatched && rand()%TenantRules::kHotelCheckInOdds == 0) checkIn(k);
+     }
+    }
+   }
    if (hosted && !dinnerSent && game->tenantSlotIndex(this)%2 == 0 && rand()%6 == 0) {
     dinnerSent = true;
     for (Guest *g : guests) if (g->at == this && !g->leaving) {
@@ -368,7 +405,7 @@ void Hotel::advance(double)
    if (g->parkingUsed) g->parkingUsed->freeSpace(g);
    g->journey.cancel(); it=guests.erase(it); delete g;
   } else {
-   if (!g->leaving && g->at == this) g->state = (game->time.hour >= 23 || game->time.hour < 6) ? Person::kResting : Person::kHome;
+   if (!g->leaving && g->at == this) g->state = (game->time.hour >= 23 || game->time.hour < (prototype->yoot ? 6 : 7)) ? Person::kResting : Person::kHome;
    ++it;
   }
  }
@@ -397,7 +434,12 @@ void Hotel::addPerson(Person *p)
  if (auto *g = dynamic_cast<Guest*>(p)) {
   if (g->hotel != this || g->leaving) return;
   g->atHotel=true; g->state=Person::kHome;
-  if (!hosted) { hosted=capacity(); population=hosted; game->addPopulation(variant+1, hosted); }
+  if (!hosted) {
+   hosted=capacity(); population=hosted; game->addPopulation(variant+1, hosted);
+   // HotelCheckIn 1180:0e72/0edc resets the neglect fuse. This body
+   // occupies the undumped hotel gap at all.c:20716-20719.
+   if (!prototype->yoot) tenant.tenure=0;
+  }
   roomState=kOccupied; spriteNeedsUpdate=true;
   if (prototype->yoot && !yootStayBooked)
   {
