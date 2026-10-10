@@ -12,7 +12,7 @@ import { join, basename, resolve } from "path";
 import { pathToFileURL } from "url";
 
 const argv = process.argv.slice(2);
-const opt = { web: "/home/tim/Projects/OpenSkyWeb-art-v2", yoot: "/home/tim/Downloads/Yoot-Tower_Win_EN/YOOT", days: 3, seed: 1, out: null, injectCycle: false };
+const opt = { web: "/home/tim/Projects/OpenSkyWeb-art-v2", yoot: "/home/tim/Downloads/Yoot-Tower_Win_EN/YOOT", days: 3, seed: 1, dt: 0.2, out: null, injectCycle: false };
 const fixtures = [];
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
@@ -20,6 +20,7 @@ for (let i = 0; i < argv.length; i++) {
   else if (a === "--yoot") opt.yoot = argv[++i];
   else if (a === "--days") opt.days = +argv[++i];
   else if (a === "--seed") opt.seed = +argv[++i];
+  else if (a === "--dt") opt.dt = +argv[++i];
   else if (a === "--out") opt.out = argv[++i];
   else if (a === "--inject-cycle") opt.injectCycle = true; // add accountingCycle="0" like a C++-written save
   else fixtures.push(a);
@@ -97,12 +98,13 @@ async function runOne(path, aliased = false) {
     let wasBlack = !!g.powerSystem.isBlackOut();
     const start = g.time.absolute;
     rec.start = snapshot(g, extra);
-    const total = Math.ceil(opt.days * 1000);
+    const ticksPerDay = Math.ceil(64 / opt.dt);
+    const total = Math.ceil(opt.days * ticksPerDay * 1.5) + 1000;
     rec.midnights = []; let lastFloor = Math.floor(start);
     let nextDay = 1, ticks = 0, pk = g.population, mn = g.population;
     for (; ticks < total; ticks++) {
       if (g.peopleSystem.stays !== stays) { /* world reset replaced the map */ }
-      g.advance(0.2);
+      g.advance(opt.dt);
       if (Math.floor(g.time.absolute) > lastFloor) { lastFloor = Math.floor(g.time.absolute); rec.midnights.push({ at: lastFloor, called: g.peopleSystem.calledToday, entered: g.peopleSystem.enteredToday, checkins: extra.checkins }); }
       const b = !!g.powerSystem.isBlackOut();
       if (b && !wasBlack) extra.blackoutsStarted++;
@@ -119,6 +121,7 @@ async function runOne(path, aliased = false) {
       if (nextDay > opt.days) break;
     }
     rec.ticks = ticks + 1;
+    rec.dt = opt.dt;
     rec.messages = msgs;
   } catch (e) {
     rec.error = { message: String(e?.message ?? e), stack: String(e?.stack ?? "") };

@@ -4,7 +4,7 @@ import json, os, statistics
 HERE = os.path.dirname(os.path.abspath(__file__))
 m = json.load(open(os.path.join(HERE, "out", "metrics.json")))
 ORIG = {  # game-parity.md section numbers in the comments; None = not recorded
-    "tokyo_g2_hotel_subway": {"popMax": [940, 1417, 2095], "checkins": [0, 0, 0], "note": "7.4 item 5 corrected map; 7.5 zero hotel guests in both games"},
+    "tokyo_g2_hotel_subway": {"popMax": [1639, 1852, 2463], "checkins": [0, 0, 0], "note": "WP8c fresh grade-2 pool (300 types): 1639 / 1852 / 2463 [BldExport grade-1 pool: 940 / 1417 / 2095]; 7.5 zero hotel guests in both games"},
     "tokyo_g4_blackout": {"popMax": [140, 79, 79], "dfunds": [36000, 0, -2505000], "blackout": [True, True, True], "note": "7.5/7.6.D: Power down 11:00 day 0, lasting; oracle day-3 funds delta -2,505,000 is the quarterly maintenance at 3.0 (inside the D3 row)"},
     "tokyo_g5_large_elevator": {"popMax": [144, None, None], "note": "7.6.A hkA-lift5, 1 day only: peak 144/144, riding 9/9; 2/2 funds within tolerance"},
     "hawaii_g2_resort": {"note": "no oracle run recorded for this fixture"},
