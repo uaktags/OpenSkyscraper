@@ -372,11 +372,27 @@ void Hotel::advance(double)
    ++it;
   }
  }
+ // YootTower: the maid sent by yootSendHousekeeper makes the bed after half
+ // an hour in the room (the merge of the YootTower branch dropped this step,
+ // so no dirty room was ever cleaned), then the room is free for the next trip.
+ if (prototype->yoot && housekeeper && housekeeper->at == this && housekeeper->cleaning &&
+     game->time.absolute >= housekeeper->cleaningUntil) {
+  roomState = kClean; spriteNeedsUpdate = true;
+  Item::removePerson(housekeeper);
+  housekeeper->journey.cancel();
+  delete housekeeper; housekeeper = nullptr;
+ }
  if (spriteNeedsUpdate || roomFrameIndex != hotelRoomFrame(roomState, game->time.hour)) updateSprite();
 }
 void Hotel::addPerson(Person *p)
 {
  Item::addPerson(p);
+ if (auto *h = dynamic_cast<Housekeeper*>(p)) {
+  h->state = Person::kWorking; h->cleaning = true;
+  h->cleaningUntil = game->time.absolute + Time::hourToAbsolute(0.5);
+  spriteNeedsUpdate = true;
+  return;
+ }
  if (YootVisitor *v = dynamic_cast<YootVisitor*>(p)) { game->eventSystem.people.roomEnter(this, v); return; }
  if (auto *g = dynamic_cast<Guest*>(p)) {
   if (g->hotel != this || g->leaving) return;

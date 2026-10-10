@@ -132,6 +132,10 @@ namespace OT
 		void pay(Item::Item * item, int dollars, const char * message);
 		void theaterTick(Item::Theater * t, int minute, int day);
 		void eventCenterTick(Item::EventCenter * e, int minute, int day);
+		/// T2Tenant::CalcProfitEstimate of the hall (visitors since it opened).
+		int hallEstimate(const Item::EventCenter * e) const;
+		/// EventCenter.t2p EnterTenant hook 0x1000bba0: 30 -> 31 -> 32.
+		void hallEntered(Item::EventCenter * e);
 		void genericTick(Item::YootVenue * v, int minute);
 		void subwayTick(int minute);
 		void cruiseTick(int minute);

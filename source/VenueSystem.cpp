@@ -355,6 +355,8 @@ void VenueSystem::enter(Item::YootVenue * v, YootVisitor * p)
 		v->visitorsToday++;
 	}
 	game->eventSystem.people.arrived(p, v, admitted, leave);
+	if (admitted)
+		if (Item::EventCenter * hall = dynamic_cast<Item::EventCenter *>(v)) hallEntered(hall);
 }
 
 void VenueSystem::ticketBoothIdle(Item::YootVenue * booth, Item::YootVenue * obs)
@@ -481,6 +483,17 @@ void VenueSystem::theaterTick(Item::Theater * t, int minute, int day)
 
 // ------------------------------------------------------------ event center
 
+int VenueSystem::hallEstimate(const Item::EventCenter * e) const
+{
+	const YootItemStats & y = *e->prototype->yoot;
+	return Yoot::profitEstimate(e->visitorsToday, y.inMoneyFor(0) / kYootMoneyUnit, y.outMoney / kYootMoneyUnit);
+}
+
+void VenueSystem::hallEntered(Item::EventCenter * e)
+{
+	e->status = Yoot::hallStatusOnEnter(e->status, (int)game->eventSystem.people.visitorsIn(e).size(), e->capacity());
+}
+
 void VenueSystem::eventCenterTick(Item::EventCenter * e, int minute, int day)
 {
 	HallEventDef def;
@@ -507,7 +520,11 @@ void VenueSystem::eventCenterTick(Item::EventCenter * e, int minute, int day)
 			std::map<std::string, int>::const_iterator v = hallValue.find(e->today);
 			e->target = v != hallValue.end() ? v->second : def.unkDC;
 		}
-		if (e->lastOpenDay == day) e->status = 30;
+		// FUN_1000bec0: the plugin idle resets the booked hall to 30 in
+		// [open - 60, open - 52) and [open, open + 8); the Enter / Leave hooks
+		// (hallEntered / PeopleSystem::pushOut) move it between 30, 31 and 32.
+		const bool idle = minute % Yoot::kTenantIdleMinutes == e->idlePhase;
+		if (e->lastOpenDay == day && (e->status < 30 || (idle && Yoot::hallStatusReset(minute, open)))) e->status = 30;
 		// FUN_1000dc70 on every idle while open: CollectCustomer(target -
 		// walking - inside) with the hall event's table.
 		if (e->status >= 30 && reachable(e) && Yoot::hallEventCollects(minute, tOpen, tClose, stayOf(e, 0)) &&
@@ -521,12 +538,18 @@ void VenueSystem::eventCenterTick(Item::EventCenter * e, int minute, int day)
 		e->status = 10;
 		e->leaveAt.clear();
 	}
-	e->setPattern(e->status < 30 ? 0 : e->users() == 0 ? 1 : (e->users() >= cap / 2 ? 3 : 2));
+	// UpdateCommercialEstimate (CalcProfitEstimate from the visitors counted
+	// since the hall last opened) on the plugin idle at or after open, in the
+	// first 8 minutes of each hour and at open; the close refreshes it below.
+	if (e->prototype->yoot && minute % Yoot::kTenantIdleMinutes == e->idlePhase && Yoot::hallEstimateIdle(minute, open))
+		e->yootEstimate = hallEstimate(e);
+	e->setPattern(e->status < 30 ? 0 : std::min(3, e->status - 29)); // +0x3c = status - 29
 
 	// [close, close+8): funds += cost - outMoney (an idle hall pays its outMoney).
 	if (minute >= close && e->settledDay != day)
 	{
 		e->settledDay = day;
+		if (e->prototype->yoot) e->yootEstimate = hallEstimate(e);
 		const int dollars = Yoot::hallEventSettlement(hasEvent ? def.cost : 0, outMoneyUnits(e, 100));
 		pay(e, dollars, dollars >= 0 ? "Income from Event Center just came in." : "Event Center expenses were paid.");
 	}

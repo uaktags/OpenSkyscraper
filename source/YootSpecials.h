@@ -89,6 +89,17 @@ namespace OT
 		/// Picks the next trip: the indices of up to kRoomsPerMaid dirty,
 		/// reachable rooms in list order (FUN_1000c010 walks registry 1).
 		std::vector<int> maidTrip(const std::vector<bool> & dirtyAndReachable);
+		// ---- Hotel guest call (Singleroom.t2p status 30, 0x100136b0) ----
+		/// At status 30 a clean room with estimate > 200 calls its guests when
+		/// WithinMinutes(open, open + 300) holds (0x10013794: push open+0x12c)
+		/// and rand() % 30 == 0 (0x100137a3..af), on each 8-minute tenant idle.
+		const int kHotelCallWindowMinutes = 300;
+		const int kHotelCallOdds = 30;
+		/// Tenant idles that fall in the call window for a room whose idle slot is
+		/// `phase` (minute % 8 == phase).
+		int hotelCallIdles(int openMinute, int phase);
+		/// Chance that a room with `idles` rolls is called at least once.
+		double hotelCallChance(int idles);
 		const char * const kBedsNotMade = "Beds are not made.";              ///< string 1047
 		const char * const kRoomTooDirty = "Room is too dirty.";             ///< string 1048
 		const char * const kNoFrontDesk = "Room is not connected to the front desk."; ///< string 1049

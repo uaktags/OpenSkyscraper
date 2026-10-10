@@ -20,6 +20,7 @@
 #include "Item/Hotel.h"
 #include "Item/YootSpecialItems.h"
 #include "YootRules.h"
+#include "YootSpecials.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -172,7 +173,7 @@ void PeopleSystem::roomIdle(Item::Hotel * room, int minute, long long now)
 		// 30 -> 31: estimate > 200, 17:00..22:00, one in 30, and an open
 		// linked desk (FUN_10012d50).
 		if (room->yootEstimate != 0 && room->yootEstimate <= 200) return;
-		if (!within(minute, open, open + 300) || std::rand() % 30 != 0) return;
+		if (!within(minute, open, open + Yoot::kHotelCallWindowMinutes) || std::rand() % Yoot::kHotelCallOdds != 0) return;
 		Item::FrontDesk * desk = game->eventSystem.specials.deskOf(room);
 		if (!desk || !desk->isOpen(minute)) return;
 		HotelStay s;
