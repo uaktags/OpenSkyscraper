@@ -108,7 +108,9 @@ void Housekeeping::advance(double)
     maid->target->roomState=Hotel::kClean; maid->target->tenant.redraw=true; maid->target->spriteNeedsUpdate=true;
     maid->mode=2; maid->work=3; maid->state=Person::kWorking; continue;
    }
-   if (maid->mode==2) { if (maid->work>0) { --maid->work; continue; } maid->mode=0; }
+   // 1228:602b case 2 returns after finishing work (all.c:32800-32812,
+   // 32834-32839); selection starts on the next 16-frame visit.
+   if (maid->mode==2) { if (maid->work>0) { --maid->work; continue; } maid->mode=0; continue; }
    if (maid->mode==0 && !select(maid)) goHome(maid);
   }
  }

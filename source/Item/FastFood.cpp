@@ -111,7 +111,7 @@ void FastFood::decodeXML(tinyxml2::XMLElement &xml)
 	lastDemandDay = xml.IntAttribute("lastDemandDay", -1);
 	revenueSettled = xml.BoolAttribute("revenueSettled", false);
     std::string slots=xmlAttrOr(xml, "dispatched", "");
-    for (int k=0;k<40;++k) dispatched[k]=k<int(slots.size()) && slots[k]=='1';
+    for (int k=0;k<TenantRules::kRetailPoolSize;++k) dispatched[k]=k<int(slots.size()) && slots[k]=='1';
 	for (int i = 0; i < 3; ++i) {
 		char key[32];
 		snprintf(key, sizeof(key), "serviceScore%d", i);
@@ -170,7 +170,7 @@ void FastFood::advance(double dt)
         const double hour=game->time.hour;
         const int width=(hour >= 10 && hour < 17) ? 36 : (hour >= 17 && hour < 21) ? 6 : 0;
         const long visits=visitsThisTick(game, 16, 0);
-        for (long v=0;v<visits;++v) for (int k=0;k<40 && quotaRemaining>0;++k) {
+        for (long v=0;v<visits;++v) for (int k=0;k<TenantRules::kRetailPoolSize && quotaRemaining>0;++k) {
             if (dispatched[k] || width==0 || (width>1 && rand()%width!=0)) continue;
             dispatched[k]=true;
             Customer *c=new Customer(this); c->poolSlot=k; c->member=k;

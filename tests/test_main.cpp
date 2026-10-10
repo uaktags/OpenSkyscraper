@@ -4600,6 +4600,7 @@ static void testBatch5BRecyclingAndVip()
 }
 
 #ifdef OPENSKY_TRANSPORT_SCENARIOS
+#include "Item/Cinema.h"
 // Engine scenarios for the batch-5 fixes (F1-F9); runs in OpenSkyTransportTests.
 static void testBatch5Engine(OT::Game &g)
 {
@@ -4625,6 +4626,170 @@ static void testBatch5Engine(OT::Game &g)
   for (int k=0;k<6;++k) { c->tenant.bank[k].count=1; c->tenant.bank[k].total=(int16_t)total; }
   return c;
  };
+
+ // WP9b: 1230:07cb, all.c:33438-33442 allocates 48, not the
+ // 40-person admission cap. At period 5, 1228:466d (all.c:32319-32323)
+ // dispatches every idle restaurant slot without a die. Quota 50 therefore
+ // dispatches 48 and leaves 2; a second visit cannot reuse today's slots.
+ {
+  reset(2.0+Time::hourToAbsolute(21.5));
+  auto *food=static_cast<Item::Restaurant *>(make("restaurant",0,0));
+  auto *ff=static_cast<Item::FastFood *>(make("fastfood",30,0));
+  EXPECT(sizeof(food->dispatched)/sizeof(food->dispatched[0])==48);
+  EXPECT(sizeof(ff->dispatched)/sizeof(ff->dispatched[0])==48);
+  food->open=true; food->lastDemandDay=2; food->dailyQuota=food->quotaRemaining=50;
+  g.time.dta=16.0/2600;
+  food->advance(0);
+  EXPECT(food->walkinsToday==48 && food->quotaRemaining==2);
+  food->advance(0);
+  EXPECT(food->walkinsToday==48 && food->quotaRemaining==2);
+  tinyxml2::XMLPrinter pr; pr.OpenElement("restaurant"); food->encodeXML(pr); pr.CloseElement();
+  tinyxml2::XMLDocument doc; EXPECT(doc.Parse(pr.CStr())==tinyxml2::XML_SUCCESS);
+  EXPECT(std::string(doc.RootElement()->Attribute("dispatched"))==std::string(48,'1'));
+  food->decodeXML(*doc.RootElement());
+  EXPECT(food->dispatched[47] && food->quotaRemaining==2);
+  // Existing 40-bit saves have eight idle slots after loading.
+  doc.RootElement()->SetAttribute("dispatched",std::string(40,'1').c_str());
+  food->decodeXML(*doc.RootElement());
+  EXPECT(food->dispatched[39] && !food->dispatched[40] && !food->dispatched[47]);
+ }
+
+ // WP9b: 1188:05af (all.c:21115-21128) calls the quota lookup twice
+ // before incrementing age. 1188:0b3e (all.c:21352-21389) selects age/3.
+ // Film 8 at age 5: 60+60=120; age 8: 40+40=80. The following days
+ // cross to 80/40. Film 0 remains 80 at age 8, then crosses to 40.
+ {
+  const int film[]={8,8,0,8};
+  const int age[]={5,8,8,127};
+  const int quota[]={60,40,40,20};
+  const int nextQuota[]={40,20,20,20};
+  for(int k=0;k<4;++k) {
+   reset(2.0+Time::hourToAbsolute(10));
+   auto *cinema=static_cast<Item::Cinema *>(make("cinema",0,1));
+   cinema->movieType=film[k]; cinema->movieAgeDays=age[k];
+   cinema->advance(0);
+   EXPECT(cinema->quotaMatinee==quota[k] && cinema->quotaEvening==quota[k]);
+   EXPECT(g.countT.cat[TenantRules::kCountCinema]==2*quota[k]);
+   EXPECT(cinema->movieAgeDays==(age[k]<127 ? age[k]+1 : 127));
+   struct Clock : Time { using Time::set; };
+   Clock clock; clock.set(3.0+Time::hourToAbsolute(9)); clock.set(3.0+Time::hourToAbsolute(10));
+   g.time=clock;
+   cinema->advance(0);
+   EXPECT(cinema->quotaMatinee==nextQuota[k] && cinema->quotaEvening==nextQuota[k]);
+   EXPECT(g.countT.cat[TenantRules::kCountCinema]==2*nextQuota[k]);
+  }
+ }
+
+ // WP9b: hotel state 0x20, 1228:2c63-2cdc (jump body omitted at
+ // all.c:31996-32001): armed + period 4 + 1/12, not 1/8. One single
+ // room and a same-floor lobby isolate the die from transport failures.
+ {
+  reset((300.0+1616)/2600);
+  g.extendFloor(0,-10,40);
+  auto *lobby=make("lobby",0,0); g.mainLobby=lobby;
+  auto *hotel=static_cast<Item::Hotel *>(make("hotel_single",20,0));
+  hotel->tenant.armed=true;
+  EXPECT(!g.findRoute(lobby,hotel).empty());
+  auto seedFor=[&](bool hit) {
+   for(unsigned seed=0;seed<10000;++seed) {
+    srand(seed); const int draw=rand();
+    if(hit ? draw%12==0 : draw%8==0 && draw%12!=0) return seed;
+   }
+   EXPECT(false); return 0u;
+  };
+  const unsigned miss=seedFor(false), hit=seedFor(true);
+  g.time.dta=16.0/2600;
+  srand(miss); hotel->advance(0);
+  EXPECT(hotel->guests.empty()); // a former 1/8 hit must now miss
+  hotel->tenant.armed=false;
+  srand(hit); hotel->advance(0); EXPECT(hotel->guests.empty());
+  hotel->tenant.armed=true; hotel->roomState=Item::Hotel::kDirty;
+  srand(hit); hotel->advance(0); EXPECT(hotel->guests.empty());
+  hotel->roomState=Item::Hotel::kClean; hotel->tenant.tenure=2;
+  setTime(Time::hourToAbsolute(21)); g.time.dta=16.0/2600;
+  srand(hit); hotel->advance(0); EXPECT(hotel->guests.empty());
+  setTime((300.0+1616)/2600); g.time.dta=16.0/2600;
+  srand(hit); hotel->advance(0); EXPECT(hotel->guests.size()==1);
+  EXPECT(hotel->tenant.tenure==0);
+ }
+
+ // WP9b: 1228:0d64 (all.c:31407-31412) visits hotel members 1..2
+ // independently; compact port members 0..1 must not dispatch as a party.
+ // HotelCheckIn's missing body at all.c:20716-20719 adds 2 once per twin
+ // room (1180:0efc-0f16), regardless of the sibling's later arrival.
+ {
+  reset(Time::hourToAbsolute(18));
+  g.extendFloor(0,-10,40); auto *lobby=make("lobby",0,0); g.mainLobby=lobby;
+  auto *hotel=static_cast<Item::Hotel *>(make("hotel_double",20,0));
+  hotel->tenant.armed=true; hotel->tenant.tenure=2;
+  EXPECT(hotel->checkIn(0));
+  EXPECT(hotel->guests.size()==1 && hotel->hosted==2 && hotel->tenant.tenure==0);
+  EXPECT(!hotel->checkIn(0));
+  hotel->dinnerSent=true;
+  EXPECT(hotel->checkIn(1));
+  EXPECT(hotel->dinnerSent);
+  EXPECT(hotel->guests.size()==2 && hotel->hosted==2);
+  EXPECT(g.countT.cat[TenantRules::kCountTwin]==2);
+ }
+
+ // WP9b: 1228:2c03-2c60 / 30bd-3123 (omitted jump bodies at
+ // all.c:31995-31997 / 32047-32048), with raw decrement 1228:6c77:
+ // two guests wake at 07, leave individually, and only the last departure
+ // dirties/pays the room. Thus maids cannot get a 05:00 head start.
+ {
+  reset(Time::hourToAbsolute(5));
+  g.extendFloor(0,-10,40); auto *lobby=make("lobby",0,0); g.mainLobby=lobby;
+  auto *hotel=static_cast<Item::Hotel *>(make("hotel_double",20,0));
+  for(int k=0;k<2;++k) {
+   auto *guest=new Item::Hotel::Guest(hotel,k); guest->entry=lobby;
+   hotel->guests.insert(guest); hotel->addPerson(guest); guest->state=Person::kResting;
+  }
+  const int startFunds=g.funds;
+  g.time.dta=16.0/2600;
+  hotel->advance(0);
+  EXPECT(hotel->hosted==2 && hotel->roomState==Item::Hotel::kOccupied);
+  EXPECT(g.countT.cat[TenantRules::kCountTwin]==2 && g.funds==startFunds);
+  // End at ft=16, avoiding the clock wrap at ft=0 which yields two visits.
+  setTime((300.0+16)/2600); g.time.dta=16.0/2600;
+  hotel->advance(0); // wake visit does not also check out
+  EXPECT(hotel->hosted==2 && hotel->guests.size()==2);
+  unsigned seed=0;
+  for(;seed<10000;++seed) { srand(seed); const int a=rand(), b=rand(); if(a%12==0 && b%12!=0) break; }
+  EXPECT(seed<10000);
+  setTime(Time::hourToAbsolute(8)); g.time.dta=16.0/2600;
+  srand(seed); hotel->advance(0);
+  EXPECT(hotel->hosted==2 && hotel->guests.size()==1);
+  EXPECT(hotel->roomState==Item::Hotel::kOccupied && g.funds==startFunds);
+  setTime(Time::hourToAbsolute(12)); g.time.dta=16.0/2600;
+  hotel->advance(0); // deterministic period-1 tail: last guest leaves
+  EXPECT(hotel->hosted==0 && hotel->roomState==Item::Hotel::kDirty);
+  EXPECT(g.countT.cat[TenantRules::kCountTwin]==0 && g.funds==startFunds+3000);
+  hotel->advance(0); EXPECT(g.funds==startFunds+3000);
+ }
+
+ // WP9b: maid case 2 (all.c:32800-32812, 32834-32839) returns
+ // after counter 3,2,1,0. With two dirty rooms on original floor 12,
+ // maid 0 cleans the first at ft16; ft80 ends work, ft96 selects the
+ // second, and ft112 cleans it. Finishing must not select at ft80.
+ {
+  reset(Time::hourToAbsolute(8));
+  g.extendFloor(2,-10,70);
+  auto *center=static_cast<Item::Housekeeping *>(make("housekeeping",0,2));
+  auto *a=static_cast<Item::Hotel *>(make("hotel_single",20,2));
+  auto *b=static_cast<Item::Hotel *>(make("hotel_single",30,2));
+  a->roomState=b->roomState=Item::Hotel::kDirty;
+  auto *maid=new Item::Housekeeping::Maid(center,0); center->maidStaff[0]=maid;
+  center->Item::Item::removePerson(maid); a->Item::Item::addPerson(maid);
+  maid->target=a; maid->mode=1;
+  auto visit=[&](int ft) { setTime((300.0+ft)/2600); g.time.dta=1.0/2600; center->advance(0); };
+  visit(16); EXPECT(a->roomState==Item::Hotel::kClean && maid->work==3);
+  visit(32); EXPECT(maid->work==2);
+  visit(48); EXPECT(maid->work==1);
+  visit(64); EXPECT(maid->work==0 && maid->mode==2);
+  visit(80); EXPECT(maid->mode==0 && maid->target==a && b->roomState==Item::Hotel::kDirty);
+  visit(96); EXPECT(maid->mode==1 && maid->target==b && b->roomState==Item::Hotel::kDirty);
+  visit(112); EXPECT(b->roomState==Item::Hotel::kClean && maid->work==3);
+ }
 
  // F3: a journey banks exactly once, even if next() is driven past the end.
  {

@@ -229,14 +229,14 @@ void Shop::advance(double dt)
 	}
 
 	// Pool rolls (T26): every 16-frame visit each undispatched slot of the
-	// 40-person pool rolls 1/width. Hits dispatch a real customer.
+	// 48-person pool (1230:07cb, all.c:33438-33442) rolls 1/width.
 	if (open && quotaRemaining > 0 && (let || tenant.armed)) {
 		const int visits = visitsThisTick(game);
 		const double hour = game->time.hour;
 		const int width = (hour >= 10.0 && hour < 17.0) ? 36 :
 			(hour >= 17.0 && hour < 21.0) ? 6 : 0;
 		for (int v = 0; width > 0 && v < visits && quotaRemaining > 0; ++v) {
-			int free = 40 - (int)customers.size();
+			int free = TenantRules::kRetailPoolSize - (int)customers.size();
 			for (int slot = 0; slot < free && quotaRemaining > 0; ++slot) {
 				if (rand() % width != 0) continue;
 				if (!let) {

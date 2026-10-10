@@ -44,7 +44,7 @@ namespace OT
 			int walkinsYesterday;
 			int lastDemandDay;
 			bool revenueSettled;
-            bool dispatched[40] = {};
+            bool dispatched[TenantRules::kRetailPoolSize] = {};
             void openDay();
 
 			class Customer : public Person
