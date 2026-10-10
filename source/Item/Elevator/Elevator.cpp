@@ -892,6 +892,7 @@ void Elevator::evacuateForDisaster()
   c->state = Car::kIdle;
   c->journeyTime = 0;
   c->doorTicks = c->holdTicks = c->moveTicks = 0;
+  c->yootPhase = 0; c->yootCounter = 0;
   c->arrivingPlayed = c->departingPlayed = false;
   c->arrivingSound.Stop(); c->departingSound.Stop(); c->updateSprite();
  }

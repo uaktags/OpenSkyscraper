@@ -9,6 +9,7 @@
 #include "PeopleSystem.h"
 #include "Sprite.h"
 #include "YootEvents.h"
+#include "YootFire.h"
 #include "Math/Vector2D.h"
 #include "Math/Rect.h"
 
@@ -134,6 +135,9 @@ namespace OT
 		/// True while the YootTower T2EV scheduler drives the calendar.
 		bool yootMode() const { return yoot; }
 		const YootEventScheduler & yootScheduler() const { return scheduler; }
+		/// The tower as the YootTower fire reads and burns it (Yoot::FireGrid).
+		Yoot::FireCell yootFireCell(int floor, int x) const;
+		void yootFireBurn(int floor, int x, int & lo, int & hi);
 
 	protected:
 		void draw(sf::RenderTarget & target, sf::RenderStates states) const;
@@ -179,6 +183,25 @@ namespace OT
 		/// True while a floor's two fronts are still within one 12-cell
 		/// strip of each other (just ignited): drawn as small flames.
 		bool fireFloorIgniting(int floor) const;
+
+		// --- YootTower fire (T2FireBurning, Tokyo.t2p 0x10030d50..; EventSystemYoot.cpp) ---
+		/// Start (once, at FBEV's begin minute: IsBreakoutFire's 100 tries), the 3-way
+		/// response dialog, one idle of the fires and the helicopter, the end.
+		void yootFireStart();
+		bool yootFireChoose(int index);
+		void yootFireStep();
+		void yootFireEnd(const char * message);
+		bool yootFireBurning() const { return yoot && type == Type::Fire && !yootFire.fires.empty(); }
+		Yoot::FireModel yootFire;
+		/// 0 = the dialog is open, 1 = helicopter, 2 = security guards, 3 = nothing.
+		int    yootFireMode = 0;
+		long long yootFireIdles = 0;   ///< last mover idle the fires have seen
+		int    yootFireStartFloor = 0;
+		/// The helicopter (mode 1): pixel position and where it flies (a click, else the nearest fire).
+		float  yootHeliX = 0, yootHeliY = 0;
+		bool   yootHeliManual = false;
+		int    yootHeliTargetX = 0, yootHeliTargetFloor = 0;
+		void yootHeliMove();
 
 		// --- bomb (EventT seg_10c8) ---
 		void offerBomb();

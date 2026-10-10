@@ -22,6 +22,9 @@ cd build
 | `--sim-summary <path.json>` | Summary path override. |
 | `--sim-seed <n>` | `srand()` seed (default 1). Every `rand()` consumer draws from it. |
 | `--sim-speed <0..4>` | Speed mode while simulating (default 3 = 12x; 4 = Fast, 3 ticks per step). |
+| `--sim-dt <seconds>` | Real-time step per tick (default 1/60). Smaller values give finer game-time steps (a tick is then under one mover idle). |
+| `--sim-choice <n>` | Button a multi-button event dialog is answered with (the YootTower fire: 0 helicopter, 1 security guards, 2 leave); default: the first button the dialog accepts. |
+| `--sim-car-trace <file>` | One line per change of an elevator car (game minute, car index, altitude, state, door timer, riders, gear, destination, door phase). |
 | `--sim-dump-every <n> <dir>` | Also write `<dir>/tick_<n>.tower` and `.json` every `n` ticks. |
 
 Each step is one `Game::advanceHeadless(1/60 s)`: the same sim ticks as

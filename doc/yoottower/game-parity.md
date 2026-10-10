@@ -162,7 +162,7 @@ Related documents. This audit cites them and does not repeat them:
 | # | YootTower rule | Evidence | OpenSky | Status | Conf |
 |---|---|---|---|---|---|
 | V1 | **Events are scheduled from data.** The world's T2EV lists `(type, rsrcId)`. Each event header is `{levelBit (grade mask), exclusive, cycleDay, beginMin, endMin}`. An event runs when the grade bit is set and `(lapseDays+1) % cycleDay == 0` (overridable), starting at beginMin. | `T2TowerEvent` ctor 0x10068ca0, `Idle` 0x10069970, `T2EventItem` 0x10030050/0x10030280 | **Implemented (step 10):** `YootEventScheduler` (`YootEvents.*`) is fed the world's T2EV list through `RulesProfile::events` (built-in table without the plugin). Begin day = `(totalDays − 11) % cycleDay == 0` (`CalcLapseDays(12)` 0x1001cb10 = CalcTotalDays − 12, +1), grade bit `1 << (grade−1)`, begin minute crossed (Santa: 1440 − width/2, ctor 0x100560b0); a running event does not restart. `EventSystem` uses it in YootTower mode only (`EventSystemYoot.cpp`); SimTower/OpenSky keep the TimeT calendar. Test: 120-day schedules for every event, grade and world. | MATCH | H |
-| V2 | **Fire** (FBEv: grades 3–4, every **60** days, 12:00–18:00). You pay for the helicopter at **$300k** (needs funds), send the security staff (needs a Security Room), or do nothing. | `T2FireBurning::Start/StartEvent/DialogHook` 0x10030d50/0x10031000/0x10031570; FBEV data | **Implemented:** YootTower fires begin at 12:00 every 60 days at grades 3–4 (FBEV), helicopter $300k (heliPrice × 100), no security/cathedral gate and no 16:00 clock jump; unfought fires stop at 18:00 (endMin). Reuses the SimTower fire model and its two-button dialog (helicopter / guards on foot); the "do nothing" choice and T2Fire spread rules are not separate. | PARTIAL | H |
+| V2 | **Fire** (FBEv: grades 3–4, every **60** days, 12:00–18:00). You pay for the helicopter at **$300k** (needs funds), send the security staff (needs a Security Room), or do nothing. | `T2FireBurning::Start/StartEvent/DialogHook` 0x10030d50/0x10031000/0x10031570; FBEV data | **Implemented:** YootTower fires begin at 12:00 every 60 days at grades 3–4 (FBEV), helicopter $300k (heliPrice × 100), no security/cathedral gate and no 16:00 clock jump; unfought fires stop at 18:00 (endMin). WP8e (7.6.K): T2FireBurning's own model: the 3-way dialog (helicopter $300k / security guard needs a Security Room / leave), the one-pixel-a-move fire with its climb every 48 moves, 100-try breakout at the begin minute. Helicopter autopilot, constant firemen walk. | PARTIAL | H |
 | V3 | **Terrorist bomb** (TrEv: Tokyo grades 2–3, Hawaii grade 3; every **36** days at 09:00). The ransom is **$300k** with a deadline of 720 (12:00). The bomb goes into a random tenant that is not fireproof, and security guards search for it. | `T2Terrorist::Start` 0x10063a60; TREV [3000,720,5000] | **Implemented:** 09:00 every 36 days on TREV's levelBit (Tokyo 2–3, Hawaii 3), ransom $300k, detonation at the TREV deadline minute 720 (12:00), no security gate, no clock jump; the SimTower guard hunt and blast are reused. | PARTIAL | H |
 | V4 | **Thief / noisy neighbour "Uncle Reggae"** (MaEv, Tokyo, grades 3+, every 20 or 25 days). He visits tenants and produces complaints ("Uncle Reggae is noisy and annoying") until the security staff catch him. | `T2Maru_Reggae` 0x1003a770–0x1003b8e0 | **Implemented (abstracted):** MAEV 129 (Tokyo, grades 3+, every 25 days, 11:00–23:00) picks a random reachable restaurant (category 50 → fastfood/restaurant), preferring occupied ones. Every 3 minutes a tick; every 10 ticks +10 stress to each occupant; every 60 ticks the claim "'Uncle Reggae is noisy.'. There was a complaint from … floor" and, if a Security office exists, a guard is sent (arrival approximated as 3 min/floor), then "Uncle Reggae was caught by the security staff.". He is not drawn as a walker. MAEV 128 (Mr. Maru, every 20 days, cosmetic) is a hook. **Step 14 B:** Mr. Maru (MAEV 128: one VIP walker, 30 minutes per tenant, sound 9003, no stress or income) stays a logged hook. **Implemented (gap closers):** Mr. Maru (MAEV 128) in YootExtrasSystem: a random lobby-connected tenant, 30 minutes standing, 8 minutes dancing with MR_Maru (world WAVE 9003, interactive runs only), 30 minutes, then the next tenant until 23:00. No stress, income or message. He is not drawn (the walker belongs to the people work). **Implemented (walking agent):** Mr. Maru and Uncle Reggae are pool VIPs who walk (T2Maru_Reggae::Start 0x1003a9f0: BornVIP of VIPL 223 / 224, special flag 0x60, in by the lobby) and stand at their tenant instead of entering. Skin::Yoot draws them: Maru with SLDF 353, at the tenant sheet 354 (ChangeStyle(1)) sitting in walk style 0 and howling in walk style 2 during the 8-minute dance; Reggae with SLDF 355, toggling walk style 0/1 every 3-minute tick; his stress, complaints and guard run only while he plays at the tenant. They leave through the lobby (DeadVIP). Deviations: Maru does not try the adjacent tenant when his target is empty (FindNextTenant), and a reloaded event without its walker ends. | PARTIAL | H |
 | V5 | **Santa** (SaEv every 12 days, all grades, cosmetic). | `T2SantaClaus` 0x100560b0 | **Implemented:** YootTower Santa follows SAEV: last day of each year (`totalDays % 12 == 11`), all grades, starts at 1440 − width/2 (20:56 in Tokyo) and crosses the world right to left, one unit per minute, at the top floor line. Kegon has no SAEV. | MATCH | H |
@@ -1583,3 +1583,85 @@ by owner, destination and `T2PeopleType`) and the zone-5 array of demand list 3 
   speed, items run their own catch-up in item order; with `--sim-speed 1` the result is the same, 0 of 12), the counter offset for
   loads at another minute (19 is the harness value at 00:30), and slot reuse after demolition (a new item takes the next
   ordinal instead of the first free slot).
+
+#### 7.6.K WP8e Large Elevator car timing and the YootTower fire
+
+Lab tree `wp8e` (runs `wp8e-*` under `/lab/out/parity/`, oracle instances `wp8e-*`). New tooling: `oracle_run.py --mindt`
+(shortest run between saves), `--fine-day N` (the `--fine` window on game day N), `FIRE_CHOICE=heli|guard|leave` (clicks the
+fire dialog); `OpenSkyscraper --sim-dt S` (finer ticks), `--sim-car-trace FILE` (one line per car change: minute, car, altitude,
+state, door timer, riders, gear, destination, door phase) and `--sim-choice N` (button for multi-button event dialogs).
+
+**K1 Large Elevator car timing (target 1).**
+- *Method.* `tokyo_g5_large_elevator`, four oracle runs (`wp8e-lift1..4`) saving 560-720 (9:20-12:00) with `--mindt 0.05`. The game
+  runs 10 game minutes per real second whatever the speed slider says (40 mover idles a second), so the saves land about 3 game
+  minutes apart; each save has the car's `position`, `offsetPos`, `direction`, `waitCounter`, `numPeople`, `nextStop` and module
+  state (`status` 1/2 unload, 3 boarding, 4 hold, 5/6/7 gear 0/1/2). The runs are not identical to each other after the first stops
+  (the pause jitter changes the people), so the samples are used statistically. OpenSky side: `--sim-dt 0.0013889 --sim-car-trace`.
+- *Gear, speed, acceleration: already right.* `offsetPos` is a multiple of 6 in state 5, of 18 in state 6 and 0 in state 7, and
+  the 0 -> 9 / 21 / 33 trips run 2 floors an idle at gear 2, as `Car::yootDrive` does (7.6.A). Not changed.
+- *Stop dwell and doors: not right.* BigElev's module states (decompile `FUN_1000c150` unload, `FUN_1000c2c0` boarding, `FUN_1000c540`
+  hold, `FUN_1000cbd0` arrival, `FUN_1000cb00` depart): arrival with a rider for the floor starts unload with counter 6 (an even
+  counter drops one rider, counter 2 drops all that remain, an odd counter only ticks; no rider left -> boarding); boarding starts at
+  counter 6 on an appointed call (even counter: one rider steps out of the queue, counter 2 all that fit; odd: the counter ticks;
+  nobody at counter 6 -> leave at once); then a hold of `mover+0x68` idles, which a newly appointed call turns back into boarding.
+  OpenSky unloaded everyone on the first door tick, boarded on a 5-tick pattern and held `defaultWait` = 3 idles.
+- *The hold is 6, not 3.* `waitCount` is read from the file into `mover+0x68`, but exporting 3, 9 and 1 (`mkwait` variants, runs
+  `wp8e-w9`, `wp8e-w1`, `hkA-lift5`) all came back as 6 in the first save; the saved hold counters in state 4 reach 6.
+- *Fix.* `Yoot::DoorCycle` (`source/YootElevator.h`) is that state machine, `Car::yootArrive` / `yootDoorStep` apply it; the
+  appointment cost is `Yoot::sweepCost` (BigElev `FUN_1000da60`: a sweeping car pays by its next stop T and the shaft top, not by its
+  distance travelled; the old cost added the distance to T). Tests: `testYootDoorCycle` (unload, boarding, hold, reopen, full car,
+  the cost table).
+- *Before / after against the oracle, 600-720 minute window, share of the busy car time:* unload 0.087 original / 0.09 OpenSky
+  (before: all in one tick); hold 0.174 / 0.18-0.19 (before 3 idles); boarding 0.185 / 0.07-0.10; doors open together 0.45 / 0.34-0.39
+  (before 0.30); gear 0 / 1 / 2 time 0.28 / 0.11 / 0.16 against 0.36-0.38 / 0.13 / 0.12-0.14. The oracle's lobby car fills to 40 over
+  36 minutes (a rider arrives about every minute and each arrival reopens the 6-idle window); OpenSky's lobby car still leaves with
+  4-8 (mean riders per moving car 4.4 against 9.3), because fewer riders reach the lobby queue in the window: a people-side
+  difference, not the door cycle.
+- *Riders (08:00-20:00 means, 4-6 seeds).* `tokyo_g5_large_elevator`, riding: original 9; OpenSky before 6.8 (3-11), after 7.3-10.
+  `yoot_people` (2 Simple Elevator cars), riding on day 0 / 1 / 2 (holiday): original 13 / 16 / 12; before 12.3 / 11.7 / 13.7;
+  after 14.2 / 13.2 / 18.3 (6 seeds). Per car that is 6.5 / 8.0 / 6.0 against 7.1 / 6.6 / 9.2. Days 0 and 1 improved, **the holiday
+  did not**: the original's moving cars carry 6.3 riders on day 2 (13.1 and 10.8 on days 0 and 1), OpenSky's 10.6-11.4, while the
+  original has 34 waiting (OpenSky 22-26). The state shares are close on day 2 (original board 0.19, hold 0.12, gear 0 0.38,
+  gear 1 0.22; OpenSky 0.15, 0.15, 0.34, 0.15), so this is demand (day-2 shop customers: burger 119 against 156) or dispatch
+  of the holiday's scattered calls, not the door timing.
+- **Open:** the holiday riders per car (9.2 against 6.0; cause not found), the Large Elevator's schedule table (the 2 x 10 x 3
+  extra data picks a dispatch mode in `FUN_1000d130`; the exporter writes fresh values), the people walking to the lobby queue.
+  Goldens `sim_people_yoottower` and `sim_visitors_yoottower` were regenerated (elevator timing).
+
+**K2 Fire (target 2): YootTower's own fire, ported.** Sources: `T2FireBurning::Start/Exec/StartEvent/DialogHook/IdleEvent/
+StopEvent/MakeFire/AdjustFirePos/CallFireman/IsBreakoutFire` 0x10030d50-0x10032110, `T2Fire::Move/ExtinguishByFireman`
+0x10032320/0x10032590, `T2Helicopter::Move` 0x10032920, `T2TowerEvent::Idle` 0x10069970; Tokyo.t2p T2DLG 8110, STRTABLE 8100, FBEV
+[3000, bitmaps 8100-8103]. Code: `source/YootFire.h/.cpp` (`Yoot::FireModel`, `fireResponse`), `EventSystemYoot.cpp`
+(`yootFireStart/Choose/Step/End`, `yootHeliMove`), `Game::askEventChoices`.
+- *Start.* `T2TowerEvent::Idle` calls `Start` once, at the begin minute (`IsBeginTime` is an equality); an event whose `Start`
+  returns 0 is dropped for the day. `IsBreakoutFire` gives it 100 random cells (x in [0, width), row in [0, rows - 2)); the cell must
+  hold a burnable tenant (not burnt, not flag 0x1000) and the 14 cells around it must all be tenants. Oracle: the 37-item
+  `tokyo_g4_fire` first draft never burned on day 11 at grade 4 (12:00-12:20, no dialog); with 24 full-width rows (887 tenants) it does,
+  at 12:00. OpenSky now has the same rule, so small towers have no fire (before: always).
+- *Dialogs.* Two: an OK notice ("Fire has broken out on the 18th floor. The residents are escaping through the emergency stairs.
+  Please put the fire out immediately!"), then T2DLG 8110 with three buttons: Firefighting team (the helicopter, `DoPay(3000, 2)` =
+  $300,000, refused with "Not enough money." when short), The security guard (refused with "You can't put the fire out because there
+  is no security room." unless a Security Room, `IBEK`, exists; `CallFireman` then sends up to six people from the registry-5
+  tenants), Leave. A refused button keeps the dialog open (`askEventChoices` returns false). Headless runs press the first accepted
+  button, or `--sim-choice`.
+- *Spread (T2Fire).* A fire is a 96 x 32 px (12-cell) flame. Each move it looks at the cell just past its front, burns a tenant it
+  touches (status 10000), and steps one pixel (8 per cell); a missing, fireproof or already burnt tenant (other than its own) stops
+  it. Every 48 moves (half its width) it tries to start a new pair (one each way) on the floor above, at its origin edge, scanning
+  up to 12 cells when stopped; a stopped fire dies at the first multiple of 48 after its counter passes 48. `MakeFire` slides a 12-cell
+  run onto tenants (`AdjustFirePos`) and burns every tenant in it. The event ends when no fire is left or the clock reaches 18:00
+  ("Fire has been put out."), without the SimTower 16:00 clock jump. Burnt tenants become rubble at once here (the original leaves
+  them as burnt tenants).
+- *Rate.* One move per mover idle (4 a game minute) is an assumption from the loop, checked by the end result: the oracle's
+  `leave` run (`wp8e-fire-leave`, fire on the 18th floor, 12:00-18:00) burnt 284 of 888 tenants; OpenSky, 30 seeds of the same
+  tower and answer, burns 300 on average (median 294, 34-617, floors 17-19: 339, 279, 261, 181).
+- *Outcomes in the oracle (`wp8e-fire-{leave,guard,heli}`, same fire).* Funds: helicopter 9,000,000 -> 8,997,000 (-$300,000),
+  guard and leave unchanged. Burnt tenants at 18:00 were 284 in all three: nobody sprays the helicopter in the harness, and the guard
+  run had a Security Room with no staff (status 10), so `CallFireman` sent nobody. A "Butler" message box ends the event at 18:00 and
+  the File menu is locked while it burns (no saves, screenshots only).
+- *Tests.* `testYootFire`: `MakeFire` / `AdjustFirePos`, one pixel a move, the floor-above climb at move 48, fireproof stop, burn-out,
+  `IsBreakoutFire` tries, `fireResponse` for the three answers, and the three outcomes on one fire (leave burns every tenant of 3
+  floors inside 1440 moves; the helicopter's water puts a fire out where it lands; one fireman puts one fire out 5 moves after
+  arriving and is sent to the next).
+- **Open:** the helicopter is an autopilot plus click-to-target (the original follows the mouse and sprays while the button is held);
+  the firemen's walk is a constant 40 moves (the original walks the people through the tower; the oracle had no staff to measure);
+  the SimTower fire art is reused (the world's FIRE bitmap is not drawn); the forced game speed 25 is not modelled.
