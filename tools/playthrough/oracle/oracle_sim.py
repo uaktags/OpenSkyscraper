@@ -378,11 +378,11 @@ def run_simulation(tdt_path, days, out_dir):
                 shot_name = os.path.join(out_dir, f"shot_d{d}_h{h:02d}.png")
                 subprocess.run(["import", "-window", "root", shot_name], env=env)
                 wd.wait(SHOT_INTERVAL, f"d{d}h{h:02d}")
-                if h == 12:
+                if h in (8, 12, 18, 23):
                     # per-day camera views: cathedral (roof), hotel floors, ground lobby
                     for view in ("cathedral", "floors", "lobby"):
                         cam.go(view)
-                        subprocess.run(["import", "-window", "root", os.path.join(out_dir, f"view_d{d}_h12_{view}.png")], env=env)
+                        subprocess.run(["import", "-window", "root", os.path.join(out_dir, f"view_d{d}_h{h:02d}_{view}.png")], env=env)
             
             # Save state at end of day
             print(f"[oracle] Saving tower state at end of day {d}...")

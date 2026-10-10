@@ -242,6 +242,8 @@ cmd_cpp_shots() {
   echo "[play] Running C++ graphical playthrough with hourly screenshots under Xvfb..."
 
   in_ctr "mkdir -p /lab/out/${name}-shots && rm -f /lab/out/${name}-shots/*.png"
+  # main menu (no --load-game): menu background shot
+  in_ctr "xvfb-run -a -s \"-screen 0 1280x800x24\" bash -c '/lab/src/$name/build/OpenSkyscraper >/dev/null 2>&1 & P=\$!; sleep 9; import -window root /lab/out/${name}-shots/menu_cpp.png; kill \$P' || true"
   in_ctr "xvfb-run -a -s \"-screen 0 1280x800x24\" bash -c '
     out=\"/lab/out/${name}-shots\"
     bin=\"/lab/src/$name/build/OpenSkyscraper\"
@@ -265,12 +267,12 @@ cmd_cpp_shots() {
       # Dismiss the modal Financial Report / rating dialog (Close button) so the sim keeps running
       bash /lab/tools/dismiss_dialog.sh
       import -window root \"\$out/\$shot_name\" || xwd -root -silent | convert xwd:- \"\$out/\$shot_name\" || true
-      if [ \$hr -eq 12 ]; then
+      if [ \$hr -eq 8 ] || [ \$hr -eq 12 ] || [ \$hr -eq 18 ] || [ \$hr -eq 23 ]; then
         # per-day views: hotel floors, cathedral, ground lobby (hourly shots stay on the lobby)
         for v in floors cathedral lobby; do
           bash /lab/tools/cpp_view.sh goto \$v
           bash /lab/tools/dismiss_dialog.sh
-          import -window root \"\$out/view_d\${d}_h12_\$v.png\" || true
+          import -window root \"\$out/view_d\${d}_h\$(printf %02d \$hr)_\$v.png\" || true
         done
       fi
       sleep 1.8

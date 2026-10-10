@@ -232,3 +232,14 @@ web: trained from the DOM text). Evidence (region crops, validation JSON, glyph 
 * C++ GUI camera: the game starts at the top of the tower. `cpp_view.sh goto <lobby|floors|cathedral>` uses the game's own keys (Up/Down = 20 px per press, clamped at the
   world bottom) plus a minimap click for the horizontal centre; lobby = bottom clamp + 13 Up presses, floors 172, cathedral 193 (SCHMITT.TDT, 1280x800).
   `play.sh cpp-shots` puts the camera on the lobby for the hourly shots and takes `view_dD_h12_{floors,cathedral,lobby}.png` every day.
+
+### Final visual-parity pass (art-v2 trees, SCHMITT + BARKLE4D, day 1; full list in `out/compare/final/REPORT.md`)
+
+* Montages (oracle | web | C++): `out/compare/final/<TOWER>/{lobby,floors,cathedral}_h{08,12,18,23}.png`, `minimap_night.png`, `menu.png`; built by `montage_final.py`.
+  `cpp-shots`, `web_drive.mjs` and `oracle_sim.py` now take lobby/floors/cathedral views at shot hours 08/12/18/23 and menu shots (`menu_cpp.png`, `menu_web.png`).
+* C++ top differences: modal "Congratulations" dialog covers every view (dismiss_dialog.sh misses it); ~2x zoom/black strip so composition is not comparable;
+  sky phase not locked to the oracle clock; main menu draws `splashscreen` checkerboard, `ui/menubg` is not wired in MainMenu.cpp; minimap sky stays day-blue at night; dark/greyer floor palette and black-silhouette people.
+* Web top differences: big empty grey shafts and open sky between tenant blocks; camera targets not matching oracle rows (no cathedral for BARKLE4D -> frames missing);
+  BARKLE4D grand lobby translucent; flat sky without twilight; overlapping floating HUD.
+* Matches: TDT import, grand-lobby slices, cathedral shape/position, hotel room states, night stars (web minimap follows night), toolbox cells.
+* Caveat: shot labels are harness indices, not a verified in-game clock (oracle analog watch only; C++ GUI no digital clock), so sky phases differ between ports.

@@ -86,6 +86,8 @@ export function recomputeAllChains(game) {
     await page.evaluate(() => { try { window.openSkyScraper?.unlock(); } catch (_) {} });
     const openskyBtn = page.locator('button[data-mode="opensky"]');
     await openskyBtn.waitFor({ state: "visible", timeout: 20000 });
+    await page.waitForTimeout(2500);
+    await page.screenshot({ path: path.join(opts.out, "menu_web.png") });
     await openskyBtn.click();
     try {
       await page.waitForFunction(() => window.__game && window.__game.ownership && window.__game.ownership.mode === "opensky", { timeout: 90000 });
@@ -213,8 +215,8 @@ export function recomputeAllChains(game) {
         await page.evaluate(() => window.__setView("lobby"));
         await page.waitForTimeout(100);
         await page.screenshot({ path: path.join(opts.out, `shot_d${day}_h${hh}.png`) });
-        // Per-day camera views at midday and 23:00: ground lobby, cathedral, hotel floors
-        if (hour === 12 || hour === 23) {
+        // Per-day camera views at 08:00, 12:00, 18:00 and 23:00: ground lobby, cathedral, hotel floors
+        if ([8, 12, 18, 23].includes(hour)) {
           for (const v of ["lobby", "cathedral", "floors"]) {
             const ok = await page.evaluate((n) => window.__setView(n), v);
             if (!ok) { console.log(`[web_drive] view ${v} unavailable (no such item)`); continue; }
