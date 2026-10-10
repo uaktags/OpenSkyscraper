@@ -4454,8 +4454,9 @@ static void testBatch5ATenantRules()
         EXPECT(c.population == 19 && c.dirty);
         c.add(kCountOffice, -6);
         EXPECT(c.population == 13);
+        c.dirty = false;
         c.reset(kCountShop);                      // the shop +10 leaks until the daily reset
-        EXPECT(c.population == 3 && c.cat[kCountShop] == 0);
+        EXPECT(c.population == 3 && c.cat[kCountShop] == 0 && c.dirty);
         EXPECT(c.resetOnce(kCountFastFood, 4) && !c.resetOnce(kCountFastFood, 4) && c.resetOnce(kCountFastFood, 5));
         c.add(-1, 5);                             // unrecognised still changes the global
         EXPECT(c.population == 8);
@@ -4639,6 +4640,7 @@ static void testBatch5BRecyclingAndVip()
 
 #ifdef OPENSKY_TRANSPORT_SCENARIOS
 #include "Item/Cinema.h"
+#include "Item/PartyHall.h"
 #include "Item/Shop.h"
 // Engine scenarios for the batch-5 fixes (F1-F9); runs in OpenSkyTransportTests.
 static void testBatch5Engine(OT::Game &g)
@@ -4665,6 +4667,80 @@ static void testBatch5Engine(OT::Game &g)
   for (int k=0;k<6;++k) { c->tenant.bank[k].count=1; c->tenant.bank[k].total=(int16_t)total; }
   return c;
  };
+
+ // WP9f: TimeT ft=240 rebuilds shops, FF, party and cinema; ft=1600
+ // rebuilds restaurants (all.c:23506-23507, 23544, 21102-21123,
+ // 28876-28878, 28906-28907). Sticky categories survive both resets.
+ // Hand sum: 333 initially, 192 at 10:00, still 192 at 13:00,
+ // 175 at 17:00. Run the same boundaries on WD and WE, including Q4->Q1.
+ for (int day : {0, 2, 12}) {
+  reset(day+Time::hourToAbsolute(9)); g.rating=4;
+  auto *shop=static_cast<Item::Shop *>(make("shop",0,0));
+  auto *ff=static_cast<Item::FastFood *>(make("fastfood",30,0));
+  auto *restaurant=static_cast<Item::Restaurant *>(make("restaurant",60,0));
+  auto *party=static_cast<Item::PartyHall *>(make("partyhall",90,0));
+  auto *cinema=static_cast<Item::Cinema *>(make("cinema",120,0));
+  shop->walkinsToday=7; ff->walkinsToday=11; restaurant->walkinsToday=13;
+  cinema->movieType=0; cinema->movieAgeDays=0;
+  g.countT=TenantRules::CountT();
+  const int initial[]={6,1,2,2,10,20,30,99,160,3};
+  for (int c=0;c<10;++c) g.addPopulation(c,initial[c]);
+  auto boundary=[&](double hour) {
+   struct Clock : Time { using Time::set; };
+   // Stay in the exact EXE frame, beyond floating-point hour rounding.
+   Clock clock; clock.set(day+Time::hourToAbsolute(hour)-1.0/2600);
+   clock.set(day+Time::hourToAbsolute(hour)+1e-8); g.time=clock;
+   g.advanceSimTick(0);
+  };
+  boundary(9.99); EXPECT(g.population==333);
+  boundary(10);
+  EXPECT(g.time.eventFrame()==240 && g.population==192);
+  EXPECT(g.countT.cat[4]==7 && g.countT.cat[5]==11 && g.countT.cat[6]==30);
+  EXPECT(g.countT.cat[7]==50 && g.countT.cat[8]==80 && !party->open);
+  boundary(13); EXPECT(party->open && g.population==192 && g.countT.cat[7]==50);
+  boundary(17); EXPECT(g.time.eventFrame()==1600 && g.population==175);
+  EXPECT(g.countT.cat[6]==13);
+  for (int c : {0,1,2,3,9}) EXPECT(g.countT.cat[c]==initial[c]);
+ }
+ // The EXE resets even an empty category (the calls precede its table loop).
+ // A stale loaded/deleted venue total must not wait for a replacement item.
+ {
+  reset(2.0+Time::hourToAbsolute(9));
+  auto *shop=static_cast<Item::Shop *>(make("shop",0,0));
+  shop->let=true; shop->walkinsYesterday=10;
+  auto *restaurant=static_cast<Item::Restaurant *>(make("restaurant",30,0));
+  restaurant->walkinsYesterday=30;
+  g.countT=TenantRules::CountT();
+  const int initial[]={6,1,2,2,10,20,30,99,160,3};
+  for (int c=0;c<10;++c) g.addPopulation(c,initial[c]);
+  g.removeItem(shop);
+  g.removeItem(restaurant);
+  EXPECT(g.countT.population==333); // demolition does not debit these categories
+  auto boundary=[&](double hour) {
+   struct Clock : Time { using Time::set; };
+   Clock clock; clock.set(2.0+Time::hourToAbsolute(hour)-1.0/2600);
+   clock.set(2.0+Time::hourToAbsolute(hour)+1e-8); g.time=clock; g.advanceSimTick(0);
+  };
+  boundary(10); EXPECT(g.population==44);
+  EXPECT(g.countT.cat[4]==0 && g.countT.cat[5]==0 && g.countT.cat[7]==0 && g.countT.cat[8]==0);
+  boundary(13); EXPECT(g.population==44);
+  boundary(17); EXPECT(g.population==14 && g.countT.cat[6]==0);
+ }
+ // Finance settlement at ft=2533 rotates money, not CountT. Neither the
+ // calendar rollover nor the 04:59 judge is a population recount.
+ {
+  reset(11.0+Time::hourToAbsolute(23));
+  g.countT=TenantRules::CountT();
+  const int initial[]={6,1,2,2,10,20,30,99,160,3};
+  for (int c=0;c<10;++c) g.addPopulation(c,initial[c]);
+  struct Clock : Time { using Time::set; };
+  Clock clock; clock.set(11.0+Time::hourToAbsolute(23.99)); clock.set(12.0);
+  g.time=clock; g.advanceSimTick(0); EXPECT(g.population==333);
+  clock.set(12.0+Time::hourToAbsolute(4.98));
+  clock.set(12.0+Time::hourToAbsolute(5));
+  g.time=clock; g.advanceSimTick(0); EXPECT(g.population==333);
+  for (int c=0;c<10;++c) EXPECT(g.countT.cat[c]==initial[c]);
+ }
 
  // WP9d: the EXE's bc58 retail period survives the visual rain stop at
  // 17:00 (1020:0e0d, all.c:4531-4535), midnight and the 04:59 judge.
@@ -4824,8 +4900,8 @@ static void testBatch5Engine(OT::Game &g)
  // all.c:31995-31997 / 32047-32048), with raw decrement 1228:6c77:
  // two guests wake at 07, leave individually, and only the last departure
  // dirties/pays the room. Thus maids cannot get a 05:00 head start.
- {
-  reset(Time::hourToAbsolute(5));
+ for (int day : {0, 2}) { // WP9f: WD and WE have identical departure accounting
+  reset(day+Time::hourToAbsolute(5));
   g.extendFloor(0,-10,40); auto *lobby=make("lobby",0,0); g.mainLobby=lobby;
   auto *hotel=static_cast<Item::Hotel *>(make("hotel_double",20,0));
   for(int k=0;k<2;++k) {
@@ -4838,17 +4914,17 @@ static void testBatch5Engine(OT::Game &g)
   EXPECT(hotel->hosted==2 && hotel->roomState==Item::Hotel::kOccupied);
   EXPECT(g.countT.cat[TenantRules::kCountTwin]==2 && g.funds==startFunds);
   // End at ft=16, avoiding the clock wrap at ft=0 which yields two visits.
-  setTime((300.0+16)/2600); g.time.dta=16.0/2600;
+  setTime(day+(300.0+16)/2600); g.time.dta=16.0/2600;
   hotel->advance(0); // wake visit does not also check out
   EXPECT(hotel->hosted==2 && hotel->guests.size()==2);
   unsigned seed=0;
   for(;seed<10000;++seed) { srand(seed); const int a=rand(), b=rand(); if(a%12==0 && b%12!=0) break; }
   EXPECT(seed<10000);
-  setTime(Time::hourToAbsolute(8)); g.time.dta=16.0/2600;
+  setTime(day+Time::hourToAbsolute(8)); g.time.dta=16.0/2600;
   srand(seed); hotel->advance(0);
   EXPECT(hotel->hosted==2 && hotel->guests.size()==1);
   EXPECT(hotel->roomState==Item::Hotel::kOccupied && g.funds==startFunds);
-  setTime(Time::hourToAbsolute(12)); g.time.dta=16.0/2600;
+  setTime(day+Time::hourToAbsolute(12)); g.time.dta=16.0/2600;
   hotel->advance(0); // deterministic period-1 tail: last guest leaves
   EXPECT(hotel->hosted==0 && hotel->roomState==Item::Hotel::kDirty);
   EXPECT(g.countT.cat[TenantRules::kCountTwin]==0 && g.funds==startFunds+3000);

@@ -6,6 +6,7 @@ set -eo pipefail
 # METRIC METHOD (three sources, see README "Metric method"):
 #   C++ headless  : `cpp` runs --sim Nd, values come from the SimHarness summary JSON (exact state;
 #                   rating is 0-based, stars = rating+1); hourly state via --sim-dump-every 40 + cpp_hourly.py.
+#                   Set PLAY_CPP_DUMP_EVERY=40 to retain dumps for each cpp checkpoint run.
 #   C++ GUI shots : `cpp-shots` + extract_cpp_metrics.py -> ocr.py digit-template OCR of the time window.
 #   Web           : web_drive.mjs logs game state AND the HUD DOM text/boxes per hour (hourly.json);
 #                   ocr.py reads the HUD pixels with templates trained on the DOM text (cross-check).
@@ -171,6 +172,7 @@ import os, sys, subprocess, json, csv
 name = \"$name\"
 tower = \"$tower\"
 days = int(\"$days\")
+dump_every = int(\"${PLAY_CPP_DUMP_EVERY:-0}\")
 out_dir = f\"/lab/out/{name}\"
 bin_path = f\"/lab/src/{name}/build/OpenSkyscraper\"
 
@@ -187,6 +189,10 @@ for day in range(1, days + 1):
         \"--sim-out\", day_tower,
         \"--sim-summary\", day_json
     ]
+    if dump_every > 0:
+        dump_dir = f\"{out_dir}/day{day}_dumps\"
+        os.makedirs(dump_dir, exist_ok=True)
+        cmd += [\"--sim-dump-every\", str(dump_every), dump_dir]
     print(f\"[play] Simulating Day {day}/{days}: {\" \".join(cmd)}\")
     res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     if res.returncode != 0:

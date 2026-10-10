@@ -239,7 +239,7 @@ namespace OT
 			bool dirty = false;
 			int resetDayPlus1[kCountCategories] = {0}; ///< day+1 of the last resetOnce
 			/// Reset at most once per `day` (items sharing a venue type each
-			/// call this at open; the first call wins, later ones add on top).
+			/// share their scheduled rebuild; later calls add on top).
 			bool resetOnce(int c, int day)
 			{
 				if (c < 0 || c >= kCountCategories || resetDayPlus1[c] == day + 1) return false;
@@ -258,6 +258,7 @@ namespace OT
 				if (c < 0 || c >= kCountCategories) return;
 				population -= cat[c];
 				cat[c] = 0;
+				dirty = true; // 1068:07b3 also sets the HUD/report dirty word
 			}
 		};
 
