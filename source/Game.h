@@ -144,9 +144,9 @@ namespace OT {
 		TenantRules::CountT countT;
 		void addPopulation(int category, int delta);
 		void resetCategory(int category);
-		/// resetCategory at most once per simulation day: every shop / fast food /
-		/// restaurant / cinema / party hall calls this when it opens, the first
-		/// call of the day clears the category and later calls only add.
+		/// Scheduled category rebuilds: shop / fast food / cinema / party at
+		/// 10:00, restaurant at 17:00. The scheduler clears even empty categories;
+		/// item calls share the day marker and then add each contribution.
 		void resetCategoryOnce(int category);
 		/// Recompute countT once from item state (old saves without it).
 		void recomputeCountT();

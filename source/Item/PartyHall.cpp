@@ -63,12 +63,20 @@ void PartyHall::updateSprite()
 void PartyHall::advance(double dt)
 {
 	(void)dt;
+	// 1188:05af, all.c:21102-21123: party=0+50 in the 10:00
+	// entertainment table rebuild. Opening the doors at 13:00 adds nobody.
+	if (!prototype->yoot && game->time.checkHour(10)) {
+		quota = 50;
+		game->resetCategoryOnce(TenantRules::kCountParty);
+		game->addPopulation(TenantRules::kCountParty, quota);
+	}
 	if (game->time.checkHour(13)) {
 		open = true;
 		quota = 50;
-		// CountT party category (T14): daily reset at the 13:00 quota set.
-		game->resetCategoryOnce(TenantRules::kCountParty);
-		game->addPopulation(TenantRules::kCountParty, quota);
+		if (prototype->yoot) {
+			game->resetCategoryOnce(TenantRules::kCountParty);
+			game->addPopulation(TenantRules::kCountParty, quota);
+		}
 		patronsToday = 0;
 		eventSettled = false;
 		clearVisitors();

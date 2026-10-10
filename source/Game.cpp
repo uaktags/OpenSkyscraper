@@ -1089,6 +1089,18 @@ void Game::advanceSimTick(double dt)
 
     eventSystem.advance(dt);
     const bool frozen = eventWasActive || eventSystem.isActive();
+    if (!frozen && !yootEconomy) {
+        // TimeT ft=240 / 1600 (all.c:28876-28878, 28906-28907):
+        // clear whole categories before their item pass, even with no live
+        // venues. 1188:05af rebuilds BOTH cinema and party quotas at 10:00.
+        if (time.checkHour(10)) {
+            resetCategoryOnce(TenantRules::kCountShop);
+            resetCategoryOnce(TenantRules::kCountFastFood);
+            resetCategoryOnce(TenantRules::kCountParty);
+            resetCategoryOnce(TenantRules::kCountCinema);
+        }
+        if (time.checkHour(17)) resetCategoryOnce(TenantRules::kCountRestaurant);
+    }
     // The EXE freezes the VIP system and recycling while a fire/bomb
     // emergency is active; YootTower keeps them running.
     if (!frozen || yootEconomy) vipSystem.advance(dt);
@@ -1658,7 +1670,9 @@ void Game::removeItem(Item::Item * item)
 {
     if (!item || !items.count(item)) return;
     NameManager::removeTenant(item);
-    // Demolition removes an occupied office (6) / condo (3) from CountT.
+    // 1200:369d (all.c:28199-28236) removes only sticky office/condo
+    // and hosted hotel contributions. Retail and entertainment stay in
+    // CountT until their next scheduled table rebuild, even if now empty.
     if (item->populationCategory() >= 0 && item->populationContribution() != 0)
         addPopulation(item->populationCategory(), -item->populationContribution());
     // Cancel current and queued trips while virtual detach hooks are live.
