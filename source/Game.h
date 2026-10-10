@@ -29,19 +29,45 @@
 #include "LevelUpDialog.h"
 #include "MapWindow.h"
 #include "FinanceWindow.h"
+#include "ReportDialog.h"
 #include "JudgeSystem.h"
 #include "LevelUp.h"
 #include "VipSystem.h"
 #include "EventSystem.h"
+#include "BuildRules.h"
+#include "Skin.h"
+#include "YootCatalog.h"
+#include "YootWorldArt.h"
+#include <memory>
+
 
 namespace OT {
 	namespace Item { class AbstractPrototype; }
+	namespace Item { class Item; }
 
 	class Game : public State
 	{
 	public:
 		Application & app;
 		Game(Application & app);
+		BuildRules activeRules;
+		/// Switch the active ruleset/profile and apply its process-wide
+		/// clock mode (YootTower minute-linear time) and calendar.
+		void setRules(const BuildRules & rules);
+
+		/// YootTower item catalog (plan step 4): prototype id -> TNDF/MVDF
+		/// stats for the active world. Empty outside YootTower mode.
+		std::map<std::string, YootItemStats> yootCatalog;
+		/// OpenSky price/carCost of every overlaid prototype, restored when
+		/// the catalog is removed.
+		std::map<std::string, std::pair<int, int> > yootBasePrices;
+		/// Overlay (or, outside YootTower, remove) the catalog onto the
+		/// prototypes: price, carCost and prototype->yoot.
+		void applyItemCatalog();
+		/// Catalog entry for an item's prototype, or null.
+		const YootItemStats * yootStats(const Item::Item * item) const;
+
+
 		virtual ~Game();
 
 		typedef std::set<Sprite *> Sprites;
@@ -54,15 +80,32 @@ namespace OT {
 
 		bool handleEvent(sf::Event & event);
 		void advance(double dt);
+		/// Headless sim step (--sim, SimHarness): the sim ticks of
+		/// advance() plus the weather roll, with no rendering or input.
+		/// A pending event choice is answered "yes" deterministically.
+		void advanceHeadless(double dt);
+		/// Event log for the headless summary; recording is off in play.
+		bool simRecording = false;
+		/// --sim-choice N: the button headless runs press in a multi-button event
+		/// dialog first (the fire dialog: 0 helicopter, 1 security, 2 leave); -1 = first accepted.
+		int headlessChoice = -1;
+		std::vector<std::string> simEvents;
+		void recordSimEvent(const std::string & message);
+
+		/// Jump the game clock to `h` (0..24) of the current day. The clock's
+		/// absolute-to-hour mapping is non-linear, so this goes through
+		/// Time's table. Used by the event system (e.g. a caught fire) to
+		/// snap the clock forward.
+		void jumpToHour(double h);
 		bool handleViewportScrollbarEvent(sf::Event & event);
 		void drawViewportScrollbars(sf::RenderTarget & target) const;
 		void qaSetViewportScrollFractions(double horizontal, double vertical);
 
 		Item::Factory itemFactory;
 
-		typedef std::set<Item::Item *> ItemSet;
+		typedef std::set<Item::Item *, SimLess> ItemSet;
 		ItemSet items;
-		typedef std::set<class Person *> PersonSet;
+		typedef std::set<class Person *, SimLess> PersonSet;
 		PersonSet people;
 		typedef std::map<int, ItemSet> ItemSetByInt;
 		typedef std::map<std::string, ItemSet> ItemSetByString;
@@ -74,23 +117,71 @@ namespace OT {
 		Item::Item * metroStation;
 		void addItem(Item::Item * item);
 		void removeItem(Item::Item * item);
-		void extendFloor(int floor, int minX, int maxX, bool free = false);
+        void destroyItemByDisaster(Item::Item *item);
+        void evacuateForDisaster();
+        void cancelTransientVip();
+        bool rejectDisasterWorldEdit();
+		bool extendFloor(int floor, int minX, int maxX, bool free = false);
+		/// True on the days the bomb (day%60==59) or fire (day%84==83) event
+		/// is offered; venues pay no income then (ASM 1180:12e7).
+		bool isDisasterOfferDay() const;
 		/// Mint free stub floor slabs where a loaded tower lost them
 		/// (OpenSkyWeb ISSUE-041 self-heal). Returns true when repaired.
 		bool repairFloorCoverage();
 		/// Serialize the tower (with integrity hash) to the given path.
 		bool writeTowerFile(const std::string & path);
 
-		int funds;
+		int64_t funds;
 		Money money;
 		int rating;
 		int population;
 		bool populationNeedsUpdate;
-		void transferFunds(int f, std::string category = "misc", std::string message = std::string());
-		void setFunds(int f);
+		/// Next YootTower tenant ordinal (Item::yootSlot).
+		int yootSlotCounter = 0;
+		void transferFunds(int64_t f, std::string category = "misc", std::string message = std::string());
+		void setFunds(int64_t f);
 		void setRating(int r);
 		void setPopulation(int p);
 		void ratingMayIncrease();
+
+		/// EXE CountT (batch 5 T14): ten category totals plus the global.
+		/// `population` mirrors countT.population.
+		TenantRules::CountT countT;
+		void addPopulation(int category, int delta);
+		void resetCategory(int category);
+		/// Scheduled category rebuilds: shop / fast food / cinema / party at
+		/// 10:00, restaurant at 17:00. The scheduler clears even empty categories;
+		/// item calls share the day marker and then add each contribution.
+		void resetCategoryOnce(int category);
+		/// Recompute countT once from item state (old saves without it).
+		void recomputeCountT();
+		/// Items on `floor` in slot order (ascending x, ties by id); floor slabs excluded.
+		std::vector<Item::Item *> slotOrder(int floor) const;
+		/// Count of non-infrastructure items strictly left of `item` on its floor.
+		int tenantSlotIndex(const Item::Item * item) const;
+
+		// batch 5 agent B state/APIs (declared here, defined in Game.cpp by B).
+		bool medicalAdequate = true;
+		bool recyclingAdequate = true;
+		int  recyclingDisplayStage = 0;
+		bool emergencyActive() const;
+		void rebuildVenueLists();
+		Item::Item *pickVenue(int originFloor, int kind);
+		Item::Item *pickMedicalCenter(int originFloor);
+		std::vector<Item::Item *> venueLists[7][4];
+
+		/// YootTower VIP-visited bits (T2TowerDoc +0xa0). Each grade row's
+		/// vipFlag must be set before population can promote.
+		uint32_t yootVipFlags;
+		/// YootTower doc+0x9c: bit 0 = secret plugins loaded (the Kegon hot
+		/// spring unlocks the Spa). Saved as yootSecretItems.
+		uint32_t yootSecretItems = 0;
+		/// YootTower final-item hook (T2.exe FUN_00422670, doc vtable
+		/// +0x188): at the top grade (grade == numGrades) OR that grade's
+		/// flag into yootVipFlags so the last promotion can land. Called by
+		/// the world's final event (Tokyo stadium baseball, Hawaii cathedral
+		/// wedding, Kegon attraction). Returns false (no-op) otherwise.
+		bool grantFinalGrade();
 
 		// State read by ToolboxWindow during construction (it calls updateTool()/
 	// updateSpeed() inside its constructor, which read these fields). They
@@ -108,9 +199,27 @@ namespace OT {
 	// Yoot source. Read by ToolboxWindow's "View" button click handler (not
 	// at construction time), but declared here for proximity to the related
 	// state.
-	enum StatusMode { kNormal, kEval, kPric, kHotel };
+	// kOutside: Skin::Yoot only, the Control palette's "Outside" view
+	// (T2WorldDef::ClickOutViewButton 0x10071c00, view mode 1).
+	enum StatusMode { kNormal, kEval, kPric, kHotel, kOutside };
 	StatusMode statusMode;
 	void cycleStatusMode();
+
+		/// Active art set (Skin selector). Independent of the ruleset;
+		/// cycled live with K or the toolbox "Skin" button.
+		Skin skin = Skin::OpenSky;
+		void setSkin(Skin newSkin);
+		void cycleSkin();
+		/// YootTower plugin art for the active world, or null when the skin
+		/// is not Yoot or the world plugin is missing (OpenSky art is used).
+		const YootWorldArt * yootSkinArt() const;
+		/// (Re)loads the YootTower art for the active skin and world.
+		void refreshYootArt();
+
+		/// Open the quarterly financial report dialog (Wave U row 49).
+		/// Called automatically once a 4:59AM quarterly settlement
+		/// commits, and bound to the 'P' key.
+		void showReport();
 
 	ToolboxWindow toolboxWindow;
 		TimeWindow    timeWindow;
@@ -119,6 +228,7 @@ namespace OT {
 		LevelUpDialog   levelUpDialog;
 		MapWindow     mapWindow;
 		FinanceWindow financeWindow;
+		ReportDialog  reportDialog;
 
 		Time time;
 
@@ -153,12 +263,25 @@ namespace OT {
 
 		void updateRoutes();
 		Route findRoute(Item::Item * start, Item::Item * destination, bool serviceRoute = false);
+		/// Same answer as !findRoute(start, destination, serviceRoute).empty(), but a cached
+		/// search answers it while the layout is unchanged (existence does not depend on live
+		/// elevator-queue lengths), so reachability gates in per-tick loops stay cheap.
+		bool routeExists(Item::Item * start, Item::Item * destination, bool serviceRoute = false);
+		/// Resolves the map nodes findRoute searches between; false when no route can exist.
+		bool routeEndpoints(Item::Item * start, Item::Item * destination, MapNode *& startNode, MapNode *& destinationNode);
 		void seedOfficeLunchQa();
 		void seedNewTower();
 
 		/// Centre the main viewport on the given tower tile coordinate.
 		/// Used by the minimap click-to-jump.
 		void centerViewportOnTile(double tileX, double tileY);
+
+		/// Multiply the viewport zoom by `factor`, keeping the world point
+		/// under `anchorPx` (window pixels, e.g. the mouse) fixed when
+		/// given; otherwise the view centre stays put. Clamped to
+		/// [1/3, 2]: SimTower's 3x-out .. 2x-in range (`zoom` is the
+		/// fraction of the world visible, so smaller = closer).
+		void zoomBy(double factor, const sf::Vector2i * anchorPx = nullptr);
 
 		/// Modal two-button choice for emergency events (fire crew /
 		/// terrorist ransom). Pauses the simulation until answered;
@@ -167,8 +290,25 @@ namespace OT {
 		void askEventChoice(const std::string & title, const std::string & text,
 		                    const std::string & yesLabel, const std::string & noLabel,
 		                    const std::function<void(bool)> & onChoice);
+		/// Modal choice with any number of buttons (YootTower's 3-way fire
+		/// dialog, T2DLG 8110). `onChoice(i)` gets the pressed button and
+		/// returns whether the dialog may close: false keeps it open, as the
+		/// original's DialogHook does when a response is refused. Headless
+		/// runs press the first button that is accepted.
+		void askEventChoices(const std::string & title, const std::string & text,
+		                     const std::vector<std::string> & labels,
+		                     const std::function<bool(int)> & onChoice);
+		/// Modal text entry with one OK button (YootTower T2Baseball dialog
+		/// 12006). OK with an empty text keeps the dialog open (DialogHook
+		/// refuses ""); headless runs accept `defaultText`.
+		void askEventText(const std::string & title, const std::string & text,
+		                  const std::string & defaultText,
+		                  const std::function<void(const std::string &)> & onText);
 		/// Close any open event choice without answering it.
 		void closeEventChoice();
+		/// --qa-build: runs the construction flow for prototype `id` at
+		/// (x, floor) as a tool click would. Returns true when built.
+		bool qaBuild(const std::string & id, int2 pos);
 
 		/// ISSUE-039 drag-to-place batching (OpenSkyWeb port): hold an item
 		/// tool and drag to lay out a whole row/column (Shift = full grid).
@@ -193,7 +333,12 @@ namespace OT {
 
 		GameMap gameMap;
 		PathFinder pathFinder;
+		/// Items waiting for their lobby route to be recomputed (see updateRoutes).
+		std::vector<Item::Item *> routeBuildQueue;
+		void pumpRouteBuilds();
 		Decorations decorations;
+		std::unique_ptr<YootWorldArt> yootArt;
+		double yootClock = 0; ///< real seconds, drives the SE (sign light) cycle
 
 		/// Daily tenant & hotel evaluation engine. Updated once per day from
 		/// settleDailyAccounting(); scores are cached on each Item::evaluation.
@@ -215,11 +360,49 @@ namespace OT {
 		void decodeXML(tinyxml2::XMLDocument & xml);
 		void reloadGUI();
 
+		/// Deregister a dying object from the pointer-keyed tracking
+		/// containers (JudgeSystem visitorDaySeen/badDayStreak, EventSystem
+		/// pendingBuilds). SimLess dereferences its keys during deterministic
+		/// runs, so a stale entry for a freed object would be a
+		/// use-after-free on the next find()/insert().
+		void forgetTracking(const Person * p);
+		void forgetTracking(const Item::Item * item);
+
+		/// Grand-lobby height [bc5a]: floors 1..band-1 above the ground floor are
+		/// exempt from lobby upkeep (EXE 10a8:133b, exempt iff 11 <= floor < 10 + bc5a).
+		/// Total quarterly upkeep the 04:59 settlement would charge right now.
+		int quarterlyUpkeepTotal() const;
+		int groundLobbyBand() const { return lobbyHeightLock > 0 ? lobbyHeightLock : lobbyToolHeight(); }
+
 	private:
 		void clearWorld();
+		/// New-tower funds, rating and clock from the active profile.
+		void applyNewTowerProfile();
+		/// YootTower promotion gate (population + VIP flag), cheap enough
+		/// to run every tick (CheckGameLevel 0x10073290).
+		void yootCheckGrade();
+		/// Lobby height for a placement: Ctrl = 2, Ctrl+Shift = 3, otherwise
+		/// the profile default (1, or the YootTower world's lobby height).
+		int lobbyToolHeight() const;
+		Item::Item * legacyFootprintClash(Item::Item * item);
+		/// Grand-lobby height locked by the first ground-lobby build click
+		/// (0 = still open). Saved with the tower.
+		int lobbyHeightLock = 0;
+		/// Modifier-key choice: Ctrl = 2, Ctrl+Shift = 3, otherwise the profile default.
+		int lobbyHeightFromKeys() const;
+		/// Tower-wide placement rules shared by click and batch paths
+		/// (ceiling/depth, cathedral, above/below-ground, metro, caps,
+		/// recycling adjacency, parking and ramps). Does not mutate.
+		bool placementRuleBlock(Item::AbstractPrototype * proto, int x, int y, std::string & reason) const;
+		/// Bulldozer rules + owner buyout; returns true when the item was removed.
+		bool bulldozeItem(Item::Item * item);
+		/// One simulation tick: the sim core of advance() (clock,
+		/// accounting, items, people, hour boundaries). Fast mode runs
+		/// several of these per rendered frame.
+		void advanceSimTick(double dt);
 		void settleDailyAccounting();
-		int calculateDailyMaintenanceCost() const;
 		int lastAccountingDay;
+		int lastJudgeDay = -1000000; ///< last day the 04:59 tenant judge ran
 		/// Autosave bookkeeping (OpenSkyWeb autosave.js policy): last in-game
 		/// day and wall-clock second we wrote a crash-recovery snapshot.
 		int lastAutosaveDay;
@@ -228,6 +411,7 @@ namespace OT {
 		void autosaveIfDue();
 		/// Answer + teardown for the event choice dialog.
 		void answerEventChoice(bool yes);
+		bool answerEventChoices(int index);
 		/// Validate a generic-room placement without mutating anything
 		/// (mirror of the construction branch's checks for previews).
 bool validateBatchCell(Item::AbstractPrototype * proto, int x, int y, std::string & reason, const std::set<int> & simulatedSlabs = std::set<int>()) const;
@@ -245,13 +429,38 @@ bool validateBatchCell(Item::AbstractPrototype * proto, int x, int y, std::strin
 		// --- Event choice dialog state ---
 		tgui::ChildWindow::Ptr eventChoiceWindow;
 		std::function<void(bool)> eventChoiceCallback;
+		std::function<bool(int)> eventChoicesCallback;
+		int eventChoicesCount = 0;
 		int eventChoiceSavedSpeed = -1;
+		// --- Hidden debug menu (EXE actions 9000-9003) ---
+		// The window only exists when the app was started with
+		// --debug-menu; Ctrl+Shift+D toggles it.
+		tgui::ChildWindow::Ptr debugMenuWindow;
+		void toggleDebugMenu();
+		/// EXE action 9003: force a complete repaint right now.
+		void debugRedraw();
 		/// Quarter value at the last settleDailyAccounting. When the live
 		/// time.quarter advances past this, we call Money::finalizeQuarter
 		/// so the finance window's quarterly accumulators reset.
 		int lastAccountingQuarter;
+		/// YootTower: financial cycle whose office rent (04:52-04:59, day 1)
+		/// has been collected (plan step 7, E4).
+		int yootRentCycle = -1;
+	public:
+		/// YootTower price selection (index into inMoney, 0 = cheapest) for
+		/// an item: shops use their rent class, the rest the OpenSky default
+		/// class, which maps to selection 2 (the YootTower default
+		/// inMoneyIndex seen in Sample Tokyo Map.bld).
+		int yootPriceSelection(const Item::Item * item) const;
+		/// Pay `amount` dollars (+ income / - cost) through the YootTower
+		/// ledger categories; no-op for 0.
+		void yootBook(int amount, const char * category, const char * message);
+	private:
 		double zoom;
 		double2 poi;
+		/// Horizontal camera range: poi.x stays in [-limit, limit]. 512 px,
+		/// or half the YootTower world's width so its edges are reachable.
+		double horizontalScrollLimit() const;
 		enum class ViewportDrag { None, Vertical, Horizontal };
 		ViewportDrag viewportDrag;
 

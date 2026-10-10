@@ -8,10 +8,12 @@ using OT::Game;
 Decorations::Decorations(Game * game)
 :	GameObject(game)
 {
-	// Initialize the crane sprite.
+	// Initialize the crane sprite (36x36, parked at a floor's left edge).
 	crane.SetImage(App->bitmaps["simtower/deco/crane"]);
-	crane.setOrigin({20.f, 36.f});
+	crane.setOrigin({0.f, 36.f});
 	craneVisible = false;
+	craneFloor = kNoCraneFloor;
+	craneX = 0;
 
 	track.SetImage(App->bitmaps["simtower/metro/tracks"]);
 	track.setTextureRect(sf::IntRect({0,0}, {32,36}));
@@ -19,10 +21,18 @@ Decorations::Decorations(Game * game)
 	tracksVisible = false;
 }
 
+
+/// Re-resolve the cached decoration sprites after a live skin switch.
+void Decorations::reloadTextures()
+{
+	crane.SetImage(App->bitmaps["simtower/deco/crane"]);
+	track.SetImage(App->bitmaps["simtower/metro/tracks"]);
+}
 void Decorations::reset()
 {
 	fireStairs.clear();
 	craneVisible = false;
+	craneFloor = kNoCraneFloor;
 	tracksVisible = false;
 }
 
@@ -30,8 +40,10 @@ void Decorations::reset()
  * the tower on this floor. */
 void Decorations::updateFloor(int y)
 {
-	// If there is no floor item, remove any existing stairs.
-	if (game->floorItems.count(y) == 0) {
+	// If there is no floor item - or the slab only sits under the upper
+	// stories of a tall tenant, which has no floor record in the original
+	// and so no fire escape - remove any existing stairs.
+	if (game->floorItems.count(y) == 0 || (!game->yootSkinArt() && game->floorItems[y]->isStackedStory())) {
 		FireStairs::iterator i = fireStairs.find(y);
 		if (i != fireStairs.end()) {
 			fireStairs.erase(i);
@@ -65,34 +77,59 @@ void Decorations::updateFloor(int y)
 	}
 }
 
-/** Updates the position of the crane present at the top of the tower. Call this method whenever
- * the tower's top floor changes, i.e. the tower height is changed or another item is placed on
- * the top floor. */
+/** Updates the crane at the top of the tower (OverlayT 11c0). Re-evaluates the crane only when
+ * the top floor's NUMBER changes: it then parks at the floor's LEFT edge if the floor spans at
+ * least 7 cells, and stays there even if the floor later grows sideways (the original's stuck
+ * crane). Hidden at/above floor 100 and under the cathedral crown. */
 void Decorations::updateCrane()
 {
-	//Find the tower's top floor.
+	//Top floor with non-transport tenants and its extent (OverlayT's
+	//floor-map records cover non-transport items only; a floor spanned
+	//solely by an elevator or stair does not count).
 	int maxY = 0;
+	int minFloorX = INT_MAX;
+	int maxFloorX = INT_MIN;
 	for (Game::ItemSetByInt::const_iterator ii = game->itemsByFloor.begin(); ii != game->itemsByFloor.end(); ii++) {
-		if (ii->first > maxY)
-			maxY = ii->first;
-	}
-
-	//Find the dimensions of the top floor.
-	if (maxY > 0) {
-		const Game::ItemSet &items = game->itemsByFloor[maxY];
-		int minFloorX = INT_MAX;
-		int maxFloorX = INT_MIN;
-		for (Game::ItemSet::const_iterator ii = items.begin(); ii != items.end(); ii++) {
-			Item::Item * i = *ii;
+		const int y = ii->first;
+		if (y < maxY)
+			continue;
+		for (Game::ItemSet::const_iterator ij = ii->second.begin(); ij != ii->second.end(); ij++) {
+			Item::Item * i = *ij;
+			if (i->canHaulPeople())
+				continue;
+			if (y > maxY) {
+				maxY = y;
+				minFloorX = INT_MAX;
+				maxFloorX = INT_MIN;
+			}
 			minFloorX = std::min(minFloorX, i->position.x);
 			maxFloorX = std::max(maxFloorX, i->getRect().maxX());
 		}
-		if (minFloorX < maxFloorX) {
-			crane.setPosition({(minFloorX + maxFloorX) / 2 * 8.0f, -(maxY + 1) * 36.0f});
-			craneVisible = (maxFloorX - minFloorX >= 4);
-		} else {
-			craneVisible = false;
+	}
+
+	//UpdateCrane (11c0:024a): re-evaluate only when the top floor NUMBER
+	//changes — crane_x stays where it was captured even if the floor
+	//later widens (the original's stuck crane). A top floor narrower
+	//than 7 cells gets no crane; while absent (sentinel), every call
+	//re-checks, so widening spawns the crane at the new left edge.
+	if (maxY <= 0) {
+		craneFloor = kNoCraneFloor;
+	} else if (craneFloor != maxY) {
+		if (maxFloorX - minFloorX < kCraneMinCells)
+			craneFloor = kNoCraneFloor;
+		else {
+			craneFloor = maxY;
+			craneX = minFloorX;
 		}
+	}
+
+	//Draw gate (11c0:0000): hidden at/above displayed floor 100 or once
+	//the cathedral crowns the tower.
+	Game::ItemSetByString::const_iterator cathedral = game->itemsByType.find("cathedral");
+	bool hasCathedral = (cathedral != game->itemsByType.end() && !cathedral->second.empty());
+	if (craneFloor != kNoCraneFloor && craneFloor < kCraneMaxFloor && !hasCathedral) {
+		crane.setPosition({craneX * 8.0f, -(craneFloor + 1) * 36.0f});
+		craneVisible = true;
 	} else {
 		craneVisible = false;
 	}
@@ -121,17 +158,45 @@ void Decorations::render(sf::RenderTarget & target) const
 	sf::Vector2f dmax = center + size/2.f;
 	sf::Vector2f dmin = center - size/2.f;
 
+	// YootTower skin: the world's SideL/SideR fire escapes and OutCrane
+	// replace the OpenSky sprites at the same anchors.
+	const OT::YootWorldArt * yoot = game->yootSkinArt();
+	const bool yootSides = yoot && yoot->hasSides();
+	const bool yootCrane = yoot && yoot->hasCrane();
+	if (yoot && yoot->hidesOptionObjects()) return;
+
 	sf::FloatRect rect = target.getView().getViewport();
 	for (int y = (int)floor(dmin.y / 36); y <= ceil(dmax.y / 36); y++) {
 		FireStairs::const_iterator fsi = fireStairs.find(-y);
 		if (fsi == fireStairs.end()) continue;
+		if (yootSides) {
+			const sf::Color tint = game->lighting.compose(sf::Color::White);
+			for (int side = 0; side < 2; side++) {
+				const sf::IntRect r = yoot->sideRect(side == 1);
+				sf::Sprite s(yoot->sidesTexture(), r);
+				s.setOrigin({side == 0 ? (float)r.size.x : 0.f, (float)r.size.y});
+				s.setPosition(side == 0 ? fsi->second.minX.getPosition() : fsi->second.maxX.getPosition());
+				s.setColor(tint);
+				target.draw(s);
+			}
+			continue;
+		}
 		target.draw(fsi->second.minX);
 		target.draw(fsi->second.maxX);
 	}
 
-	if (craneVisible) target.draw(crane);
+	if (craneVisible && yootCrane) {
+		const sf::IntRect r = yoot->craneRect();
+		sf::Sprite s(yoot->craneTexture(), r);
+		s.setOrigin({0.f, (float)r.size.y});
+		s.setPosition(crane.getPosition());
+		s.setColor(game->lighting.compose(sf::Color::White));
+		target.draw(s);
+	} else if (craneVisible) target.draw(crane);
 
-	if (tracksVisible) {
+	// YootTower draws no tracks: the tunnel along the Subway's row is part
+	// of the world backdrop (Tokyo 'Sky' tiles 104 / 110).
+	if (tracksVisible && !yoot) {
 		// sf::FloatRect view = target.getView().getViewport();
 		recti rect = game->metroStation->getRect();
 

@@ -59,4 +59,19 @@ inline TimeWindowLayout makeModernTimeWindowLayout(float uiScale)
     };
 }
 
+/// Ordinal suffix of the HUD year, e.g. "st Yr". SIMTOWER.EXE 1120:0ee1
+/// (all.c:17744): 10..19 always take "th" (13th), otherwise year % 10 picks
+/// 1 st / 2 nd / 3 rd, and every other digit takes "th".
+inline const char * yearOrdinalSuffix(int year)
+{
+    if (year < 10 || year > 19)
+    {
+        const int digit = year % 10;
+        if (digit == 1) return "st Yr";
+        if (digit == 2) return "nd Yr";
+        if (digit == 3) return "rd Yr";
+    }
+    return "th Yr";
+}
+
 }

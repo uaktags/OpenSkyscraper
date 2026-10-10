@@ -11,11 +11,44 @@ const double Time::kBaseSpeed    = 1.0 / 60 / kDayDuration; // game days / secon
 // eliminating the rubberbanding the old dt-weighted blend produced.
 const static double kSpeedRampTau = 0.25;
 
+static bool s_linearClock = false;
+
+void Time::setLinearClock(bool linear)
+{
+	s_linearClock = linear;
+}
+
+bool Time::linearClock()
+{
+	return s_linearClock;
+}
+
+bool Time::yootIsHoliday(unsigned year, unsigned month)
+{
+	// Direct port: unsigned arithmetic, so n wraps for early year-1 days.
+	if (month == 7 || month == 11)
+		return true;
+	const unsigned n = month - 23u + year * 12u;
+	return n >= 2 && (n - 2) % 5 == 0;
+}
+
+bool Time::yootTokyoIsRainy(unsigned month)
+{
+	return month / 3 != 3 && ((month + 1) & 3) == 0;
+}
+
 
 double Time::absoluteToHour(double a)
 {
 	if (a == 1.0)
 		return 24.0;
+
+	if (s_linearClock)
+	{
+		double frac = fmod(a, 1.0);
+		if (frac < 0) frac += 1.0;
+		return frac * 24.0;
+	}
 
 	//jcranmer did some research on how time progresses in SimTower (doc/simtower/TDT_format.txt).
 	//We scale the time up to the 2600 frames/day he proposed, and derive the hour by applying
@@ -33,15 +66,22 @@ double Time::absoluteToHour(double a)
 
 double Time::hourToAbsolute(double h)
 {
-	if (h == 24.0)
+	// Callers occasionally carry a next-day hour (or a UI value beyond
+	// midnight). Clamp outside the representable SimTower day instead of
+	// returning an uninitialized value for h > 24.
+	if (h >= 24.0)
 		return 1.0;
+	if (h <= 0.0)
+		return 0.0;
+	if (s_linearClock)
+		return h / 24.0;
 
 	double a;
 	if      (h < 1)  a = (h -  0) /  1 *  100 +    0;
 	else if (h < 7)  a = (h -  1) /  6 *  200 +  100;
 	else if (h < 12) a = (h -  7) /  5 *  400 +  300;
 	else if (h < 13) a = (h - 12) /  1 *  800 +  700;
-	else if (h < 24) a = (h - 13) / 11 * 1100 + 1500;
+	else              a = (h - 13) / 11 * 1100 + 1500;
 	a /= 2600;
 	assert(a >= 0 && a <= 1);
 	return a;
@@ -62,6 +102,46 @@ Time::Time()
 	prev_year = 1;
 	speed = 1;
 	speed_animated = speed;
+	calendar = Calendar::SimTower;
+}
+
+int Time::eventFrame() const
+{
+	// hourToAbsolute() accumulates a few ULPs of error, so an exact hour
+	// anchor can land just below its stage (e.g. 13:00 or 8:21). The JS port
+	// absorbs this with the same epsilon; fractional frames still floor.
+	const double stage = floor(absolute * kSimFramesPerDay + 1e-6);
+	const int frame = static_cast<int>(fmod(stage - 300, kSimFramesPerDay));
+	return frame < 0 ? frame + kSimFramesPerDay : frame;
+}
+
+double Time::eventFramesSince(double previousAbsolute) const
+{
+	return (absolute - previousAbsolute) * kSimFramesPerDay;
+}
+
+void Time::advanceToEventFrame(int frame)
+{
+	assert(frame >= 0 && frame < kSimFramesPerDay);
+	const double fraction = ((frame + 300) % kSimFramesPerDay) /
+	                        static_cast<double>(kSimFramesPerDay);
+	const double target = floor(absolute) + fraction;
+	// Forward only, same calendar day: the EXE rewrites its frame counter
+	// without touching the day, and every reachable caller runs before 16:00.
+	set(target > absolute ? target : absolute); // a skipped jump counts as no tick
+}
+
+int Time::dayOfYear() const
+{
+	const int d = (int)floor(absolute) % 12;
+	return d < 0 ? d + 12 : d;
+}
+
+bool Time::isHoliday() const
+{
+	if (calendar == Calendar::YootTower)
+		return yootIsHoliday((unsigned)year, (unsigned)dayOfYear());
+	return day == 2;
 }
 
 void Time::set(double t)
@@ -125,6 +205,11 @@ bool Time::check(double a)
 bool Time::checkTick(double p)
 {
 	return (floor(prev_absolute / p) != floor(absolute / p));
+}
+
+long Time::ticksCrossed(double p)
+{
+	return static_cast<long>(floor(absolute / p) - floor(prev_absolute / p));
 }
 
 /** Returns true if the time has just passed said hour. E.g. if the time advanced from 9.98 to 10.1

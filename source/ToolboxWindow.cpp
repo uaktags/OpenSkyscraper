@@ -30,7 +30,8 @@ static const std::map<std::string, std::vector<std::string>> CATEGORIES = {
     {"stairs",            {"escalator"}},
     {"lobby",             {"floor"}},
     {"elevator-standard", {"elevator-express", "elevator-service"}},
-    {"hotel_single",      {"hotel_double", "hotel_suite"}},
+    {"hotel_single",      {"hotel_double", "hotel_suite", "frontdesk", "housekeeping"}},
+    {"parkinggate",       {"parkinglot"}},
     {"condo",             {"yoot_condo"}}
 };
 
@@ -182,7 +183,7 @@ void ToolboxWindow::reload()
     // slot will revert to its parent on the next render pass.
     std::map<std::string, std::string> savedSubs;
     for (auto& kv : parentActiveChild) {
-        if (LevelUp::minRatingToBuild(kv.second) <= game->rating)
+        if (game->activeRules.minRatingToBuild(kv.second) <= game->rating)
             savedSubs[kv.first] = kv.second;
     }
     parentActiveChild.clear();
@@ -202,7 +203,7 @@ void ToolboxWindow::reload()
     {
         Item::AbstractPrototype *prototype = game->itemFactory.prototypes[i];
 
-        if (LevelUp::minRatingToBuild(prototype->id) > game->rating)
+        if (game->activeRules.minRatingToBuild(prototype->id) > game->rating)
             continue;
 
         std::string parent;
@@ -214,7 +215,23 @@ void ToolboxWindow::reload()
 
     int numItems = visiblePrototypes.size();
     int totalRows = (numItems + kCols - 1) / kCols;
-    int speedY = kItemsTopY + totalRows * kCellH + 8;
+    int itemsHeight = totalRows * kCellH;
+    const bool yootLayout = yootLayoutActive();
+    std::vector<YootToolboxGroup> yootGroups;
+    if (yootLayout) {
+        yootGroups = collectYootGroups();
+        bool known = false;
+        for (const YootToolboxGroup& g : yootGroups) {
+            // Open on the selected tool's category the first time.
+            if (yootCategory < 0 && std::find(g.prototypeIds.begin(), g.prototypeIds.end(),
+                                              game->selectedTool.substr(game->selectedTool.rfind("item-", 0) == 0 ? 5 : 0)) != g.prototypeIds.end())
+                yootCategory = g.category;
+            known = known || g.category == yootCategory;
+        }
+        if (!known) yootCategory = yootGroups.empty() ? -1 : yootGroups.front().category;
+        itemsHeight = yootLayoutHeight(yootGroups);
+    }
+    int speedY = kItemsTopY + itemsHeight + 8;
     int viewY  = speedY + 24 + 4;  // view-toggle row sits below speed controls
     int clientHeight = viewY + 24 + 3;
 
@@ -261,6 +278,10 @@ void ToolboxWindow::reload()
     inspectButton->onPress([this] { game->selectTool("inspector"); });
 
     // STEP 2: BUILDING ITEMS (parents + standalone tools only)
+    if (yootLayout) {
+        addYootItems(yootGroups);
+        visiblePrototypes.clear();
+    }
     int row = 0;
     for (int i = 0; i < (int)visiblePrototypes.size(); i++)
     {
@@ -303,7 +324,7 @@ void ToolboxWindow::reload()
     }
 
     // STEP 3: SPEED CONTROLS AT THE BOTTOM (horizontally centered)
-    const int kSpeedW = 92;
+    const int kSpeedW = 5 * 23; // the EXE's four cells + the Fast button
     const int kSpeedH = 24;
     auto speedLayout = tgui::HorizontalLayout::create();
     window->add(speedLayout);
@@ -317,10 +338,17 @@ void ToolboxWindow::reload()
     sf::Texture speedTexture = app->bitmaps["simtower/ui/toolbox/speed"];
     if (speedTexture.getSize() == sf::Vector2u(256, 32))
         loadGeneratedSpeedTexture(speedTexture);
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < 5; i++)
     {
         ButtonState state;
-        auto button = makeButton(23, 24, speedTexture, i, state);
+        // The EXE speed sheet holds only four 23x24 cells; Fast (speed 4)
+        // has no cell of its own and reuses the top speed cell's art with
+        // a text label (plan-approved contingency).
+        auto button = makeButton(23, 24, speedTexture, (i == 4 ? 3 : i), state);
+        if (i == 4) {
+            button->setText("F»");
+            button->setTextSize(10 * app->uiScale);
+        }
         speedLayout->add(button);
         speedButtons[i] = button;
         buttonStates[button] = state;
@@ -350,7 +378,7 @@ void ToolboxWindow::reload()
     };
     {
         int windowW = kPadX * 2 + kCellW * kCols;
-        int totalW = kViewBtnW * 3 + kViewBtnGap * 2;  // 3 buttons with gaps
+        int totalW = kViewBtnW * 4 + kViewBtnGap * 3;  // 4 buttons with gaps
         int startX = (windowW - totalW) / 2;
         mapButton = makeViewButton("Map", startX, [this] {
             game->mapWindow.setVisible(!game->mapWindow.isVisible());
@@ -360,6 +388,9 @@ void ToolboxWindow::reload()
         });
         statusButton = makeViewButton("View", startX + (kViewBtnW + kViewBtnGap) * 2, [this] {
             game->cycleStatusMode();
+        });
+        skinButton = makeViewButton("Skin", startX + (kViewBtnW + kViewBtnGap) * 3, [this] {
+            game->cycleSkin();
         });
     }
 
@@ -381,6 +412,8 @@ void ToolboxWindow::updateTool()
         selectedProtoId = game->selectedTool.substr(5);
     }
 
+    if (yootLayoutActive()) followYootTool(selectedProtoId);
+
     std::string parentId;
     if (!selectedProtoId.empty() && isChildTool(selectedProtoId, parentId)) {
         auto activeIt = parentActiveChild.find(parentId);
@@ -394,12 +427,19 @@ void ToolboxWindow::updateTool()
     for (auto &pair : toolButtons) {
         auto it = buttonStates.find(pair.second);
         if (it != buttonStates.end())
-            setButtonVisuals(pair.second, it->second, pair.first == highlightTool);
+            setButtonVisuals(pair.second, it->second, pair.first == highlightTool ||
+                             pair.first == "category-" + std::to_string(yootCategory));
     }
 }
 
 tgui::Button::Ptr ToolboxWindow::makeItemButton(Item::AbstractPrototype* proto, ButtonState& state)
 {
+    // YootTower: the linked plugin's own OBJMAP 100 icon (pattern
+    // variation x 10, e.g. Floor.t2p 0 = Floor, 10 = Lobby).
+    tgui::Button::Ptr pluginButton;
+    if (proto->yoot && !proto->yoot->plugin.empty() &&
+        makePluginIconButton(proto->yoot->plugin, proto->yoot->variation * 10, state, pluginButton))
+        return pluginButton;
     if (proto->id == "yoot_condo")
     {
         // Toolbox icon for the YootCondo is RT_BITMAP 100 inside the
@@ -408,6 +448,23 @@ tgui::Button::Ptr ToolboxWindow::makeItemButton(Item::AbstractPrototype* proto, 
         sf::Texture yootIconTexture;
         app->bitmaps.loadFromPlugin("Condo.t2p", 100, yootIconTexture, sf::Color(255, 255, 255));
         return makeButton(kCellW, kCellH, yootIconTexture, 0, state);
+    }
+    if (BuildRules::isYootOnlyPrototype(proto->id))
+    {
+        // The YootTower-only items' RT_BITMAP 100 is a vertical 26x130 icon
+        // strip; OBJMAP 100 names the item's pattern 0 at Rect 0,78,26,104.
+        const std::string plugin = proto->yoot ? proto->yoot->plugin
+            : BuildRules::yootOnlyPlugin(proto->id);
+        sf::Texture sheet;
+        if (app->bitmaps.loadFromPlugin(plugin, 100, sheet)) {
+            sf::Image full = sheet.copyToImage();
+            sf::Image cell({26, 26});
+            if (full.getSize().y >= 104 && cell.copy(full, {0, 0}, sf::IntRect({0, 78}, {26, 26}))) {
+                sf::Texture icon;
+                if (icon.loadFromImage(cell))
+                    return makeButton(kCellW, kCellH, icon, 0, state, 26, 26);
+            }
+        }
     }
     sf::Texture itemTexture = app->bitmaps["simtower/ui/toolbox/items"];
     return makeButton(kCellW, kCellH, itemTexture, proto->icon, state, 32, 32);
@@ -440,7 +497,7 @@ void ToolboxWindow::showOverlayFor(const std::string& parentId)
             continue;
 
         // Skip tools the player can't build yet.
-        if (LevelUp::minRatingToBuild(protoId) > game->rating)
+        if (game->activeRules.minRatingToBuild(protoId) > game->rating)
             continue;
 
         auto pit = game->itemFactory.prototypesById.find(protoId);
@@ -509,6 +566,11 @@ void ToolboxWindow::rebuildSlotTexture(const std::string& parentId, const std::s
 
 void ToolboxWindow::update()
 {
+    if (yootReloadPending) {
+        yootReloadPending = false;
+        reload();
+        return;
+    }
     if (holdingParent.empty())
         return;
 

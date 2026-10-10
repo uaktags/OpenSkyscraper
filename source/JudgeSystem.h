@@ -1,35 +1,48 @@
 #pragma once
 
 #include <map>
+#include <vector>
 
 namespace OT
 {
 	class Game;
+	class Person;
 
 	namespace Item { class Item; }
 
-	/** Daily tenant & hotel evaluation engine.
-	 *
-	 * Computes a 0..100 satisfaction score for each tenant item based on
-	 * route quality, occupant stress and amenity coverage, then writes the
-	 * result back into Item::evaluation. Office::isAttractive() and
-	 * Condo::isAttractive() consult this score when deciding move-in and
-	 * vacation, and the per-person eval field is refreshed so the inspector
-	 * (Phase 4.1) and status overlays (Phase 4.3) have data to show.
-	 *
-	 * Mirrors the role of JudgeT.h/c in the original Yoot Tower source
-	 * (JudgeAllTenant, JudgeAllHotel, JudgeOneTenant). The Counts struct
-	 * approximates CountT.h/c and is intended to feed star progression
-	 * (Phase 3.2) and the future minimap overlays.
-	 */
+	/** Tenant judge (batch 5, J1/J9). Computes the EXE tenant category
+	 * (0 stressed, 1 OK, 2 happy, 255 unjudged) from the per-member banked
+	 * waits stored on Item::tenant, runs the per-floor daily judge / move-out /
+	 * arm passes, immediate rescue on a rent-class change and the noise scan.
+	 * Item::evaluation is now only a display value derived from the category.
+	 * The pure arithmetic lives in TenantRules.h (unit-tested). */
 	class JudgeSystem
 	{
 	public:
 		JudgeSystem();
 
-		/// Run a full evaluation pass. Intended to be called once per game
-		/// day from Game::settleDailyAccounting().
+		/// Refresh the facility counters (cheap; also used by LevelUp).
 		void evaluateAll(Game * game);
+
+		/// Daily judge at the 04:59 settlement: one pass per floor (basement
+		/// first) judging, then on quarter days move-out + settle, otherwise
+		/// the arm pass. Replaces the old tower-wide scoring.
+		void judgeDaily(Game * game, bool isQuarterDay);
+
+		/// Judge a single tenant item and store its category (T3/T7/T8).
+		/// Returns the stored category.
+		int judgeOne(Item::Item * item);
+
+		/// Rejudge after a rent-class change; arms a vacant disarmed unit
+		/// whose category is not 0 (T11). Never moves anybody out.
+		void rescueOne(Item::Item * item);
+
+		/// Tenant metric after class adjustment, noise and clamp (T3); -1
+		/// when the unit is not eligible to be judged.
+		int tenantMetric(Item::Item * item);
+
+		/// First noisy neighbour of `item` (T4), or nullptr.
+		Item::Item * noiseSource(Item::Item * item);
 
 		/// Tallies accumulated during the last evaluateAll() pass.
 		/// Approximates the per-type counters (CountPC / CountVC /
@@ -46,27 +59,53 @@ namespace OT
 			int medicalCenters;
 			int metros;
 			int population;
-			int criticalTenants; ///< tenants with evaluation < 25 (complaint risk)
+			int criticalTenants; ///< tenants with category 0 (stressed)
 
-			/// Granular capacity/occupancy metrics. Capacity uses each
-			/// item type's rule-of-thumb (offices: 3 workers, condos: 2
-			/// residents, hotels: capacity() per room). Visitors and
-			/// day-pass counts are stubbed until the matching scheduling
-			/// work lands; they are reported here so future UI/stat
-			/// windows can read a single struct.
+			/// Granular capacity/occupancy metrics. Capacity is derived from
+			/// the live item model; visitor pools are current occupants by
+			/// category and dailyArrivals is deduplicated per simulation day.
 			int populationCapacity; ///< sum of worker/resident capacity
 			int visitorCapacity;    ///< hotel + commercial capacity
 			int currentOccupants;   ///< people currently at an item
+			int visitorPool;        ///< all hotel/commercial visitors present
+			int hotelVisitorPool;   ///< hotel guests present
+			int foodVisitorPool;    ///< fast-food/restaurant visitors present
+			int shopVisitorPool;    ///< retail visitors present
+			int leisureVisitorPool; ///< cinema/party visitors present
+			int dailyArrivals;      ///< visitor arrivals during the current day
+			int dailyHotelArrivals;
+			int dailyFoodArrivals;
+			int dailyShopArrivals;
+			int dailyLeisureArrivals;
+			int visitorDay;         ///< floor(time.absolute), for pass consumers
 			double hotelAvgEval;    ///< mean evaluation across hotels, 0 if none
 		};
 		const Counts & counts() const { return lastCounts; }
 
+		/// Drop tracking entries for an object that is being destroyed:
+		/// the maps are keyed by pointer and SimLess dereferences keys in
+		/// deterministic runs, so stale entries would be use-after-free.
+		void forget(const Person * p);
+		void forget(const Item::Item * item);
+
+		/// YootTower 1..300 estimate (plan step 8, J1-J3); 0 when the item
+		/// is not a YootTower-evaluated tenant.
+		/// `residents` replaces the item's people as the belong list (hotel
+		/// rooms keep their guests in the pool layer, not in item->people).
+		int yootEstimate(Game * game, Item::Item * item, const std::vector<int> * residents = nullptr);
+
 	private:
-		/// Per-item scoring helpers. Each returns a value in [0, 100].
+		bool moveOut(Game * game, Item::Item * item, const std::vector<Item::Item *> & floorTenants);
+
+		/// Per-item scoring helpers (YootTower ruleset). Each returns a
+		/// value in [0, 100].
 		double scoreOffice(Game * game, Item::Item * item);
 		double scoreCondo(Game * game, Item::Item * item);
 		double scoreHotel(Game * game, Item::Item * item);
 		double scoreCommercial(Game * game, Item::Item * item);
+
+		/// T2TrafficInfo::GetRange stand-in (0..3) at a tenant's entrance.
+		static int yootTrafficRange(Game * game, Item::Item * item);
 
 		/// Aggregate hotel review (JudgeAllHotel equivalent). Returns
 		/// true if hotels are underperforming enough to surface a daily
@@ -89,9 +128,12 @@ namespace OT
 
 		Counts lastCounts;
 
+		/// Visitor pass de-duplication: a person contributes once per day even
+		/// when evaluateAll is also triggered by a rating/facility change.
+		std::map<Person *, int, SimLess> visitorDaySeen;
 		/// Item pointer -> consecutive bad days. Used by
 		/// reviewUnderperformers to only complain about persistently
 		/// unhappy tenants rather than transient dips.
-		std::map<Item::Item *, int> badDayStreak;
+		std::map<Item::Item *, int, SimLess> badDayStreak;
 	};
 }

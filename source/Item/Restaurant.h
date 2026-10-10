@@ -20,6 +20,7 @@ namespace OT
 				p->icon = 12;
 			}
 			virtual ~Restaurant();
+			virtual void evacuateForDisaster() override;
 
 			virtual void init();
 
@@ -29,14 +30,29 @@ namespace OT
 			int variant;
 			/// Cosmetic tenant identity (OpenSkyWeb ISSUE-035, authentic
 			/// SIMTOWER.EXE name pools), indexed by the sprite `variant`.
-			static const char * const kNameVariants[4];
+			static const char * const kNameVariants[5];
 			bool open;
 			int pricePerMeal;
+			// Daily retail pool (VenueT / Restaurant.c): quota is selected
+			// from the previous service score and counts down as street
+			// walk-ins are dispatched.  The door itself remains capped at 40.
+			int serviceScore[3];
+			int dailyQuota;
+			int quotaRemaining;
+			int walkinsToday;
+			int customersToday;
+			int walkinsYesterday;
+			int lastDemandDay;
+			bool revenueSettled;
+            bool dispatched[TenantRules::kRetailPoolSize] = {};
+            void openDay();
 
 			class Customer : public Person
 			{
 			public:
 				Customer(Restaurant *item);
+                Restaurant *owner;
+                int poolSlot=-1;
 				virtual ~Customer() { LOG(DEBUG, "restaurant customer %p killed", this); }
 				double arrivalTime; // when the customer arrives at the lobby of the tower
 
@@ -50,7 +66,7 @@ namespace OT
 			};
 			std::priority_queue<Customer *, std::deque<Customer *>, Customer::laterThan> arrivingCustomers; // Priority queue to facilitate selection of customers spawned by Restaurant due to arrive at tower
 			std::list<Person *> eatingCustomers;															// List (in order of arrival) to facilitate selection of customers due to leave Restaurant
-			typedef std::set<Customer *> Customers;
+			typedef std::set<Customer *, SimLess> Customers;
 			Customers customers;
 			void clearCustomers();
 
@@ -58,7 +74,7 @@ namespace OT
 			{
 				double arrivalTime; // when the customer arrived at the Restaurant
 			};
-			typedef std::map<Person *, CustomerMetadata> CustomerMetadataMap;
+			typedef std::map<Person *, CustomerMetadata, SimLess> CustomerMetadataMap;
 			CustomerMetadataMap customerMetadata;
 
 			Sprite sprite;
@@ -66,7 +82,6 @@ namespace OT
 			void updateSprite();
 
 			virtual void advance(double dt);
-			virtual int dailyMaintenanceCost() const override { return 800; }
 
 			virtual void addPerson(Person *p);
 			virtual void removePerson(Person *p);

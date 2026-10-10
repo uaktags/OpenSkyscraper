@@ -53,6 +53,9 @@ namespace OT
 		/// caring about other types.
 		std::map<std::string, std::vector<int>> resourcesByType() const override;
 
+		/// SP for the "SP" sub-plugin container, PE otherwise.
+		ResourceContainer container() const override;
+
 	private:
 		Path path_;
 		mutable std::unique_ptr<WindowsPEExecutable> exe_;

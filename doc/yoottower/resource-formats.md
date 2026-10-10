@@ -515,6 +515,7 @@ plugin's `.text`.
 - **SP-format plugins** (51 of them, magic `"SP"`): a separate container format
   handled by `WindowsPEExecutable::loadSP`. Out of scope here; they lack
   OBJMAP/ATTR and need their own doc.
+- **Superseded field maps:** see `doc/yoottower/plugin-schema.md` for the byte-exact, population-validated schema of every resource (several labels in §3/§9 above are corrected there — ATTR mID/mItemType, TMDF vs SLDF, PLDF/DPDF/PADF), and `tools/yoottower/t2p_schema.py` for the reference codec.
 
 ---
 
@@ -671,9 +672,21 @@ grammar in `objmap-format.md`:
 
 ### 9.6 Binary resource reader: `T2Archive`
 
-The binary resources (ATTR/DPDF/WODF/MVDF/PLDF/...) are not parsed ad-hoc;
-they go through a stream object, **`T2Archive`** (`T2DLL.dll`), which wraps
-the resource bytes. Key primitives (all confirmed by decompilation):
+> **Correction (plugin-schema.md §0, §1).** Plugin resources are read by
+> **`CResFile`** (T2DLL 0x10010ca0..0x10011990), not `T2Archive`, which is
+> the save-file stream. In `CResFile` binary mode every integer extraction
+> (uchar/short/int/...) consumes one **4-byte LE slot**, strings are a length
+> byte + bytes + a terminator byte, and `CResFile>>RECT` (0x10011730) reads
+> **four LE int32 slots in the order top,left,bottom,right**. `T2Archive::
+> ReadSRect` (0x10017360) belongs to the save format and reads 8 bytes as
+> **big-endian int16 top,left,bottom,right**. Both use the Mac field order;
+> only width and endianness differ. The "left/top/right/bottom short" claim
+> in the table below is wrong on both counts. `POINT` is y,x and `SIZE` is
+> cy,cx. The C++ reader is `CResReader` in `source/PluginResources.h`.
+
+The original (partly superseded) notes follow. The binary resources were
+assumed to go through a stream object, **`T2Archive`** (`T2DLL.dll`).
+Key primitives of that class:
 
 | Primitive (`T2Archive::`) | Addr        | Reads |
 |---------------------------|-------------|-------|
@@ -681,7 +694,7 @@ the resource bytes. Key primitives (all confirmed by decompilation):
 | `operator>>(ushort&)`     | (stream op) | one little-endian u16 |
 | `operator>>(uchar&)`      | (stream op) | one byte |
 | `ReadPStr(char*)`         | `0x100171c0`| 1-byte length `n`, then `n` bytes (Pascal string — matches §3 pstr convention ✓) |
-| `ReadSRect(RECT&)`        | `0x10017360`| four little-endian **short** (left/top/right/bottom) |
+| `ReadSRect(RECT&)`        | `0x10017360`| save files only: four **big-endian int16** top,left,bottom,right (see the correction above) |
 | `LArray::ReadAsDWord`      | `0x100136b0`| count + count×u32 (array form) |
 | `LArray::ReadAsWord`       | `0x100134f0`| header + count×u16 |
 | `LArray::ReadAsChar`       | `0x10013720`| header + count×u8 |
@@ -689,8 +702,10 @@ the resource bytes. Key primitives (all confirmed by decompilation):
 This confirms the "version byte then fixed/ counted fields" pattern assumed
 throughout §3: the leading `01` is just the first `operator>>` these readers
 consume. `ReadPStr` precisely validates the pstr convention used by
-WODF/SLDF/TNDF/MVDF (§3.6–§3.9). `ReadSRect` shows OBJMAP rects and any
-embedded `SRect` use **16-bit** coordinates.
+WODF/SLDF/TNDF/MVDF (§3.6–§3.9). ~~`ReadSRect` shows OBJMAP rects and any
+embedded `SRect` use **16-bit** coordinates.~~ Plugin rects (e.g. MVDF
+`mAddSize`/`mModuleInset`) are four int32 slots in top,left,bottom,right
+order; 16-bit big-endian SRects only occur in save files.
 
 ### 9.7 `CPEFile` — how the engine enumerates `.t2p` resources
 
@@ -705,6 +720,8 @@ the cached `HINSTANCE`/`HRSRC` pair a parsed resource is bound to.
 ### 9.8 What this changes for OpenSky
 
 - **Relabel `field5` → `mAttrib`** in `PluginAttr` / the OSP schema / tests.
+  (Done, together with the wider ATTR fix of plugin-schema.md §0: offset 1
+  is `mID`, offset 21 is the numeric `mItemType`, offset 9 is `mDependID`.)
 - **Trust the §2.3 / §3.1 field maps**: they were right without T2DLL, and
   T2DLL confirms them. No rework needed.
 - The OBJMAP parser can be tightened to mirror the engine's record size

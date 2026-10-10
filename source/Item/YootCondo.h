@@ -21,6 +21,9 @@ namespace OT
 				p->icon = 24;
 			}
 			virtual ~YootCondo();
+			virtual int disasterSaleReversal() const override { return occupied ? rentDeposit : 0; }
+			virtual int demolitionBuyout() const override { return occupied ? rentDeposit : 0; }
+			virtual void evacuateForDisaster() override;
 
 			enum LightingConditions
 			{
@@ -75,7 +78,6 @@ namespace OT
 			virtual void encodeXML(tinyxml2::XMLPrinter &xml) override;
 			virtual void decodeXML(tinyxml2::XMLElement &xml) override;
 			virtual void advance(double dt) override;
-			virtual int dailyMaintenanceCost() const override { return 0; }
 			virtual bool isOccupied() const override { return occupied; }
 
 			virtual void addPerson(Person *p) override;
@@ -99,21 +101,29 @@ namespace OT
 			int variant;
 			LightingConditions lighting;
 			bool occupied;
+			long long yootIdleMinute = -1;   ///< last game minute whose idle slot was checked
 
 			mutable Sprite baseSprite;
 			mutable Sprite residentSprite;
 			bool spriteNeedsUpdate;
 
-			std::set<YootCondoOccupant *> occupants;
+			std::set<YootCondoOccupant *, SimLess> occupants;
 			std::priority_queue<YootCondoOccupant *, std::deque<YootCondoOccupant *>, YootCondoOccupant::departsLaterThan> departureQueue;
 			std::priority_queue<YootCondoOccupant *, std::deque<YootCondoOccupant *>, YootCondoOccupant::returnsLaterThan> returnQueue;
 
-			// Static textures shared among instances
-			static sf::Texture emptyCondoTexture;
-			static sf::Texture residentTexture;
-			static bool texturesLoaded;
+			/// Plugin art: Condo.t2p, or the world's plugin through the
+			/// catalog (HawaianCondo.t2p in Hawaii); Apartment.t2p overrides.
+			virtual const char * condoPlugin() const;
+			/// Becoming occupied / vacated: sale and buy-back (YootCondo).
+			virtual void moveIn();
+			virtual void moveOut();
+			virtual int residentsToCreate() const;
+			virtual bool hasFamilies() const { return true; }
 
-			static bool loadTextures(Game *game);
+			// Textures shared among instances, cached per plugin.
+			const sf::Texture * emptyCondoTexture = nullptr;
+			const sf::Texture * residentTexture = nullptr;
+			bool loadTextures();
 		};
 	}
 }

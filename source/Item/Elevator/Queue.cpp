@@ -1,25 +1,34 @@
-#include <cassert>
+#include <algorithm>
+#include <cmath>
 #include "../../Application.h"
 #include "../../Game.h"
 #include "../../Person.h"
 #include "../../Sprite.h"
 #include "Elevator.h"
 #include "Queue.h"
+#include "../../YootPeopleArt.h"
+#include "../../YootRules.h"
+#include <vector>
 
 using namespace OT;
 using namespace OT::Item::Elevator;
 
-/// The seconds at regular speed requried to stress a person from zero to max.
-const static double kSecondsUntilStressed = 30;
+/// Wait stress is kept in the person's journey bank and delivered when the
+/// journey reaches its destination. Service queues do not bank wait stress.
 
 Queue::Queue(Elevator *e)
 	: GameObject(e->game),
-	  elevator(e)
-{
-	called = false;
-	callTime = 0;
-	answered = false;
-	steppingInside = false;
+	  elevator(e),
+	  floor(0),
+	  direction(Elevator::kNone),
+	  width(400),
+	  called(false),
+	  callTime(0),
+	  answered(false),
+	  appointed(nullptr),
+	  steppingInside(false),
+	  fullRetryFrame(0),
+	  waitStartFrame(0){
 }
 
 Queue::~Queue()
@@ -37,50 +46,116 @@ double Queue::getWaitDuration()
 	return game->time.absolute - callTime;
 }
 
-void Queue::addPerson(Person *p)
+bool Queue::addPerson(Person *p)
 {
+	if (!p) return false;
+	if ((int)people.size() >= kQueueCapacity)
+	{
+		if (!elevator->isService() && !p->isServicePerson())
+			p->addJourneyStress(kQueueFullPenalty);
+		p->journey.queueRejected();
+		return false;
+	}
+	p->waitStartFrame = game->time.absolute * Time::kSimFramesPerDay;
 	people.push_back(p);
-	if (!called)
-		callElevator();
+	if (!called) callElevator();
+	return true;
 }
 
 void Queue::removePerson(Person *p)
 {
 	people.remove(p);
+	if (people.empty()) {
+		called = answered = steppingInside = false;
+		assignedCar = nullptr;
+	}
+}
+
+void Queue::bankWait(Person *p)
+{
+	if (elevator->isService()) return;
+	const double waited = std::min(300.0, std::max(0.0,
+		game->time.absolute * Time::kSimFramesPerDay - p->waitStartFrame));
+	const int height = game->mainLobby && floor == 0 ? game->mainLobby->size.y : 1;
+	const double bonus = height >= 3 ? 50.0 : height == 2 ? 25.0 : 0.0;
+	p->addJourneyStress(std::max(0.0, waited - bonus));
 }
 
 Person *Queue::popPerson()
 {
-	if (people.empty())
-		return NULL;
+	if (people.empty()) return nullptr;
 	Person *p = people.front();
-	people.pop_front();
+	bankWait(p);
+	removePerson(p);
 	return p;
 }
 
 void Queue::callElevator()
 {
-	if (!called)
-	{
+	if (!called && !people.empty()) {
 		called = true;
+		answered = false;
+		assignedCar = nullptr;
 		callTime = game->time.absolute;
 		elevator->called(this);
 	}
 }
 
+void Queue::applyWatchdog()
+{
+	const double frame = game->time.absolute * Time::kSimFramesPerDay;
+	bool ejected = false;
+	for (auto it = people.begin(); it != people.end();) {
+		Person *p = *it++;
+		if (frame - p->waitStartFrame + 1e-7 < kQueueWatchdogFrames) continue;
+		bankWait(p);
+		p->journey.failWaiting();
+		p->bankTrip(); // watchdog removal banks the felt wait (batch 5 T2)
+		ejected = true;
+	}
+	if (ejected) {
+		called = !people.empty();
+		if (people.empty()) {
+			answered = steppingInside = false;
+			assignedCar = nullptr;
+		}
+	}
+}
+
 void Queue::advance(double dt)
 {
-	double dta = game->time.dta;
 	if (!people.empty() && !called)
-		callElevator();
-
-	for (People::iterator ip = people.begin(); ip != people.end();)
 	{
-		Person *p = *(ip++);
-		p->addStress(1.0 / kSecondsUntilStressed / Time::kBaseSpeed * dta);
-		if (p->stress >= 1.0)
-			p->journey.next();
+		const double frame = game->time.absolute / Time::kBaseSpeed;
+		// Failed calls are retried at the original one-in-sixteen cadence,
+		// rather than continuously hammering dispatch.
+		if (frame >= waitStartFrame && ((int)frame % kQueueFullRetryFrames) == 0)
+			callElevator();
+		// YootTower: people left behind by a full car keep their T2Request
+		// and call again at once (16 SimTower frames are 2 game hours here).
+		else if (people.front()->yootRules())
+			callElevator();
 	}
+	if (!people.empty() && people.front()->yootRules())
+	{
+		// YootTower (P1, T2People::IdleWaitMover 0x10048880): every waiting
+		// person idles once per 2 game minutes and gains +5 stress; at 300
+		// they give up and jump to their destination. Replaces the
+		// SimTower watchdog and journey-bank wait stress.
+		const long long tick = Yoot::absoluteMinute(game->time.absolute) / Yoot::kPeopleIdleMinutes;
+		if (yootIdleTick < 0) yootIdleTick = tick;
+		long long ticks = tick - yootIdleTick;
+		yootIdleTick = tick;
+		for (; ticks > 0 && !people.empty(); --ticks)
+		{
+			std::vector<Person *> waiting(people.begin(), people.end());
+			for (size_t i = 0; i < waiting.size(); ++i)
+				waiting[i]->yootWaitTick(); // may remove the person from this queue
+		}
+		return;
+	}
+	yootIdleTick = -1;	applyWatchdog();
+	if (!called && !people.empty()) callElevator();
 }
 
 void Queue::draw(sf::RenderTarget &target, sf::RenderStates states) const
@@ -121,6 +196,25 @@ void Queue::render(sf::RenderTarget &target) const
 		if (stepping)
 			x -= 16;
 
+		// YootTower: the world silhouette, facing the elevator (rows 0/3;
+		// the walking frame while stepping in).
+		const YootSilhouetteFrame yoot = yootPersonSilhouette(game, p);
+		if (yoot.texture)
+		{
+			Sprite y;
+			y.setTexture(*yoot.texture);
+			y.setTextureRect(yootSilhouetteRect((direction == Elevator::kUp ? 0 : 3) + (stepping ? 1 : 0)));
+			y.setOrigin({0.f, 36.f});
+			y.setPosition({(direction == Elevator::kUp ? -x - 8.f : elevator->size.x * 8.f + x - 8.f) + elevator->getPositionPixels().x,
+				-(float)(floor * 36)});
+			const double blue = 100.0, yellow = 230.0; // PPDF stress limits
+			sf::Color c = p->stress >= yellow ? sf::Color(255, 0, 0) : p->stress >= blue ? sf::Color(255, 128, 128) : sf::Color::White;
+			y.setColor(tinted ? game->lighting.compose(c) : c);
+			target.draw(y);
+			x += (stepping ? 16 : 8 * yoot.width);
+			if (x >= width) break;
+			continue;
+		}
 		// Calculate the texture subrect for this person.
 		int type = p->type;
 		sf::IntRect sr({type * 32, (stepping ? 48 : 0)}, {p->getWidth(), 24});
@@ -135,11 +229,11 @@ void Queue::render(sf::RenderTarget &target) const
 		pos.x = (direction == Elevator::kUp ? -x : elevator->size.x * 8 + x);
 		pos.x += elevator->getPositionPixels().x;
 
-		// Decide what color to use based on stress level.
+		// The bank is 0..300: pink at 80, red at the 150 judge bar.
 		sf::Color color = sf::Color::Black;
-		if (p->stress > 0.8)
+		if (p->stress >= 150.0)
 			color = sf::Color(255, 0, 0);
-		else if (p->stress > 0.4)
+		else if (p->stress >= 80.0)
 			color = sf::Color(255, 128, 128);
 		if (tinted)
 		{

@@ -4,7 +4,9 @@
 #include <TGUI/Widgets/ChildWindow.hpp>
 #include <TGUI/Widgets/Label.hpp>
 #include <TGUI/Widgets/Button.hpp>
+#include <TGUI/Widgets/ComboBox.hpp>
 #include <string>
+#include <vector>
 
 namespace OT
 {
@@ -42,10 +44,23 @@ namespace OT
 		tgui::ChildWindow::Ptr window;
 		tgui::Label::Ptr       content;
 		tgui::Button::Ptr      floorsButton;  ///< Shown only for elevators.
+		tgui::Button::Ptr      classButtons[4]; ///< Rent class selector (T12).
+		tgui::Button::Ptr      transformerButton; ///< YootTower Power Room only.
+		tgui::ComboBox::Ptr    venueChoice;   ///< YootTower movie / hall event / sponsor.
+		tgui::Button::Ptr      venueButton;   ///< YootTower subway schedule upgrade.
+		bool                   fillingChoice = false;
+		void refreshVenueChoice();
 		Item::Item *           currentItem;
 
 		void buildWindow();
 		std::string describeItem(Item::Item * item);
+		/// Tenant comments in the EXE order (T46).
+		std::vector<std::string> tenantComments(Item::Item * item);
+		/// Generic / custom / VIP label of a person (T44).
+		std::string personLabel(Person * person);
+		/// Whereabouts status line (T45).
+		std::string personWhereabouts(Person * person);
+		void refreshClassButtons();
 		std::string stateName(Person::State s);
 		std::string typeName(Person::Type t);
 	};

@@ -1,73 +1,85 @@
 #pragma once
 
 #include "GameObject.h"
+#include "FacilitySystem.h"
+#include "PowerSystem.h"
+#include "VenueSystem.h"
+#include "SpecialSystem.h"
+#include "YootExtrasSystem.h"
+#include "PeopleSystem.h"
 #include "Sprite.h"
+#include "YootEvents.h"
+#include "YootFire.h"
 #include "Math/Vector2D.h"
+#include "Math/Rect.h"
 
-#include <SFML/Graphics/Drawable.hpp>
 #include <map>
 #include <set>
 #include <string>
+#include <vector>
 
 namespace tinyxml2 { class XMLPrinter; class XMLElement; }
 
 namespace OT
 {
-	/** Random emergency events: fire and terror (bomb threat).
+	namespace Item { class Item; }
+
+	/** Scheduled disasters: fire, bomb threat and buried treasure
+	 * (TODO.md "Concilia-tower adoption review (2026-09-14)" rows 12-18).
 	 *
-	 * Mirrors EventT.h/c, FireT.h/c and the emergency portions of Emergen.h/c
-	 * from the original SimTower source (codemap.md:749-773, 833-862, 958-990).
+	 * Re-expressed from concilia-tower's clean-room SIMTOWER.EXE decode
+	 * (EventT seg_10c8, FireT seg_10e8, TimeT seg_1208, SantaT seg_11b8,
+	 * LevelT seg_1148). All constants are byte-verified tuning values; see
+	 * local://ground-truth.md.
 	 *
-	 * Events are rare occurrences that require player intervention:
+	 * Calendar (TimeT 1208:0342) — deterministic, no dice:
+	 *  - fire: every 84th day (day % 84 == 83) at 10:00, gated on
+	 *    star > 2 AND a security office exists AND no cathedral;
+	 *  - bomb threat: every 60th day (day % 60 == 59) at 10:00, only at
+	 *    stars 2/3/4, gated on a security office. The fire check runs
+	 *    first (TimeT @0357 before @0373);
+	 *  - Santa fly-by: every 12th day (day % 12 == 11) at 21:00.
 	 *
-	 *  - Fire: ignites at a random occupied tenant. Spreads to adjacent
-	 *    tiles over time, stressing and eventually destroying tenants.
-	 *    The player calls a helicopter (click the fire) which arrives after
-	 *    a delay and extinguishes the blaze. Costs $ to dispatch.
+	 * The fire model runs on EXE frames (2600 frames/day, ft 0 at
+	 * 07:00), not displayed hours: per-floor left/right fronts
+	 * advance 1 cell every 7 frames, each floor above the origin ignites
+	 * on the origin cell 80 frames per floor later, never downward, and a
+	 * front dies at the floor extent. Unfought fires hard-stop at 21:00.
+	 * The $500,000 chopper sweeps left 1 cell/frame; foot guards (6 per
+	 * security office) douse fronts with a 5-frame action. Burned cells
+	 * become rubble (simtower/fire/rubble), no cash damage charge.
 	 *
-	 *  - Terror (bomb): a bomb appears at a random floor location with a
-	 *    countdown timer. The player must click the bomb to defuse it.
-	 *    If the timer expires the bomb detonates, damaging nearby tenants
-	 *    and inflicting a funds penalty + heavy stress.
+	 * DIVERGENCE (ORIGINAL-BUGS B7): the chopper sweeps to the actual
+	 * leftmost burning front instead of the origin floor's left extent, so
+	 * a wider floor's front can no longer slip past the sweep alive.
 	 *
-	 * Only one event is active at a time. Events only trigger once the
-	 * tower reaches 2 stars.
+	 * The burglar event was retired (row 13): it does not exist in the EXE.
 	 *
-	 * Scheduling ported from OpenSkyWeb ISSUE-036 (authentic triggers):
-	 *  - random events (fire 50% / burglar 50%) are spaced 30-90 in-game
-	 *    DAYS apart (the old code passed days through hourToAbsolute, which
-	 *    has no branch above 24h — undefined behaviour that broke cadence);
-	 *  - the terrorist bomb threat is deterministic: once per game, on the
-	 *    weekend day of Q4 in year 5 at 10:00, detonating at 15:00 the same
-	 *    day;
-	 *  - buried treasure can surface (8%/day) while something is under
-	 *    construction (ISSUE-034).
-	 *
-	 * Art resources (loaded by SimTowerLoader, previously unused):
-	 *   simtower/fire/large   (384x36, 4 animation frames)
-	 *   simtower/fire/small   (384x36, 4 frames)
-	 *   simtower/fire/chopper (96x36)
-	 *   simtower/fire/destroyed (248x24)
-	 *   simtower/alerts/fire, simtower/alerts/terrorist, simtower/alerts/chopper,
-	 *   simtower/alerts/treasure
+	 * YootTower (--ruleset yoottower) replaces the calendar with the world's
+	 * T2EV list (YootEventScheduler; EventSystemYoot.cpp): fire, terrorist,
+	 * Santa and the daily blackout check reuse the paths below with the
+	 * FBEV/TREV/SAEV/BOEV parameters; Uncle Reggae and the rooftop
+	 * decorations are native; the world X-events are hooks (game-parity.md
+	 * V1-V7). Buried treasure is SimTower-only.
 	 */
 	class EventSystem : public GameObject, public sf::Drawable
 	{
 	public:
-		enum class Type { None, Fire, Terror, Treasure };
+		/// Active event kinds. Treasure is not an active event: it pays
+		/// out immediately and queues its notice.
+		enum class Type { None, Fire, Terror };
 
 		EventSystem(Game * game);
 
-		/// Per-frame hook. Handles event scheduling and active-event
-		/// progression (fire spread, bomb countdown, helicopter arrival).
+		/// Per-frame hook: the 10:00/21:00 calendar, then the active
+		/// event's frame-accurate progression.
 		void advance(double dt);
 
 		/// Reset all state. Called from Game::clearWorld().
 		void reset();
 
-		/// Handle a click at the given tile coordinate. Returns true if the
-		/// click was consumed (i.e. it hit the active event). For fire this
-		/// dispatches the helicopter; for terror this defuses the bomb.
+		/// Handle a click at the given tile coordinate. For a fire this
+		/// buys the helicopter mid-blaze (the hidden 10e8:01e2 path).
 		bool handleClick(int2 tile);
 
 		/// Is an event currently active?
@@ -77,93 +89,247 @@ namespace OT
 		/// Persist / restore across save-reload.
 		void encodeXML(tinyxml2::XMLPrinter & xml) const;
 		void decodeXML(tinyxml2::XMLElement & xml);
+        bool hasRubble(int floor, int x) const;
+        bool rubbleIntersects(const recti &rect) const;
+        bool clearRubble(int floor, int x);
+        void burnFootprint(const recti &rect);
+        /// Buried-treasure check on successful facility placement (build click).
+        void notifyPlaced();
+
+		/// Promotion-ceremony hook (LevelT @0047-004a): re-seed the buried
+		/// treasure latch with the NEW tier's dig condition, so a basement
+		/// over-dug before the promotion forfeits that tier's treasure and
+		/// anything less re-arms it. Called by LevelUp/Game::ratingMayIncrease
+		/// once per promotion with the new star rating. Safe at star > 3 or
+		/// with no basement (sets the latch to false).
+		void armTreasureLatch(int star);
+		/// Hidden debug menu triggers (EXE actions 9002/9000/9001). They
+		/// run the calendar's own scheduling paths (startFire / offerBomb
+		/// / payTreasure), so the paths' own gating still applies; only
+		/// the calendar scheduling is skipped. Reachable only via the
+		/// --debug-menu dev menu in Game.
+		void debugTriggerFire();
+		void debugTriggerTerror();
+		void debugTriggerTreasure();
+
+		/// YootTower power and blackout (BOEV). Inert in other rulesets.
+		PowerSystem power;
+		/// YootTower: tenants stop idling while the exclusive blackout runs. The
+		/// original's T2TowerEvent::Idle returns 1 for an exclusive event that is
+		/// executing, and FUN_0041dc40 then skips T2TenantArrayList::DispatchIdle
+		/// (and the OutObj/template dispatch). Inert in other rulesets.
+		bool tenantIdleFrozen() const { return yoot && power.isBlackOut(); }
+		/// YootTower trash, restrooms and doctors (plan step 12). Inert elsewhere.
+		FacilitySystem facilities;
+		/// YootTower venues, final items and the subway (plan step 14 B). Inert elsewhere.
+		VenueSystem venues;
+		/// YootTower front desk, housekeeping, parking, fire dept (step 14).
+		SpecialSystem specials;
+		/// YootTower school, kite/dolphins, Mr. Maru, hot spring, traffic map.
+		YootExtrasSystem extras;
+		/// Layer-1 world sprites (the Kegon kite), drawn before the tower.
+		void drawBehindTower(sf::RenderTarget & target) const { if (yoot) extras.drawBehindTower(target); }
+		void drawUnderMovers(sf::RenderTarget & target) const { if (yoot) venues.drawTrains(target); }
+		/// YootTower visitor pool and walking visitors (P4). Inert elsewhere.
+		PeopleSystem people;
+		/// True while the YootTower T2EV scheduler drives the calendar.
+		bool yootMode() const { return yoot; }
+		const YootEventScheduler & yootScheduler() const { return scheduler; }
+		/// The tower as the YootTower fire reads and burns it (Yoot::FireGrid).
+		Yoot::FireCell yootFireCell(int floor, int x) const;
+		void yootFireBurn(int floor, int x, int & lo, int & hi);
 
 	protected:
 		void draw(sf::RenderTarget & target, sf::RenderStates states) const;
 
 	private:
-		void scheduleNextEvent();
+		struct Guard;
+		struct GuardOffice;
+
+	public:
+		/// Drop the under-construction tracking entry for a dying item
+		/// (pointer-keyed; SimLess dereferences keys in deterministic runs).
+		void forgetItem(const Item::Item * item);
+
+	private:
+
+		// --- calendar ---
+		void dailyDispatch();
+		void launchSanta();
+
+		// --- YootTower T2EV scheduler (EventSystemYoot.cpp) ---
+		void syncRuleset();
+		void yootDispatch();
+		void yootBegin(int index);
+		void yootSyncRunning();
+		void yootAdvanceSanta(double frames);
+		void startReggae(int index);
+		void stepReggae(int minute);
+		void endReggae(bool caught);
+		void drawOutDecorations(sf::RenderTarget & target) const;
+		sf::Texture * outDecorationTexture(int imageId) const;
+
+		// --- fire (FireT seg_10e8) ---
 		void startFire();
-		void startTerror();
-		void startBurglar();
-		void endEvent();
-
-		/// True when the tower contains a SECOM Center (OpenSkyWeb
-		/// ISSUE-031): auto-senses fires and auto-scans bomb threats.
-		bool hasSecom() const;
-		/// Dispatch the paid helicopter/fire crew (shared by the click
-		/// path and the fire-crew choice dialog).
-		void dispatchHelicopter();
-		/// Player answers to the fire-crew choice dialog (true = call).
+		void offerFireChopper();
 		void resolveFireResponse(bool callCrew);
-		/// Player answers to the ransom choice dialog (true = pay).
-		void resolveTerrorResponse(bool pay);
+		void callChopper();
+		void stepFireFrame();
+		void stepFireGuards();
+		void deployFireGuards();
+		void destroyFireCell(int floor, int x);
+		void endFire();
+		bool fireBurning() const;
+		/// True while a floor's two fronts are still within one 12-cell
+		/// strip of each other (just ignited): drawn as small flames.
+		bool fireFloorIgniting(int floor) const;
 
-		/// Pick a random occupied tenant tile as the fire origin.
-		int2 pickRandomTenantTile() const;
-		/// Pick a random tile inside an item that is under construction.
-		int2 pickRandomConstructionTile() const;
-		/// True when any Security office patrols within range of the floor.
-		bool securityCoversFloor(int floor) const;
-		/// Daily buried-treasure roll while construction is active.
-		void checkTreasure();
-		void startTreasure();
-		/// Apply stress to people at/near the burning tiles.
-		void applyFireStress(double dt);
-		/// Spread fire to a new adjacent tile.
-		void spreadFire();
+		// --- YootTower fire (T2FireBurning, Tokyo.t2p 0x10030d50..; EventSystemYoot.cpp) ---
+		/// Start (once, at FBEV's begin minute: IsBreakoutFire's 100 tries), the 3-way
+		/// response dialog, one idle of the fires and the helicopter, the end.
+		void yootFireStart();
+		bool yootFireChoose(int index);
+		void yootFireStep();
+		void yootFireEnd(const char * message);
+		bool yootFireBurning() const { return yoot && type == Type::Fire && !yootFire.fires.empty(); }
+		Yoot::FireModel yootFire;
+		/// 0 = the dialog is open, 1 = helicopter, 2 = security guards, 3 = nothing.
+		int    yootFireMode = 0;
+		long long yootFireIdles = 0;   ///< last mover idle the fires have seen
+		int    yootFireStartFloor = 0;
+		/// The helicopter (mode 1): pixel position and where it flies (a click, else the nearest fire).
+		float  yootHeliX = 0, yootHeliY = 0;
+		bool   yootHeliManual = false;
+		int    yootHeliTargetX = 0, yootHeliTargetFloor = 0;
+		void yootHeliMove();
+
+		// --- bomb (EventT seg_10c8) ---
+		void offerBomb();
+		void resolveBombResponse(bool pay);
+		void armBomb();
+		void stepBombGuards();
+		void deployBombGuards();
+		void detonateBomb();
+
+		// --- buried treasure (LevelT seg_1148) ---
+		bool treasureCondition(int star) const;
+		void payTreasure(int star);
+
+		// --- shared helpers ---
+		void addRubble(int floor, int x);
+		bool floorExtent(int floor, int & left, int & right) const;
+	int  topBuiltFloor() const;
+		int  lobbyHeight() const;
+		int  pickDisasterFloor() const;
+		bool hasSecurity() const;
+		double elapsedFrames() const;
+		/// Current EXE clock frame in [0, 2600), with ft 0 at 07:00.
+		int  clockFrame() const;
+		/// Next unsearched floor for a guard's frontier, or INT_MIN when
+		/// the search is exhausted (GuardT 10f8:0701).
+		int  nextGuardFloor(GuardOffice & office, const Guard & g) const;
 
 		Type   type;
-		double nextEventTime;
 
-		// --- Fire state ---
-		// Burning tiles stored as floor -> set of x positions. Using a map
-		// of sets because int2 has no operator< for direct set<int2>.
-		std::map<int, std::set<int>> burningTiles;
-		int2    fireOrigin;
-		double  fireSpreadTimer;   // counts down to next spread
-		double  fireAnimTime;      // drives the flicker frame selection
-		bool    helicopterCalled;
-		double  helicopterArriveTime;
-		// Tiles that have burned down (rendered as ruins).
-		std::set<long> destroyedTiles; // encoded as floor*100000 + x
+		// --- ruleset parameters (SimTower defaults; YootTower from T2EV) ---
+		bool   yoot;
+		std::string yootKey;     ///< world id the scheduler was built for
+		YootEventScheduler scheduler;
+		int    chopperCost;      ///< dollars
+		int    fireEndFrame;     ///< unfought fires stop here
+		int    bombDetonateFrame;
+		int    yootFireIdx, yootTerrorIdx, yootBlackoutIdx, yootSantaIdx;
+		int    santaStartMinute; ///< YootTower: minutes flown since launch
+		double santaMinutes;
 
-		// --- Terror state ---
-		int2   bombLocation;
-		double bombDetonateTime;
-		bool   defused;
-		// Deterministic threat bookkeeping (ISSUE-036): the bomb threat is a
-		// once-per-game scripted event; pendingTerror defers it while another
-		// event is active.
-		bool   terrorFired;
-		bool   pendingTerror;
+		// --- Uncle Reggae (T2Maru_Reggae) ---
+		struct Reggae {
+			bool active = false;
+			int  index = -1;
+			Item::Item * target = nullptr;
+			int  counter = 0;      ///< +0x54: one tick per 3 minutes
+			int  nextMinute = 0;   ///< +0x50
+			int  guardMinute = -1; ///< security arrival (approximation)
+			YootReggaeDef def;
+			YootVisitor * walker = nullptr; ///< the pool VIP who walks (PeopleSystem)
+		} reggae;
+		mutable std::map<int, sf::Texture> outDecoTextures;
 
-		// --- Buried treasure state (ISSUE-034) ---
-		int2   treasureOrigin;
-		double treasureEndTime;
-		int    lastTreasureDay;
+		// --- calendar state ---
+		double prevAbsolute;    ///< cumulative day fraction of the previous advance
+		int    lastDispatchDay; ///< day of the last 10:00 dispatch (idempotence)
+		bool   santaActive;
+		float  santaX;
+		float  santaY;
 
-		// --- Response flow state (OpenSkyWeb ISSUE-033/036) ---
-		bool   brigadeDeclined;    ///< player declined the paid fire crew
-		double securityArriveTime; ///< security quench completion time
-		double burnoutTime;        ///< unanswered fire dies out here
-		double secomScanTime;      ///< SECOM bomb-scan reveal time
-		double secomDispatchTime;  ///< SECOM auto-defusal completion time
-		int    ransom;             ///< terrorist ransom demand ($10k-$90k)
-		bool   securityCovered;    ///< security covers the bomb floor
-		int    defuseRadius;       ///< click radius (6, or 9 with security)
+		// --- fire state ---
+		std::map<int, int> fireLeft;  ///< floor -> left front cell (absent = not burning)
+		std::map<int, int> fireRight; ///< floor -> right front cell
+		int    fireOriginFloor;
+		int    fireOriginCell;
+		int    fireFrame;       ///< EXE frames since ignition
+		double fireFrameAccum;  ///< sub-frame carry
+		bool   fireChopperPending; ///< the ignition dialog is on screen
+		bool   fireChopperPaid;    ///< the helicopter has been bought
+		int    chopperX;        ///< > 0 while the chopper sweeps left
+		bool   fireGuardsActive;
 
-		// --- Sprites ---
-		Sprite fireLargeSprite;
+		// --- guards (shared by the fire and bomb responses) ---
+		struct Guard {
+			int  floor;
+			int  x;
+			int  transit;   ///< invisible frames per floor
+			int  pause;     ///< action pause frames remaining
+			bool below;     ///< expand downward (guards 3-5)
+			bool douse;     ///< a douse lands when the pause ends (fire mode)
+			bool retired;
+		};
+		struct GuardOffice {
+			int   floor;
+			int   up;    ///< highest claimed floor
+			int   down;  ///< lowest claimed floor
+			Guard g[6];  ///< kGuardsPerOffice
+		};
+		std::vector<GuardOffice> guardOffices;
+
+		// --- bomb state ---
+		int    bombFloor;
+		int    bombSlot;
+		int    bombRansom;
+		bool   bombArmed;
+		bool   bombCaught;
+		double bombCleanupAt; // absolute day fraction; -1 until resolved
+
+		// --- buried treasure state ---
+		bool   treasureLatched; ///< true = paid/forfeited for this tier
+		std::set<Item::Item *, SimLess> pendingBuilds; ///< items seen under construction
+
+		// --- rubble ---
+		std::set<long> rubble;
+        // Original tenant-record boundaries for independent bulldozer strokes.
+        // Tiles remain the canonical render/placement representation.
+        std::map<int, std::set<std::pair<int, int> > > burnedSpans;
+
+		// --- sprites ---
+		Sprite fireSprite;
+		Sprite smallFireSprite;
 		Sprite chopperSprite;
 		Sprite alertSprite;
-		Sprite destroyedSprite;
+		Sprite rubbleSprite;
+		Sprite santaSprite;
 
 		/// Convert a tile (x, floor) to world-pixel coordinates.
 		static sf::Vector2f tileToPixel(int x, int floor) {
 			return sf::Vector2f(x * 8.0f, -floor * 36.0f);
 		}
-		/// Encode a tile into a single long key for the destroyed set.
-		static long encodeTile(int floor, int x) { return (long)floor * 100000L + x; }
+		/// Encode a tile into a single non-negative long key for the rubble
+		/// set (basements are negative floors, and blasts reach negative x).
+		static long encodeTile(int floor, int x) {
+			return (long)(floor + 1000) * 100000L + (x + 1000);
+		}
+		static void decodeTile(long key, int & floor, int & x) {
+			floor = (int)(key / 100000L) - 1000;
+			x = (int)(key % 100000L) - 1000;
+		}
 	};
 }

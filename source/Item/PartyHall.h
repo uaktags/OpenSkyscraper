@@ -17,6 +17,7 @@ namespace OT {
 				p->icon  = 15;
 			}
 			virtual ~PartyHall();
+			virtual void evacuateForDisaster() override;
 
 			virtual void init();
 
@@ -24,6 +25,9 @@ namespace OT {
 			virtual void decodeXML(tinyxml2::XMLElement & xml);
 
 			bool open;
+			int quota;
+			int patronsToday;
+			bool eventSettled;
 
 			/** A Person who arrives for a party. Spawned when the hall opens,
 			 *  removed when the hall closes (with attendance-based income). */
@@ -31,7 +35,7 @@ namespace OT {
 			public:
 				Visitor(PartyHall *hall);
 			};
-			typedef std::set<Visitor *> Visitors;
+			typedef std::set<Visitor *, SimLess> Visitors;
 			Visitors visitors;
 			void clearVisitors();
 
@@ -40,7 +44,6 @@ namespace OT {
 			void updateSprite();
 
 			virtual void advance(double dt);
-			virtual int dailyMaintenanceCost() const override { return 1000; }
 
 			virtual void addPerson(Person * p);
 			virtual void removePerson(Person * p);

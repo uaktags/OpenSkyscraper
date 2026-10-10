@@ -37,10 +37,14 @@ sf::Color Lighting::colorForState(int state, double & outBrightness)
 		case 1:
 			outBrightness = 0.96;
 			return sf::Color(255, 196, 140);
-		// Night - dark blue, moderately dimmed.
+		// Night - mild cool tint. The original has no global tint: it swaps
+		// only the sky/window palette entries via ANIMATEPALETTE (all.c:4133,
+		// 4287, 4306, 4334; ranges 0xbc/0xc2/0xcf), so lit windows stay warm.
+		// A multiplicative stand-in must therefore stay light-handed or it
+		// turns lit windows blue-grey (OpenSky 23:00 vs original).
 		case 2:
-			outBrightness = 0.55;
-			return sf::Color(150, 168, 220);
+			outBrightness = 0.70;
+			return sf::Color(180, 188, 222);
 		// Cloudy - cool gray-blue, slightly dimmed.
 		case 3:
 			outBrightness = 0.82;
@@ -99,4 +103,13 @@ void Lighting::advance(double dt)
 	current.g = static_cast<uint8_t>(std::max(0.0, std::min(255.0, gg)));
 	current.b = static_cast<uint8_t>(std::max(0.0, std::min(255.0, bb)));
 	current.a = 255;
+
+	// The YootTower skin has no global tint: the original only animates the
+	// palette (sky, windows, signs; YootItemArt) and darkens blacked-out
+	// tenants (PowerSystem).
+	if (game->skin == Skin::Yoot)
+	{
+		current = sf::Color(255, 255, 255, 255);
+		currentBrightness = 1.0;
+	}
 }

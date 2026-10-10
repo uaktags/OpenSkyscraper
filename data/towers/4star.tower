@@ -1,0 +1,1999 @@
+<tower funds="25000000" rating="3" time="0.115385" speed="1" rainy="0" tool="inspector" x="0" y="200">
+<item type="floor" x="-187" y="0" evaluation="90.0" width="375"/>
+<item type="lobby" x="-187" y="0" evaluation="90.0" width="375" height="1"/>
+<item type="floor" x="-187" y="1" evaluation="90.0" width="375"/>
+<item type="security" x="-155" y="1" evaluation="90.0"/>
+<item type="office" x="-139" y="1" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-130" y="1" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-109" y="1" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-100" y="1" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-91" y="1" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-82" y="1" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-63" y="1" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-54" y="1" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-45" y="1" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-36" y="1" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-17" y="1" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-8" y="1" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="1" y="1" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="10" y="1" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="30" y="1" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="39" y="1" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="48" y="1" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="57" y="1" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="76" y="1" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="85" y="1" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="94" y="1" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="103" y="1" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="122" y="1" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="131" y="1" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="140" y="1" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="149" y="1" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="floor" x="-187" y="2" evaluation="90.0" width="375"/>
+<item type="office" x="-155" y="2" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-146" y="2" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-137" y="2" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-128" y="2" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-109" y="2" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-100" y="2" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-91" y="2" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-82" y="2" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-63" y="2" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-54" y="2" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-45" y="2" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-36" y="2" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-17" y="2" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-8" y="2" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="1" y="2" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="10" y="2" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="30" y="2" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="39" y="2" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="48" y="2" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="57" y="2" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="76" y="2" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="85" y="2" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="94" y="2" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="103" y="2" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="122" y="2" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="131" y="2" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="140" y="2" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="149" y="2" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="floor" x="-187" y="3" evaluation="90.0" width="375"/>
+<item type="medicalcenter" x="-155" y="3" evaluation="90.0"/>
+<item type="office" x="-109" y="3" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-100" y="3" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-91" y="3" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-82" y="3" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-63" y="3" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-54" y="3" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-45" y="3" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-36" y="3" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-17" y="3" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-8" y="3" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="1" y="3" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="10" y="3" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="30" y="3" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="39" y="3" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="48" y="3" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="57" y="3" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="76" y="3" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="85" y="3" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="94" y="3" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="103" y="3" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="122" y="3" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="131" y="3" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="140" y="3" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="149" y="3" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="stairs" x="-163" y="0" evaluation="90.0"/>
+<item type="stairs" x="-163" y="1" evaluation="90.0"/>
+<item type="stairs" x="-163" y="2" evaluation="90.0"/>
+<item type="stairs" x="-117" y="0" evaluation="90.0"/>
+<item type="stairs" x="-117" y="1" evaluation="90.0"/>
+<item type="stairs" x="-117" y="2" evaluation="90.0"/>
+<item type="stairs" x="-71" y="0" evaluation="90.0"/>
+<item type="stairs" x="-71" y="1" evaluation="90.0"/>
+<item type="stairs" x="-71" y="2" evaluation="90.0"/>
+<item type="stairs" x="-25" y="0" evaluation="90.0"/>
+<item type="stairs" x="-25" y="1" evaluation="90.0"/>
+<item type="stairs" x="-25" y="2" evaluation="90.0"/>
+<item type="stairs" x="22" y="0" evaluation="90.0"/>
+<item type="stairs" x="22" y="1" evaluation="90.0"/>
+<item type="stairs" x="22" y="2" evaluation="90.0"/>
+<item type="stairs" x="68" y="0" evaluation="90.0"/>
+<item type="stairs" x="68" y="1" evaluation="90.0"/>
+<item type="stairs" x="68" y="2" evaluation="90.0"/>
+<item type="stairs" x="114" y="0" evaluation="90.0"/>
+<item type="stairs" x="114" y="1" evaluation="90.0"/>
+<item type="stairs" x="114" y="2" evaluation="90.0"/>
+<item type="stairs" x="160" y="0" evaluation="90.0"/>
+<item type="stairs" x="160" y="1" evaluation="90.0"/>
+<item type="stairs" x="160" y="2" evaluation="90.0"/>
+<item type="floor" x="-187" y="4" evaluation="90.0" width="375"/>
+<item type="condo" x="-163" y="4" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-147" y="4" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-131" y="4" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-115" y="4" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-99" y="4" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-83" y="4" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-67" y="4" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-51" y="4" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-35" y="4" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-19" y="4" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-3" y="4" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="13" y="4" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="29" y="4" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="45" y="4" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="61" y="4" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="77" y="4" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="93" y="4" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="109" y="4" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="125" y="4" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="141" y="4" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="floor" x="-187" y="5" evaluation="90.0" width="375"/>
+<item type="condo" x="-163" y="5" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-147" y="5" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-131" y="5" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-115" y="5" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-99" y="5" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-83" y="5" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-67" y="5" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-51" y="5" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-35" y="5" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-19" y="5" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-3" y="5" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="13" y="5" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="29" y="5" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="45" y="5" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="61" y="5" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="77" y="5" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="93" y="5" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="109" y="5" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="125" y="5" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="141" y="5" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="floor" x="-187" y="6" evaluation="90.0" width="375"/>
+<item type="condo" x="-163" y="6" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-147" y="6" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-131" y="6" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-115" y="6" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-99" y="6" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-83" y="6" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-67" y="6" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-51" y="6" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-35" y="6" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-19" y="6" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-3" y="6" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="13" y="6" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="29" y="6" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="45" y="6" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="61" y="6" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="77" y="6" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="93" y="6" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="109" y="6" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="125" y="6" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="141" y="6" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="floor" x="-187" y="7" evaluation="90.0" width="375"/>
+<item type="condo" x="-163" y="7" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-147" y="7" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-131" y="7" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-115" y="7" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-99" y="7" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-83" y="7" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-67" y="7" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-51" y="7" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-35" y="7" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-19" y="7" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-3" y="7" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="13" y="7" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="29" y="7" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="45" y="7" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="61" y="7" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="77" y="7" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="93" y="7" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="109" y="7" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="125" y="7" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="141" y="7" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="floor" x="-187" y="8" evaluation="90.0" width="375"/>
+<item type="condo" x="-163" y="8" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-147" y="8" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-131" y="8" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-115" y="8" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-99" y="8" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-83" y="8" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-67" y="8" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-51" y="8" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-35" y="8" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-19" y="8" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-3" y="8" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="13" y="8" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="29" y="8" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="45" y="8" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="61" y="8" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="77" y="8" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="93" y="8" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="109" y="8" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="125" y="8" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="141" y="8" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="floor" x="-187" y="9" evaluation="90.0" width="375"/>
+<item type="condo" x="-163" y="9" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-147" y="9" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-131" y="9" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-115" y="9" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-99" y="9" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-83" y="9" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-67" y="9" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-51" y="9" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-35" y="9" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-19" y="9" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-3" y="9" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="13" y="9" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="29" y="9" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="45" y="9" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="61" y="9" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="77" y="9" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="93" y="9" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="109" y="9" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="125" y="9" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="141" y="9" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="floor" x="-187" y="10" evaluation="90.0" width="375"/>
+<item type="condo" x="-163" y="10" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-147" y="10" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-131" y="10" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-115" y="10" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-99" y="10" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-83" y="10" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-67" y="10" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-51" y="10" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-35" y="10" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-19" y="10" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-3" y="10" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="13" y="10" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="29" y="10" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="45" y="10" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="61" y="10" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="77" y="10" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="93" y="10" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="109" y="10" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="125" y="10" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="141" y="10" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="floor" x="-187" y="11" evaluation="90.0" width="375"/>
+<item type="hotel_suite" x="-163" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="-156" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="-149" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="-142" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="-135" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="-128" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="-121" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="-114" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="-107" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="-100" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="-93" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="-86" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="-79" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="-72" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="-65" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="-58" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="-51" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="-44" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="-37" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="-30" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="-23" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="-16" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="-9" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="-2" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="5" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="12" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="19" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="26" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="33" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="40" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="47" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="54" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="61" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="68" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="75" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="82" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="89" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="96" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="103" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="110" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="117" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="124" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="131" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="138" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="145" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="152" y="11" evaluation="90.0"/>
+<item type="hotel_suite" x="159" y="11" evaluation="90.0"/>
+<item type="floor" x="-187" y="12" evaluation="90.0" width="375"/>
+<item type="hotel_double" x="-163" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="-157" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="-151" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="-145" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="-139" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="-133" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="-127" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="-121" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="-115" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="-109" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="-103" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="-97" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="-91" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="-85" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="-79" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="-73" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="-67" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="-61" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="-55" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="-49" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="-43" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="-37" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="-31" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="-25" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="-19" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="-13" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="-7" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="-1" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="5" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="11" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="17" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="23" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="29" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="35" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="41" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="47" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="53" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="59" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="65" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="71" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="77" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="83" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="89" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="95" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="101" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="107" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="113" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="119" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="125" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="131" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="137" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="143" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="149" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="155" y="12" evaluation="90.0"/>
+<item type="hotel_double" x="161" y="12" evaluation="90.0"/>
+<item type="floor" x="-187" y="-1" evaluation="90.0" width="375"/>
+<item type="fastfood" x="-155" y="-1" evaluation="90.0" variant="0" open="1"/>
+<item type="fastfood" x="-139" y="-1" evaluation="90.0" variant="1" open="1"/>
+<item type="fastfood" x="-109" y="-1" evaluation="90.0" variant="2" open="1"/>
+<item type="fastfood" x="-93" y="-1" evaluation="90.0" variant="3" open="1"/>
+<item type="fastfood" x="-63" y="-1" evaluation="90.0" variant="4" open="1"/>
+<item type="fastfood" x="-47" y="-1" evaluation="90.0" variant="0" open="1"/>
+<item type="fastfood" x="-17" y="-1" evaluation="90.0" variant="1" open="1"/>
+<item type="fastfood" x="-1" y="-1" evaluation="90.0" variant="2" open="1"/>
+<item type="fastfood" x="30" y="-1" evaluation="90.0" variant="3" open="1"/>
+<item type="fastfood" x="46" y="-1" evaluation="90.0" variant="4" open="1"/>
+<item type="fastfood" x="76" y="-1" evaluation="90.0" variant="0" open="1"/>
+<item type="fastfood" x="92" y="-1" evaluation="90.0" variant="1" open="1"/>
+<item type="fastfood" x="122" y="-1" evaluation="90.0" variant="2" open="1"/>
+<item type="fastfood" x="138" y="-1" evaluation="90.0" variant="3" open="1"/>
+<item type="escalator" x="-163" y="-1" evaluation="90.0"/>
+<item type="escalator" x="-117" y="-1" evaluation="90.0"/>
+<item type="escalator" x="-71" y="-1" evaluation="90.0"/>
+<item type="escalator" x="-25" y="-1" evaluation="90.0"/>
+<item type="escalator" x="22" y="-1" evaluation="90.0"/>
+<item type="escalator" x="68" y="-1" evaluation="90.0"/>
+<item type="escalator" x="114" y="-1" evaluation="90.0"/>
+<item type="escalator" x="160" y="-1" evaluation="90.0"/>
+<item type="floor" x="-187" y="15" evaluation="90.0" width="375"/>
+<item type="lobby" x="-187" y="15" evaluation="90.0" width="375" height="1"/>
+<item type="floor" x="-187" y="16" evaluation="90.0" width="375"/>
+<item type="office" x="-155" y="16" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-146" y="16" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-137" y="16" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-128" y="16" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-109" y="16" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-100" y="16" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-91" y="16" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-82" y="16" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-63" y="16" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-54" y="16" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-45" y="16" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-36" y="16" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-17" y="16" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-8" y="16" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="1" y="16" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="10" y="16" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="30" y="16" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="39" y="16" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="48" y="16" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="57" y="16" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="76" y="16" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="85" y="16" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="94" y="16" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="103" y="16" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="122" y="16" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="131" y="16" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="140" y="16" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="149" y="16" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="floor" x="-187" y="17" evaluation="90.0" width="375"/>
+<item type="office" x="-155" y="17" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-146" y="17" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-137" y="17" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-128" y="17" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-109" y="17" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-100" y="17" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-91" y="17" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-82" y="17" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-63" y="17" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-54" y="17" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-45" y="17" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-36" y="17" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-17" y="17" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-8" y="17" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="1" y="17" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="10" y="17" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="30" y="17" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="39" y="17" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="48" y="17" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="57" y="17" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="76" y="17" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="85" y="17" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="94" y="17" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="103" y="17" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="122" y="17" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="131" y="17" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="140" y="17" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="149" y="17" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="floor" x="-187" y="18" evaluation="90.0" width="375"/>
+<item type="office" x="-155" y="18" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-146" y="18" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-137" y="18" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-128" y="18" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-109" y="18" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-100" y="18" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-91" y="18" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-82" y="18" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-63" y="18" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-54" y="18" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-45" y="18" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-36" y="18" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-17" y="18" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-8" y="18" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="1" y="18" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="10" y="18" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="30" y="18" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="39" y="18" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="48" y="18" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="57" y="18" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="76" y="18" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="85" y="18" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="94" y="18" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="103" y="18" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="122" y="18" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="131" y="18" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="140" y="18" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="149" y="18" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="stairs" x="-163" y="15" evaluation="90.0"/>
+<item type="stairs" x="-163" y="16" evaluation="90.0"/>
+<item type="stairs" x="-163" y="17" evaluation="90.0"/>
+<item type="stairs" x="-117" y="15" evaluation="90.0"/>
+<item type="stairs" x="-117" y="16" evaluation="90.0"/>
+<item type="stairs" x="-117" y="17" evaluation="90.0"/>
+<item type="stairs" x="-71" y="15" evaluation="90.0"/>
+<item type="stairs" x="-71" y="16" evaluation="90.0"/>
+<item type="stairs" x="-71" y="17" evaluation="90.0"/>
+<item type="stairs" x="-25" y="15" evaluation="90.0"/>
+<item type="stairs" x="-25" y="16" evaluation="90.0"/>
+<item type="stairs" x="-25" y="17" evaluation="90.0"/>
+<item type="stairs" x="22" y="15" evaluation="90.0"/>
+<item type="stairs" x="22" y="16" evaluation="90.0"/>
+<item type="stairs" x="22" y="17" evaluation="90.0"/>
+<item type="stairs" x="68" y="15" evaluation="90.0"/>
+<item type="stairs" x="68" y="16" evaluation="90.0"/>
+<item type="stairs" x="68" y="17" evaluation="90.0"/>
+<item type="stairs" x="114" y="15" evaluation="90.0"/>
+<item type="stairs" x="114" y="16" evaluation="90.0"/>
+<item type="stairs" x="114" y="17" evaluation="90.0"/>
+<item type="stairs" x="160" y="15" evaluation="90.0"/>
+<item type="stairs" x="160" y="16" evaluation="90.0"/>
+<item type="stairs" x="160" y="17" evaluation="90.0"/>
+<item type="floor" x="-187" y="19" evaluation="90.0" width="375"/>
+<item type="condo" x="-163" y="19" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-147" y="19" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-131" y="19" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-115" y="19" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-99" y="19" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-83" y="19" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-67" y="19" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-51" y="19" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-35" y="19" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-19" y="19" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-3" y="19" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="13" y="19" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="29" y="19" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="45" y="19" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="61" y="19" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="77" y="19" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="93" y="19" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="109" y="19" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="125" y="19" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="141" y="19" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="floor" x="-187" y="20" evaluation="90.0" width="375"/>
+<item type="condo" x="-163" y="20" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-147" y="20" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-131" y="20" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-115" y="20" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-99" y="20" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-83" y="20" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-67" y="20" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-51" y="20" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-35" y="20" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-19" y="20" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-3" y="20" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="13" y="20" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="29" y="20" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="45" y="20" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="61" y="20" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="77" y="20" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="93" y="20" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="109" y="20" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="125" y="20" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="141" y="20" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="floor" x="-187" y="21" evaluation="90.0" width="375"/>
+<item type="condo" x="-163" y="21" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-147" y="21" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-131" y="21" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-115" y="21" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-99" y="21" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-83" y="21" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-67" y="21" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-51" y="21" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-35" y="21" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-19" y="21" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-3" y="21" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="13" y="21" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="29" y="21" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="45" y="21" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="61" y="21" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="77" y="21" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="93" y="21" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="109" y="21" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="125" y="21" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="141" y="21" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="floor" x="-187" y="22" evaluation="90.0" width="375"/>
+<item type="condo" x="-163" y="22" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-147" y="22" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-131" y="22" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-115" y="22" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-99" y="22" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-83" y="22" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-67" y="22" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-51" y="22" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-35" y="22" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-19" y="22" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-3" y="22" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="13" y="22" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="29" y="22" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="45" y="22" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="61" y="22" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="77" y="22" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="93" y="22" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="109" y="22" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="125" y="22" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="141" y="22" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="floor" x="-187" y="23" evaluation="90.0" width="375"/>
+<item type="condo" x="-163" y="23" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-147" y="23" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-131" y="23" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-115" y="23" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-99" y="23" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-83" y="23" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-67" y="23" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-51" y="23" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-35" y="23" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-19" y="23" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-3" y="23" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="13" y="23" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="29" y="23" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="45" y="23" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="61" y="23" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="77" y="23" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="93" y="23" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="109" y="23" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="125" y="23" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="141" y="23" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="floor" x="-187" y="24" evaluation="90.0" width="375"/>
+<item type="condo" x="-163" y="24" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-147" y="24" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-131" y="24" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-115" y="24" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-99" y="24" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-83" y="24" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-67" y="24" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-51" y="24" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-35" y="24" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-19" y="24" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-3" y="24" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="13" y="24" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="29" y="24" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="45" y="24" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="61" y="24" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="77" y="24" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="93" y="24" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="109" y="24" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="125" y="24" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="141" y="24" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="floor" x="-187" y="25" evaluation="90.0" width="375"/>
+<item type="condo" x="-163" y="25" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-147" y="25" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-131" y="25" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-115" y="25" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-99" y="25" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-83" y="25" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-67" y="25" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-51" y="25" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-35" y="25" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-19" y="25" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-3" y="25" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="13" y="25" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="29" y="25" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="45" y="25" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="61" y="25" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="77" y="25" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="93" y="25" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="109" y="25" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="125" y="25" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="141" y="25" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="floor" x="-187" y="26" evaluation="90.0" width="375"/>
+<item type="hotel_suite" x="-163" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="-156" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="-149" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="-142" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="-135" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="-128" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="-121" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="-114" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="-107" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="-100" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="-93" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="-86" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="-79" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="-72" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="-65" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="-58" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="-51" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="-44" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="-37" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="-30" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="-23" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="-16" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="-9" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="-2" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="5" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="12" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="19" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="26" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="33" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="40" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="47" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="54" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="61" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="68" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="75" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="82" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="89" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="96" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="103" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="110" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="117" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="124" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="131" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="138" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="145" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="152" y="26" evaluation="90.0"/>
+<item type="hotel_suite" x="159" y="26" evaluation="90.0"/>
+<item type="floor" x="-187" y="27" evaluation="90.0" width="375"/>
+<item type="hotel_double" x="-163" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="-157" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="-151" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="-145" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="-139" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="-133" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="-127" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="-121" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="-115" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="-109" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="-103" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="-97" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="-91" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="-85" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="-79" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="-73" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="-67" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="-61" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="-55" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="-49" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="-43" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="-37" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="-31" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="-25" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="-19" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="-13" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="-7" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="-1" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="5" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="11" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="17" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="23" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="29" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="35" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="41" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="47" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="53" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="59" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="65" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="71" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="77" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="83" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="89" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="95" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="101" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="107" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="113" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="119" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="125" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="131" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="137" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="143" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="149" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="155" y="27" evaluation="90.0"/>
+<item type="hotel_double" x="161" y="27" evaluation="90.0"/>
+<item type="floor" x="-187" y="14" evaluation="90.0" width="375"/>
+<item type="fastfood" x="-155" y="14" evaluation="90.0" variant="0" open="1"/>
+<item type="fastfood" x="-139" y="14" evaluation="90.0" variant="1" open="1"/>
+<item type="fastfood" x="-109" y="14" evaluation="90.0" variant="2" open="1"/>
+<item type="fastfood" x="-93" y="14" evaluation="90.0" variant="3" open="1"/>
+<item type="fastfood" x="-63" y="14" evaluation="90.0" variant="4" open="1"/>
+<item type="fastfood" x="-47" y="14" evaluation="90.0" variant="0" open="1"/>
+<item type="fastfood" x="-17" y="14" evaluation="90.0" variant="1" open="1"/>
+<item type="fastfood" x="-1" y="14" evaluation="90.0" variant="2" open="1"/>
+<item type="fastfood" x="30" y="14" evaluation="90.0" variant="3" open="1"/>
+<item type="fastfood" x="46" y="14" evaluation="90.0" variant="4" open="1"/>
+<item type="fastfood" x="76" y="14" evaluation="90.0" variant="0" open="1"/>
+<item type="fastfood" x="92" y="14" evaluation="90.0" variant="1" open="1"/>
+<item type="fastfood" x="122" y="14" evaluation="90.0" variant="2" open="1"/>
+<item type="fastfood" x="138" y="14" evaluation="90.0" variant="3" open="1"/>
+<item type="escalator" x="-163" y="14" evaluation="90.0"/>
+<item type="escalator" x="-117" y="14" evaluation="90.0"/>
+<item type="escalator" x="-71" y="14" evaluation="90.0"/>
+<item type="escalator" x="-25" y="14" evaluation="90.0"/>
+<item type="escalator" x="22" y="14" evaluation="90.0"/>
+<item type="escalator" x="68" y="14" evaluation="90.0"/>
+<item type="escalator" x="114" y="14" evaluation="90.0"/>
+<item type="escalator" x="160" y="14" evaluation="90.0"/>
+<item type="floor" x="-187" y="30" evaluation="90.0" width="375"/>
+<item type="lobby" x="-187" y="30" evaluation="90.0" width="375" height="1"/>
+<item type="floor" x="-187" y="31" evaluation="90.0" width="375"/>
+<item type="security" x="-155" y="31" evaluation="90.0"/>
+<item type="office" x="-139" y="31" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-130" y="31" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-109" y="31" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-100" y="31" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-91" y="31" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-82" y="31" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-63" y="31" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-54" y="31" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-45" y="31" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-36" y="31" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-17" y="31" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-8" y="31" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="1" y="31" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="10" y="31" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="30" y="31" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="39" y="31" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="48" y="31" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="57" y="31" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="76" y="31" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="85" y="31" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="94" y="31" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="103" y="31" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="122" y="31" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="131" y="31" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="140" y="31" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="149" y="31" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="floor" x="-187" y="32" evaluation="90.0" width="375"/>
+<item type="office" x="-155" y="32" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-146" y="32" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-137" y="32" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-128" y="32" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-109" y="32" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-100" y="32" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-91" y="32" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-82" y="32" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-63" y="32" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-54" y="32" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-45" y="32" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-36" y="32" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-17" y="32" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-8" y="32" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="1" y="32" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="10" y="32" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="30" y="32" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="39" y="32" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="48" y="32" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="57" y="32" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="76" y="32" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="85" y="32" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="94" y="32" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="103" y="32" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="122" y="32" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="131" y="32" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="140" y="32" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="149" y="32" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="floor" x="-187" y="33" evaluation="90.0" width="375"/>
+<item type="office" x="-155" y="33" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-146" y="33" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-137" y="33" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-128" y="33" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-109" y="33" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-100" y="33" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-91" y="33" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-82" y="33" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-63" y="33" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-54" y="33" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-45" y="33" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-36" y="33" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-17" y="33" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-8" y="33" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="1" y="33" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="10" y="33" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="30" y="33" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="39" y="33" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="48" y="33" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="57" y="33" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="76" y="33" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="85" y="33" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="94" y="33" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="103" y="33" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="122" y="33" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="131" y="33" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="140" y="33" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="149" y="33" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="stairs" x="-163" y="30" evaluation="90.0"/>
+<item type="stairs" x="-163" y="31" evaluation="90.0"/>
+<item type="stairs" x="-163" y="32" evaluation="90.0"/>
+<item type="stairs" x="-117" y="30" evaluation="90.0"/>
+<item type="stairs" x="-117" y="31" evaluation="90.0"/>
+<item type="stairs" x="-117" y="32" evaluation="90.0"/>
+<item type="stairs" x="-71" y="30" evaluation="90.0"/>
+<item type="stairs" x="-71" y="31" evaluation="90.0"/>
+<item type="stairs" x="-71" y="32" evaluation="90.0"/>
+<item type="stairs" x="-25" y="30" evaluation="90.0"/>
+<item type="stairs" x="-25" y="31" evaluation="90.0"/>
+<item type="stairs" x="-25" y="32" evaluation="90.0"/>
+<item type="stairs" x="22" y="30" evaluation="90.0"/>
+<item type="stairs" x="22" y="31" evaluation="90.0"/>
+<item type="stairs" x="22" y="32" evaluation="90.0"/>
+<item type="stairs" x="68" y="30" evaluation="90.0"/>
+<item type="stairs" x="68" y="31" evaluation="90.0"/>
+<item type="stairs" x="68" y="32" evaluation="90.0"/>
+<item type="stairs" x="114" y="30" evaluation="90.0"/>
+<item type="stairs" x="114" y="31" evaluation="90.0"/>
+<item type="stairs" x="114" y="32" evaluation="90.0"/>
+<item type="stairs" x="160" y="30" evaluation="90.0"/>
+<item type="stairs" x="160" y="31" evaluation="90.0"/>
+<item type="stairs" x="160" y="32" evaluation="90.0"/>
+<item type="floor" x="-187" y="34" evaluation="90.0" width="375"/>
+<item type="condo" x="-163" y="34" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-147" y="34" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-131" y="34" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-115" y="34" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-99" y="34" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-83" y="34" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-67" y="34" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-51" y="34" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-35" y="34" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-19" y="34" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-3" y="34" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="13" y="34" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="29" y="34" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="45" y="34" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="61" y="34" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="77" y="34" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="93" y="34" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="109" y="34" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="125" y="34" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="141" y="34" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="floor" x="-187" y="35" evaluation="90.0" width="375"/>
+<item type="condo" x="-163" y="35" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-147" y="35" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-131" y="35" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-115" y="35" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-99" y="35" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-83" y="35" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-67" y="35" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-51" y="35" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-35" y="35" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-19" y="35" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-3" y="35" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="13" y="35" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="29" y="35" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="45" y="35" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="61" y="35" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="77" y="35" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="93" y="35" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="109" y="35" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="125" y="35" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="141" y="35" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="floor" x="-187" y="36" evaluation="90.0" width="375"/>
+<item type="condo" x="-163" y="36" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-147" y="36" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-131" y="36" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-115" y="36" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-99" y="36" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-83" y="36" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-67" y="36" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-51" y="36" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-35" y="36" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-19" y="36" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-3" y="36" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="13" y="36" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="29" y="36" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="45" y="36" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="61" y="36" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="77" y="36" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="93" y="36" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="109" y="36" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="125" y="36" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="141" y="36" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="floor" x="-187" y="37" evaluation="90.0" width="375"/>
+<item type="condo" x="-163" y="37" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-147" y="37" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-131" y="37" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-115" y="37" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-99" y="37" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-83" y="37" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-67" y="37" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-51" y="37" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-35" y="37" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-19" y="37" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-3" y="37" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="13" y="37" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="29" y="37" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="45" y="37" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="61" y="37" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="77" y="37" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="93" y="37" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="109" y="37" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="125" y="37" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="141" y="37" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="floor" x="-187" y="38" evaluation="90.0" width="375"/>
+<item type="condo" x="-163" y="38" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-147" y="38" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-131" y="38" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-115" y="38" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-99" y="38" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-83" y="38" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-67" y="38" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-51" y="38" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-35" y="38" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-19" y="38" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-3" y="38" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="13" y="38" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="29" y="38" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="45" y="38" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="61" y="38" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="77" y="38" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="93" y="38" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="109" y="38" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="125" y="38" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="141" y="38" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="floor" x="-187" y="39" evaluation="90.0" width="375"/>
+<item type="condo" x="-163" y="39" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-147" y="39" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-131" y="39" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-115" y="39" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-99" y="39" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-83" y="39" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-67" y="39" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-51" y="39" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-35" y="39" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-19" y="39" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-3" y="39" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="13" y="39" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="29" y="39" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="45" y="39" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="61" y="39" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="77" y="39" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="93" y="39" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="109" y="39" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="125" y="39" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="141" y="39" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="floor" x="-187" y="40" evaluation="90.0" width="375"/>
+<item type="condo" x="-163" y="40" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-147" y="40" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-131" y="40" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-115" y="40" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-99" y="40" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-83" y="40" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-67" y="40" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-51" y="40" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-35" y="40" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-19" y="40" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-3" y="40" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="13" y="40" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="29" y="40" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="45" y="40" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="61" y="40" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="77" y="40" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="93" y="40" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="109" y="40" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="125" y="40" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="141" y="40" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="floor" x="-187" y="41" evaluation="90.0" width="375"/>
+<item type="hotel_suite" x="-163" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="-156" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="-149" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="-142" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="-135" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="-128" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="-121" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="-114" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="-107" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="-100" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="-93" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="-86" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="-79" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="-72" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="-65" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="-58" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="-51" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="-44" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="-37" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="-30" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="-23" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="-16" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="-9" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="-2" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="5" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="12" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="19" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="26" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="33" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="40" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="47" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="54" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="61" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="68" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="75" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="82" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="89" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="96" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="103" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="110" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="117" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="124" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="131" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="138" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="145" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="152" y="41" evaluation="90.0"/>
+<item type="hotel_suite" x="159" y="41" evaluation="90.0"/>
+<item type="floor" x="-187" y="42" evaluation="90.0" width="375"/>
+<item type="hotel_double" x="-163" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="-157" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="-151" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="-145" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="-139" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="-133" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="-127" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="-121" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="-115" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="-109" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="-103" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="-97" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="-91" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="-85" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="-79" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="-73" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="-67" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="-61" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="-55" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="-49" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="-43" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="-37" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="-31" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="-25" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="-19" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="-13" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="-7" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="-1" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="5" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="11" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="17" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="23" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="29" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="35" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="41" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="47" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="53" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="59" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="65" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="71" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="77" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="83" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="89" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="95" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="101" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="107" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="113" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="119" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="125" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="131" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="137" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="143" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="149" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="155" y="42" evaluation="90.0"/>
+<item type="hotel_double" x="161" y="42" evaluation="90.0"/>
+<item type="floor" x="-187" y="29" evaluation="90.0" width="375"/>
+<item type="fastfood" x="-155" y="29" evaluation="90.0" variant="0" open="1"/>
+<item type="fastfood" x="-139" y="29" evaluation="90.0" variant="1" open="1"/>
+<item type="fastfood" x="-109" y="29" evaluation="90.0" variant="2" open="1"/>
+<item type="fastfood" x="-93" y="29" evaluation="90.0" variant="3" open="1"/>
+<item type="fastfood" x="-63" y="29" evaluation="90.0" variant="4" open="1"/>
+<item type="fastfood" x="-47" y="29" evaluation="90.0" variant="0" open="1"/>
+<item type="fastfood" x="-17" y="29" evaluation="90.0" variant="1" open="1"/>
+<item type="fastfood" x="-1" y="29" evaluation="90.0" variant="2" open="1"/>
+<item type="fastfood" x="30" y="29" evaluation="90.0" variant="3" open="1"/>
+<item type="fastfood" x="46" y="29" evaluation="90.0" variant="4" open="1"/>
+<item type="fastfood" x="76" y="29" evaluation="90.0" variant="0" open="1"/>
+<item type="fastfood" x="92" y="29" evaluation="90.0" variant="1" open="1"/>
+<item type="fastfood" x="122" y="29" evaluation="90.0" variant="2" open="1"/>
+<item type="fastfood" x="138" y="29" evaluation="90.0" variant="3" open="1"/>
+<item type="escalator" x="-163" y="29" evaluation="90.0"/>
+<item type="escalator" x="-117" y="29" evaluation="90.0"/>
+<item type="escalator" x="-71" y="29" evaluation="90.0"/>
+<item type="escalator" x="-25" y="29" evaluation="90.0"/>
+<item type="escalator" x="22" y="29" evaluation="90.0"/>
+<item type="escalator" x="68" y="29" evaluation="90.0"/>
+<item type="escalator" x="114" y="29" evaluation="90.0"/>
+<item type="escalator" x="160" y="29" evaluation="90.0"/>
+<item type="floor" x="-187" y="45" evaluation="90.0" width="375"/>
+<item type="lobby" x="-187" y="45" evaluation="90.0" width="375" height="1"/>
+<item type="floor" x="-187" y="46" evaluation="90.0" width="375"/>
+<item type="office" x="-155" y="46" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-146" y="46" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-137" y="46" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-128" y="46" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-109" y="46" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-100" y="46" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-91" y="46" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-82" y="46" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-63" y="46" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-54" y="46" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-45" y="46" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-36" y="46" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-17" y="46" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-8" y="46" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="1" y="46" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="10" y="46" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="30" y="46" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="39" y="46" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="48" y="46" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="57" y="46" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="76" y="46" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="85" y="46" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="94" y="46" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="103" y="46" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="122" y="46" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="131" y="46" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="140" y="46" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="149" y="46" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="floor" x="-187" y="47" evaluation="90.0" width="375"/>
+<item type="office" x="-155" y="47" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-146" y="47" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-137" y="47" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-128" y="47" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-109" y="47" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-100" y="47" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-91" y="47" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-82" y="47" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-63" y="47" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-54" y="47" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-45" y="47" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-36" y="47" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-17" y="47" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-8" y="47" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="1" y="47" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="10" y="47" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="30" y="47" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="39" y="47" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="48" y="47" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="57" y="47" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="76" y="47" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="85" y="47" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="94" y="47" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="103" y="47" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="122" y="47" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="131" y="47" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="140" y="47" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="149" y="47" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="floor" x="-187" y="48" evaluation="90.0" width="375"/>
+<item type="office" x="-155" y="48" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-146" y="48" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-137" y="48" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-128" y="48" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-109" y="48" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-100" y="48" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-91" y="48" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-82" y="48" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-63" y="48" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-54" y="48" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-45" y="48" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-36" y="48" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-17" y="48" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-8" y="48" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="1" y="48" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="10" y="48" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="30" y="48" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="39" y="48" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="48" y="48" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="57" y="48" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="76" y="48" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="85" y="48" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="94" y="48" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="103" y="48" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="122" y="48" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="131" y="48" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="140" y="48" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="149" y="48" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="stairs" x="-163" y="45" evaluation="90.0"/>
+<item type="stairs" x="-163" y="46" evaluation="90.0"/>
+<item type="stairs" x="-163" y="47" evaluation="90.0"/>
+<item type="stairs" x="-117" y="45" evaluation="90.0"/>
+<item type="stairs" x="-117" y="46" evaluation="90.0"/>
+<item type="stairs" x="-117" y="47" evaluation="90.0"/>
+<item type="stairs" x="-71" y="45" evaluation="90.0"/>
+<item type="stairs" x="-71" y="46" evaluation="90.0"/>
+<item type="stairs" x="-71" y="47" evaluation="90.0"/>
+<item type="stairs" x="-25" y="45" evaluation="90.0"/>
+<item type="stairs" x="-25" y="46" evaluation="90.0"/>
+<item type="stairs" x="-25" y="47" evaluation="90.0"/>
+<item type="stairs" x="22" y="45" evaluation="90.0"/>
+<item type="stairs" x="22" y="46" evaluation="90.0"/>
+<item type="stairs" x="22" y="47" evaluation="90.0"/>
+<item type="stairs" x="68" y="45" evaluation="90.0"/>
+<item type="stairs" x="68" y="46" evaluation="90.0"/>
+<item type="stairs" x="68" y="47" evaluation="90.0"/>
+<item type="stairs" x="114" y="45" evaluation="90.0"/>
+<item type="stairs" x="114" y="46" evaluation="90.0"/>
+<item type="stairs" x="114" y="47" evaluation="90.0"/>
+<item type="stairs" x="160" y="45" evaluation="90.0"/>
+<item type="stairs" x="160" y="46" evaluation="90.0"/>
+<item type="stairs" x="160" y="47" evaluation="90.0"/>
+<item type="floor" x="-187" y="49" evaluation="90.0" width="375"/>
+<item type="condo" x="-163" y="49" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-147" y="49" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-131" y="49" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-115" y="49" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-99" y="49" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-83" y="49" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-67" y="49" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-51" y="49" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-35" y="49" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-19" y="49" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-3" y="49" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="13" y="49" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="29" y="49" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="45" y="49" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="61" y="49" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="77" y="49" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="93" y="49" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="109" y="49" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="125" y="49" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="141" y="49" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="floor" x="-187" y="50" evaluation="90.0" width="375"/>
+<item type="condo" x="-163" y="50" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-147" y="50" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-131" y="50" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-115" y="50" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-99" y="50" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-83" y="50" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-67" y="50" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-51" y="50" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-35" y="50" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-19" y="50" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-3" y="50" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="13" y="50" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="29" y="50" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="45" y="50" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="61" y="50" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="77" y="50" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="93" y="50" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="109" y="50" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="125" y="50" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="141" y="50" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="floor" x="-187" y="51" evaluation="90.0" width="375"/>
+<item type="condo" x="-163" y="51" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-147" y="51" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-131" y="51" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-115" y="51" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-99" y="51" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-83" y="51" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-67" y="51" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-51" y="51" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-35" y="51" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-19" y="51" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-3" y="51" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="13" y="51" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="29" y="51" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="45" y="51" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="61" y="51" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="77" y="51" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="93" y="51" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="109" y="51" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="125" y="51" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="141" y="51" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="floor" x="-187" y="52" evaluation="90.0" width="375"/>
+<item type="condo" x="-163" y="52" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-147" y="52" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-131" y="52" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-115" y="52" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-99" y="52" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-83" y="52" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-67" y="52" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-51" y="52" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-35" y="52" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-19" y="52" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-3" y="52" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="13" y="52" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="29" y="52" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="45" y="52" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="61" y="52" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="77" y="52" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="93" y="52" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="109" y="52" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="125" y="52" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="141" y="52" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="floor" x="-187" y="53" evaluation="90.0" width="375"/>
+<item type="condo" x="-163" y="53" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-147" y="53" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-131" y="53" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-115" y="53" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-99" y="53" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-83" y="53" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-67" y="53" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-51" y="53" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-35" y="53" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-19" y="53" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-3" y="53" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="13" y="53" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="29" y="53" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="45" y="53" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="61" y="53" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="77" y="53" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="93" y="53" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="109" y="53" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="125" y="53" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="141" y="53" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="floor" x="-187" y="54" evaluation="90.0" width="375"/>
+<item type="condo" x="-163" y="54" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-147" y="54" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-131" y="54" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-115" y="54" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-99" y="54" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-83" y="54" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-67" y="54" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-51" y="54" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-35" y="54" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-19" y="54" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-3" y="54" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="13" y="54" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="29" y="54" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="45" y="54" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="61" y="54" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="77" y="54" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="93" y="54" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="109" y="54" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="125" y="54" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="141" y="54" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="floor" x="-187" y="55" evaluation="90.0" width="375"/>
+<item type="condo" x="-163" y="55" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-147" y="55" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-131" y="55" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-115" y="55" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-99" y="55" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-83" y="55" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-67" y="55" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-51" y="55" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-35" y="55" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-19" y="55" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-3" y="55" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="13" y="55" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="29" y="55" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="45" y="55" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="61" y="55" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="77" y="55" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="93" y="55" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="109" y="55" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="125" y="55" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="141" y="55" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="floor" x="-187" y="56" evaluation="90.0" width="375"/>
+<item type="hotel_suite" x="-163" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="-156" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="-149" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="-142" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="-135" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="-128" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="-121" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="-114" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="-107" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="-100" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="-93" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="-86" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="-79" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="-72" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="-65" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="-58" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="-51" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="-44" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="-37" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="-30" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="-23" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="-16" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="-9" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="-2" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="5" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="12" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="19" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="26" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="33" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="40" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="47" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="54" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="61" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="68" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="75" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="82" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="89" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="96" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="103" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="110" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="117" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="124" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="131" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="138" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="145" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="152" y="56" evaluation="90.0"/>
+<item type="hotel_suite" x="159" y="56" evaluation="90.0"/>
+<item type="floor" x="-187" y="57" evaluation="90.0" width="375"/>
+<item type="hotel_double" x="-163" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="-157" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="-151" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="-145" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="-139" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="-133" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="-127" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="-121" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="-115" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="-109" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="-103" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="-97" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="-91" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="-85" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="-79" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="-73" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="-67" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="-61" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="-55" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="-49" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="-43" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="-37" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="-31" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="-25" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="-19" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="-13" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="-7" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="-1" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="5" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="11" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="17" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="23" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="29" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="35" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="41" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="47" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="53" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="59" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="65" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="71" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="77" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="83" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="89" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="95" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="101" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="107" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="113" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="119" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="125" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="131" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="137" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="143" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="149" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="155" y="57" evaluation="90.0"/>
+<item type="hotel_double" x="161" y="57" evaluation="90.0"/>
+<item type="floor" x="-187" y="44" evaluation="90.0" width="375"/>
+<item type="fastfood" x="-155" y="44" evaluation="90.0" variant="0" open="1"/>
+<item type="fastfood" x="-139" y="44" evaluation="90.0" variant="1" open="1"/>
+<item type="fastfood" x="-109" y="44" evaluation="90.0" variant="2" open="1"/>
+<item type="fastfood" x="-93" y="44" evaluation="90.0" variant="3" open="1"/>
+<item type="fastfood" x="-63" y="44" evaluation="90.0" variant="4" open="1"/>
+<item type="fastfood" x="-47" y="44" evaluation="90.0" variant="0" open="1"/>
+<item type="fastfood" x="-17" y="44" evaluation="90.0" variant="1" open="1"/>
+<item type="fastfood" x="-1" y="44" evaluation="90.0" variant="2" open="1"/>
+<item type="fastfood" x="30" y="44" evaluation="90.0" variant="3" open="1"/>
+<item type="fastfood" x="46" y="44" evaluation="90.0" variant="4" open="1"/>
+<item type="fastfood" x="76" y="44" evaluation="90.0" variant="0" open="1"/>
+<item type="fastfood" x="92" y="44" evaluation="90.0" variant="1" open="1"/>
+<item type="fastfood" x="122" y="44" evaluation="90.0" variant="2" open="1"/>
+<item type="fastfood" x="138" y="44" evaluation="90.0" variant="3" open="1"/>
+<item type="escalator" x="-163" y="44" evaluation="90.0"/>
+<item type="escalator" x="-117" y="44" evaluation="90.0"/>
+<item type="escalator" x="-71" y="44" evaluation="90.0"/>
+<item type="escalator" x="-25" y="44" evaluation="90.0"/>
+<item type="escalator" x="22" y="44" evaluation="90.0"/>
+<item type="escalator" x="68" y="44" evaluation="90.0"/>
+<item type="escalator" x="114" y="44" evaluation="90.0"/>
+<item type="escalator" x="160" y="44" evaluation="90.0"/>
+<item type="floor" x="-187" y="60" evaluation="90.0" width="375"/>
+<item type="lobby" x="-187" y="60" evaluation="90.0" width="375" height="1"/>
+<item type="floor" x="-187" y="61" evaluation="90.0" width="375"/>
+<item type="security" x="-155" y="61" evaluation="90.0"/>
+<item type="office" x="-139" y="61" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-130" y="61" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-109" y="61" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-100" y="61" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-91" y="61" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-82" y="61" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-63" y="61" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-54" y="61" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-45" y="61" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-36" y="61" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-17" y="61" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-8" y="61" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="1" y="61" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="10" y="61" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="30" y="61" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="39" y="61" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="48" y="61" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="57" y="61" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="76" y="61" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="85" y="61" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="94" y="61" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="103" y="61" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="122" y="61" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="131" y="61" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="140" y="61" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="149" y="61" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="floor" x="-187" y="62" evaluation="90.0" width="375"/>
+<item type="office" x="-155" y="62" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-146" y="62" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-137" y="62" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-128" y="62" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-109" y="62" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-100" y="62" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-91" y="62" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-82" y="62" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-63" y="62" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-54" y="62" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-45" y="62" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-36" y="62" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-17" y="62" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-8" y="62" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="1" y="62" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="10" y="62" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="30" y="62" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="39" y="62" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="48" y="62" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="57" y="62" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="76" y="62" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="85" y="62" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="94" y="62" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="103" y="62" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="122" y="62" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="131" y="62" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="140" y="62" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="149" y="62" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="floor" x="-187" y="63" evaluation="90.0" width="375"/>
+<item type="office" x="-155" y="63" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-146" y="63" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-137" y="63" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-128" y="63" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-109" y="63" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-100" y="63" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-91" y="63" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-82" y="63" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-63" y="63" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-54" y="63" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-45" y="63" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-36" y="63" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-17" y="63" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="-8" y="63" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="1" y="63" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="10" y="63" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="30" y="63" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="39" y="63" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="48" y="63" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="57" y="63" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="76" y="63" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="85" y="63" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="94" y="63" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="103" y="63" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="122" y="63" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="131" y="63" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="140" y="63" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="office" x="149" y="63" evaluation="90.0" rent="10000" rentDeposit="10000"/>
+<item type="stairs" x="-163" y="60" evaluation="90.0"/>
+<item type="stairs" x="-163" y="61" evaluation="90.0"/>
+<item type="stairs" x="-163" y="62" evaluation="90.0"/>
+<item type="stairs" x="-117" y="60" evaluation="90.0"/>
+<item type="stairs" x="-117" y="61" evaluation="90.0"/>
+<item type="stairs" x="-117" y="62" evaluation="90.0"/>
+<item type="stairs" x="-71" y="60" evaluation="90.0"/>
+<item type="stairs" x="-71" y="61" evaluation="90.0"/>
+<item type="stairs" x="-71" y="62" evaluation="90.0"/>
+<item type="stairs" x="-25" y="60" evaluation="90.0"/>
+<item type="stairs" x="-25" y="61" evaluation="90.0"/>
+<item type="stairs" x="-25" y="62" evaluation="90.0"/>
+<item type="stairs" x="22" y="60" evaluation="90.0"/>
+<item type="stairs" x="22" y="61" evaluation="90.0"/>
+<item type="stairs" x="22" y="62" evaluation="90.0"/>
+<item type="stairs" x="68" y="60" evaluation="90.0"/>
+<item type="stairs" x="68" y="61" evaluation="90.0"/>
+<item type="stairs" x="68" y="62" evaluation="90.0"/>
+<item type="stairs" x="114" y="60" evaluation="90.0"/>
+<item type="stairs" x="114" y="61" evaluation="90.0"/>
+<item type="stairs" x="114" y="62" evaluation="90.0"/>
+<item type="stairs" x="160" y="60" evaluation="90.0"/>
+<item type="stairs" x="160" y="61" evaluation="90.0"/>
+<item type="stairs" x="160" y="62" evaluation="90.0"/>
+<item type="floor" x="-187" y="64" evaluation="90.0" width="375"/>
+<item type="condo" x="-163" y="64" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-147" y="64" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-131" y="64" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-115" y="64" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-99" y="64" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-83" y="64" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-67" y="64" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-51" y="64" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-35" y="64" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-19" y="64" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-3" y="64" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="13" y="64" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="29" y="64" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="45" y="64" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="61" y="64" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="77" y="64" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="93" y="64" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="109" y="64" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="125" y="64" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="141" y="64" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="floor" x="-187" y="65" evaluation="90.0" width="375"/>
+<item type="condo" x="-163" y="65" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-147" y="65" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-131" y="65" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-115" y="65" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-99" y="65" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-83" y="65" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-67" y="65" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-51" y="65" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-35" y="65" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-19" y="65" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-3" y="65" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="13" y="65" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="29" y="65" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="45" y="65" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="61" y="65" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="77" y="65" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="93" y="65" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="109" y="65" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="125" y="65" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="141" y="65" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="floor" x="-187" y="66" evaluation="90.0" width="375"/>
+<item type="condo" x="-163" y="66" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-147" y="66" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-131" y="66" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-115" y="66" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-99" y="66" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-83" y="66" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-67" y="66" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-51" y="66" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-35" y="66" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-19" y="66" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-3" y="66" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="13" y="66" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="29" y="66" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="45" y="66" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="61" y="66" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="77" y="66" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="93" y="66" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="109" y="66" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="125" y="66" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="141" y="66" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="floor" x="-187" y="67" evaluation="90.0" width="375"/>
+<item type="condo" x="-163" y="67" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-147" y="67" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-131" y="67" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-115" y="67" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-99" y="67" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-83" y="67" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-67" y="67" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-51" y="67" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-35" y="67" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-19" y="67" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-3" y="67" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="13" y="67" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="29" y="67" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="45" y="67" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="61" y="67" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="77" y="67" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="93" y="67" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="109" y="67" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="125" y="67" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="141" y="67" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="floor" x="-187" y="68" evaluation="90.0" width="375"/>
+<item type="condo" x="-163" y="68" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-147" y="68" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-131" y="68" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-115" y="68" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-99" y="68" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-83" y="68" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-67" y="68" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-51" y="68" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-35" y="68" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-19" y="68" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-3" y="68" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="13" y="68" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="29" y="68" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="45" y="68" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="61" y="68" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="77" y="68" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="93" y="68" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="109" y="68" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="125" y="68" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="141" y="68" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="floor" x="-187" y="69" evaluation="90.0" width="375"/>
+<item type="condo" x="-163" y="69" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-147" y="69" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-131" y="69" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-115" y="69" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-99" y="69" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-83" y="69" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-67" y="69" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-51" y="69" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-35" y="69" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-19" y="69" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-3" y="69" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="13" y="69" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="29" y="69" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="45" y="69" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="61" y="69" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="77" y="69" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="93" y="69" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="109" y="69" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="125" y="69" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="141" y="69" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="floor" x="-187" y="70" evaluation="90.0" width="375"/>
+<item type="condo" x="-163" y="70" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-147" y="70" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-131" y="70" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-115" y="70" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-99" y="70" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-83" y="70" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-67" y="70" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-51" y="70" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-35" y="70" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-19" y="70" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="-3" y="70" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="13" y="70" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="29" y="70" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="45" y="70" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="61" y="70" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="77" y="70" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="93" y="70" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="109" y="70" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="125" y="70" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="condo" x="141" y="70" evaluation="90.0" rent="8000" rentDeposit="8000"/>
+<item type="floor" x="-187" y="71" evaluation="90.0" width="375"/>
+<item type="hotel_suite" x="-163" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="-156" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="-149" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="-142" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="-135" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="-128" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="-121" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="-114" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="-107" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="-100" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="-93" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="-86" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="-79" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="-72" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="-65" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="-58" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="-51" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="-44" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="-37" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="-30" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="-23" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="-16" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="-9" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="-2" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="5" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="12" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="19" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="26" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="33" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="40" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="47" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="54" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="61" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="68" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="75" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="82" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="89" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="96" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="103" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="110" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="117" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="124" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="131" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="138" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="145" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="152" y="71" evaluation="90.0"/>
+<item type="hotel_suite" x="159" y="71" evaluation="90.0"/>
+<item type="floor" x="-187" y="72" evaluation="90.0" width="375"/>
+<item type="hotel_double" x="-163" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="-157" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="-151" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="-145" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="-139" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="-133" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="-127" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="-121" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="-115" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="-109" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="-103" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="-97" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="-91" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="-85" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="-79" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="-73" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="-67" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="-61" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="-55" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="-49" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="-43" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="-37" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="-31" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="-25" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="-19" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="-13" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="-7" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="-1" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="5" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="11" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="17" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="23" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="29" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="35" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="41" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="47" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="53" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="59" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="65" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="71" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="77" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="83" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="89" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="95" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="101" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="107" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="113" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="119" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="125" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="131" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="137" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="143" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="149" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="155" y="72" evaluation="90.0"/>
+<item type="hotel_double" x="161" y="72" evaluation="90.0"/>
+<item type="floor" x="-187" y="59" evaluation="90.0" width="375"/>
+<item type="fastfood" x="-155" y="59" evaluation="90.0" variant="0" open="1"/>
+<item type="fastfood" x="-139" y="59" evaluation="90.0" variant="1" open="1"/>
+<item type="fastfood" x="-109" y="59" evaluation="90.0" variant="2" open="1"/>
+<item type="fastfood" x="-93" y="59" evaluation="90.0" variant="3" open="1"/>
+<item type="fastfood" x="-63" y="59" evaluation="90.0" variant="4" open="1"/>
+<item type="fastfood" x="-47" y="59" evaluation="90.0" variant="0" open="1"/>
+<item type="fastfood" x="-17" y="59" evaluation="90.0" variant="1" open="1"/>
+<item type="fastfood" x="-1" y="59" evaluation="90.0" variant="2" open="1"/>
+<item type="fastfood" x="30" y="59" evaluation="90.0" variant="3" open="1"/>
+<item type="fastfood" x="46" y="59" evaluation="90.0" variant="4" open="1"/>
+<item type="fastfood" x="76" y="59" evaluation="90.0" variant="0" open="1"/>
+<item type="fastfood" x="92" y="59" evaluation="90.0" variant="1" open="1"/>
+<item type="fastfood" x="122" y="59" evaluation="90.0" variant="2" open="1"/>
+<item type="fastfood" x="138" y="59" evaluation="90.0" variant="3" open="1"/>
+<item type="escalator" x="-163" y="59" evaluation="90.0"/>
+<item type="escalator" x="-117" y="59" evaluation="90.0"/>
+<item type="escalator" x="-71" y="59" evaluation="90.0"/>
+<item type="escalator" x="-25" y="59" evaluation="90.0"/>
+<item type="escalator" x="22" y="59" evaluation="90.0"/>
+<item type="escalator" x="68" y="59" evaluation="90.0"/>
+<item type="escalator" x="114" y="59" evaluation="90.0"/>
+<item type="escalator" x="160" y="59" evaluation="90.0"/>
+<item type="floor" x="-187" y="13" evaluation="90.0" width="375"/>
+<item type="floor" x="-187" y="14" evaluation="90.0" width="375"/>
+<item type="cinema" x="-15" y="13" evaluation="90.0"/>
+<item type="floor" x="-187" y="-7" evaluation="90.0" width="375"/>
+<item type="parking" x="-163" y="-7" evaluation="90.0"/>
+<item type="parking" x="-155" y="-7" evaluation="90.0"/>
+<item type="parking" x="-147" y="-7" evaluation="90.0"/>
+<item type="parking" x="-139" y="-7" evaluation="90.0"/>
+<item type="parking" x="-131" y="-7" evaluation="90.0"/>
+<item type="parking" x="-123" y="-7" evaluation="90.0"/>
+<item type="parking" x="-115" y="-7" evaluation="90.0"/>
+<item type="parking" x="-107" y="-7" evaluation="90.0"/>
+<item type="parking" x="-99" y="-7" evaluation="90.0"/>
+<item type="parking" x="-91" y="-7" evaluation="90.0"/>
+<item type="parking" x="-83" y="-7" evaluation="90.0"/>
+<item type="parking" x="-75" y="-7" evaluation="90.0"/>
+<item type="parking" x="-67" y="-7" evaluation="90.0"/>
+<item type="parking" x="-59" y="-7" evaluation="90.0"/>
+<item type="parking" x="-51" y="-7" evaluation="90.0"/>
+<item type="parking" x="-43" y="-7" evaluation="90.0"/>
+<item type="parking" x="-35" y="-7" evaluation="90.0"/>
+<item type="parking" x="-27" y="-7" evaluation="90.0"/>
+<item type="parking" x="-19" y="-7" evaluation="90.0"/>
+<item type="parking" x="-11" y="-7" evaluation="90.0"/>
+<item type="parking" x="-3" y="-7" evaluation="90.0"/>
+<item type="parking" x="5" y="-7" evaluation="90.0"/>
+<item type="parking" x="13" y="-7" evaluation="90.0"/>
+<item type="parking" x="21" y="-7" evaluation="90.0"/>
+<item type="parking" x="29" y="-7" evaluation="90.0"/>
+<item type="parking" x="37" y="-7" evaluation="90.0"/>
+<item type="parking" x="45" y="-7" evaluation="90.0"/>
+<item type="parking" x="53" y="-7" evaluation="90.0"/>
+<item type="parking" x="61" y="-7" evaluation="90.0"/>
+<item type="parking" x="69" y="-7" evaluation="90.0"/>
+<item type="parking" x="77" y="-7" evaluation="90.0"/>
+<item type="parking" x="85" y="-7" evaluation="90.0"/>
+<item type="parking" x="93" y="-7" evaluation="90.0"/>
+<item type="parking" x="101" y="-7" evaluation="90.0"/>
+<item type="parking" x="109" y="-7" evaluation="90.0"/>
+<item type="parking" x="117" y="-7" evaluation="90.0"/>
+<item type="parking" x="125" y="-7" evaluation="90.0"/>
+<item type="parking" x="133" y="-7" evaluation="90.0"/>
+<item type="parking" x="141" y="-7" evaluation="90.0"/>
+<item type="parking" x="149" y="-7" evaluation="90.0"/>
+<item type="parking" x="157" y="-7" evaluation="90.0"/>
+<item type="parking" x="165" y="-7" evaluation="90.0"/>
+<item type="parking" x="173" y="-7" evaluation="90.0"/>
+<item type="elevator-express" x="-187" y="-7" evaluation="90.0" height="68" showShaft="1"><unserviced floor="-6"/><unserviced floor="-5"/><unserviced floor="-4"/><unserviced floor="-3"/><unserviced floor="-2"/><unserviced floor="-1"/><unserviced floor="1"/><unserviced floor="2"/><unserviced floor="3"/><unserviced floor="4"/><unserviced floor="5"/><unserviced floor="6"/><unserviced floor="7"/><unserviced floor="8"/><unserviced floor="9"/><unserviced floor="10"/><unserviced floor="11"/><unserviced floor="12"/><unserviced floor="13"/><unserviced floor="14"/><unserviced floor="16"/><unserviced floor="17"/><unserviced floor="18"/><unserviced floor="19"/><unserviced floor="20"/><unserviced floor="21"/><unserviced floor="22"/><unserviced floor="23"/><unserviced floor="24"/><unserviced floor="25"/><unserviced floor="26"/><unserviced floor="27"/><unserviced floor="28"/><unserviced floor="29"/><unserviced floor="31"/><unserviced floor="32"/><unserviced floor="33"/><unserviced floor="34"/><unserviced floor="35"/><unserviced floor="36"/><unserviced floor="37"/><unserviced floor="38"/><unserviced floor="39"/><unserviced floor="40"/><unserviced floor="41"/><unserviced floor="42"/><unserviced floor="43"/><unserviced floor="44"/><unserviced floor="46"/><unserviced floor="47"/><unserviced floor="48"/><unserviced floor="49"/><unserviced floor="50"/><unserviced floor="51"/><unserviced floor="52"/><unserviced floor="53"/><unserviced floor="54"/><unserviced floor="55"/><unserviced floor="56"/><unserviced floor="57"/><unserviced floor="58"/><unserviced floor="59"/><car altitude="-7.0" homeFloor="-7"/><car altitude="0.0" homeFloor="0"/><car altitude="15.0" homeFloor="15"/><car altitude="30.0" homeFloor="30"/><car altitude="45.0" homeFloor="45"/><car altitude="60.0" homeFloor="60"/></item>
+<item type="elevator-express" x="-181" y="-7" evaluation="90.0" height="68" showShaft="1"><unserviced floor="-6"/><unserviced floor="-5"/><unserviced floor="-4"/><unserviced floor="-3"/><unserviced floor="-2"/><unserviced floor="-1"/><unserviced floor="1"/><unserviced floor="2"/><unserviced floor="3"/><unserviced floor="4"/><unserviced floor="5"/><unserviced floor="6"/><unserviced floor="7"/><unserviced floor="8"/><unserviced floor="9"/><unserviced floor="10"/><unserviced floor="11"/><unserviced floor="12"/><unserviced floor="13"/><unserviced floor="14"/><unserviced floor="16"/><unserviced floor="17"/><unserviced floor="18"/><unserviced floor="19"/><unserviced floor="20"/><unserviced floor="21"/><unserviced floor="22"/><unserviced floor="23"/><unserviced floor="24"/><unserviced floor="25"/><unserviced floor="26"/><unserviced floor="27"/><unserviced floor="28"/><unserviced floor="29"/><unserviced floor="31"/><unserviced floor="32"/><unserviced floor="33"/><unserviced floor="34"/><unserviced floor="35"/><unserviced floor="36"/><unserviced floor="37"/><unserviced floor="38"/><unserviced floor="39"/><unserviced floor="40"/><unserviced floor="41"/><unserviced floor="42"/><unserviced floor="43"/><unserviced floor="44"/><unserviced floor="46"/><unserviced floor="47"/><unserviced floor="48"/><unserviced floor="49"/><unserviced floor="50"/><unserviced floor="51"/><unserviced floor="52"/><unserviced floor="53"/><unserviced floor="54"/><unserviced floor="55"/><unserviced floor="56"/><unserviced floor="57"/><unserviced floor="58"/><unserviced floor="59"/><car altitude="-7.0" homeFloor="-7"/><car altitude="0.0" homeFloor="0"/><car altitude="15.0" homeFloor="15"/><car altitude="30.0" homeFloor="30"/><car altitude="45.0" homeFloor="45"/><car altitude="60.0" homeFloor="60"/></item>
+<item type="elevator-express" x="-175" y="-7" evaluation="90.0" height="68" showShaft="1"><unserviced floor="-6"/><unserviced floor="-5"/><unserviced floor="-4"/><unserviced floor="-3"/><unserviced floor="-2"/><unserviced floor="-1"/><unserviced floor="1"/><unserviced floor="2"/><unserviced floor="3"/><unserviced floor="4"/><unserviced floor="5"/><unserviced floor="6"/><unserviced floor="7"/><unserviced floor="8"/><unserviced floor="9"/><unserviced floor="10"/><unserviced floor="11"/><unserviced floor="12"/><unserviced floor="13"/><unserviced floor="14"/><unserviced floor="16"/><unserviced floor="17"/><unserviced floor="18"/><unserviced floor="19"/><unserviced floor="20"/><unserviced floor="21"/><unserviced floor="22"/><unserviced floor="23"/><unserviced floor="24"/><unserviced floor="25"/><unserviced floor="26"/><unserviced floor="27"/><unserviced floor="28"/><unserviced floor="29"/><unserviced floor="31"/><unserviced floor="32"/><unserviced floor="33"/><unserviced floor="34"/><unserviced floor="35"/><unserviced floor="36"/><unserviced floor="37"/><unserviced floor="38"/><unserviced floor="39"/><unserviced floor="40"/><unserviced floor="41"/><unserviced floor="42"/><unserviced floor="43"/><unserviced floor="44"/><unserviced floor="46"/><unserviced floor="47"/><unserviced floor="48"/><unserviced floor="49"/><unserviced floor="50"/><unserviced floor="51"/><unserviced floor="52"/><unserviced floor="53"/><unserviced floor="54"/><unserviced floor="55"/><unserviced floor="56"/><unserviced floor="57"/><unserviced floor="58"/><unserviced floor="59"/><car altitude="-7.0" homeFloor="-7"/><car altitude="0.0" homeFloor="0"/><car altitude="15.0" homeFloor="15"/><car altitude="30.0" homeFloor="30"/><car altitude="45.0" homeFloor="45"/><car altitude="60.0" homeFloor="60"/></item>
+<item type="elevator-express" x="-169" y="-7" evaluation="90.0" height="68" showShaft="1"><unserviced floor="-6"/><unserviced floor="-5"/><unserviced floor="-4"/><unserviced floor="-3"/><unserviced floor="-2"/><unserviced floor="-1"/><unserviced floor="1"/><unserviced floor="2"/><unserviced floor="3"/><unserviced floor="4"/><unserviced floor="5"/><unserviced floor="6"/><unserviced floor="7"/><unserviced floor="8"/><unserviced floor="9"/><unserviced floor="10"/><unserviced floor="11"/><unserviced floor="12"/><unserviced floor="13"/><unserviced floor="14"/><unserviced floor="16"/><unserviced floor="17"/><unserviced floor="18"/><unserviced floor="19"/><unserviced floor="20"/><unserviced floor="21"/><unserviced floor="22"/><unserviced floor="23"/><unserviced floor="24"/><unserviced floor="25"/><unserviced floor="26"/><unserviced floor="27"/><unserviced floor="28"/><unserviced floor="29"/><unserviced floor="31"/><unserviced floor="32"/><unserviced floor="33"/><unserviced floor="34"/><unserviced floor="35"/><unserviced floor="36"/><unserviced floor="37"/><unserviced floor="38"/><unserviced floor="39"/><unserviced floor="40"/><unserviced floor="41"/><unserviced floor="42"/><unserviced floor="43"/><unserviced floor="44"/><unserviced floor="46"/><unserviced floor="47"/><unserviced floor="48"/><unserviced floor="49"/><unserviced floor="50"/><unserviced floor="51"/><unserviced floor="52"/><unserviced floor="53"/><unserviced floor="54"/><unserviced floor="55"/><unserviced floor="56"/><unserviced floor="57"/><unserviced floor="58"/><unserviced floor="59"/><car altitude="-7.0" homeFloor="-7"/><car altitude="0.0" homeFloor="0"/><car altitude="15.0" homeFloor="15"/><car altitude="30.0" homeFloor="30"/><car altitude="45.0" homeFloor="45"/><car altitude="60.0" homeFloor="60"/></item>
+<item type="elevator-standard" x="168" y="0" evaluation="90.0" height="13" showShaft="1"><car altitude="0.0" homeFloor="0"/><car altitude="1.0" homeFloor="1"/></item>
+<item type="elevator-standard" x="172" y="0" evaluation="90.0" height="13" showShaft="1"><car altitude="0.0" homeFloor="0"/><car altitude="1.0" homeFloor="1"/></item>
+<item type="elevator-standard" x="168" y="15" evaluation="90.0" height="13" showShaft="1"><car altitude="15.0" homeFloor="15"/><car altitude="16.0" homeFloor="16"/></item>
+<item type="elevator-standard" x="172" y="15" evaluation="90.0" height="13" showShaft="1"><car altitude="15.0" homeFloor="15"/><car altitude="16.0" homeFloor="16"/></item>
+<item type="elevator-standard" x="176" y="15" evaluation="90.0" height="13" showShaft="1"><car altitude="15.0" homeFloor="15"/><car altitude="16.0" homeFloor="16"/></item>
+<item type="elevator-standard" x="168" y="30" evaluation="90.0" height="13" showShaft="1"><car altitude="30.0" homeFloor="30"/><car altitude="31.0" homeFloor="31"/></item>
+<item type="elevator-standard" x="172" y="30" evaluation="90.0" height="13" showShaft="1"><car altitude="30.0" homeFloor="30"/><car altitude="31.0" homeFloor="31"/></item>
+<item type="elevator-standard" x="176" y="30" evaluation="90.0" height="13" showShaft="1"><car altitude="30.0" homeFloor="30"/><car altitude="31.0" homeFloor="31"/></item>
+<item type="elevator-standard" x="168" y="45" evaluation="90.0" height="13" showShaft="1"><car altitude="45.0" homeFloor="45"/><car altitude="46.0" homeFloor="46"/></item>
+<item type="elevator-standard" x="172" y="45" evaluation="90.0" height="13" showShaft="1"><car altitude="45.0" homeFloor="45"/><car altitude="46.0" homeFloor="46"/></item>
+<item type="elevator-standard" x="176" y="45" evaluation="90.0" height="13" showShaft="1"><car altitude="45.0" homeFloor="45"/><car altitude="46.0" homeFloor="46"/></item>
+<item type="elevator-standard" x="168" y="60" evaluation="90.0" height="13" showShaft="1"><car altitude="60.0" homeFloor="60"/><car altitude="61.0" homeFloor="61"/></item>
+<item type="elevator-standard" x="172" y="60" evaluation="90.0" height="13" showShaft="1"><car altitude="60.0" homeFloor="60"/><car altitude="61.0" homeFloor="61"/></item>
+<item type="elevator-standard" x="176" y="60" evaluation="90.0" height="13" showShaft="1"><car altitude="60.0" homeFloor="60"/><car altitude="61.0" homeFloor="61"/></item>
+<item type="elevator-service" x="184" y="0" evaluation="90.0" height="28" showShaft="1"><unserviced floor="1"/><unserviced floor="2"/><unserviced floor="3"/><unserviced floor="4"/><unserviced floor="5"/><unserviced floor="6"/><unserviced floor="7"/><unserviced floor="8"/><unserviced floor="9"/><unserviced floor="10"/><unserviced floor="13"/><unserviced floor="14"/><unserviced floor="16"/><unserviced floor="17"/><unserviced floor="18"/><unserviced floor="19"/><unserviced floor="20"/><unserviced floor="21"/><unserviced floor="22"/><unserviced floor="23"/><unserviced floor="24"/><unserviced floor="25"/><car altitude="0.0" homeFloor="0"/></item>
+<item type="elevator-service" x="184" y="30" evaluation="90.0" height="28" showShaft="1"><unserviced floor="31"/><unserviced floor="32"/><unserviced floor="33"/><unserviced floor="34"/><unserviced floor="35"/><unserviced floor="36"/><unserviced floor="37"/><unserviced floor="38"/><unserviced floor="39"/><unserviced floor="40"/><unserviced floor="43"/><unserviced floor="44"/><unserviced floor="46"/><unserviced floor="47"/><unserviced floor="48"/><unserviced floor="49"/><unserviced floor="50"/><unserviced floor="51"/><unserviced floor="52"/><unserviced floor="53"/><unserviced floor="54"/><unserviced floor="55"/><car altitude="30.0" homeFloor="30"/></item>
+<item type="elevator-service" x="184" y="60" evaluation="90.0" height="13" showShaft="1"><unserviced floor="61"/><unserviced floor="62"/><unserviced floor="63"/><unserviced floor="64"/><unserviced floor="65"/><unserviced floor="66"/><unserviced floor="67"/><unserviced floor="68"/><unserviced floor="69"/><unserviced floor="70"/><car altitude="60.0" homeFloor="60"/></item>
+</tower>

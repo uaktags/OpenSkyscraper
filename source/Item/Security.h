@@ -1,5 +1,6 @@
 #pragma once
 #include "../Sprite.h"
+#include "../YootItemArt.h"
 #include "Item.h"
 #include <set>
 
@@ -19,6 +20,7 @@ namespace OT {
             virtual ~Security();
 
             virtual void init();
+            virtual void advance(double dt);
 
             /// Second prototype for the SECOM Center (OpenSkyWeb ISSUE-031):
             /// the original ships two security items — the manual Security
@@ -39,6 +41,8 @@ namespace OT {
             int variant;
 
             Sprite sprite;
+            /// Skin::Yoot plugin art (YootItemArt.h), null = OpenSky art.
+            const YootPluginView * yootView = nullptr;
             bool spriteNeedsUpdate;
             void updateSprite();
         };

@@ -19,7 +19,6 @@ namespace OT {
 			virtual void init();
 			virtual void encodeXML(tinyxml2::XMLPrinter & xml);
 			virtual void decodeXML(tinyxml2::XMLElement & xml);
-			virtual int dailyMaintenanceCost() const override { return 25; }
 
 		private:
 			void configureForLobby();

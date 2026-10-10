@@ -1,5 +1,6 @@
 #include "../Game.h"
 #include "../Math/Rand.h"
+#include "../YootItemArt.h"
 #include "Security.h"
 
 using namespace OT;
@@ -13,21 +14,48 @@ Security::~Security()
 void Security::init()
 {
     Item::init();
+    variant = 0;
 
     sprite.SetImage(App->bitmaps.editionTexture("security", "simtower/security"));
     sprite.setOrigin({0.f, 24.f});
     sprite.setPosition({static_cast<float>(getPosition().x * 8), static_cast<float>(-getPosition().y * 36)});
+    // Skin::Yoot: Securityroom.t2p (pattern 0 unstaffed, 1 with guards).
+    yootView = game->skin == Skin::Yoot
+        ? yootPluginView(game->app, prototype->yoot ? prototype->yoot->plugin : "Securityroom.t2p", kYootWindowKey) : nullptr;
+    if (yootView) {
+        sprite.SetImage(yootView->texture);
+        sprite.setPosition({static_cast<float>(getPosition().x * 8), static_cast<float>(-getPosition().y * 36 - kYootInteriorLift)});
+    }
     addSprite(&sprite);
     spriteNeedsUpdate = false;
 
     updateSprite();
 }
 
+void Security::advance(double dt)
+{
+    // The EXE animates sheet 0x8768 all day by cycling color-table
+    // entries (197<->198, 199<->200, 201->202->203; AnimeT). We advance
+    // the three pre-extracted frames one step per tick, the same
+    // cadence as the recycling cycle.
+    int frame = yootView ? (people.empty() ? 0 : 1) : static_cast<int>(game->time.absolute * 1000.0) % 3;
+    if (frame != variant)
+    {
+        variant = frame;
+        updateSprite();
+    }
+}
+
 void Security::updateSprite()
 {
     spriteNeedsUpdate = false;
-    int index = 0;
-    sprite.setTextureRect(sf::IntRect({index*128, variant*24}, {128, 24}));
+    if (yootView) {
+        sprite.setTextureRect(yootView->band(variant));
+        return;
+    }
+    // Sheet: three 128x24 palette-cycle frames side by side (frames
+    // were pinned to 0 before; the EXE cycles them continuously).
+    sprite.setTextureRect(sf::IntRect({variant * 128, 0}, {128, 24}));
 }
 
 AbstractPrototype * Security::makeSecomPrototype()

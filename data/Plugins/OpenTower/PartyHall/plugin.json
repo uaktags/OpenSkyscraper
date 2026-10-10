@@ -17,12 +17,12 @@
   "bitmaps": {
     "ingame": {
       "present": true,
-      "width": 384,
+      "width": 576,
       "height": 60,
       "transparentColor": null,
       "maskDiscovery": "none",
       "downscale": {
-        "toW": 384,
+        "toW": 576,
         "toH": 60
       }
     }

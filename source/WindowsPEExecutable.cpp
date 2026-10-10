@@ -268,6 +268,7 @@ bool WindowsPEExecutable::loadPE(Path path)
 	}
 
 	parseDirectory(f, rsrc_offset, rsrc_offset, sections, 1, "", 0, resources);
+	format = Format::PE;
 	return true;
 }
 
@@ -326,6 +327,7 @@ bool WindowsPEExecutable::loadSP(Path path)
 			f.read(r.data, r.length);
 		}
 	}
+	format = Format::SP;
 	return true;
 }
 

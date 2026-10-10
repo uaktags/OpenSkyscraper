@@ -11,18 +11,20 @@ namespace OT
 	/** Minimap window.
 	 *
 	 * TGUI child window containing an SFML canvas that renders a bird's-eye
-	 * overview of the tower. Items are drawn as filled rectangles coloured by
-	 * the current StatusMode (Normal = by category, Eval = by satisfaction,
-	 * Hotel = by cleanliness). Elevators appear as black vertical bars.
-	 * Click-to-jump: clicking on the canvas recenters the main viewport on
-	 * the corresponding tower coordinate.
+	 * overview of the tower, following the original MapPaint documentation
+	 * (doc/simtower/SimTower Notes.md:11-23):
+	 *   - Normal (Unitmap): the tower as a grey body, elevators as black
+	 *     lines, sky backdrop band.
+	 *   - Eval: blue/yellow/red by tenant evaluation, populated units only.
+	 *   - Pric: light-blue/yellow/green/red ladder over the rent classes.
+	 *   - Hotel: red for unclean rooms, grey body otherwise.
+	 * Elevator shafts draw as thin per-type service-colour lines (black in
+	 * the Unitmap). Construction and vacated units read in distinct colours
+	 * in every mode. Click-to-jump: clicking on the canvas recenters the
+	 * main viewport on the corresponding tower coordinate.
 	 *
 	 * Mirrors MapT.h/c + mapwin.h/c from the Yoot source. Toggle with 'M'.
-	 *
-	 * TODO(Phase 4.2): the original draws three explicit overlay modes
-	 * (Eval/Pric/Hotel) keyed off the StatusMode cycle. We reuse the same
-	 * StatusMode tinting as the main viewport for consistency; a dedicated
-	 * Pric palette lands when the rent-pricing model does. */
+	 */
 	class MapWindow : public GameObject
 	{
 	public:
@@ -61,5 +63,6 @@ namespace OT
 
 		void computeTowerBounds();
 		sf::Color colorForItem(Item::Item * item) const;
+		sf::Color elevatorColorFor(Item::Item * item) const;
 	};
 }

@@ -20,11 +20,13 @@ jobs:
             triplet: x64-linux
             generator: Ninja
             exe: OpenSkyscraper
-          - name: Windows x86-64
-            os: windows-latest
+            run_tests: true
+          - name: Windows x86-64 (cross-built on Linux)
+            os: ubuntu-latest
             triplet: x64-mingw-dynamic
             generator: Ninja
             exe: OpenSkyscraper.exe
+            run_tests: false
 
     steps:
       - name: Check out source
@@ -37,6 +39,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
+            cmake \
             ninja-build \
             pkg-config \
             libgl1-mesa-dev \
@@ -45,13 +48,17 @@ jobs:
             libxcursor-dev \
             libxrandr-dev \
             libxi-dev \
+            xvfb \
             libopenal-dev \
             libflac-dev \
             libvorbis-dev
 
-      - name: Install Windows build prerequisites
-        if: runner.os == 'Windows'
-        run: choco install ninja -y
+      - name: Install MinGW cross toolchain
+        if: matrix.triplet == 'x64-mingw-dynamic'
+        run: |
+          sudo apt-get install -y \
+            binutils-mingw-w64-x86-64 \
+            g++-mingw-w64-x86-64-posix
 
       - name: Bootstrap vcpkg
         if: runner.os == 'Linux'
@@ -59,13 +66,6 @@ jobs:
         run: |
           git clone https://github.com/microsoft/vcpkg "$RUNNER_TEMP/vcpkg"
           "$RUNNER_TEMP/vcpkg/bootstrap-vcpkg.sh" -disableMetrics
-
-      - name: Bootstrap vcpkg
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          git clone https://github.com/microsoft/vcpkg "$env:RUNNER_TEMP/vcpkg"
-          & "$env:RUNNER_TEMP/vcpkg/bootstrap-vcpkg.bat" -disableMetrics
 
       - name: Restore vcpkg dependency cache
         uses: actions/cache@v4
@@ -115,7 +115,12 @@ jobs:
         run: cmake --build build-ci --config Release --parallel
 
       - name: Test
-        run: ctest --test-dir build-ci --build-config Release --output-on-failure
+        if: matrix.run_tests
+        shell: bash
+        run: |
+          # AnimPeple/texture tests create SFML GL resources: headless Linux
+          # needs a virtual X display (software GL via mesa).
+          xvfb-run -a ctest --test-dir build-ci --build-config Release --output-on-failure
 
       - name: Bundle artifact
         shell: bash
@@ -123,12 +128,20 @@ jobs:
           mkdir -p "dist/OpenSkyscraper-${{ matrix.triplet }}"
           cp "build-ci/${{ matrix.exe }}" "dist/OpenSkyscraper-${{ matrix.triplet }}/"
           cp -R data "dist/OpenSkyscraper-${{ matrix.triplet }}/"
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            cp "$RUNNER_TEMP/vcpkg/installed/${{ matrix.triplet }}/bin/"*.dll "dist/OpenSkyscraper-${{ matrix.triplet }}/" || true
+          if [ "${{ matrix.triplet }}" = "x64-mingw-dynamic" ]; then
+            cp "$RUNNER_TEMP/vcpkg/installed/x64-mingw-dynamic/bin/"*.dll "dist/OpenSkyscraper-${{ matrix.triplet }}/" || true
+            # MinGW runtime DLLs the exe needs on a bare Windows box.
+            find /usr/lib/gcc/x86_64-w64-mingw32 /usr/x86_64-w64-mingw32/lib \
+              \( -name "libstdc++-6.dll" -o -name "libgcc_s_seh-1.dll" -o -name "libwinpthread-1.dll" \) \
+              -exec cp {} "dist/OpenSkyscraper-${{ matrix.triplet }}/" \; || true
           fi
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        # v4 of the artifact action requires GitHub's new artifact backend;
+        # Forgejo/Gitea instances serve the v3 API, and the upload is a
+        # convenience here anyway — never fail the build over it.
+        uses: actions/upload-artifact@v3
+        continue-on-error: true
         with:
           name: OpenSkyscraper-${{ matrix.triplet }}
           path: dist/OpenSkyscraper-${{ matrix.triplet }}

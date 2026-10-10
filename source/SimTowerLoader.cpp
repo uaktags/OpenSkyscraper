@@ -109,8 +109,12 @@ bool SimTowerLoader::load()
 
 	// Find the possible paths to the SimTower executable and use the first that works.
 	DataManager::Paths paths;
-	if (overridePath.empty())
+	if (overridePath.empty()) {
 		paths = app->data.paths("SIMTOWER.EXE");
+		// Case-sensitive filesystems: probe the common lowercase names too.
+		DataManager::Paths lowerPaths = app->data.paths("simtower.exe");
+		paths.insert(paths.end(), lowerPaths.begin(), lowerPaths.end());
+	}
 	else if (!overrideCompressed)
 		paths.push_back(Path(overridePath));
 	bool success = false;
@@ -143,8 +147,11 @@ bool SimTowerLoader::load()
 		//Iterate through the possible locations and try to find a cached/decompressed version, or decompress if not found.
 		if (overrideCompressed)
 			compressedPaths.push_back(Path(overridePath));
-		else if (overridePath.empty())
+		else if (overridePath.empty()) {
 			compressedPaths = app->data.paths("SIMTOWER.EX_");
+			DataManager::Paths lowerCompressed = app->data.paths("simtower.ex_");
+			compressedPaths.insert(compressedPaths.end(), lowerCompressed.begin(), lowerCompressed.end());
+		}
 		mskwaj_decompressor * d = NULL;
 		for (int i = 0; i < compressedPaths.size() && !success; i++) {
 			const Path &path = compressedPaths[i];
@@ -474,9 +481,11 @@ void SimTowerLoader::loadBitmaps()
 		fastfoods.copy(fastfood, toVector2u(0, i * 24));
 	}
 
-	//Restaurants
+	//Restaurants - all five variants. Each row is four 192px state
+	//frames merged from the 0x8568+2*i / 0x8568+2*i+1 pair; the old
+	//4*24 buffer clipped row 4 (the fifth restaurant) off the bottom.
 	sf::Image & restaurants = images["simtower/restaurant"];
-	restaurants.resize(toVector2u(4 * 192, 4 * 24));
+	restaurants.resize(toVector2u(4 * 192, 5 * 24));
 	for (int i = 0; i < 5; i++) {
 		sf::Image restaurant;
 		loadFood(0x8568 + i*2, restaurant);
@@ -506,6 +515,11 @@ void SimTowerLoader::loadBitmaps()
 	loadMergedByID(suiteRooms[0], 'x', 0x8528, 0x8529, NULL);
 	loadMergedByID(suiteRooms[1], 'x', 0x852A, 0x852B, NULL);
 	loadMerged(images["simtower/suite"], 'y', &suiteRooms[0], &suiteRooms[1], NULL);
+	//loadHotel masks the two sky colors out of the single/double
+	//window panes; this merge path bypasses it, and all four suite
+	//sheets (0x8528..0x852B) do carry those pixels.
+	images["simtower/suite"].createMaskFromColor(sf::Color(0x8C, 0xD6, 0xFF));
+	images["simtower/suite"].createMaskFromColor(sf::Color(0x4A, 0xB4, 0xFF));
 
 	//Stairs
 	sf::Image stairs[2];
@@ -748,15 +762,24 @@ void SimTowerLoader::loadBitmaps()
 		{0x8E29, "construction/solid"},
 		{0x85EA, "construction/worker", sf::Color::White},
 
-		// AnimPeple occupant strips from the original. These are 16x24 frame
-		// horizontal sheets used by the Draw*AP family; names are based on
-		// visual/resource audit and can be refined as more strips are mapped.
+		// AnimPeple occupant strips (16x24 frames, white-keyed). Each strip
+		// is one venue's slice of the shared frame-code space, checked by DIB
+		// width and identical to the band split in concilia's game.h:
+		//   office 0x00-0x1D (480px), condo 0x1E-0x38 (432px),
+		//   construction 0x39-0x3E (96px), fast food 0x3F-0x48 (160px),
+		//   restaurant 0x49-0x4F (112px), hotel 0x50-0x5F (256px),
+		//   in-room maid 0x60-0x62 (48px).
+		// 0x85EB was misfiled as the hotel strip; it is 160px = 10 fast-food
+		// staff frames. The hotel-guest band is 0x85ED (16 frames), keyed
+		// animpeple/event for existing consumers, with animpeple/hotel kept
+		// as a corrected alias of it.
 		{0x85E8, "animpeple/office",       sf::Color::White},
 		{0x85E9, "animpeple/condo",        sf::Color::White},
 		{0x85EA, "animpeple/construction", sf::Color::White},
-		{0x85EB, "animpeple/hotel",        sf::Color::White},
+		{0x85EB, "animpeple/fastfood",     sf::Color::White},
 		{0x85EC, "animpeple/restaurant",   sf::Color::White},
 		{0x85ED, "animpeple/event",        sf::Color::White},
+		{0x85ED, "animpeple/hotel",        sf::Color::White},
 		{0x85EE, "animpeple/housekeeper",  sf::Color::White},
 		{0x8469, "animpeple/guard",        sf::Color::White},
 
@@ -765,6 +788,22 @@ void SimTowerLoader::loadBitmaps()
 		{0x8F6C, "fire/small"},
 		{0x8F6D, "fire/chopper"},
 		{0x8FA8, "fire/destroyed"},
+		//0x8FA8 is also the burned-out rubble sheet the fire and bomb
+		//waves lay down: same DIB, second key.
+		{0x8FA8, "fire/rubble"},
+
+		//ChurchT wedding art. 0x8828 is the 128x36 procession sheet: eight
+		//16px cells, 0 bride walk / 1 groom walk / 2..6 ceremony / 7 held
+		//pose. The six 224x36 ceremony strips stack above the cathedral
+		//(ceremony0 topmost); strips 0-3 key their sky border out, while 4
+		//and 5 are opaque congregation interior (no sky pixels in the DIB).
+		{0x8828, "church/couple",    sf::Color::White},
+		{0x8CE9, "church/ceremony0", sf::Color(0x4A, 0xB4, 0xFF)},
+		{0x8D29, "church/ceremony1", sf::Color(0x4A, 0xB4, 0xFF)},
+		{0x8D69, "church/ceremony2", sf::Color(0x4A, 0xB4, 0xFF)},
+		{0x8DA9, "church/ceremony3", sf::Color(0x4A, 0xB4, 0xFF)},
+		{0x8DE9, "church/ceremony4"},
+		{0x8DEA, "church/ceremony5"},
 
 		{0x8F28, "metro/tracks"},
 
@@ -780,6 +819,10 @@ void SimTowerLoader::loadBitmaps()
 		{0xA713, "alerts/treasure",  sf::Color::White},
 		{0xA714, "alerts/fire",      sf::Color::White},
 		{0xA716, "alerts/starup",    sf::Color(0xCC, 0xCC, 0xCC)},
+		//0x81F4 is the quarterly financial report backdrop: the EXE pops
+		//its report on it right after each 4:59AM settlement (Wave U
+		//row 49). White-keyed like the other UI sheets.
+		{0x81F4, "ui/report", sf::Color::White},
 		{0, ""}
 	};
 	for (int i = 0; namedBitmaps[i].id != 0; i++) {
@@ -790,9 +833,48 @@ void SimTowerLoader::loadBitmaps()
 		}
 	}
 
-	// Convert the images we just loaded to textures.
-	LOG(DEBUG, "Converting loaded images to textures");
+	//The EXE's AnimPeple band: the seven 16x24 strips 0x85E8..0x85EE
+	//joined in id order into one sheet of 99 frames (30+27+6+10+7+16+3,
+	//widths 480/432/96/160/112/256/48 px = 1584 px = 0x63 * 16).
+	//Occupant band tables index it directly with the EXE's global frame
+	//codes 0x00-0x62 instead of chasing the seven per-venue keys.
+	{
+		sf::Image bandStrips[7];
+		for (int i = 0; i < 7; i++) {
+			loadBitmap(0x85E8 + i, bandStrips[i]);
+			bandStrips[i].createMaskFromColor(sf::Color::White);
+		}
+		loadMerged(images["simtower/animpeple/band"], 'x',
+			&bandStrips[0], &bandStrips[1], &bandStrips[2], &bandStrips[3],
+			&bandStrips[4], &bandStrips[5], &bandStrips[6], NULL);
+	}
+
+	// Convert the loaded images to textures. The skin decides which EXE
+	// sheets are installed:
+	//   Classic  — everything: the classic look is canonical EXE art
+	//              end-to-end, first-party files included.
+	//   OpenSky  — only keys with no first-party data/bitmaps art AND no
+	//              cataloged OpenTower plugin sheet, so the plugin art
+	//              wins instead of a cached EXE sheet.
+	//   Yoot     — only keys with neither YootTower t2p art (condo today)
+	//              nor first-party files; classic fallback where Yoot has
+	//              nothing.
+	const Skin skin = app->bitmaps.skin();
+	LOG(DEBUG, "Converting loaded images to textures (skin %s)", skinIdentifier(skin));
 	for (Images::const_iterator it = images.begin(); it != images.end(); ++it) {
+		bool firstParty = app->bitmaps.hasFirstPartyArt(it->first);
+		switch (skin) {
+			case Skin::Classic:
+				break;  // install unconditionally
+			case Skin::OpenSky:
+				if (firstParty || app->bitmaps.editionProvidesKey(it->first))
+					continue;
+				break;
+			case Skin::Yoot:
+				if (firstParty || it->first.str() == "simtower/condo")
+					continue;
+				break;
+		}
 		app->bitmaps.getResources()[it->first].loadFromImage(it->second);
 	}
 }
@@ -962,7 +1044,11 @@ void SimTowerLoader::loadElevators()
 	shaft_wide.copy(extension, toVector2u(0, 0), toIntRect(0, 0, 8, 36));
 	shaft_wide.copy(extension, toVector2u(40, 0), toIntRect(8, 0, 8, 36));
 
-	//Render the shaft digits.
+	//Render the shaft digits. Row 0 is the plain 0x87e9/0x87ea atlas,
+	//row 1 the red plate bank 0x87ec/0x87ed (lit color 153,87,76 over
+	//the 25,25,25 shaft plate), which Elevator::render picks while a car
+	//of the group stands on the floor (IsCarOnFloor 10a8:367). Both
+	//atlases share geometry: glyphs at x = 1+16*i, y = 16, 11x17 px.
 	sf::Image rawDigits[2];
 	loadBitmap(0x87e9, rawDigits[0]);
 	loadBitmap(0x87ec, rawDigits[1]);

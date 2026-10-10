@@ -1,0 +1,46 @@
+<tower funds="7877000" rating="2" time="0.020833" speed="1" rainy="0" tool="inspector" ruleset="yoottower" world="tokyo" yootVipFlags="0" x="-112" y="180">
+<money todayIncome="0" todayExpenses="0" yesterdayIncome="0" yesterdayExpenses="0" lastQuarterBalance="10000000" quarterIncome="0" quarterExpenses="2123000"/>
+<item type="lobby" x="-37" y="0" evaluation="50.0" width="46" height="3"/>
+<item type="office" x="-13" y="4" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="yt_icecream" x="-37" y="3" evaluation="50.0" tenantStatus="9"/>
+<item type="office" x="-22" y="4" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-31" y="4" evaluation="50.0" occupied="0" population="0"/>
+<item type="office" x="-13" y="5" evaluation="50.0" occupied="0" population="0"/>
+<item type="office" x="-22" y="5" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-31" y="5" evaluation="50.0" occupied="0" population="0"/>
+<item type="office" x="-13" y="6" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-22" y="6" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="office" x="-31" y="6" evaluation="100.000" yootEstimate="300" occupied="1" population="0"/>
+<item type="yt_barber" x="-31" y="7" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_flower" x="-19" y="7" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_drink" x="-6" y="7" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_bookstore" x="-31" y="8" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_burger" x="-16" y="8" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_coffee" x="-31" y="9" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_ramen" x="-19" y="9" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_cigar" x="-6" y="9" evaluation="50.0" tenantStatus="9"/>
+<item type="floor" x="-37" y="3" evaluation="50.0" width="46"/>
+<item type="floor" x="-31" y="4" evaluation="50.0" width="40"/>
+<item type="floor" x="-31" y="5" evaluation="50.0" width="40"/>
+<item type="floor" x="-31" y="6" evaluation="50.0" width="40"/>
+<item type="floor" x="-31" y="7" evaluation="50.0" width="40"/>
+<item type="floor" x="-31" y="8" evaluation="50.0" width="40"/>
+<item type="floor" x="-31" y="9" evaluation="50.0" width="40"/>
+<item type="elevator-standard" x="0" y="0" evaluation="50.0" height="15" showShaft="1"><unserviced floor="1"/><unserviced floor="2"/><car altitude="0.0" homeFloor="0"/><car altitude="9.0" homeFloor="9"/></item>
+<item type="floor" x="-40" y="10" evaluation="50.0" width="70"/>
+<item type="floor" x="-40" y="11" evaluation="50.0" width="70"/>
+<item type="floor" x="-40" y="12" evaluation="50.0" width="70"/>
+<item type="floor" x="-40" y="13" evaluation="50.0" width="70"/>
+<item type="floor" x="-40" y="14" evaluation="50.0" width="70"/>
+<item type="classictheater" x="-31" y="10" evaluation="50.0" movie="MV_Cop.t2p"/>
+<item type="eventcenter" x="4" y="10" evaluation="50.0" event="PlArt.t2p" startDay="0" span="3" today="PlArt.t2p"/>
+<item type="gatheringarea" x="-36" y="13" evaluation="50.0"/>
+<item type="frontdesk" x="5" y="13" evaluation="50.0"/>
+<item type="hotel_suite" x="-36" y="12" evaluation="50.0"/>
+<item type="hotel_single" x="-15" y="12" evaluation="50.0"/>
+<item type="hotel_double" x="-10" y="12" evaluation="50.0"/>
+<item type="hotel_single" x="5" y="14" evaluation="50.0"/>
+<item type="hotel_double" x="10" y="14" evaluation="50.0"/>
+<item type="housekeeping" x="10" y="12" evaluation="50.0"/>
+<item type="ticketbooth" x="-20" y="3" evaluation="50.0"/>
+</tower>

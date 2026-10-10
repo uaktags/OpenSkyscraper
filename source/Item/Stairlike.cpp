@@ -7,7 +7,7 @@
 using namespace OT;
 using namespace Item;
 
-const static double kTransitionTime = 1.5;
+const static double kTransitionTime = 20;
 
 void Stairlike::init()
 {
@@ -24,13 +24,15 @@ layer = 1;
 void Stairlike::advance(double dt)
 {
 	Item::advance(dt);
-	double dta = game->time.dta / Time::kBaseSpeed;
-	for (People::iterator ip = people.begin(); ip != people.end();)
-	{
-		Person *p = *(ip++);
-		if ((transitionTimes[p] += dta) >= kTransitionTime)
-			p->journey.next();
+	// Skin::Yoot: the escalator's steps run all the time (3 patterns).
+	if (yootView && prototype->id == "escalator") {
+		const int p = (int)(game->time.absolute * 1440.0) % 3;
+		if (p != yootPattern) {
+			yootPattern = p;
+			updateSprite();
+		}
 	}
+	double dta = game->time.dta * Time::kSimFramesPerDay;
 	// Animation pacing ported from OpenSkyWeb stairlike.js: frames follow
 	// the actual walking progress of the person on the stairs, with
 	// direction-aware frames on straight stairs (1..6 up, 7..13 down),
@@ -76,7 +78,7 @@ void Stairlike::advance(double dt)
 		if (frame != newFrame)
 		{
 			frame = newFrame;
-			updateSprite();
+			if (!yootView) updateSprite();
 		}
 	}
 	else
@@ -84,15 +86,31 @@ void Stairlike::advance(double dt)
 		if (frame != 0)
 		{
 			frame = 0;
-			updateSprite();
+			if (!yootView) updateSprite();
 		}
 	}
 }
 void Stairlike::updateSprite()
 {
+	yootView = nullptr;
+	if (game->skin == Skin::Yoot) {
+		const bool escalator = prototype->id == "escalator";
+		const YootPluginView * v = yootPluginView(game->app,
+			prototype->yoot ? prototype->yoot->plugin : (escalator ? "Escalator.t2p" : "Stair.t2p"));
+		const int band = v ? v->findSpan(size.y, escalator ? yootPattern : -1) : -1;
+		if (band >= 0) {
+			yootView = v;
+			const sf::IntRect r = v->bands[band];
+			sprite.setTexture(v->texture);
+			sprite.setTextureRect(r);
+			sprite.setOrigin({0.f, (float)r.size.y});
+			// The art spans roof-to-floor-strip: 24 + 36 x (storeys - 1) px.
+			sprite.setPosition({(float)getPosition().x * 8, (float)-getPosition().y * 36 - kYootInteriorLift});
+			return;
+		}
+	}
 	int w = sprite.getTexture().getSize().x / frameCount;
 	int h = sprite.getTexture().getSize().y;
-
 	sprite.setOrigin({0.f, (float)h});
 	sprite.setTextureRect(sf::IntRect({w * frame, 0}, {w, h}));
 	sprite.setPosition({(float)getPosition().x * 8, (float)-getPosition().y * 36});

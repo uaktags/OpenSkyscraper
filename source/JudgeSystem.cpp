@@ -1,9 +1,16 @@
 #include "Game.h"
 #include "Item/Item.h"
 #include "Item/Hotel.h"
-#include "Item/Parking.h"
+#include "Item/Office.h"
+#include "Item/Condo.h"
+#include "Item/Shop.h"
+#include "Item/Restaurant.h"
+#include "Item/FastFood.h"
 #include "JudgeSystem.h"
 #include "Person.h"
+#include "TenantRules.h"
+#include "YootRules.h"
+#include "YootMisc.h"
 
 #include <algorithm>
 #include <cmath>
@@ -25,117 +32,44 @@ namespace
 		return (it == byType.end()) ? empty : it->second;
 	}
 
-	double averageStress(Item::Item * item)
+	bool isHotelId(const std::string & id)
 	{
-		if (item->people.empty()) return 0;
-		double sum = 0;
-		for (Item::Item::People::iterator p = item->people.begin(); p != item->people.end(); ++p)
-			sum += (*p)->stress;
-		return sum / item->people.size();
+		return id == "hotel_single" || id == "hotel_double" ||
+		       id == "hotel_suite" || id == "hotel";
 	}
 
-	// Noise model approximating the original Kinsoku.h/c placement rules.
-	struct NoiseProfile { int level; int sensitivity; };
-	NoiseProfile noiseProfileFor(const std::string & id)
+	int slotTypeFor(const std::string & id)
 	{
-		// Loud tenants - offices and commercial activity.
-		if (id == "office"   || id == "fastfood"   || id == "restaurant" ||
-		    id == "cinema"   || id == "partyhall"  || id == "metro")     return {90,  0};
-		// Quiet but noise-sensitive residents.
-		if (id == "condo" || id == "yoot_condo")                          return {10, 90};
-		if (id == "hotel_single" || id == "hotel_double" ||
-		    id == "hotel_suite"  || id == "hotel")                        return {10, 70};
-		return {0, 0};
-	}
-
-	// Isolation radius in tiles, per the SimTower Notes
-	// (120px / 8px = 15 tiles for hotels, 240px / 8px = 30 tiles for condos).
-	int noiseRadiusTilesFor(const std::string & id)
-	{
-		if (id == "condo" || id == "yoot_condo")              return 30;
-		if (id.find("hotel") != std::string::npos)            return 15;
-		return 0;
-	}
-
-	// Sum the noise load on a sensitive item from loud neighbours on the same
-	// floor and the two adjacent floors. Returns a 0..25 evaluation penalty.
-	double computeNoisePenalty(Game * game, Item::Item * item)
-	{
-		NoiseProfile np = noiseProfileFor(item->prototype->id);
-		if (np.sensitivity == 0) return 0;
-		int radius = noiseRadiusTilesFor(item->prototype->id);
-		if (radius <= 0) return 0;
-
-		double noiseLoad = 0;
-		for (int floorDelta = -1; floorDelta <= 1; ++floorDelta)
-		{
-			int floor = item->position.y + floorDelta;
-			Game::ItemSetByInt::const_iterator it = game->itemsByFloor.find(floor);
-			if (it == game->itemsByFloor.end()) continue;
-
-			for (Game::ItemSet::const_iterator nit = it->second.begin();
-			     nit != it->second.end(); ++nit)
-			{
-				Item::Item *neighbor = *nit;
-				if (neighbor == item) continue;
-				NoiseProfile np2 = noiseProfileFor(neighbor->prototype->id);
-				if (np2.level == 0) continue;
-
-				// Horizontal gap between the two item rectangles (tiles).
-				int myMin = item->position.x;
-				int myMax = item->position.x + item->size.x;
-				int nMin  = neighbor->position.x;
-				int nMax  = neighbor->position.x + neighbor->size.x;
-				int dist;
-				if (nMin >= myMax)      dist = nMin - myMax;
-				else if (myMin >= nMax) dist = myMin - nMax;
-				else                    dist = 0; // overlapping
-				// Cross-floor noise has to pass through a ceiling, treat that
-				// as a few extra tiles of distance.
-				if (floorDelta != 0) dist += 5;
-
-				if (dist < radius)
-				{
-					double weight = 1.0 - static_cast<double>(dist) / radius;
-					noiseLoad += np2.level * weight;
-				}
-			}
-		}
-
-		if (noiseLoad <= 0) return 0;
-		// Scale so a single neighbouring office at distance 0 (~90 load)
-		// subtracts ~18 points from a condo's evaluation.
-		if (noiseLoad > 125.0) noiseLoad = 125.0;
-		return noiseLoad * 0.2;
+		using namespace TenantRules;
+		if (id == "office") return kSlotOffice;
+		if (isHotelId(id)) return kSlotHotel;
+		if (id == "condo") return kSlotCondo;
+		if (id == "restaurant") return kSlotRestaurant;
+		if (id == "shop") return kSlotShop;
+		if (id == "fastfood") return kSlotFastFood;
+		if (id == "cinema") return kSlotCinema;
+		if (id == "partyhall") return kSlotParty;
+		return kSlotOther;
 	}
 }
 
 JudgeSystem::JudgeSystem()
 {
 	lastCounts = Counts();
-	parkingCoverage = 1.0;
-}
-
-double JudgeSystem::clampScore(double v)
-{
-	if (v < 0)   return 0;
-	if (v > 100) return 100;
-	return v;
 }
 
 namespace {
-	// Rule-of-thumb capacities used by the granular counters. They don't
-	// drive any gameplay directly; they just give the statistics UI and
-	// future VIP system a sensible "this tower can hold N people" number.
+	// Capacities mirror the live occupant constructors and venue admission
+	// pools; these values are counters, not satisfaction heuristics.
 	int populationCapacityFor(const std::string & id)
 	{
-		if (id == "office")                       return 3;
-		if (id == "condo" || id == "yoot_condo")  return 2;
-		return 0; // hotels counted via capacity() below
+		if (id == "office")                       return 6;
+		if (id == "condo" || id == "yoot_condo") return 10;
+		return 0; // hotels counted via Hotel::capacity()
 	}
 	int visitorCapacityFor(const std::string & id)
 	{
-		// Coarse visitor estimates for commercial venues.
+		// Commercial admission pools are bounded per venue type.
 		if (id == "fastfood")    return 6;
 		if (id == "restaurant")  return 8;
 		if (id == "cinema")      return 20;
@@ -144,153 +78,41 @@ namespace {
 	}
 }
 
-/** Base score shared by all tenant types. Rewards being reachable from the
- *  lobby and penalises occupant stress. */
-static double baseTenantScore(Item::Item * item)
-{
-	double score = 50;
-	if (!item->lobbyRoute.empty())
-	{
-		score += 20;
-		// Lower route cost (fewer hops / shorter) is better. lobbyRoute.score()
-		// is unbounded above, so cap the bonus.
-		int s = item->lobbyRoute.score();
-		if (s > 0)
-			score += std::max(0.0, 10.0 - s * 0.5);
-	}
-	else
-	{
-		// Unreachable tenants are deeply unhappy.
-		score -= 30;
-	}
-	score -= averageStress(item) * 0.3;
-	return score;
-}
-
-double JudgeSystem::scoreOffice(Game * game, Item::Item * item)
-{
-	double score = baseTenantScore(item);
-
-	// Lunch amenity: office workers need a reachable FastFood for their 12:00
-	// break. Without one they accumulate stress and eventually vacate.
-	const Game::ItemSet & fastfood = bucket(game, "fastfood");
-	bool lunchReachable = false;
-	for (Game::ItemSet::const_iterator f = fastfood.begin(); f != fastfood.end(); ++f)
-	{
-		if (!game->findRoute(item, *f).empty())
-		{
-			lunchReachable = true;
-			break;
-		}
-	}
-	score += lunchReachable ? 10 : -15;
-
-	// Security coverage within a 10-floor window keeps crime-related stress
-	// down. Phase 3.3 (Thief) will make this more concrete.
-	if (!bucket(game, "security").empty())
-		score += 3;
-
-	// Parking: original requires 1 space per 4 offices. Undercoverage taxes
-	// the office's evaluation.
-	if (parkingCoverage < 0.5)
-		score -= 10;
-	else if (parkingCoverage < 1.0)
-		score -= 5;
-
-	return clampScore(score);
-}
-
-double JudgeSystem::scoreCondo(Game * game, Item::Item * item)
-{
-	double score = baseTenantScore(item);
-
-	// Residents value quiet: a tower with no security presence tends to mean
-	// the player has not invested in residential infrastructure yet.
-	if (!bucket(game, "security").empty())
-		score += 3;
-
-	// Reachable food is a minor plus for residents (dinner / convenience).
-	const Game::ItemSet & restaurants = bucket(game, "restaurant");
-	bool foodReachable = !restaurants.empty() &&
-		std::any_of(restaurants.begin(), restaurants.end(),
-			[&](Item::Item * r) { return !game->findRoute(item, r).empty(); });
-	score += foodReachable ? 3 : 0;
-
-	// Noise penalty - condos are the most noise-sensitive tenant.
-	score -= computeNoisePenalty(game, item);
-
-	return clampScore(score);
-}
-
-double JudgeSystem::scoreHotel(Game * game, Item::Item * item)
-{
-	double score = baseTenantScore(item);
-
-	// Hotel-specific: dirty rooms tank the score. Use the room state directly
-	// since Hotel exposes it as a public field.
-	Item::Hotel * hotel = dynamic_cast<Item::Hotel *>(item);
-	if (hotel)
-	{
-		if (hotel->roomState == Item::Hotel::kDirty)
-			score -= 30;
-		else if (hotel->roomState == Item::Hotel::kOccupied)
-			score += 5;
-
-		// Guests need a reachable restaurant for dinner, otherwise they leave
-		// the tower which costs the player the dinner revenue.
-		const Game::ItemSet & restaurants = bucket(game, "restaurant");
-		bool dinnerReachable = !restaurants.empty() &&
-			std::any_of(restaurants.begin(), restaurants.end(),
-				[&](Item::Item * r) { return !game->findRoute(item, r).empty(); });
-		score += dinnerReachable ? 8 : -8;
-
-		// Parking: original requires 1 space per hotel suite (treat any hotel
-		// room as needing 1 space for MVP).
-		if (parkingCoverage < 0.5)
-			score -= 12;
-		else if (parkingCoverage < 1.0)
-			score -= 6;
-
-		// Noise penalty - hotels are noise-sensitive but less so than condos.
-		score -= computeNoisePenalty(game, item) * 0.7;
-	}
-
-	return clampScore(score);
-}
-
-double JudgeSystem::scoreCommercial(Game * game, Item::Item * item)
-{
-	double score = baseTenantScore(item);
-
-	// Commercial venues are happier when reachable from the lobby (footfall).
-	// baseTenantScore already rewards this; add a small steady bonus so a
-	// well-placed venue scores notably above residential.
-	if (!item->lobbyRoute.empty())
-		score += 5;
-
-	return clampScore(score);
-}
-
 void JudgeSystem::evaluateAll(Game * game)
 {
-	// Reset tallies.
+	const int day = static_cast<int>(std::floor(game->time.absolute));
+	const int oldDay = lastCounts.visitorDay;
+	const int oldDailyArrivals = lastCounts.dailyArrivals;
+	const int oldDailyHotel = lastCounts.dailyHotelArrivals;
+	const int oldDailyFood = lastCounts.dailyFoodArrivals;
+	const int oldDailyShop = lastCounts.dailyShopArrivals;
+	const int oldDailyLeisure = lastCounts.dailyLeisureArrivals;
 	lastCounts = Counts();
+	lastCounts.visitorDay = day;
+	if (oldDay == day)
+	{
+		lastCounts.dailyArrivals = oldDailyArrivals;
+		lastCounts.dailyHotelArrivals = oldDailyHotel;
+		lastCounts.dailyFoodArrivals = oldDailyFood;
+		lastCounts.dailyShopArrivals = oldDailyShop;
+		lastCounts.dailyLeisureArrivals = oldDailyLeisure;
+	}
 
-	// Pass 1: cheap counting pass so derived metrics (parking coverage) are
-	// available before the per-item scorers run.
+	// Pass 1: count facilities, live capacities, and current visitor pools.
 	for (Game::ItemSet::iterator it = game->items.begin(); it != game->items.end(); ++it)
 	{
-		const std::string & id = (*it)->prototype->id;
+		Item::Item *item = *it;
+		const std::string &id = item->prototype->id;
 		if (id == "office")                              ++lastCounts.offices;
 		else if (id == "condo" || id == "yoot_condo")    ++lastCounts.condos;
 		else if (id == "hotel_single" || id == "hotel_double" ||
 		         id == "hotel_suite" || id == "hotel")
 		{
 			++lastCounts.hotels;
-			Item::Hotel * hotel = dynamic_cast<Item::Hotel *>(*it);
+			Item::Hotel *hotel = dynamic_cast<Item::Hotel *>(item);
 			if (hotel)
 			{
-				if (hotel->roomState == Item::Hotel::kDirty)    ++lastCounts.hotelsDirty;
+				if (hotel->roomState == Item::Hotel::kDirty) ++lastCounts.hotelsDirty;
 				else if (hotel->roomState == Item::Hotel::kOccupied) ++lastCounts.hotelsOccupied;
 				lastCounts.visitorCapacity += hotel->capacity();
 			}
@@ -300,73 +122,67 @@ void JudgeSystem::evaluateAll(Game * game)
 		else if (id == "medicalcenter")                  ++lastCounts.medicalCenters;
 		else if (id == "metro")                          ++lastCounts.metros;
 
-		// Granular capacity / occupancy tallies. These are reported
-		// alongside the basic Counts above so future UI/VIP systems can
-		// read a single struct instead of rescanning the world.
 		lastCounts.populationCapacity += populationCapacityFor(id);
 		lastCounts.visitorCapacity    += visitorCapacityFor(id);
-		lastCounts.currentOccupants   += static_cast<int>((*it)->people.size());
+		const int occupants = static_cast<int>(item->people.size());
+		lastCounts.currentOccupants += occupants;
+		const bool hotel = id == "hotel_single" || id == "hotel_double" ||
+			id == "hotel_suite" || id == "hotel";
+		const bool food = id == "fastfood" || id == "restaurant";
+		const bool shop = id == "shop";
+		const bool leisure = id == "cinema" || id == "partyhall";
+		if (hotel || food || shop || leisure)
+		{
+			lastCounts.visitorPool += occupants;
+			if (hotel)   lastCounts.hotelVisitorPool += occupants;
+			if (food)    lastCounts.foodVisitorPool += occupants;
+			if (shop)    lastCounts.shopVisitorPool += occupants;
+			if (leisure) lastCounts.leisureVisitorPool += occupants;
+		}
 	}
 	lastCounts.population = game->population;
 
-	// Tower-wide parking coverage, cached for the per-item scorers below.
-	computeParkingCoverage(game);
+	// Daily visitor passes are idempotent across multiple judge invocations.
+	for (Game::PersonSet::const_iterator p = game->people.begin(); p != game->people.end(); ++p)
+	{
+		Person *person = *p;
+		Item::Item *at = person->at;
+		if (!at) continue;
+		const std::string &id = at->prototype->id;
+		const bool visitor = id == "hotel_single" || id == "hotel_double" ||
+			id == "hotel_suite" || id == "hotel" || id == "fastfood" ||
+			id == "restaurant" || id == "shop" || id == "cinema" ||
+			id == "partyhall";
+		std::map<Person *, int>::iterator seen = visitorDaySeen.find(person);
+		if (seen != visitorDaySeen.end() && seen->second == day) continue;
+		visitorDaySeen[person] = day;
+		++lastCounts.dailyArrivals;
+		if (id == "hotel_single" || id == "hotel_double" ||
+		    id == "hotel_suite" || id == "hotel")
+			++lastCounts.dailyHotelArrivals;
+		else if (id == "fastfood" || id == "restaurant")
+			++lastCounts.dailyFoodArrivals;
+		else if (id == "shop")
+			++lastCounts.dailyShopArrivals;
+		else if (id == "cinema" || id == "partyhall")
+			++lastCounts.dailyLeisureArrivals;
+	}
+	for (std::map<Person *, int>::iterator p = visitorDaySeen.begin();
+	     p != visitorDaySeen.end(); )
+	{
+		if (game->people.find(p->first) == game->people.end())
+			p = visitorDaySeen.erase(p);
+		else
+			++p;
+	}
 
-	// Pass 2: walk every item, dispatching to the appropriate scorer.
+	// Stressed tenants (category 0) feed LevelUp and the daily complaint.
 	for (Game::ItemSet::iterator it = game->items.begin(); it != game->items.end(); ++it)
 	{
 		Item::Item * item = *it;
 		const std::string & id = item->prototype->id;
-		double score = 50; // neutral default for unhandled types
-
-		if (id == "office")
-		{
-			score = scoreOffice(game, item);
-		}
-		else if (id == "condo" || id == "yoot_condo")
-		{
-			score = scoreCondo(game, item);
-		}
-		else if (id == "hotel_single" || id == "hotel_double" || id == "hotel_suite" || id == "hotel")
-		{
-			score = scoreHotel(game, item);
-		}
-		else if (id == "fastfood" || id == "restaurant" ||
-		         id == "cinema"    || id == "partyhall")
-		{
-			score = scoreCommercial(game, item);
-		}
-
-		item->evaluation = score;
-		if (score < 25.0) ++lastCounts.criticalTenants;
-
-		// Mirror the item score onto each person currently at the item, so
-		// the inspector and per-person overlays have something to show.
-		for (Item::Item::People::iterator p = item->people.begin(); p != item->people.end(); ++p)
-			(*p)->eval = score;
-	}
-
-	LOG(DEBUG, "JudgeSystem pass: o=%i c=%i h=%i (dirty=%i occ=%i) food=%i sec=%i med=%i pop=%i cap=%i/%i cov=%.2f",
-	    lastCounts.offices, lastCounts.condos, lastCounts.hotels, lastCounts.hotelsDirty,
-	    lastCounts.hotelsOccupied, lastCounts.foodOutlets, lastCounts.securityOffices,
-	    lastCounts.medicalCenters, lastCounts.population, lastCounts.populationCapacity,
-	    lastCounts.visitorCapacity, parkingCoverage);
-
-	// Aggregate hotel review (JudgeAllHotel equivalent) and per-tenant
-	// bad-day tracking (ExpandoBadHotel equivalent). Each may surface a
-	// message via timeWindow.showMessage.
-	reviewHotels(game);
-	reviewUnderperformers(game);
-
-	// Surface a daily complaint if any tenant is critically unhappy. The
-	// original SimTower does this via InfoDlog/TenantInfo messages.
-	if (lastCounts.criticalTenants > 0)
-	{
-		char buf[128];
-		snprintf(buf, sizeof(buf), "%d tenant%s unhappy - check the Evaluation view (O)",
-		         lastCounts.criticalTenants,
-		         lastCounts.criticalTenants == 1 ? " is" : "s are");
-		game->timeWindow.showMessage(buf);
+		if (!item->hasTenantRecord() || id == "restaurant" || id == "fastfood") continue;
+		if (item->tenant.category == TenantRules::kStressed) ++lastCounts.criticalTenants;
 	}
 }
 
@@ -424,6 +240,284 @@ bool JudgeSystem::reviewHotels(Game * game)
 	return false;
 }
 
+int JudgeSystem::tenantMetric(Item::Item * item)
+{
+	using namespace TenantRules;
+	if (!item || !item->hasTenantRecord()) return -1;
+	const std::string & id = item->prototype->id;
+	Kind kind;
+	if (id == "office")
+	{
+		if (!item->isOccupied() && item->tenant.armed) return -1;
+		kind = kOffice;
+	}
+	else if (id == "condo")
+	{
+		if (!item->isOccupied() && item->tenant.armed) return -1;
+		kind = kCondo;
+	}
+	else if (isHotelId(id))
+	{
+		Item::Hotel * hotel = dynamic_cast<Item::Hotel *>(item);
+		if (hotel && hotel->roomState >= Item::Hotel::kInfested) return -1;
+		kind = id == "hotel_double" ? kTwin : id == "hotel_suite" ? kSuite : kSingle;
+	}
+	else return -1;
+	const int raw = rawMetric(item->tenant.bank, memberCount(kind), divisorFor(kind));
+	return adjustMetric(raw, item->tenant.rentClass, noiseSource(item) != nullptr);
+}
+
+Item::Item * JudgeSystem::noiseSource(Item::Item * item)
+{
+	if (!item || !item->game) return nullptr;
+	std::vector<Item::Item *> order = item->game->slotOrder(item->position.y);
+	std::vector<TenantRules::Slot> slots;
+	int victim = -1;
+	for (size_t i = 0; i < order.size(); ++i)
+	{
+		Item::Item * o = order[i];
+		TenantRules::Slot s;
+		s.left = o->position.x;
+		s.right = o->position.x + o->size.x;
+		s.type = slotTypeFor(o->prototype->id);
+		slots.push_back(s);
+		if (o == item) victim = (int)i;
+	}
+	const int idx = TenantRules::noiseSourceIndex(slots.data(), (int)slots.size(), victim);
+	return idx < 0 ? nullptr : order[idx];
+}
+
+int JudgeSystem::judgeOne(Item::Item * item)
+{
+	using namespace TenantRules;
+	if (!item || !item->hasTenantRecord()) return kUnjudged;
+	const std::string & id = item->prototype->id;
+	int category;
+	if (id == "restaurant")
+	{
+		Item::Restaurant * r = dynamic_cast<Item::Restaurant *>(item);
+		category = foodCategory(r ? r->customersToday : 0);
+		item->tenant.category = (uint8_t)category;
+		return category;
+	}
+	if (id == "fastfood")
+	{
+		Item::FastFood * f = dynamic_cast<Item::FastFood *>(item);
+		category = foodCategory(f ? f->customersToday : 0);
+		item->tenant.category = (uint8_t)category;
+		return category;
+	}
+	if (id == "shop")
+	{
+		Item::Shop * shop = dynamic_cast<Item::Shop *>(item);
+		category = shop ? shopCategory(shop->let, shop->quotaRemaining + shop->customersToday,
+		                               item->tenant.rentClass) : (int)kUnjudged;
+	}
+	else
+	{
+		const int metric = tenantMetric(item);
+		category = categoryFor(metric, item->game ? item->game->rating : 0);
+	}
+	item->tenant.category = (uint8_t)category;
+	item->refreshEvaluation();
+	return category;
+}
+
+void JudgeSystem::rescueOne(Item::Item * item)
+{
+	if (!item || !item->hasTenantRecord()) return;
+	judgeOne(item);
+	bool vacant = false;
+	if (Item::Shop * shop = dynamic_cast<Item::Shop *>(item)) vacant = !shop->let;
+	else vacant = !item->isOccupied();
+	if (vacant && !item->tenant.armed && item->tenant.category != TenantRules::kStressed)
+		item->tenant.armed = true;
+}
+
+bool JudgeSystem::moveOut(Game * game, Item::Item * item,
+                          const std::vector<Item::Item *> & floorTenants)
+{
+	(void)game;
+	const std::string & id = item->prototype->id;
+	Item::Item::TenantRecord & t = item->tenant;
+	bool leave = false;
+	if (id == "office" || id == "condo")
+		leave = item->isOccupied() && t.category == TenantRules::kStressed;
+	else if (id == "shop")
+	{
+		Item::Shop * shop = dynamic_cast<Item::Shop *>(item);
+		leave = shop && shop->let && t.category == TenantRules::kStressed && t.tenure != 0;
+	}
+	if (!leave) return false;
+
+	t.armed = false; t.tenure = 0; t.redraw = true;
+	if (Item::Office * office = dynamic_cast<Item::Office *>(item)) office->vacate();
+	else if (Item::Condo * condo = dynamic_cast<Item::Condo *>(item)) condo->vacate();
+	else if (Item::Shop * shop = dynamic_cast<Item::Shop *>(item)) shop->vacate();
+
+	// Rescue pairing: first same-prototype neighbour judged happy.
+	for (size_t i = 0; i < floorTenants.size(); ++i)
+	{
+		Item::Item * other = floorTenants[i];
+		if (other == item || other->prototype->id != id) continue;
+		if (other->tenant.category != TenantRules::kHappy) continue;
+		other->tenant.category = TenantRules::kOk;
+		other->refreshEvaluation();
+		t.category = TenantRules::kOk;
+		t.armed = true;
+		item->resetMemberBanks();
+		break;
+	}
+	item->refreshEvaluation();
+	return true;
+}
+
+void JudgeSystem::judgeDaily(Game * game, bool isQuarterDay)
+{
+	const bool quarter = isQuarterDay;
+	evaluateAll(game);
+
+	// YootTower (J1): the 1..300 estimate drives the decisions; the
+	// 0..100 evaluation mirrors it for overlays and inspectors.
+	if (game->activeRules.profile().yootWorld)
+	{
+		for (Game::ItemSet::iterator it = game->items.begin(); it != game->items.end(); ++it)
+		{
+			Item::Item * item = *it;
+			if (!item->prototype->yoot) continue;
+			const int yoot = yootEstimate(game, item);
+			if (yoot > 0)
+			{
+				item->yootEstimate = yoot;
+				item->evaluation = yoot / 3.0;
+			}
+		}
+	}
+	reviewUnderperformers(game);
+
+	std::vector<int> floors;
+	for (Game::ItemSetByInt::const_iterator f = game->itemsByFloor.begin();
+	     f != game->itemsByFloor.end(); ++f)
+		floors.push_back(f->first);
+
+	for (size_t fi = 0; fi < floors.size(); ++fi)
+	{
+		std::vector<Item::Item *> order = game->slotOrder(floors[fi]);
+		std::vector<Item::Item *> tenants;
+		for (size_t i = 0; i < order.size(); ++i)
+		{
+			Item::Item * item = order[i];
+			if (item->underConstruction || !item->hasTenantRecord()) continue;
+			if (isHotelId(item->prototype->id)) continue; // 17:00 hotel pass
+			tenants.push_back(item);
+		}
+		for (size_t i = 0; i < tenants.size(); ++i) judgeOne(tenants[i]);
+
+		if (quarter)
+		{
+			std::vector<bool> left(tenants.size(), false);
+			for (size_t i = 0; i < tenants.size(); ++i)
+				left[i] = moveOut(game, tenants[i], tenants);
+			for (size_t i = 0; i < tenants.size(); ++i)
+			{
+				Item::Item * item = tenants[i];
+				const std::string & id = item->prototype->id;
+				if (left[i] || id == "restaurant" || id == "fastfood") continue;
+				bool tenanted = item->isOccupied();
+				if (Item::Shop * shop = dynamic_cast<Item::Shop *>(item)) tenanted = shop->let;
+				if (!tenanted) continue;
+				item->tenant.tenure = (uint8_t)std::min(120, (int)item->tenant.tenure + 1);
+				item->resetMemberBanks();
+			}
+		}
+		else
+		{
+			for (size_t i = 0; i < tenants.size(); ++i)
+			{
+				Item::Item * item = tenants[i];
+				const std::string & id = item->prototype->id;
+				if (id == "restaurant" || id == "fastfood") continue;
+				if (!item->tenant.armed && item->tenant.category != TenantRules::kStressed)
+					item->tenant.armed = true; // plain byte test: 255 arms too
+			}
+		}
+	}
+
+	if (lastCounts.criticalTenants > 0)
+	{
+		char buf[128];
+		snprintf(buf, sizeof(buf), "%d tenant%s unhappy - check the Evaluation view (O)",
+		         lastCounts.criticalTenants,
+		         lastCounts.criticalTenants == 1 ? " is" : "s are");
+		game->timeWindow.showMessage(buf);
+	}
+	reviewHotels(game);
+}
+
+int JudgeSystem::yootTrafficRange(Game * game, Item::Item * item)
+{
+	// T2TrafficInfo::GetRange at the entrance (YootExtrasSystem keeps the
+	// map: route legs booked per person, decayed hourly, ranges 0..3).
+	if (game->eventSystem.extras.traffic.configured())
+		return game->eventSystem.extras.trafficRange(item);
+	// Fallback without a map: people queued at or riding a mover that
+	// serves this floor within 8 cells of the tenant, one step per 5.
+	const int floor = item->position.y;
+	int count = 0;
+	for (Game::ItemSet::const_iterator it = game->items.begin(); it != game->items.end(); ++it)
+	{
+		Item::Item *mover = *it;
+		if (!mover->canHaulPeople() || mover->people.empty()) continue;
+		if (floor < mover->position.y || floor >= mover->position.y + mover->size.y) continue;
+		const int gap = mover->position.x >= item->position.x + item->size.x
+			? mover->position.x - (item->position.x + item->size.x)
+			: (item->position.x >= mover->position.x + mover->size.x
+				? item->position.x - (mover->position.x + mover->size.x) : 0);
+		if (gap > 8) continue;
+		for (Item::Item::People::const_iterator p = mover->people.begin(); p != mover->people.end(); ++p)
+			if ((*p)->journey.fromFloor == floor || (*p)->journey.toFloor == floor) ++count;
+	}
+	return std::min(3, count / 5);
+}
+
+int JudgeSystem::yootEstimate(Game * game, Item::Item * item, const std::vector<int> * residents)
+{
+	const YootItemStats *stats = item->prototype->yoot;
+	if (!stats) return 0;
+	const std::string & id = item->prototype->id;
+	const bool residential = id == "office" || id == "condo" || id == "yoot_condo" || id == "apartment" ||
+		id == "hotel_single" || id == "hotel_double" || id == "hotel_suite";
+	if (!residential)
+		return item->yootEstimate; // commercial: set at close (CalcProfitEstimate)
+
+	// T2Tenant::UpdateResidencialEstimate 0x10060e20.
+	Yoot::ResidentialInputs in;
+	if (residents)
+		in.peopleEstimates = *residents;
+	else
+		for (Item::Item::People::const_iterator p = item->people.begin(); p != item->people.end(); ++p)
+			in.peopleEstimates.push_back((*p)->yootCurrentEstimate());
+	in.previousPeopleEstimate = item->yootPeopleEstimate;
+	in.senseOfNoise = stats->senseOfNoise;
+	in.trafficRange = in.senseOfNoise ? yootTrafficRange(game, item) : 0;
+	in.priceIndex = Yoot::priceIndex(game->yootPriceSelection(item), (int)stats->inMoney.size());
+	in.yearsSinceBuilt = Yoot::yearsSinceBuilt((int)std::floor(game->time.absolute), item->yootBuildDay);
+	int peopleEstimate = item->yootPeopleEstimate;
+	const int estimate = Yoot::residentialEstimate(in, &peopleEstimate);
+	item->yootPeopleEstimate = peopleEstimate;
+	return estimate;
+}
+
+void JudgeSystem::forget(const Person * p)
+{
+	visitorDaySeen.erase(const_cast<Person *>(p));
+}
+
+void JudgeSystem::forget(const Item::Item * item)
+{
+	badDayStreak.erase(const_cast<Item::Item *>(item));
+}
+
 void JudgeSystem::reviewUnderperformers(Game * game)
 {
 	// ExpandoBadHotel equivalent. The original dynamically grew/shrank
@@ -436,7 +530,7 @@ void JudgeSystem::reviewUnderperformers(Game * game)
 
 	// Build the current set of underperformers so we can prune stale
 	// entries below.
-	std::set<Item::Item *> stillBad;
+	std::set<Item::Item *, SimLess> stillBad;
 	for (Game::ItemSet::iterator it = game->items.begin(); it != game->items.end(); ++it)
 	{
 		Item::Item * item = *it;
@@ -471,7 +565,7 @@ void JudgeSystem::reviewUnderperformers(Game * game)
 
 	// Decay/clear streaks for items that recovered, and prune entries for
 	// items that have been removed from the world.
-	for (std::map<Item::Item *, int>::iterator it = badDayStreak.begin();
+	for (std::map<Item::Item *, int, SimLess>::iterator it = badDayStreak.begin();
 	     it != badDayStreak.end(); )
 	{
 		if (stillBad.find(it->first) == stillBad.end())
@@ -479,22 +573,4 @@ void JudgeSystem::reviewUnderperformers(Game * game)
 		else
 			++it;
 	}
-}
-
-void JudgeSystem::computeParkingCoverage(Game * game)
-{
-	// Sum capacity across all parking items.
-	int totalSpaces = 0;
-	const Game::ItemSet & parking = bucket(game, "parking");
-	for (Game::ItemSet::const_iterator p = parking.begin(); p != parking.end(); ++p)
-	{
-		Item::Parking * park = dynamic_cast<Item::Parking *>(*p);
-		if (park) totalSpaces += park->totalSpaces();
-	}
-
-	// Original SimTower rule of thumb: 1 space per 4 offices and 1 per hotel
-	// room. Condos are owner-occupied and assumed to have their own garage.
-	int required = (lastCounts.offices + 3) / 4 + lastCounts.hotels;
-
-	parkingCoverage = (required == 0) ? 1.0 : static_cast<double>(totalSpaces) / required;
 }

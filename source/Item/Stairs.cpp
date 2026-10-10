@@ -33,6 +33,11 @@ void Stairs::decodeXML(tinyxml2::XMLElement & xml)
 	} else if (spiral == 0) {
 		configureForLobby();
 	}
+	// decodeXML runs after Stairlike::init already posed the sprite with
+	// the prototype's straight-stairs texture rect; re-pose with the
+	// spiral sheet or the stair renders as a partial-height window of the
+	// sheet until its first animation frame change.
+	updateSprite();
 }
 
 void Stairs::configureForLobby()

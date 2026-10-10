@@ -1,5 +1,6 @@
 #pragma once
 #include "../Sprite.h"
+#include "../YootItemArt.h"
 #include "Item.h"
 
 namespace OT
@@ -19,6 +20,9 @@ namespace OT
 				p->icon = 24;
 			}
 			virtual ~Condo();
+			virtual int disasterSaleReversal() const override { return occupied ? rentDeposit : 0; }
+			virtual int demolitionBuyout() const override;
+			virtual void evacuateForDisaster() override;
 
 			enum LightingConditions
 			{
@@ -28,52 +32,26 @@ namespace OT
 			};
 
 			/**
-			 * A Person living in a Condo item. The class maintains
-			 * additional information of the occupant, such as the day's schedule
-			 * and the like.
+			 * A Person living in a Condo item (T36). Every condo has exactly
+			 * three members: 0 adult (Man), 1 homebody (Mother with Baby),
+			 * 2 kid (Child). The extra arguments of the constructor are kept
+			 * for source compatibility; the day cycle is rolled per visit.
 			 */
 			class CondoOccupant : public Person
 			{
 			public:
-				CondoOccupant(Condo *item, Person::Type type, double depart, double ret)
-					: Person(item->game, type),
-					  departureTime(depart),
-					  returnTime(ret),
-					  departureJitter(0.0),
-					  returnJitter(0.0),
-					  atHome(true)
-				{
-				}
+				CondoOccupant(Condo *item, Person::Type type, double depart = 0, double ret = 0, int k = 0);
 
-				/// When the occupant is supposed to leave the tower in the morning.
 				double departureTime;
-				/// When the occupant is supposed to return to the tower in the evening.
 				double returnTime;
-
-				/// The difference between when they are supposed to leave and when they actually will
-				double departureJitter;
-				/// The difference between when they are supposed to return and when they actually will
-				double returnJitter;
 				/// True if the person is currently in the condo
 				bool atHome;
-
-				struct departsLaterThan
-				{
-					bool operator()(const CondoOccupant *a, const CondoOccupant *b) const
-					{
-						return (a->actualDepartureTime() > b->actualDepartureTime());
-					}
-				};
-				struct returnsLaterThan
-				{
-					bool operator()(const CondoOccupant *a, const CondoOccupant *b) const
-					{
-						return (a->actualReturnTime() > b->actualReturnTime());
-					}
-				};
-
-				double actualReturnTime() const;
-				double actualDepartureTime() const;
+				/// Outside the condo (commute, shopping, dining).
+				bool out = false;
+				bool asleep = false;
+				bool leftToday = false;
+				/// Venue phase bits: shopping/dining dispatched in this phase.
+				int shopPhase = -1;
 			};
 
 			virtual void init();
@@ -81,36 +59,44 @@ namespace OT
 			virtual void encodeXML(tinyxml2::XMLPrinter &xml) override;
 			virtual void decodeXML(tinyxml2::XMLElement &xml) override;
 			virtual void advance(double dt);
-			virtual int dailyMaintenanceCost() const override { return 150; }
 			virtual bool isOccupied() const override { return occupied; }
 
 			virtual void addPerson(Person *p);
 			virtual void removePerson(Person *p);
 
+			/// Quarter-day move-out (T6): family retires, unit buys back.
+			void vacate();
+			/// Mover arrival (T9): sale credited, family created.
+			void moveIn();
+			virtual void resetMemberBanks() override;
+			virtual int populationCategory() const override { return 9; }
+			virtual int populationContribution() const override { return occupied ? 3 : 0; }
+
 			/// Night-frame gate used by the AnimPeple suppression in
 			/// Item::renderPeople (OpenSkyWeb ISSUE-037 lighting rules).
 			bool isNightLighting() const { return lighting == NIGHT; }
-			
+
 		protected:
-			void generateJitters();
-			void moveOccupants();
+			void visit();
 			void createOccupants();
 			void removeOccupants();
 			bool updateLighting(double time);
 			void updateSprite();
-			bool isAttractive();
 
 			int rent;
 			int rentDeposit;
 			int variant;
 			LightingConditions lighting;
 			bool occupied;
+			int diningPhase = -1;
+			int diningSent = 0;
 
 			Sprite sprite;
+			/// Skin::Yoot plugin art (YootItemArt.h), null = OpenSky art.
+			const YootPluginView * yootView = nullptr;
 			bool spriteNeedsUpdate;
-			std::set<CondoOccupant *> occupants;
-			std::priority_queue<CondoOccupant *, std::deque<CondoOccupant *>, CondoOccupant::departsLaterThan> departureQueue;
-			std::priority_queue<CondoOccupant *, std::deque<CondoOccupant *>, CondoOccupant::returnsLaterThan> returnQueue;
+			std::set<CondoOccupant *, SimLess> occupants;
+			CondoOccupant *family[3] = {nullptr, nullptr, nullptr};
 		};
 	}
 }

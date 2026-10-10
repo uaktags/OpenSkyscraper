@@ -32,6 +32,12 @@ cmake_install.cmake
 /stdout.log
 *.png
 
+# First-party art source sheets under data/bitmaps are tracked assets.
+!data/bitmaps/**/*.png
+
+# 4x high-resolution twins of those sheets (same layout, 4x pixels).
+!data/bitmaps@4x/**/*.png
+
 # OpenTower edition ships its art as committed folder-plugin sprites.
 !data/Plugins/OpenTower/**/*.png
 
@@ -42,3 +48,12 @@ cmake_install.cmake
 /data/SIMTOWER.EX_
 /scratch/
 memory/
+/SIMTOWER.EX_.bak
+__pycache__/
+
+# play-through harness results (pulled from Unraid)
+tools/playthrough/out/
+tools/playthrough/oracle/*.DLL
+tools/playthrough/oracle/*.dll
+tools/playthrough/oracle/*.INI
+tools/playthrough/yoot/out/

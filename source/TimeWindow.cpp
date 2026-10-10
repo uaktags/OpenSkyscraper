@@ -21,6 +21,7 @@
 #include "cmath"
 #include "Game.h"
 #include "TGUI/Widgets/Scrollbar.hpp"
+#include "YootWorld.h"
 
 using namespace OT;
 
@@ -249,19 +250,24 @@ lblMoneyStats = tgui::Label::create();
 
 void TimeWindow::updateTime() {
     Time & t = game->time;
+	if (!game->activeRules.profile().worldId.empty()) {
+		// YootTower calendar (T2WorldDef::DrawCalendar): "YEAR 1 Jan. WD",
+		// holidays as "HD" in red.
+		const bool holiday = t.isHoliday();
+		lblDate->setText(yootCalendarText(t.year, t.dayOfYear(), holiday));
+		setLabelColor(lblDate, holiday ? sf::Color(255, 96, 96) : sf::Color(229, 238, 246));
+		return;
+	}
 		
 	std::string timestring;
-	timestring.append(t.day == 0 ? "1st WD" : "2nd WD");
+	timestring.append(t.day == 2 ? "WE" : t.day == 0 ? "1st WD" : "2nd WD");
 	//weekday->SetProperty("display", (t.day == 2 ? "none" : "inline"));
 	//weekend->SetProperty("display", (t.day != 2 ? "none" : "inline"));
 	
 	timestring.append(" / " + std::to_string(t.quarter) + "Q");
 
-	const char * suffix = "th Yr";
-	int yl = (t.year % 10);
-	if (yl == 1) suffix = "st Yr";
-	if (yl == 2) suffix = "nd Yr";
-	if (yl == 3) suffix = "rd Yr";
+	// FUN_1120_0ee1 (all.c:17744): 10..19 always take "th" (11th, 12th, 13th)
+	const char * suffix = yearOrdinalSuffix(t.year);
 	timestring.append(" / " + std::to_string(t.year) + suffix);
 
     lblDate->setText(timestring);    
@@ -286,6 +292,7 @@ void TimeWindow::updateTooltip() {
 		case 1: str << "Speed 1x"; break;
 		case 2: str << "Speed 2x"; break;
 		case 3: str << "Speed 4x"; break;
+		case 4: str << "Fast"; break;
 		default: break;
 	}
     lblTooltip->setText(str.str());
@@ -297,6 +304,7 @@ void TimeWindow::updateTooltip() {
 void TimeWindow::showMessage(std::string msg)
 {
 	LOG(IMPORTANT, msg.c_str());
+	game->recordSimEvent(msg);
 	message = msg;
 	messageTimer = 3;
 	updateTooltip();
@@ -392,29 +400,43 @@ void TimeWindow::renderWatch() {
     watch->display();
 }
 
-std::string TimeWindow::formatMoney(int amount)
+std::string TimeWindow::formatYearOrdinal(int year)
+{
+	// 11th, 12th and 13th are the English exceptions to the last-digit rule.
+	const int teen = year % 100;
+	const int yl = year % 10;
+	const char * suffix = "th Yr";
+	if (teen < 11 || teen > 13) {
+		if (yl == 1) suffix = "st Yr";
+		else if (yl == 2) suffix = "nd Yr";
+		else if (yl == 3) suffix = "rd Yr";
+	}
+	return std::to_string(year) + suffix;
+}
+
+std::string TimeWindow::formatMoney(int64_t amount)
 {
 	char c[32];
-	snprintf(c, 32, "$%i", amount);
+	snprintf(c, 32, "$%lld", (long long)amount);
 	string fmt(c);
 	for (int i = (int)fmt.length() - 3; i > 1; i -= 3) fmt.insert(i, "'");
 	return fmt;
 }
 
-std::string TimeWindow::formatCompactMoney(int amount)
+std::string TimeWindow::formatCompactMoney(int64_t amount)
 {
-	int absAmount = std::abs(amount);
+	int64_t absAmount = std::abs(amount);
 	char c[32];
 	if (absAmount >= 1000000)
-		snprintf(c, 32, "$%iM", absAmount / 1000000);
+		snprintf(c, 32, "$%lldM", (long long)(absAmount / 1000000));
 	else if (absAmount >= 1000)
-		snprintf(c, 32, "$%ik", absAmount / 1000);
+		snprintf(c, 32, "$%lldk", (long long)(absAmount / 1000));
 	else
-		snprintf(c, 32, "$%i", absAmount);
+		snprintf(c, 32, "$%lld", (long long)absAmount);
 	return std::string(c);
 }
 
-std::string TimeWindow::formatSignedCompactMoney(int amount)
+std::string TimeWindow::formatSignedCompactMoney(int64_t amount)
 {
 	if (amount < 0)
 		return "-" + formatCompactMoney(amount);

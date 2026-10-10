@@ -2,31 +2,28 @@
 
 #include "GameObject.h"
 #include <string>
+#include <vector>
 
 namespace tinyxml2 { class XMLPrinter; class XMLElement; }
 
 namespace OT
 {
-	/** VIP visit system (Phase 3.2).
+	namespace Item { class Hotel; class Item; }
+	class Person;
+
+	/** Authentic VIP visit state machine.
 	 *
-	 * Scheduling retuned to the authentic trigger model (OpenSkyWeb
-	 * ISSUE-036, docs/research/event-triggers.md): VIP visits are NOT
-	 * random. The VIP arrives when the next star promotion requires a VIP
-	 * rating and every other requirement is already met. A good review
-	 * completes the promotion gate (consumed by Game::ratingMayIncrease);
-	 * a bad review schedules a 14-day retry cooldown.
-	 *
-	 * The visit itself is abstract - we don't spawn a walking Person for
-	 * the VIP, just bookkeep a scheduled window. This keeps the system
-	 * decoupled from the pathfinder and lets it run even mid-construction.
+	 * At exactly three stars, every ninth-day schedule arms a real suite
+	 * guest.  The guest must arrive in a parked car; the guest's own banked
+	 * stress is judged at checkout and a favorable result supplies one
+	 * consumable 3->4 approval.
 	 */
 	class VipSystem : public GameObject
 	{
 	public:
 		VipSystem(Game * game);
 
-		/// Per-frame hook. Handles countdown to the next scheduled visit
-		/// and ends any in-progress visit. Called from Game::advance().
+		/// Per-frame hook. Handles deterministic arming, arrival and checkout.
 		void advance(double dt);
 
 		/// Force a visit as soon as possible (used by dev keys / tests).
@@ -36,39 +33,68 @@ namespace OT
 		void reset();
 
 		/// Is a VIP currently on the premises?
-		bool isVisiting() const { return visiting; }
+		bool isVisiting() const { return visiting != 0; }
 
-		/// Absolute-time at which the next visit will trigger. 0 if no
-		/// visit is scheduled yet (e.g. fresh tower below the threshold).
+		/// Absolute-time at which the next visit will trigger. 0 if none.
 		double nextVisitAt() const { return nextVisitTime; }
 
-		/// Persist / restore across save-reload. Called from Game's
-		/// encodeXML/decodeXML.
+		/// Persist / restore across save-reload.
 		void encodeXML(tinyxml2::XMLPrinter & xml) const;
 		void decodeXML(tinyxml2::XMLElement & xml);
 
-		/// Running count of positive reviews. Intended to gate the
-		/// Cathedral "Tower of the Year" ending once that lands.
-		int positiveReviews() const { return goodReviews; }
+		/// Favorable verdicts on hand, consumed by promotion ceremonies.
+		int positiveReviews() const { return gameIsYoot() ? goodReviews : (favorable ? 1 : 0); }
+
+		/// Consume exactly one favorable verdict without clearing history.
+		void clearApproval();
 
 	private:
-		/// True when the next promotion requires a VIP rating and every
-		/// other requirement (population, facilities) is already met — the
-		/// condition under which the VIP comes to inspect.
-		bool promotionNeedsVisit() const;
+		/// YootTower VIEV visits (T2VisitVIP): one reservation attempt per
+		/// day at the VIEV begin time, arrival at the VIP's +0x38 minute,
+		/// success when the estimate exceeds 200; success sets the VIP's
+		/// flag in Game::yootVipFlags.
+		void advanceYoot();
+		void resolveYootVisit();
+		/// 1..300 estimate the VIP verdict compares with 200.
+		int yootVisitEstimate(Item::Item * dest) const;
+		Item::Item * findYootDestination(const std::vector<std::string> & prototypes) const;
+		bool liveItem(Item::Item * item) const;
 
-		/// Begin a visit: mark visiting, capture the end time, emit an
-		/// arrival message.
-		void beginVisit();
+        bool gameIsYoot() const;
+        void armVisit();
+        bool liveGuest(Person*) const;
+        int visiting = 0;
+        int lastDay = -1;
+        bool watch = false;
+        Person *vipGuest = nullptr;
+        int vipTotal = 0, vipTrips = 0, result = 0;
+        int goodReviews = 0, badReviews = 0; // Yoot path only
+        double nextVisitTime = 0;
+        int pendingHomeX = 0, pendingHomeY = 0, pendingMember = -1;
+    public:
+        bool favorable = false;
+        void bankTrip(Person*, int wait);
+        void bindGuest(Person*);
+        void checkout(Person*, bool normal);
+        void voidPerson(Person*);
+        /// Clear the bound guest if it is this (about to be destroyed) person.
+        void forgetPerson(Person*);
+        /// Arm the VIP visit from the shared daily judge tick.
+        void armDaily();
+        void dayCheck();
+        /// Re-find the bound guest once items have been decoded.
+        void relink();
+    private:
 
-		/// End a visit: evaluate tower state, emit a result message,
-		/// grant any reward, bump goodReviews / badReviews.
-		void endVisit();
-
-		double nextVisitTime;   ///< absolute time of next scheduled visit; 0 = none
-		double visitEndTime;    ///< absolute time when current visit ends
-		bool   visiting;        ///< is a VIP currently on premises?
-		int    goodReviews;     ///< lifetime positive reviews
-		int    badReviews;      ///< lifetime negative reviews
+		// --- YootTower VIP state ---
+		int    yootPendingVip;    ///< index into RulesProfile::vips, -1 = none
+		double yootArrivalTime;   ///< absolute time the pending VIP is judged
+		int    yootLastDay;       ///< day of the last reservation attempt
+		Item::Item * yootDestination;
+		/// The saved reservation's destination (prototype id and cell). Set
+		/// with yootDestination; a loaded reservation resolves it once.
+		std::string yootDestType;
+		int    yootDestX, yootDestY;
+		void resolveSavedDestination();
 	};
 }

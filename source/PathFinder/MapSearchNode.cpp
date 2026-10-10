@@ -1,227 +1,248 @@
 #include <cmath>
+
+#include "../Item/Elevator/Elevator.h"
+#include "../Item/Elevator/Queue.h"
 #include "../Item/Factory.h"
 #include "../Item/Item.h"
 #include "FloorNode.h"
 #include "MapSearchNode.h"
+#include "../YootCatalog.h"
+#include "../YootRules.h"
 using namespace OT;
 
 
-MapSearchNode::MapSearchNode() : mapNode(NULL), parent_item(NULL), 
-numStairs(0), numEscalators(0), numElevators(0), 
-stairsSinceTransport(0), escalatorsSinceTransport(0),
-g(0), h(0), 
-								 start_point(INT_MIN, INT_MIN), end_point(INT_MIN, INT_MIN),
-								 serviceRoute(false) {}
+namespace {
+static const int kMaxRoutingSlots = 16;
+static const int kExpressSlotWidth = 6;
+static const int kStandardSlotWidth = 4;
+static bool elevatorMatchesRoute(const Item::Item *item, bool serviceRoute) {
+	return item && item->isElevator() && ((item->prototype->icon == 5) == serviceRoute);
+}
+static Item::Item *elevatorAt(const MapNode *node, bool serviceRoute) {
+	if (!node) return NULL;
+	for (int d = MapNode::UP; d <= MapNode::DOWN; ++d) {
+		Item::Item *item = node->transportItems[d];
+		if (elevatorMatchesRoute(item, serviceRoute)) return item;
+	}
+	return NULL;
+}
+static std::vector<MapSearchNode::QueueDep> *g_queueDeps = NULL;
+static int elevatorQueueLength(const Item::Item *item, int floor, Item::Elevator::Elevator::Direction direction) {
+	const Item::Elevator::Elevator *e = static_cast<const Item::Elevator::Elevator *>(item);
+	for (Item::Elevator::Elevator::Queues::const_iterator q = e->queues.begin(); q != e->queues.end(); ++q)
+		if ((*q)->floor == floor && (*q)->direction == direction) return static_cast<int>((*q)->people.size());
+	return 0;
+}
+/// YootTower floor holes: the start item's own hop to the first transport
+/// must not cross an uncovered span either (NULL test = always walkable).
+static bool spanReachable(const MapNode *floor, int x1, int x2) {
+	if (!floor || !floor->walkableBetween || !*floor->walkableBetween) return true;
+	return (*floor->walkableBetween)(floor->position.y, x1, x2);
+}
+static bool destinationElevatorMatchesRoute(const MapNode *node, bool serviceRoute) {
+	return elevatorAt(node, serviceRoute) != NULL;
+}
+static bool hasTransferSlot(const MapSearchNode *start, const MapNode *dest) {
+	if (!start || !start->mapNode || !dest || !start->mapNode->floorNode) return false;
+	// The shaft just ridden is remembered while walking along the floor
+	// (lastElevator); see MapSearchNode.h. Without it, a second shaft further
+	// along the lobby than the first node over could never be boarded.
+	Item::Item *from = start->lastElevator ? start->lastElevator
+		: (start->parent_item && start->parent_item->isElevator()
+			? start->parent_item : elevatorAt(start->mapNode, start->serviceRoute));
+	Item::Item *to = elevatorAt(dest, start->serviceRoute);
+	if (!from || !to) return false;
+	const int fromWidth = from->prototype->icon == 6 ? kExpressSlotWidth : kStandardSlotWidth;
+	const int toWidth = to->prototype->icon == 6 ? kExpressSlotWidth : kStandardSlotWidth;
+	int slots = 0;
+	const std::list<MapNode *> *nodes = start->mapNode->floorNode->nodesOnFloor;
+	for (std::list<MapNode *>::const_iterator n = nodes->begin(); n != nodes->end(); ++n) {
+		Item::Item *lobby = NULL;
+		for (int d = MapNode::UP; d <= MapNode::DOWN; ++d)
+			if ((*n)->transportItems[d] && (*n)->transportItems[d]->isLobby()) { lobby = (*n)->transportItems[d]; break; }
+		if (!lobby) continue;
+		const bool fromOverlaps = from->position.x < lobby->position.x + lobby->size.x
+			&& from->position.x + fromWidth > lobby->position.x;
+		const bool toOverlaps = to->position.x < lobby->position.x + lobby->size.x
+			&& to->position.x + toWidth > lobby->position.x;
+		if (!fromOverlaps && !toOverlaps) continue;
+		if (++slots > kMaxRoutingSlots) return false;
+		if (fromOverlaps && toOverlaps) return true;
+	}
+	return false;
+}
+}
 
-MapSearchNode::MapSearchNode(const OT::MapNode *mp) : mapNode(mp), parent_item(NULL), 
-													  numStairs(0), numEscalators(0), numElevators(0), 
-													  g(0), h(0), 
-													  start_point(INT_MIN, INT_MIN), end_point(INT_MIN, INT_MIN),
-													  serviceRoute(false) {}
+MapSearchNode::MapSearchNode() : mapNode(NULL), parent_item(NULL), lastElevator(NULL),
+numStairs(0), numEscalators(0), numElevators(0),
+stairsSinceTransport(0), escalatorsSinceTransport(0),
+walkFloorsSinceTransport(0), walkingHasStairs(false),
+g(0), h(0),
+                                 start_point(INT_MIN, INT_MIN), end_point(INT_MIN, INT_MIN),
+                                 serviceRoute(false) {}
+
+MapSearchNode::MapSearchNode(const OT::MapNode *mp) : mapNode(mp), parent_item(NULL), lastElevator(NULL),
+                                                     numStairs(0), numEscalators(0), numElevators(0),
+                                                     stairsSinceTransport(0), escalatorsSinceTransport(0),
+                                                     walkFloorsSinceTransport(0), walkingHasStairs(false),
+                                                     g(0), h(0),
+                                                     start_point(INT_MIN, INT_MIN), end_point(INT_MIN, INT_MIN),
+                                                     serviceRoute(false) {}
 
 float MapSearchNode::GetCost(MapSearchNode &successor) {
-	Item::Item *i = getItemOnRoute(&successor); // Discover item that lies on this node, given the next step
+	Item::Item *i = getItemOnRoute(&successor);
 	successor.parent_item = i;
+	// Walking keeps the last ridden shaft; stairlikes and lobby hops forget it.
+	successor.lastElevator = i ? (i->isElevator() ? i : NULL) : lastElevator;
 	successor.numStairs = numStairs;
 	successor.numEscalators = numEscalators;
-successor.numElevators = numElevators;
-successor.stairsSinceTransport = stairsSinceTransport;
-successor.escalatorsSinceTransport = escalatorsSinceTransport;
-successor.g = g;
-	
+	successor.numElevators = numElevators;
+	successor.stairsSinceTransport = stairsSinceTransport;
+	successor.escalatorsSinceTransport = escalatorsSinceTransport;
+	successor.walkFloorsSinceTransport = walkFloorsSinceTransport;
+	successor.walkingHasStairs = walkingHasStairs;
+	successor.start_point = start_point;
+	successor.end_point = end_point;
+	successor.serviceRoute = serviceRoute;
+	successor.g = g;
+
 	int traverse_cost = 0;
-	if(!i) {
-		// NULL item. Next step is traversal on current floor.
-		if(mapNode->position.y == 0 && successor.mapNode->position.y == 0)
-			traverse_cost = 0; // Movement in main lobby is free(?)
-		else if(!mapNode->floorNode && start_point.x > INT_MIN) // This is a floor start node, use start_point to compute cost instead
-			traverse_cost = std::abs(successor.mapNode->position.x - start_point.x)*WALKING_COST;
-		else if(!successor.mapNode->floorNode && mapNode->position.y == end_point.y) {
-			// Successor is a floor end node, use end_point to compute cost instead
-			int end_walking_dist = std::abs(end_point.x - mapNode->position.x);
-
-			// Check if final transport node is too far away from destination, and adjust cost accordingly
-			if(end_walking_dist > MAX_WALKING_DIST)
-				traverse_cost = (int)(MAX_WALKING_DIST*WALKING_COST + (float)end_walking_dist/MAX_WALKING_DIST*INHIBITORY_COST);
+	if (!i) {
+		// Horizontal walking is represented by the transport score; walking
+		// inside a lobby/zone is free in the EXE route table.
+		traverse_cost = 0;
+	} else if (i->isStairlike()) {
+		const int distance = std::abs(i->position.x - start_point.x);
+		const bool stairs = i->prototype->icon == ICON_STAIRS;
+		// Escalator score is 8*d; therefore scores below 640 are the
+		// TransferT early-accept branch and beat elevator candidates.
+		traverse_cost = ROUTE_COST_PER_CELL * distance;
+		// Only a flagged one-way escalator carries the stair base; the native
+		// catalog currently has no such variant, so keep this branch explicit.
+		if (stairs || i->prototype->id == "escalator-one-way") traverse_cost += ROUTE_BASE_COST;
+		if (stairs) {
+			successor.numStairs++;
+			successor.stairsSinceTransport++;
+			successor.walkingHasStairs = true;
+		} else successor.numEscalators++;
+		successor.walkFloorsSinceTransport += std::abs(successor.mapNode->position.y - mapNode->position.y);
+	// The next transport score measures from this landing, not the original
+	// room, after a multi-leg route.
+	successor.start_point.x = i->position.x;
+	} else if (i->isElevator()) {
+		const bool boarding = i != parent_item;
+		if (boarding) {
+			const bool transfer = numElevators > 0 || (parent_item && parent_item->isElevator());
+			const int floor = mapNode->position.y;
+			const Item::Elevator::Elevator::Direction direction = successor.mapNode->position.y >= floor
+				? Item::Elevator::Elevator::kUp : Item::Elevator::Elevator::kDown;
+			const int queue_length = elevatorQueueLength(i, floor, direction);
+			const bool full = queue_length >= ELEVATOR_QUEUE_CAPACITY;
+			if (g_queueDeps) {
+				// Only express shafts price the exact length; the rest read the full flag.
+				const bool exact = i->prototype->icon == 6;
+				QueueDep dep = { i, floor, (int)direction, exact ? queue_length : (full ? 1 : 0), exact };
+				if (g_queueDeps->empty() || !g_queueDeps->back().sameKey(dep)) g_queueDeps->push_back(dep);
+			}
+			const int origin_x = mapNode->floorNode ? start_point.x : mapNode->position.x;
+			const int elevator_x = i->position.x + i->size.x / 2;
+			const int distance = std::abs(origin_x - elevator_x);
+			if (i->prototype->icon == 6)
+				traverse_cost = queue_length + (transfer ? ROUTE_TRANSFER_COST : ROUTE_BASE_COST);
+			else if (transfer)
+				traverse_cost = ROUTE_COST_PER_CELL * distance + (full ? ROUTE_TRANSFER_FULL_COST : ROUTE_TRANSFER_COST);
 			else
-				traverse_cost = end_walking_dist*WALKING_COST;
-		} else
-			traverse_cost = std::abs(successor.mapNode->position.x - mapNode->position.x)*WALKING_COST;
-	} else if(i->isStairlike()) {
-		if(i->prototype->icon == 2) {
-traverse_cost += STAIRS_COST;
-successor.numStairs++;
-successor.stairsSinceTransport++;
-		} else {
-traverse_cost += ESCALATOR_COST;
-successor.numEscalators++;
-successor.escalatorsSinceTransport++;
+				traverse_cost = ROUTE_COST_PER_CELL * distance + (full ? ROUTE_FULL_COST : ROUTE_BASE_COST);
+			successor.numElevators++;
+			successor.start_point.x = elevator_x;
 		}
-		
-		traverse_cost += FLOOR_COST;
-	} else if(i->isElevator()) {
-		if(i != parent_item) {
-			// NOTE: In future when hotel rooms are implemented, 
-			// there will need to be another check here to include Service elevator costs.
-			if(i->prototype->icon == 4)
-				traverse_cost += ELEVATOR_COST;
-else
-traverse_cost += EXPRESS_COST;
-successor.numElevators++;
-}
-// Riding an elevator refills the stairlike budget (OpenSkyWeb PORT
-// NOTE 1): stairs used BELOW an elevator must not consume the budget
-// needed for stairs ABOVE it.
-successor.stairsSinceTransport = 0;
-successor.escalatorsSinceTransport = 0;
-		
-traverse_cost += std::abs(successor.mapNode->position.y - mapNode->position.y)*FLOOR_COST;
-} else if(i->prototype->icon == ICON_LOBBY) {
-// Multi-story lobby vertical traversal (OpenSkyWeb ISSUE-006): a
-// cheap internal transfer; lobby contact refills the stairlike budget.
-traverse_cost = std::abs(successor.mapNode->position.y - mapNode->position.y) * 10;
-successor.stairsSinceTransport = 0;
-successor.escalatorsSinceTransport = 0;
-} else traverse_cost = INHIBITORY_COST;// ERROR: Should not end up here. INHIBITORY_COST should deter further expansion from this node.
+		successor.stairsSinceTransport = 0;
+		successor.escalatorsSinceTransport = 0;
+		successor.walkFloorsSinceTransport = 0;
+		successor.walkingHasStairs = false;
+	} else if (i->prototype->icon == ICON_LOBBY) {
+		successor.stairsSinceTransport = 0;
+		successor.escalatorsSinceTransport = 0;
+		successor.walkFloorsSinceTransport = 0;
+		successor.walkingHasStairs = false;
+	} else traverse_cost = INHIBITORY_COST;
 
-// Arriving on any elevator node (even just walking onto its tile) counts
-// as transport contact and refills the stairlike budget (PORT NOTE 1).
-if (successor.mapNode->hasElevator) {
-successor.stairsSinceTransport = 0;
-successor.escalatorsSinceTransport = 0;
-}
-
-successor.g += (float)traverse_cost;
-return (float)traverse_cost;
+	if (successor.mapNode->hasElevator) {
+		successor.stairsSinceTransport = 0;
+		successor.escalatorsSinceTransport = 0;
+		successor.walkFloorsSinceTransport = 0;
+		successor.walkingHasStairs = false;
+	}
+	// YootTower (P3, T2Mover::CalcScore 0x1003ef20): a mover leg costs its
+	// MVDF score x floors (Stairs 50, Escalator 30, Simple 15, Service 8,
+	// Large 5); walking stays free. Only catalogued movers carry a score,
+	// so SimTower/OpenSky routing is untouched.
+	if (i && i->prototype->yoot && i->prototype->yoot->routeScore > 0 &&
+	    (i->isStairlike() || i->isElevator()))
+		traverse_cost = OT::Yoot::moverRouteScore(i->prototype->yoot->routeScore,
+			successor.mapNode->position.y - mapNode->position.y);
+	successor.g += (float)traverse_cost;
+	return (float)traverse_cost;
 }
 
 float MapSearchNode::GoalDistanceEstimate(MapSearchNode &nodeGoal) {
-	if(!nodeGoal.mapNode->floorNode) {
-		if(!mapNode->floorNode)
-			h = (float)(std::abs(end_point.y - mapNode->position.y)*FLOOR_COST);
-		else
-			h = (float)(std::abs(end_point.x - mapNode->position.x)*WALKING_COST + std::abs(end_point.y - mapNode->position.y)*FLOOR_COST);
-	} else {
-		if(!mapNode->floorNode)
-			h = (float)(std::abs(nodeGoal.mapNode->position.x - start_point.x)*WALKING_COST + std::abs(nodeGoal.mapNode->position.y - start_point.y)*FLOOR_COST);
-		else
-			h = (float)(std::abs(nodeGoal.mapNode->position.x - mapNode->position.x)*WALKING_COST + std::abs(nodeGoal.mapNode->position.y - mapNode->position.y)*FLOOR_COST);
-	}
-
+	// Escalators can score zero at the same x, so zero is the admissible lower bound.
+	h = 0;
+	(void)nodeGoal;
 	return h;
 }
 
-bool MapSearchNode::GetSuccessors(AStarSearch< MapSearchNode > *astarsearch, MapSearchNode *parent_node) {
+bool MapSearchNode::GetSuccessors(IndexedAStarSearch< MapSearchNode > *astarsearch, MapSearchNode *parent_node) {
 	MapSearchNode n;
 	MapNode *left = NULL;
 	MapNode *right = NULL;
 	bool ret;
-
-	if(!parent_node && !mapNode->floorNode) {
-		// Start node which is also a floor node.
-		// Find and add nearest transport nodes to the left/right (based on start_point, which should be populated)
-		std::list<MapNode *> *nodesOnFloor = mapNode->nodesOnFloor;
-		assert(nodesOnFloor != NULL);
-		for(std::list<MapNode *>::const_iterator i = nodesOnFloor->begin(); i != nodesOnFloor->end(); i++) {
-			MapNode *node = *i;
-			if(node->position.x <= start_point.x && canTransfer(this, node, MapNode::LEFT)) left = node;
-			else if(canTransfer(this, node, MapNode::RIGHT)) {
-				right = node;
-				break;
-			}
-		}
-
-		if(left) {
-			createNode(n, left);
-			ret = astarsearch->AddSuccessor(n);
-			if(!ret) return false;
-		}
-		
-		if(right) {
-			createNode(n, right);
-			ret = astarsearch->AddSuccessor(n);
-			if(!ret) return false;
-		}
-
+	if (!parent_node && !mapNode->floorNode) {
+		const MapNode *seedLeft = NULL, *seedRight = NULL;
+		firstExpansionSeeds(seedLeft, seedRight);
+		left = const_cast<MapNode *>(seedLeft);
+		right = const_cast<MapNode *>(seedRight);
+		if (left) { createNode(n, left); ret = astarsearch->AddSuccessor(n); if (!ret) return false; }
+		if (right) { createNode(n, right); ret = astarsearch->AddSuccessor(n); if (!ret) return false; }
 		return true;
 	}
-
-	if(mapNode->position.y == end_point.y && !astarsearch->GetSolutionEnd()->mapNode->floorNode) {
-		// Reached the same floor as end node, and end node is a floor node.
-		// Add destination floor node
-		if(!mapNode->floorNode) return false; // ERROR: All transport nodes must contain pointer to their respective floor node.
-
+	if (mapNode->position.y == end_point.y && !astarsearch->GetSolutionEnd()->mapNode->floorNode) {
+		if (!mapNode->floorNode) return false;
 		createNode(n, mapNode->floorNode);
-		ret = astarsearch->AddSuccessor(n);
-		if(!ret) return false;
-		else	 return true;
+		return astarsearch->AddSuccessor(n);
 	}
-
 	MapNode *node = mapNode->neighbours[MapNode::LEFT];
-	while(node && !left) {
-		if (!canTransfer(this, node, MapNode::LEFT)) {
-			node = node->neighbours[MapNode::LEFT];
-			continue;
-		}
-		
-		left = node;
-	}
-
+	while (node && !left) { if (!canTransfer(this, node, MapNode::LEFT)) node = node->neighbours[MapNode::LEFT]; else left = node; }
 	node = mapNode->neighbours[MapNode::RIGHT];
-	while(node && !right) {
-		if (!canTransfer(this, node, MapNode::RIGHT)) {
-			node = node->neighbours[MapNode::RIGHT];
-			continue;
-		}
-
-		right = node;
-	}
-
-	if(left) {
-		createNode(n, left);
-		ret = astarsearch->AddSuccessor(n);
-		if(!ret) return false;
-	}
-
-	if(right) {
-		createNode(n, right);
-		ret = astarsearch->AddSuccessor(n);
-		if(!ret) return false;
-	}
-
-	if(mapNode->neighbours[MapNode::UP]) {
+	while (node && !right) { if (!canTransfer(this, node, MapNode::RIGHT)) node = node->neighbours[MapNode::RIGHT]; else right = node; }
+	if (left) { createNode(n, left); ret = astarsearch->AddSuccessor(n); if (!ret) return false; }
+	if (right) { createNode(n, right); ret = astarsearch->AddSuccessor(n); if (!ret) return false; }
+	if (mapNode->neighbours[MapNode::UP]) {
 		node = mapNode->neighbours[MapNode::UP];
-		if(mapNode->hasElevator) {
-			while(node) {
-				createNode(n, node);
-				ret = astarsearch->AddSuccessor(n);
-				if(!ret) return false;
-				node = node->neighbours[MapNode::UP];
-			}
-		} else if(canTransfer(this, node, MapNode::UP)) {
-			createNode(n, node);
-			ret = astarsearch->AddSuccessor(n);
-			if(!ret) return false;
-		}
+		if (mapNode->hasElevator) {
+			while (node) { if (canTransfer(this, node, MapNode::UP)) { createNode(n, node); ret = astarsearch->AddSuccessor(n); if (!ret) return false; } node = node->neighbours[MapNode::UP]; }
+		} else if (canTransfer(this, node, MapNode::UP)) { createNode(n, node); ret = astarsearch->AddSuccessor(n); if (!ret) return false; }
 	}
-
-	if(mapNode->neighbours[MapNode::DOWN]) {
+	if (mapNode->neighbours[MapNode::DOWN]) {
 		node = mapNode->neighbours[MapNode::DOWN];
-		if(mapNode->hasElevator) {
-			while(node) {
-				createNode(n, node);
-				ret = astarsearch->AddSuccessor(n);
-				if(!ret) return false;
-				node = node->neighbours[MapNode::DOWN];
-			}
-		} else if(canTransfer(this, node, MapNode::DOWN)) {
-			createNode(n, node);
-			ret = astarsearch->AddSuccessor(n);
-			if(!ret) return false;
-		}
+		if (mapNode->hasElevator) {
+			while (node) { if (canTransfer(this, node, MapNode::DOWN)) { createNode(n, node); ret = astarsearch->AddSuccessor(n); if (!ret) return false; } node = node->neighbours[MapNode::DOWN]; }
+		} else if (canTransfer(this, node, MapNode::DOWN)) { createNode(n, node); ret = astarsearch->AddSuccessor(n); if (!ret) return false; }
 	}
-
 	return true;
+}
+
+void MapSearchNode::firstExpansionSeeds(const OT::MapNode *&left, const OT::MapNode *&right) const {
+	left = NULL;
+	right = NULL;
+	std::list<MapNode *> *nodesOnFloor = mapNode->nodesOnFloor;
+	assert(nodesOnFloor != NULL);
+	for (std::list<MapNode *>::const_iterator i = nodesOnFloor->begin(); i != nodesOnFloor->end(); ++i) {
+		MapNode *node = *i;
+		if (!spanReachable(mapNode, start_point.x, node->position.x)) continue;
+		if (node->position.x <= start_point.x && canTransfer(this, node, MapNode::LEFT)) left = node;
+		else if (canTransfer(this, node, MapNode::RIGHT)) { right = node; break; }
+	}
 }
 
 bool MapSearchNode::IsGoal(MapSearchNode &nodeGoal) {
@@ -233,14 +254,37 @@ bool MapSearchNode::IsGoal(MapSearchNode &nodeGoal) {
 }
 
 bool MapSearchNode::IsSameState(MapSearchNode &rhs) {
-// State equivalence includes the transfer stamina counters so that a
-// path arriving with an exhausted stairlike budget does not falsely
-// prune a valid elevator path that has refilled stamina (OpenSkyWeb
-// commit 9918897).
-return (mapNode == rhs.mapNode
-&& stairsSinceTransport == rhs.stairsSinceTransport
-&& escalatorsSinceTransport == rhs.escalatorsSinceTransport
-&& numElevators == rhs.numElevators);
+	return mapNode == rhs.mapNode
+		&& parent_item == rhs.parent_item
+		&& lastElevator == rhs.lastElevator
+		&& stairsSinceTransport == rhs.stairsSinceTransport
+		&& escalatorsSinceTransport == rhs.escalatorsSinceTransport
+		&& walkFloorsSinceTransport == rhs.walkFloorsSinceTransport
+		&& walkingHasStairs == rhs.walkingHasStairs
+		&& numElevators == rhs.numElevators;
+}
+
+void MapSearchNode::recordQueueDeps(std::vector<QueueDep> *deps) { g_queueDeps = deps; }
+
+bool MapSearchNode::queueDepsHold(const std::vector<QueueDep> &deps) {
+	for (std::vector<QueueDep>::const_iterator d = deps.begin(); d != deps.end(); ++d) {
+		const int len = elevatorQueueLength(d->elevator, d->floor, (Item::Elevator::Elevator::Direction)d->direction);
+		if ((d->exact ? len : (len >= ELEVATOR_QUEUE_CAPACITY ? 1 : 0)) != d->value) return false;
+	}
+	return true;
+}
+
+size_t MapSearchNode::StateHash() const {
+	size_t h = std::hash<const void *>()(mapNode);
+	auto mix = [&h](size_t v) { h ^= v + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2); };
+	mix(std::hash<const void *>()(parent_item));
+	mix(std::hash<const void *>()(lastElevator));
+	mix((size_t)(unsigned)stairsSinceTransport);
+	mix((size_t)(unsigned)escalatorsSinceTransport);
+	mix((size_t)(unsigned)walkFloorsSinceTransport);
+	mix(walkingHasStairs ? 1 : 0);
+	mix((size_t)(unsigned)numElevators);
+	return h;
 }
 
 OT::Item::Item * MapSearchNode::getItemOnRoute(const MapSearchNode *successor) {
@@ -265,45 +309,27 @@ OT::Item::Item * MapSearchNode::getItemOnRoute(const MapSearchNode *successor) {
 }
 
 bool MapSearchNode::canTransfer(const MapSearchNode *start, const OT::MapNode *dest, const OT::MapNode::Direction dir) const {
-	/* 
-		Returns true if transfer to destination transport has not exceed transfer limits.
-		Returns false otherwise.
-		Maximum transfer limits are:
-			2 elevators (no more than 1 elevator if journey has already used stairs or escalators)
-			4 stairs
-			6 escalators
-			1 stair, 2 escalators OR 2 stairs, 1 escalator
-	*/
-
-	if((dir == MapNode::UP || dir == MapNode::DOWN)) {
-		// Once in an elevator node, travel is allowed for as many floors available in the elevator shaft
-		if(start->mapNode->hasElevator) return true;
-
-// Hence we only check limits for stairlike travel. The budget is
-// measured per transport segment (since the last elevator/lobby
-// contact) rather than cumulatively over the whole journey - see
-// OpenSkyWeb pathfinder.js PORT NOTE 1.
-if(start->mapNode->transportItems[dir]->prototype->icon == 2) {
-if(start->stairsSinceTransport > 3 - start->escalatorsSinceTransport) return false;
-} else {
-if(start->escalatorsSinceTransport > 5) return false;
-if(start->stairsSinceTransport > 0 && start->escalatorsSinceTransport > 2 - start->stairsSinceTransport) return false;
-}
-	} else {
-		if(dest->hasElevator) {
-			if((!start->serviceRoute && dest->hasServiceElevator) || (start->serviceRoute && !dest->hasServiceElevator)) return false;
-			if(start->numElevators > 1) return false;
-			if(start->numElevators == 1 && (start->mapNode->position.y % 15 != 0 || start->numStairs > 0 || start->numEscalators > 0)) return false;
-		}
-		// Transit to other stairlike nodes (moving left/right) has no limits.
-		// Limit only applies when actually using (moving up/down) the stairlike.
+	if (!start || !start->mapNode || !dest) return false;
+	if (dir == MapNode::UP || dir == MapNode::DOWN) {
+		Item::Item *item = start->mapNode->transportItems[dir];
+		if (!item) return false;
+		if (item->isElevator()) return elevatorMatchesRoute(item, start->serviceRoute);
+		if (!item->isStairlike() || (start->serviceRoute && item->prototype->icon != ICON_STAIRS)) return false;
+		const int floors = std::abs(dest->position.y - start->mapNode->position.y);
+		const bool stairs = start->walkingHasStairs || item->prototype->icon == ICON_STAIRS;
+		return start->walkFloorsSinceTransport + floors <= (stairs ? MAX_STAIR_WALK_FLOORS : MAX_ESCALATOR_WALK_FLOORS);
 	}
-
-	return true;
+	if (!dest->hasElevator) return true;
+	if (!destinationElevatorMatchesRoute(dest, start->serviceRoute)) return false;
+	const int rides = start->numElevators + ((start->numElevators == 0 && start->parent_item && start->parent_item->isElevator()) ? 1 : 0);
+	if (start->serviceRoute) return rides == 0;
+	if (rides >= 2) return false;
+	return rides == 0 || hasTransferSlot(start, dest);
 }
 
 void MapSearchNode::createNode(MapSearchNode &n, const OT::MapNode *node) {
 	n = MapSearchNode(node);
+	n.start_point = start_point;
 	n.end_point = end_point;
 	n.serviceRoute = serviceRoute;
 }
