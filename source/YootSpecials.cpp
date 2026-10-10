@@ -68,6 +68,21 @@ namespace OT
 			return minute >= open && minute <= close - 120;
 		}
 
+		int hotelCallIdles(int openMinute, int phase)
+		{
+			int n = 0;
+			for (int m = openMinute; m < openMinute + kHotelCallWindowMinutes; ++m)
+				if (m % 8 == phase) ++n;
+			return n;
+		}
+
+		double hotelCallChance(int idles)
+		{
+			double none = 1.0;
+			for (int i = 0; i < idles; ++i) none *= double(kHotelCallOdds - 1) / kHotelCallOdds;
+			return 1.0 - none;
+		}
+
 		std::vector<int> maidTrip(const std::vector<bool> & dirtyAndReachable)
 		{
 			std::vector<int> trip;

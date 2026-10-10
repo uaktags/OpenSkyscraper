@@ -100,6 +100,22 @@ namespace OT
 		/// i.e. funds += cost - outMoney (engine $100 units; cost 0 when
 		/// nothing is booked). Returns dollars.
 		int hallEventSettlement(int costUnits, int outMoneyUnits);
+		/// EventCenter.t2p EnterTenant hook 0x1000bba0 (inside already counts the
+		/// entrant): 30 -> 31 on the first visitor, 31 -> 32 once capacity / 2 are
+		/// inside (signed halving). Other statuses are unchanged.
+		int hallStatusOnEnter(int status, int inside, int capacity);
+		/// LeaveTenant hook 0x1000bcb0 (inside no longer counts the leaver): an
+		/// empty hall that is not closed (10) goes back to 30; 32 -> 31 when
+		/// inside <= capacity / 2.
+		int hallStatusOnLeave(int status, int inside, int capacity);
+		/// FUN_1000bec0 resets the booked hall to status 30 in [open - 60,
+		/// open - 52) and again in [open, open + 8) (one plugin idle each), even
+		/// with visitors inside (oracle: status 30 with 3 and 7 inside at 11:00).
+		bool hallStatusReset(int minute, int open);
+		/// FUN_1000bec0 refreshes the tenant estimate (UpdateCommercialEstimate)
+		/// on a plugin idle at or after the open minute in the first 8 minutes of
+		/// every hour, in [open, open + 8) and at close.
+		bool hallEstimateIdle(int minute, int open);
 		/// EventCenter.t2p FUN_1000dcb0 after an event's last day: attendance
 		/// below unkE0 is a flop (36-day cooldown, its bookings dropped, the
 		/// target falls back to unkDC); otherwise the next target is

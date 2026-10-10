@@ -170,11 +170,14 @@ approximate or missing (see `doc/yoottower/game-parity.md` for the full audit):
 - **Visuals checked only at the logic level:** Mr. Maru turning back at the row end, rubble tiling (drawn per
   cell, not per tenant), the kite in Kegon, and the Billboard countdown differ from or are not confirmed
   against the original; clouds, kite and dolphins have not been compared pixel for pixel.
-- **Event Center:** booked events import from and export to `.bld` and open and settle on the original's
-  days and hours, but the audience runs ~10% high, the "full" status (31) is not shown, and the tenant
-  estimate stays at 0 during an event.
-- **Hotels:** OpenSky fills about half of the eligible rooms per day against the original's ~80% (funds stay
-  within tolerance); room estimates run higher than the original's.
+- **Event Center:** booked events import from and export to `.bld`, open and settle on the original's
+  days and hours, and now show the original's status chain (30 empty, 31 some inside, 32 from half the
+  capacity) and its hourly profit estimate (300 once three visitors have paid). The audience matches the
+  oracle on the current tree (five seeds: 53-84 on day 1 against 70, 128-152 on day 2 against 143). Not
+  closed: the target of the first run (the original's `*(slot + 4)`), and the evening events stay unobserved.
+- **Hotels:** after restoring the maids' cleaning step (lost in the YootTower merge) OpenSky fills 73-77% of
+  the eligible rooms against the original's 82% on day 1, and day-2 funds are back inside tolerance on all six
+  seeds; room estimates still run higher than the original's (280-300 against 248-276).
 - **Population detail:** Hawaii has one condo resident more than the original (55 vs 54) and a few more
   daytime visitors; a coffee shop's pre-blackout demand is below the original's.
 

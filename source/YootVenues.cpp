@@ -1,5 +1,6 @@
 /* Copyright (c) 2026 OpenSkyscraper contributors */
 #include "YootVenues.h"
+#include "YootTenants.h"
 
 #include <algorithm>
 #include <cmath>
@@ -149,6 +150,30 @@ namespace OT
 		int hallEventSettlement(int costUnits, int outMoneyUnits)
 		{
 			return (costUnits - outMoneyUnits) * 100;
+		}
+
+		int hallStatusOnEnter(int status, int inside, int capacity)
+		{
+			if (status == 30) return 31;
+			if (status == 31 && inside >= capacity / 2) return 32;
+			return status;
+		}
+
+		int hallStatusOnLeave(int status, int inside, int capacity)
+		{
+			if (inside == 0) return status != 10 ? 30 : status;
+			if (status == 32 && inside <= capacity / 2) return 31;
+			return status;
+		}
+
+		bool hallStatusReset(int minute, int open)
+		{
+			return withinMinutes(minute, open - 60, open - 52) || withinMinutes(minute, open, open + 8);
+		}
+
+		bool hallEstimateIdle(int minute, int open)
+		{
+			return minute >= open && (minute % 60 < 8 || withinMinutes(minute, open, open + 8));
 		}
 
 		bool hallEventFlop(const HallEventDef & def, int attendance)

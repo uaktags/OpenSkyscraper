@@ -7071,6 +7071,26 @@ static void testYootVenues()
 	EXPECT(Y::hallEventNextValue(art, 10, 10, 0) == 1000 && Y::hallEventNextValue(art, 60, 50, 10) == 110);
 	EXPECT(Y::hallEventCollects(540, 540, 1080, 0) && Y::hallEventCollects(1019, 540, 1080, 0));
 	EXPECT(!Y::hallEventCollects(1020, 540, 1080, 0)); // evening events draw nobody
+	// Event Center status machine, EventCenter.t2p EnterTenant 0x1000bba0 / LeaveTenant
+	// 0x1000bcb0 (disassembled; capacity 80 -> half = 40) and the idle FUN_1000bec0.
+	// Oracle hkC2-ec3 day 1/2: 30 with the first visitors, 31 while some are inside,
+	// reset to 30 at the 10:00 open idle even with 3 / 7 inside, 10 after close.
+	EXPECT(Y::hallStatusOnEnter(30, 1, 80) == 31);
+	EXPECT(Y::hallStatusOnEnter(31, 39, 80) == 31 && Y::hallStatusOnEnter(31, 40, 80) == 32);
+	EXPECT(Y::hallStatusOnEnter(32, 80, 80) == 32 && Y::hallStatusOnEnter(10, 1, 80) == 10);
+	EXPECT(Y::hallStatusOnLeave(31, 0, 80) == 30 && Y::hallStatusOnLeave(32, 0, 80) == 30);
+	EXPECT(Y::hallStatusOnLeave(10, 0, 80) == 10);
+	EXPECT(Y::hallStatusOnLeave(32, 40, 80) == 31 && Y::hallStatusOnLeave(32, 41, 80) == 32);
+	EXPECT(Y::hallStatusOnLeave(31, 5, 80) == 31);
+	EXPECT(Y::hallStatusReset(540, 600) && Y::hallStatusReset(547, 600) && !Y::hallStatusReset(548, 600));
+	EXPECT(Y::hallStatusReset(600, 600) && Y::hallStatusReset(607, 600) && !Y::hallStatusReset(608, 600));
+	// UpdateCommercialEstimate: hourly (first 8 minutes), at open and at close, from the
+	// open minute on. The oracle reads 0 before 09:00 and 1 from then (no visitors), and 300
+	// at 10:11 with 3 visitors: CalcProfitEstimate = (in x n / 100) x 70 / out, in 200, out 1.
+	EXPECT(!Y::hallEstimateIdle(539, 540) && Y::hallEstimateIdle(540, 540) && Y::hallEstimateIdle(600, 540));
+	EXPECT(Y::hallEstimateIdle(603, 540) && !Y::hallEstimateIdle(612, 540) && Y::hallEstimateIdle(660, 540));
+	EXPECT(Y::profitEstimate(0, 200, 1) == 1 && Y::profitEstimate(1, 200, 1) == 140);
+	EXPECT(Y::profitEstimate(3, 200, 1) == 300 && Y::profitEstimate(70, 200, 1) == 300);
 	const HallEventDef rock = hallDef("PlConcert.t2p");
 	EXPECT(rock.openTime == 1080 && rock.bookingDays == 1 && rock.monthMask == 0xFFFu);
 
@@ -7399,6 +7419,26 @@ static void testYootOnlyPrototypeGate()
 // saves its party with its occupied state; the reload restores the stay, so
 // the room is still occupied, and an old save (no stay attributes) still
 // checks the room out.
+// Hotel guest call odds (Singleroom.t2p status 30, 0x100136b0): one roll in 30 on
+// each 8-minute idle inside the 300-minute window from the room's open minute
+// (17:00 -> 37 or 38 idles), so a clean eligible room is called with 71-72%.
+// Measured on hawaii_g3_boatdeck (6 seeds, maids cleaning) OpenSky calls 77% (day 1)
+// and 73% (day 2) of its eligible rooms, the original 9 of 11 (82%) on day 1.
+static void testYootHotelCallOdds()
+{
+    int lo = 99, hi = 0;
+    for (int phase = 0; phase < 8; ++phase)
+    {
+        const int n = OT::Yoot::hotelCallIdles(1020, phase);
+        lo = std::min(lo, n); hi = std::max(hi, n);
+    }
+    EXPECT(lo == 37 && hi == 38);
+    const double c37 = OT::Yoot::hotelCallChance(37), c38 = OT::Yoot::hotelCallChance(38);
+    EXPECT(c37 > 0.714 && c37 < 0.715);
+    EXPECT(c38 > 0.724 && c38 < 0.725);
+    EXPECT(OT::Yoot::hotelCallChance(0) == 0.0);
+}
+
 static void testYootHotelStaySaveReload()
 {
     OT::Yoot::PeopleType a, b;
@@ -7589,6 +7629,7 @@ int main()
 	testSimLessContainers();
 	testYootOnlyPrototypeGate();
 	testYootHotelStaySaveReload();
+	testYootHotelCallOdds();
 	testOspDibValidation();
     if (g_failures > 0)
     {

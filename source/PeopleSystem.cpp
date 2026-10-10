@@ -1084,6 +1084,8 @@ void PeopleSystem::pushOut(YootVisitor * v)
 	}
 	v->prevTenant = from;
 	v->inside = nullptr;
+	if (Item::EventCenter * hall = dynamic_cast<Item::EventCenter *>(from))
+		hall->status = Yoot::hallStatusOnLeave(hall->status, (int)visitorsIn(hall).size(), hall->capacity()); // hook 0x1000bcb0
 	if (!v->dest && !v->returns.empty())
 	{
 		v->dest = v->returns.back().first;

@@ -1313,3 +1313,97 @@ Not resolved: where the original's target (`uVar1 = *(sub-plugin + 4)` in FUN_10
 10 -> 30 branch) differs from OpenSky's `hallValue` / `unkDC`. Goldens: none touched.
 Runs: `hkC3-ec` (import fix, before the collect change) and `hkC3-ec2` (after). Both
 OpenSky-only (`--skip-oracle`) on the hkC2-ec3 oracle; no oracle instances were started.
+
+#### 7.6.H WP8 close-out of the remaining measurable gaps
+
+Lab tree `wp8`, runs `wp8-*` under `/lab/out/parity/` (OpenSky only, on copies of the existing
+oracle outputs `gp2-hotel-hawaii`, `hkC2-ec3`, `gp2-blackout4`; the originals are untouched).
+
+**Hotels: the gap was a regression, not the call path.** The 1-in-30 roll and the estimate gate
+that 7.6.B could not find in `FUN_10012d50` are in the room's status function itself.
+Singleroom.t2p `0x100136b0`, case status 30 (disassembled with objdump, Plugins/Singleroom.t2p):
+the first minutes of the day add +5 (+20 from estimate 70) to the people estimate
+(`IncPeopleEstimate`), the first 8 minutes of each hour run `UpdateResidencialEstimate`, then
+`estimate > 200` (`cmp [esi+0x90],0xc8`, 0x10013777), `WithinMinutes(open, open + 0x12c)`
+(0x10013794) and `rand() % 30 == 0` (0x100137a3..af) gate the call (`thunk 0x1000129e` =
+`FUN_10012d50`). `roomIdle` already has exactly these gates, so the call path matches.
+With an idle every 8 minutes a room has 37 or 38 rolls in 17:00-22:00, so an eligible clean
+room is called with 71.5% to 72.4% (`Yoot::hotelCallChance`). Measured on
+`hawaii_g3_boatdeck` (6 seeds, 3 days) the share of eligible rooms OpenSky calls is 57% on
+day 0 (original 9 of 18 = 50%), 77% on day 1 (56 of 73; original 9 of 11) and 73% on day 2
+(40 of 55). The "half of the eligible rooms" figure came from the number of rooms that were
+eligible, not from the roll:
+- `git show b60fa72:source/Item/Hotel.cpp` still has the maid's arrival and cleaning step
+  (`Housekeeper` reaches the room, 30 minutes, `roomState = kClean`). The merge `ca55195`
+  dropped it from `Hotel::addPerson` / `Hotel::advance` and kept only `yootSendHousekeeper`. A
+  dispatched maid walked to the room and did nothing, `SpecialSystem::housekeepingTick` never
+  saw the trip finish (`maidsOut` stuck at 1-2 of 6) and no dirty room was ever cleaned.
+  Debug counters on 6 seeds: eligible clean rooms at 16:40 on day 1 / day 2 were 7.7 / 1.7 on
+  average (rooms checked out dirty at 11:00 stayed dirty for the rest of the run); the original
+  cleans its same-floor rooms every day (4 on day 1, 5 on day 2).
+- **Fix:** `Hotel::addPerson` starts the cleaning for a `Housekeeper`; `Hotel::advance` makes
+  the bed after 0.5 h (`kClean`), removes and deletes the maid and clears `housekeeper` so the
+  next stay can be cleaned too (YootTower items only, `prototype->yoot`).
+
+| 6 seeds, 3 days | Original | Before | After |
+|---|---|---|---|
+| eligible clean rooms at 16:40, day 1 / day 2 (mean) | about 11 / 6 | 7.7 / 1.7 | 12.2 / 9.2 |
+| rooms called, day 1 / day 2 (mean) | 9 / 2-3 | 6.0 / 1.3 | 9.3 / 6.7 |
+| funds change day 1 (original 37,100) | | 41.5k-55.6k, mean 47.7k | 40.5k-55.4k, mean 47.7k |
+| funds change day 2 (original 53,300) | | 23.7k-49.8k, mean 33.7k, 3 of 6 outside tolerance | 39.3k-60.4k, mean 49.2k, 6 of 6 inside |
+| funds_delta within tolerance | | 4/4 on 3 seeds, 3/4 on 3 seeds | 4/4 on all |
+
+`tests/sim/sim_visitors_yoottower.json` was regenerated (its hotel rooms share a floor with the
+Housekeeping, so the maid now cleans them). Test `testYootHotelCallOdds` pins the window,
+the 37/38 rolls and the 71.5% / 72.4% chance. Room estimates (280-300 against 248-276, and
+`hotel_double@14,5` 287 against 150) are not changed: the original recomputes the estimate
+hourly from the guests' current estimates and keeps +0x8c between stays
+(`UpdateResidencialEstimate` 0x10060e20, `IncPeopleEstimate` 0x609e0, initial 300 at
+`InitTenant` 0x5e700), while OpenSky recomputes once a day in `judgeDaily`; the traffic range
+of the entrance (150 per step) also differs for `14,5`. Open.
+
+**Event Center.** The README figures were stale: on the current tree (five seeds,
+`tokyo_g3_venues`, 3 days, hkC2-ec3 oracle) the audience is 65 / 71 / 79 / 53 / 84 on day 1
+(original 70) and 128 / 139 / 146 / 128 / 152 on day 2 (original 143), identical with and
+without this change (baseline tree `wp8base`). The status and the estimate were real gaps and
+are fixed from the plugin disassembly (EventCenter.t2p, vtable at 0x10013b18):
+- `EnterTenant` hook `0x1000bba0`: with a booking and status != 10 the visitor is counted;
+  status 30 becomes 31, and status 31 becomes 32 once `inside >= capacity / 2` (signed halving,
+  capacity 80). `LeaveTenant` hook `0x1000bcb0`: inside 0 and status != 10 gives 30; status
+  32 with `inside <= capacity / 2` gives 31. So the "full" state is 32, and 31 means "some
+  inside", which the oracle shows from the first visitors (hkC2-ec3 day 1: 30 at 611 with 3
+  inside, 31 at 658 with 10 inside).
+- `FUN_1000bec0` resets the booked hall to status 30 in `[open - 60, open - 52)` and again in
+  `[open, open + 8)` even with visitors inside; the oracle reads 30 with 3 inside at 10:11 on day 1 and
+  with 7 inside at 10:21 on day 2. `Yoot::hallStatusReset`.
+- `UpdateCommercialEstimate` runs on the plugin idle at or after the open minute in the first 8
+  minutes of every hour, in `[open, open + 8)` and at close. `CalcProfitEstimate`
+  (0x10061410) is `(inMoney x customers / 100) x 70 / out`, with inMoney 200 units and out 1
+  unit for the Event Center: 140 per visitor, 300 from three. The oracle reads 0 before 09:00,
+  1 with no visitors and 300 after the first three. Fix: `VenueSystem::hallEntered`,
+  `PeopleSystem::pushOut`, `eventCenterTick` and the pure `Yoot::hallStatusOnEnter`,
+  `hallStatusOnLeave`, `hallStatusReset`, `hallEstimateIdle` (tests in the hall block of the
+  yoot section). OpenSky run (seed 1, day 2): 30 -> 31 at 670 with 24 visitors, 32 from 730
+  with 51 inside, back to 31 at 850, estimate 300 from 10:10, 1 on an empty day.
+- Still open: the first-run target (`*(slot + 4)` of the month slot in `FUN_1000dbb0`) and the
+  evening events.
+
+**Population detail (not closed).**
+- *Hawaii condo residents, 55 against 54.* Both games hire the 20 condos at 20:00 on day 0 and
+  both end with partial tables, because `T2Pool::Find` only checks that each member has one
+  match while two of the three Condo members share silhouette 34-50. The original's snapshot
+  `gp2-hotel-hawaii` snap_023 (21:47) has 14 condos with 3 residents and 6 with 2 (= 54). Two
+  fresh oracle runs of the same tower (`wp8-or1`, `wp8-or2`, 0.97 day) end with the same 14 x 3
+  + 6 x 2 = 54 (the 20:59 snapshots differ: 13/4/3 and 14/3/3 condos with 3/2/1 residents, and
+  the single-resident condos are filled by 21:46), so the original is deterministic here.
+  OpenSky's hires are 15 with 3 and 5 with 2 (= 55). The silhouette and option checks were
+  compared with the disassembly (`CheckSilhouetteType` 0x1004e590, `CheckSilhouetteOptionType`
+  0x1004e630, `Check` 0x1004e4c0) and match; so does `Find`/`Call` of the type array and the
+  season factors (absent in the shipped worlds). The econo adjustment of
+  `CollectEmployeeFromPool` (`econo - 3 + priceIndex`) is applied in `callGuests` but not in
+  `hireBelong`; applying it left the Hawaii run unchanged to the dollar, so it was not kept.
+  The remaining difference is in the pool contents at 20:00 (how many silhouette 8-25 and
+  34-50 types of demand 3 are in the zone), not in a rule I could find.
+- *Coffee shop before the blackout (`tokyo_g4_blackout`).* The estimate now reaches 7 at
+  10:10 as the original's does (10:08). Customers are 10 at 09:40 and 20 at 10:10 against 15 at
+  09:20 and 31 at 10:08: OpenSky's first customers arrive about 40 minutes later. Not traced.
