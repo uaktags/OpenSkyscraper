@@ -107,6 +107,19 @@ namespace OT
 		/// `peopleEstimateOut` receives the stored mean (tenant+0x8c).
 		int residentialEstimate(const ResidentialInputs & in, int * peopleEstimateOut = nullptr);
 
+		/// Guest-room plugins (Singleroom.t2p ChangeStatusOnIdle 0x100136b0,
+		/// Twinroom / Suiteroom 0x1000d0d0): the room's own people estimate
+		/// (tenant+0x8c) grows by 20 (5 below an estimate of 70) in the first
+		/// 8 minutes of the day while the room is clean (status 30). IncPeopleEstimate
+		/// 0x609e0 clamps it to 0..300.
+		int roomNightBonus(int currentEstimate);
+		int incPeopleEstimate(int peopleEstimate, int delta);
+		/// Statuses that run UpdateResidencialEstimate on an idle: 30, 32 and
+		/// 33 in the first 8 minutes of every hour (the call sites at 0x1001374c,
+		/// 0x100138fd, 0x10013978), 31 on the arrival of the guests (0x100137fd).
+		/// 31 is reported by the caller, which knows when the guests are in.
+		bool roomEstimateDue(int status, int minuteOfDay);
+
 		enum class Decision { MoveOut, Grow, Stay };
 		/// T2Tenant::DecideResidencialEstimation 0x10061380: < 70 move out,
 		/// > 200 grow, otherwise grow on every 5th call (shared counter).

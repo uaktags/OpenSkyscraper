@@ -262,6 +262,8 @@ namespace OT
 		void hotelTick(long long now);
 		void transportTick(long long now);
 		void roomIdle(Item::Hotel * room, int minute, long long now);
+		/// T2Tenant::UpdateResidencialEstimate for a guest room (belong list = the party).
+		void roomEstimate(Item::Hotel * room, const std::vector<YootVisitor *> & party);
 		void deskIdle(Item::FrontDesk * desk, long long now);
 		bool callGuests(Item::Hotel * room, HotelStay & s, Item::FrontDesk * desk, long long now);
 		void leaveParty(YootVisitor * v);

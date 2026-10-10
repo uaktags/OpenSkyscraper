@@ -1407,3 +1407,111 @@ are fixed from the plugin disassembly (EventCenter.t2p, vtable at 0x10013b18):
 - *Coffee shop before the blackout (`tokyo_g4_blackout`).* The estimate now reaches 7 at
   10:10 as the original's does (10:08). Customers are 10 at 09:40 and 20 at 10:10 against 15 at
   09:20 and 31 at 10:08: OpenSky's first customers arrive about 40 minutes later. Not traced.
+
+#### 7.6.I WP8b second round on the measurable gaps
+
+Lab tree `wp8b` (runs `wp8b-*`, `cs0`-`cs2`, `ev*` under `/lab/out/parity/`, all OpenSky-only on copies of the
+existing oracle outputs except `wp8b-ev` and `wp8b-ev3`, which are new oracle runs). `cs0` is the HEAD build
+(`wp8b0`), `cs1`/`cs2` the build with this round's changes; 4-6 seeds, 3 days. The lab container was killed once
+by the host (exit 137) during `wp8b-ev3`; the run was repeated from the start.
+
+**I1 Hotel room estimate (hourly recompute, target 1).** Root cause: in the YootTower economy the only code that
+evaluated a tenant's estimate, `JudgeSystem::judgeDaily` (the 04:59 SimTower judge), is skipped
+(`Game::advance`: `!yootEconomy`). A Hawaii hotel room therefore kept `yootEstimate` 0 for the whole run ("not
+evaluated", which `roomIdle` treats as eligible, and the dumps show no attribute at any tick of `wp8b-base`). The
+older "recomputes once a day" description of 7.6.H was not what the code did. The original re-evaluates in the
+room's own status function (`Singleroom.t2p` 0x100136b0; `Twinroom` / `Suiteroom` have the same structure at
+0x1000d0d0 and call sites 0x1000d123, 0x1000d16c, 0x1000d21d, 0x1000d31b, 0x1000d396, `IncPeopleEstimate` at
+0x1000d153; thunks resolved through the import table: 0x10015e0e = `T2Tenant::UpdateResidencialEstimate`
+0x10060e20, 0x10015e08 = `IncPeopleEstimate` 0x609e0, 0x10015dde = `UpdatePatternIndex`). Singleroom call sites
+(`[edi+0xc]` is the minute of the day): status 9 at 0x10013703 (first evaluation, then status 30); status 30 at
+0x10013733 `IncPeopleEstimate(+5, +20 from an estimate of 70)` in the first 8 minutes of the day and 0x1001374c
+`UpdateResidencialEstimate` in the first 8 minutes of every hour, before the `> 200` call gate at 0x10013777;
+status 31 at 0x100137fd (the first guest in: 31 to 32); status 32 at 0x100138fd and 33 at 0x10013978 in the first
+8 minutes of every hour; 34..37 never. The guests (the belong list) give the mean `CalcCurrEstimate`, an empty room
+keeps `+0x8c` (`IncPeopleEstimate`, 300 at `InitTenant`).
+- **Fix:** `PeopleSystem::roomEstimate` (YootHotelGuests.cpp) calls `JudgeSystem::yootEstimate` (now public, with the
+  party's `yootCurrentEstimate` as the belong list) at those points; pure helpers `Yoot::roomNightBonus`,
+  `incPeopleEstimate`, `roomEstimateDue` (YootRules). Test `testYootRoomEstimateHourly`.
+- **Result, `gp2-hotel-hawaii` oracle, 6 seeds, mean estimate of the 18 rooms at 16:40:** day 1 original 263 (11 of 18
+  below 300), OpenSky 281 (10-13 below 300); day 2 original 243 (18 of 18), OpenSky 276 (14-17); before the fix
+  OpenSky had no estimate at all (the comparison skipped it: `estimate` 73/76 within tolerance, now 134-139/148 with the
+  rooms compared). `hotel_suite@-10,5` reads 150 in both games (traffic range 1 x noise 150); `hotel_double@14,5` reads 150
+  in the original from day 1 and 280-300 in OpenSky (the traffic map gives range 0 at its entrance; the T2TrafficInfo cell
+  geometry, thresholds 25 / 125 / 250, decay 31/32 and `Pass` semantics were re-read against 0x1006b5d0..0x1006b890 and
+  match, so the booked legs differ, not the map). Guest rooms stay 15-30 points above the original (guest stress during
+  the stay is lower in OpenSky).
+- **Side effects:** the one room the original excludes (`-10,5`, 150) is now excluded here too; check-ins per day,
+  6 seeds: original 9 / 11 / 2-3, before 10.3 / 9.3 / 6.3, after 11.2 / 8.5 / 5.8; funds change day 1 (original
+  37,100) 48.9k -> 49.8k mean, day 2 (53,300) 49.5k -> 42.5k mean (4 seeds, 4/4 funds checks inside tolerance both
+  times). `tokyo_g2_hotel_subway` (`gp2-hotel-tokyo`): the rooms never take guests in either game, so the recompute is
+  invisible there (all 37 rooms 300 in both on every day).
+- **Open (found, not fixed):** the same guard leaves office, condo and apartment estimates unevaluated in the YootTower
+  economy (offices keep the fixture's 300, condos stay at 0), so `isAttractive` / `yootKeepsTenants` never bite. The
+  original evaluates them in the Office / Condo plugins (Office.dll 14784, 14802, 14933, 15497).
+
+**I2 Event Center (target 2).** The first-run target is settled, the evening events are now measured and fixed.
+- *First-run target.* The booking entry (0x1c bytes, built in the hall object's constructor `FUN_1000cd60`) takes
+  `*(entry + 4) = *(subPlugin + 0xdc)` (HEDF `unkDC`, 1000 for PlArt) and `FUN_1000dcb0` rewrites it after a run
+  (`unkDC` after a flop, else medium + 2 x good). `FUN_1000dc70` only calls `CollectCustomer(doc, target - walking -
+  inside)` while that is positive, and the pool call is capped by the tenant (`CollectCustomerFromPool` 0x5ef70:
+  capacity - inside - walking; the iterator reads the float rates +0x2c, not the +0x28 quotas the integer overload
+  edits), so the target gates and never caps. `Yoot::hallCollectRoom` ports that exactly (`eventCenterTick` used
+  `min(capacity, target)`); no change on this fixture (the target is above 80), test in the hall block.
+- *Audience per day against `hkC2-ec3` / `wp8b-ev3` (cumulative since the booking, original 70 / 143 / 251):*
+  OpenSky 6 seeds day 1 62-77 (mean 68), day 2 131-160 (mean 141), day 3 195-223 (mean 207).
+  Days 1 and 2 are within 3%; day 3 is 17% low (the original grows 70, +73, +108 through the duplicates of
+  satisfied leavers; OpenSky +62..+79, +55..+83). Not traced further.
+- *Bookings run bookingDays days, not bookingDays - 1.* New oracle run `wp8b-ev3` (`tokyo_g3_venues`, 4 days): the 3-day
+  Art Exhibition was open on days 1, 2 and 3 (7.6.C3 inferred two). New fixture `tokyo_g3_evening` (towers.py, Rock
+  Live = `PlConcert.t2p`, 18:00-21:00, every month, bookingDays 1; run `wp8b-ev`, 3 days): the original opens the hall
+  on day 1 only, status 30 from 17:00 (read at 17:19) until 21:00 (10 at 21:14), zero visitors (the collect window
+  of `CollectCustomer` ends at the tenant's close - bind - 60 = 17:00, so evening events draw nobody), estimate 1, and
+  the close settles +15,000 (cost 25,000 - outMoney 10,000; funds 8,014,600 -> 8,029,600 around 21:00). OpenSky never
+  imported a 1-day booking (`b.days > 1`) and left the hall closed all three days. **Fix:** `Bld::toTowerXml` imports
+  `span = bookingDays` for any booking of one day or more; the test block "Event Center booking" now runs PlArt
+  (span 3) and PlConcert (span 1). After the fix OpenSky: status 30 17:10-20:40, 0 visitors, estimate 1, +15,000 at
+  21:00 (8,010,900 -> 8,025,900), Art Exhibition days 1-3 open.
+
+**I3 Hawaii condos, 55 against 54 (target 3).** Not closed; the difference is narrowed to one pool draw.
+- The pool at 20:00 is identical: zone 5 of demand list 3 holds the same 200 types in both games (OpenSky dump at
+  19:59 against the original's 20:12 snapshot plus the removed types; scratch scripts in the lab's `/lab/out/` compared the `yootPool` attribute with the `.bld` pool). Silhouette / option / econo rules match (7.6.H).
+- Arithmetic: with econo 4 (+ price index) only 15 types of silhouette 25 (8-25 group, econo 4 or 5) exist against
+  55 of 34-50; 20 condos need 20 of the former, so a pool that nobody else touches gives exactly 15 x 3 + 5 x 2 = 55 (the
+  partials come from `T2Pool::Find` relaxing the econo for members 1 and 2, then `Call` failing). OpenSky returns 15 / 5
+  on every seed (12 seeds).
+- The original at 20:12 has all 15 silhouette-25 types gone and 41 of the 34-50 group (one more than the condos' 40),
+  yet only 14 condos got a third resident. So one silhouette-25 type and one (35, econo 4) type went to callers other
+  than the condos before the last condo hired (tenants with demand -1 or demand 3 customer members that are open at
+  20:00: Cocktail, DutyFree, Aloha, ...). In the original each tenant idles on `T2TenantArray::DispatchIdle`
+  (0x10061730): the tenant whose ordinal (used slots before it in its 128-slot array) & 31 equals the dispatch counter
+  (T2.exe 0x41dd.. calls `T2TenantArrayList::DispatchIdle` once per 15-second tick), so a tenant idles once per 8
+  minutes in minute `origin + (ordinal % 32 + 1) / 4`, and the 20 condos hire across 20:00-20:07 interleaved with
+  the other tenants. OpenSky hires all condos on the first tick of the hour (`YootCondo::advance`, no phase) and
+  gives the other tenants `(x * 31 + y * 17) % 8`.
+- I implemented that schedule as an experiment (the `.bld` slot ordinal carried as `yootSlot` through `BldLoader`,
+  `Game::yootIdlePhase` with the load minute as origin, applied to tenants, venues, rooms, desks, condos and
+  offices): Hawaii stayed 15 / 5 on four seeds (the extra draws are random picks from the original's own `rand()`
+  sequence, which cannot be reproduced), and it moved nothing measurable elsewhere, so it was reverted. The formula
+  above is the finding; applying it needs the sub-minute order within a tick as well.
+
+**I4 Coffee shop before the blackout (target 4).** The "40 minutes later" was one seed. `tokyo_g4_blackout`, day 0,
+`yt_coffee@0,-3` (opens 08:00; the original reads 15 customers at 09:20 and 31 at 10:08), 8 seeds: first customer
+08:28-09:40 (median about 08:55), 10:08 count 16-36 (mean 23) before this round. The trace (debug build, per idle:
+staff 2/2 in from 08:13, `collectCustomers` rolls the pool at the PLDF 30% x DPDF weekday 70%) shows only the roll
+sequence: a draw per 8 minutes, a success every few idles, then 15-16 people at once (rate 0.4 x 16 + 0.6 x 16).
+One real arithmetic difference was found in that roll:
+- `UT2Utils::Float2Int` (0x749f0) multiplies the fraction by 10 on the x87 stack (`fild` / `fsubr` / `fmul`
+  0x100880a8 = 10.0 / `_ftol`, so double precision), while OpenSky multiplied in float. The rate of 70 percent is
+  0.699999988 (`percent * 0.01f`), 6 tenths in the original and 7 in float (0.9f: 8 against 9). The coffee shop's
+  weekday pool roll is therefore 60%, not 70%; the 30% place rate is 0.29999998 on both sides (20%). `float2Int`,
+  `float2IntRng` and `memberRate` (`T2TenantMemberDef::Initialize` 0x63000: ((float)percent x units) x 0.01 on the
+  stack, one store) now evaluate in double. Test in the engine-helper block of the tenant test.
+- **Result (customers of all `yt_*` shops at the end of each day, original / OpenSky before / after, 4 seeds):**
+  `tokyo_g2_hotel_subway` 701 / 769 / 748, 1152 / 1246 / 1159, 1976 / 1770 / 1862; `hawaii_g3_boatdeck` 490 / 570 /
+  548, 548 / 712 / 660, 876 / 985 / 1005; `tokyo_g3_venues` 441 / 484 / 446, 566 / 600 / 538, 683 / 755 / 771;
+  `tokyo_g4_blackout` (day 0, 61) 61 / 63. Sum of absolute errors over the nine day-end totals of the three towers: 870 before, 588 after.
+  Coffee shop first customer after: 08:32-10:49 (3 of 8 seeds have none by 10:08), so the original's single sample
+  (15 at 09:20) is in the early tail; a larger oracle sample of one shop's first-customer minute would be needed to
+  say more. Goldens `sim_people_yoottower` and `sim_visitors_yoottower` were regenerated (`UPDATE_GOLDEN=ON`, 2000
+  ticks): the roll probabilities and the room estimate draws changed the random sequence.

@@ -171,15 +171,19 @@ approximate or missing (see `doc/yoottower/game-parity.md` for the full audit):
   cell, not per tenant), the kite in Kegon, and the Billboard countdown differ from or are not confirmed
   against the original; clouds, kite and dolphins have not been compared pixel for pixel.
 - **Event Center:** booked events import from and export to `.bld`, open and settle on the original's
-  days and hours, and now show the original's status chain (30 empty, 31 some inside, 32 from half the
-  capacity) and its hourly profit estimate (300 once three visitors have paid). The audience matches the
-  oracle on the current tree (five seeds: 53-84 on day 1 against 70, 128-152 on day 2 against 143). Not
-  closed: the target of the first run (the original's `*(slot + 4)`), and the evening events stay unobserved.
-- **Hotels:** after restoring the maids' cleaning step (lost in the YootTower merge) OpenSky fills 73-77% of
-  the eligible rooms against the original's 82% on day 1, and day-2 funds are back inside tolerance on all six
-  seeds; room estimates still run higher than the original's (280-300 against 248-276).
-- **Population detail:** Hawaii has one condo resident more than the original (55 vs 54) and a few more
-  daytime visitors; a coffee shop's pre-blackout demand is below the original's.
+  days and hours (a booking runs bookingDays days from the day after the load, so the one-day evening Rock Live
+  now opens on day 1 with no audience and the +15,000 settlement, as in the oracle), and show the original's status
+  chain and hourly profit estimate. The audience matches the oracle on days 1 and 2 (six seeds: mean 68 against 70
+  and 141 against 143) and runs 17% low on day 3 (195-223 against 251). The first-run target is settled (the
+  slot's +4 is the event's `unkDC` and only gates the collection).
+- **Hotels:** after restoring the maids' cleaning step OpenSky fills 73-77% of the eligible rooms against the
+  original's 82% on day 1, and rooms now re-evaluate their estimate hourly as the plugin does (mean 281 against
+  263 on day 1, 276 against 243 on day 2; guest stress is lower here, and `hotel_double@14,5` misses the original's
+  traffic-range penalty). Offices, condos and apartments are still not re-evaluated in the YootTower economy.
+- **Population detail:** Hawaii has one condo resident more than the original (55 vs 54): the pool is identical
+  and OpenSky's 15 full condos are the arithmetic ceiling; the original lost one pool draw to another tenant
+  during the hire minutes (per-tenant idle slots, see `doc/yoottower/game-parity.md` 7.6.I). Shop customers now
+  use the original's x87 `Float2Int` (a 70% roll is 60%) and run about 3.5 points closer on average to the oracle's day totals.
 
 What is being tested?
 ---------------------

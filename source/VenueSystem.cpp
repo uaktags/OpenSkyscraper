@@ -525,12 +525,16 @@ void VenueSystem::eventCenterTick(Item::EventCenter * e, int minute, int day)
 		// (hallEntered / PeopleSystem::pushOut) move it between 30, 31 and 32.
 		const bool idle = minute % Yoot::kTenantIdleMinutes == e->idlePhase;
 		if (e->lastOpenDay == day && (e->status < 30 || (idle && Yoot::hallStatusReset(minute, open)))) e->status = 30;
-		// FUN_1000dc70 on every idle while open: CollectCustomer(target -
-		// walking - inside) with the hall event's table.
+		// FUN_1000dc70 on every idle while open: CollectCustomer(doc, target -
+		// walking - inside) when that is positive. The count only gates: the
+		// pool call is capped by the tenant capacity (CollectCustomerFromPool
+		// 0x5ef70: capacity - inside - walking) and the member rates, so the
+		// first run's target (the booking entry's +4 = the sub-plugin's +0xdc,
+		// 1000 for PlArt) never limits the audience.
 		if (e->status >= 30 && reachable(e) && Yoot::hallEventCollects(minute, tOpen, tClose, stayOf(e, 0)) &&
-		    minute % Yoot::kTenantIdleMinutes == e->idlePhase && std::min(cap, e->target) - e->users() - e->walking > 0)
+		    minute % Yoot::kTenantIdleMinutes == e->idlePhase && Yoot::hallCollectRoom(e->target, cap, e->users(), e->walking) > 0)
 			if (const YootTenantDef * d = game->eventSystem.people.venueDef(e, e->today, def.customerTableID))
-				e->walking += game->eventSystem.people.collectVenue(e, *d, std::min(cap, e->target) - e->users() - e->walking,
+				e->walking += game->eventSystem.people.collectVenue(e, *d, Yoot::hallCollectRoom(e->target, cap, e->users(), e->walking),
 					Yoot::absoluteMinute(game->time.absolute));
 	}
 	else if (e->status >= 30)

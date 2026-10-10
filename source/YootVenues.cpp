@@ -186,6 +186,12 @@ namespace OT
 			return hallEventFlop(def, attendance) ? def.unkDC : 2 * good + medium;
 		}
 
+		int hallCollectRoom(int target, int capacity, int inside, int walking)
+		{
+			if (target - inside - walking <= 0) return 0;
+			return std::max(0, capacity - inside - walking);
+		}
+
 		bool hallEventCollects(int minute, int tenantOpen, int tenantClose, int customerUnit)
 		{
 			return minute >= tenantOpen && minute < tenantClose - customerUnit - 60;

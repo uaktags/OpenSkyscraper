@@ -10,8 +10,11 @@
  *   desk queue                Front.t2p FUN_10013570: FUN_10014000 (stress)
  *                             then FUN_10013ce0 twice (check-in / -out)
  *   outing                    FUN_10012e80 / FUN_10012f60
- * Simplifications: the room estimate is JudgeSystem's (UpdateResidencial-
- * Estimate), not the +5/+20 night bonus of an empty room; a guest party that
+ *   room estimate            UpdateResidencialEstimate 0x10060e20 at status 9, on
+ *                             arrival (31 -> 32) and in the first 8 minutes of
+ *                             every hour in statuses 30, 32, 33; +5/+20 night
+ *                             bonus (IncPeopleEstimate 0x609e0) while clean
+ * Simplifications: a guest party that
  * gives up while still walking leaves the tower at once; stays are not
  * saved (a reloaded occupied room is checked out). */
 #include "PeopleSystem.h"
@@ -169,6 +172,20 @@ void PeopleSystem::roomIdle(Item::Hotel * room, int minute, long long now)
 			room->spriteNeedsUpdate = true;
 			return;
 		}
+		if (room->roomState == Item::Hotel::kClean)
+		{
+			// Status 9 evaluates once; status 30 adds the night bonus to the
+			// people estimate in the first 8 minutes of the day and re-evaluates
+			// in the first 8 minutes of every hour (Singleroom 0x100136b0).
+			const std::vector<YootVisitor *> none;
+			if (room->yootEstimate == 0) roomEstimate(room, none);
+			else
+			{
+				if (minute < Yoot::kTenantIdleMinutes)
+					room->yootPeopleEstimate = Yoot::incPeopleEstimate(room->yootPeopleEstimate, Yoot::roomNightBonus(room->yootEstimate));
+				if (Yoot::roomEstimateDue(30, minute)) roomEstimate(room, none);
+			}
+		}
 		if (room->roomState != Item::Hotel::kClean || room->lobbyRoute.empty()) return;
 		// 30 -> 31: estimate > 200, 17:00..22:00, one in 30, and an open
 		// linked desk (FUN_10012d50).
@@ -218,9 +235,11 @@ void PeopleSystem::roomIdle(Item::Hotel * room, int minute, long long now)
 			}
 		}
 		if ((hour == 23 && std::rand() % 5 == 0) || within(minute, 60, 68)) s.status = 33;
+		if (Yoot::roomEstimateDue(32, minute)) roomEstimate(room, s.party);
 		break;
 	case 33:
 		if ((within(minute, 360, 600) && std::rand() % 20 == 0) || hour == 10) s.status = 34;
+		if (Yoot::roomEstimateDue(33, minute)) roomEstimate(room, s.party);
 		break;
 	case 34:
 		if (hour == 11 || std::rand() % 20 == 0)
@@ -241,6 +260,14 @@ void PeopleSystem::roomIdle(Item::Hotel * room, int minute, long long now)
 	room->spriteNeedsUpdate = true;
 }
 
+void PeopleSystem::roomEstimate(Item::Hotel * room, const std::vector<YootVisitor *> & party)
+{
+	std::vector<int> estimates;
+	for (const YootVisitor * v : party) estimates.push_back(v->yootCurrentEstimate());
+	room->yootEstimate = game->judgeSystem.yootEstimate(game, room, &estimates);
+	room->evaluation = room->yootEstimate / 3.0;
+}
+
 void PeopleSystem::roomEnter(Item::Hotel * room, YootVisitor * v)
 {
 	std::map<Item::Item *, HotelStay>::iterator it = stays.find(room);
@@ -254,7 +281,12 @@ void PeopleSystem::roomEnter(Item::Hotel * room, YootVisitor * v)
 	arrived(v, room, true, kNoLeave);
 	v->stayEnd = -1;
 	v->state = Person::kHome;
-	if (it->second.status == 31) it->second.status = 32;
+	if (it->second.status == 31)
+	{
+		// Singleroom 0x100137db: the first guest in moves 31 to 32 and re-evaluates.
+		it->second.status = 32;
+		roomEstimate(room, it->second.party);
+	}
 	room->roomState = Item::Hotel::kOccupied;
 	room->spriteNeedsUpdate = true;
 }

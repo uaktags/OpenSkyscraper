@@ -168,7 +168,10 @@ namespace OT
 		{
 			if (!(value > 0.0f)) return 0;
 			const int whole = (int)value;
-			const int tenths = (int)((value - (float)whole) * 10.0f);
+			// UT2Utils::Float2Int 0x749f0 subtracts and multiplies on the x87 stack (double
+			// precision), so 0.7f (0.69999999) has 6 tenths and 0.9f has 8; float arithmetic
+			// would round the product up to 7.0 / 9.0.
+			const int tenths = (int)(((double)value - (double)whole) * 10.0);
 			if (tenths == 0) return whole;
 			return whole + ((rng() % 10) < tenths ? 1 : 0);
 		}

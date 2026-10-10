@@ -1165,12 +1165,13 @@ namespace Bld {
 				// find the booked id in the def's sub-plugin list, so the hall has no
 				// event (EventCenter.t2p LoadExtraData 0x1000e1f0). FUN_1000dcb0 restores
 				// the booking from the coming month's slot at the next 00:00. The import
-				// mirrors that: closed on the load day, then bookingDays - 1 days.
+				// mirrors that: closed on the load day, then bookingDays days (oracle: the
+				// 3-day Art Exhibition was open on days 1, 2 and 3, the 1-day Rock Live on day 1).
 				const uint32_t id = hallEventSlot(t.extra, ((int)in.month0 + 1) % 12);
 				const HallEventBooking b = id && hallEvents ? hallEvents(id) : HallEventBooking();
-				if (!b.plugin.empty() && b.days > 1)
+				if (!b.plugin.empty() && b.days > 0)
 				{
-					snprintf(buf, sizeof(buf), " event=\"%s\" startDay=\"%d\" span=\"%d\"", b.plugin.c_str(), loadDay + 1, b.days - 1);
+					snprintf(buf, sizeof(buf), " event=\"%s\" startDay=\"%d\" span=\"%d\"", b.plugin.c_str(), loadDay + 1, b.days);
 					attrs += buf;
 				}
 				else if (id && b.plugin.empty())
