@@ -4,6 +4,7 @@
 #include "../Math/Rand.h"
 #include "../YootCatalog.h"
 #include "../YootItemArt.h"
+#include "../YootRules.h"
 
 #include <cmath>
 #include <map>
@@ -196,8 +197,21 @@ void YootCondo::advance(double dt)
 	// come out of the pool (TNDF 1, CollectEmployee 0x1005f5a0 -> CollectEmployeeFromPool
 	// 0x10060a50) and the sale is collected. A unit whose hire fails stays empty, and a
 	// partial hire houses fewer residents.
-	const bool yootHireWindow = prototype->yoot && game->time.hour >= 7 && game->time.hour < 21 &&
-		std::fmod(game->time.hour, 1.0) * 60.0 < 8.0;
+	// The condo idles once per 8 minutes in its DispatchIdle slot (Yoot::idlePhase of its
+	// ordinal), so the one idle inside the first 8 minutes of the hour decides.
+	bool yootHireWindow = false;
+	if (prototype->yoot)
+	{
+		const long long now = Yoot::absoluteMinute(game->time.absolute);
+		if (yootIdleMinute < 0 || now < yootIdleMinute || now - yootIdleMinute > 1440) yootIdleMinute = now - 1;
+		for (long long m = yootIdleMinute + 1; m <= now; ++m)
+		{
+			const int md = (int)(((m % 1440) + 1440) % 1440);
+			if (md >= 7 * 60 && md < 21 * 60 && md % 60 < 8 && md % Yoot::kTenantIdleMinutes == Yoot::idlePhase(yootSlot))
+				yootHireWindow = true;
+		}
+		yootIdleMinute = now;
+	}
 	if (!occupied && (prototype->yoot ? yootHireWindow : (!game->time.isHoliday() && game->time.hour >= 7 && game->time.hour < 17)) &&
 	    isAttractive())
 	{

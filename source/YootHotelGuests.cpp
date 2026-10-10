@@ -43,6 +43,7 @@ namespace
 
 	int idlePhaseOf(const Item::Item * i)
 	{
+		if (i->yootSlot >= 0) return Yoot::idlePhase(i->yootSlot);
 		return (int)(((unsigned)(i->position.x * 31 + i->position.y * 17)) % Yoot::kTenantIdleMinutes);
 	}
 

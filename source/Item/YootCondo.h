@@ -101,6 +101,7 @@ namespace OT
 			int variant;
 			LightingConditions lighting;
 			bool occupied;
+			long long yootIdleMinute = -1;   ///< last game minute whose idle slot was checked
 
 			mutable Sprite baseSprite;
 			mutable Sprite residentSprite;

@@ -90,6 +90,10 @@ namespace OT {
 		/// YootTower tenant estimate on the 1..300 scale (T2Tenant +0x90,
 		/// plan step 8); 0 = not evaluated yet / not YootTower.
 		int yootEstimate = 0;
+		/// YootTower: this tenant's ordinal among the used slots of its 128-slot array (a .bld
+		/// load keeps the file's; a new item takes the next free one). It sets the 8-minute
+		/// idle slot (Yoot::idlePhase), -1 until Game::addItem assigns it.
+		int yootSlot = -1;
 		/// YootTower T2Equip +0x4c: CalcTotalDays when built (-1 = unknown,
 		/// age 0). The residential estimate loses one point per year (J2).
 		int yootBuildDay = -1;

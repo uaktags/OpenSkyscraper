@@ -173,17 +173,20 @@ approximate or missing (see `doc/yoottower/game-parity.md` for the full audit):
 - **Event Center:** booked events import from and export to `.bld`, open and settle on the original's
   days and hours (a booking runs bookingDays days from the day after the load, so the one-day evening Rock Live
   now opens on day 1 with no audience and the +15,000 settlement, as in the oracle), and show the original's status
-  chain and hourly profit estimate. The audience matches the oracle on days 1 and 2 (six seeds: mean 68 against 70
-  and 141 against 143) and runs 17% low on day 3 (195-223 against 251). The first-run target is settled (the
-  slot's +4 is the event's `unkDC` and only gates the collection).
+  chain and hourly profit estimate. The audience matches the oracle on all three days (six seeds: mean 68 against
+  70, 141 against 143 and 249 against 251; visitors stay the event's bindTime, 60 minutes, as in the original). The
+  first-run target is settled (the slot's +4 is the event's `unkDC` and only gates the collection).
 - **Hotels:** after restoring the maids' cleaning step OpenSky fills 73-77% of the eligible rooms against the
   original's 82% on day 1, and rooms now re-evaluate their estimate hourly as the plugin does (mean 281 against
   263 on day 1, 276 against 243 on day 2; guest stress is lower here, and `hotel_double@14,5` misses the original's
   traffic-range penalty). Offices, condos and apartments are still not re-evaluated in the YootTower economy.
-- **Population detail:** Hawaii has one condo resident more than the original (55 vs 54): the pool is identical
-  and OpenSky's 15 full condos are the arithmetic ceiling; the original lost one pool draw to another tenant
-  during the hire minutes (per-tenant idle slots, see `doc/yoottower/game-parity.md` 7.6.I). Shop customers now
-  use the original's x87 `Float2Int` (a 70% roll is 60%) and run about 3.5 points closer on average to the oracle's day totals.
+- **Population detail:** Hawaii has one condo resident more than the original (55 vs 54) in most runs. The pool is
+  identical; the original's Cocktail idles at 20:05:30 (tenant slot order, `T2TenantArray::DispatchIdle`), between the
+  condos' hires, and draws one of the 15 silhouette-25 types the 20 condos compete for. OpenSky now runs tenants,
+  venues, rooms and condo hires in the same slot order (2 of 36 runs end at 54), but whether the Cocktail draws is a
+  random roll of about 6-12%, so the original's single outcome is not reproduced run by run (see
+  `doc/yoottower/game-parity.md` 7.6.J). Shop customers use the original's x87 `Float2Int` (a 70% roll is 60%) and run
+  about 3.5 points closer on average to the oracle's day totals.
 
 What is being tested?
 ---------------------

@@ -13,6 +13,8 @@
 #include "SaveHash.h"
 #include "NameManager.h"
 #include "Item/FastFood.h"
+#include "Item/YootTenant.h"
+#include "Item/YootVenueItems.h"
 #include "Item/Lobby.h"
 #include "Item/Office.h"
 #include "Item/Hotel.h"
@@ -1569,6 +1571,14 @@ void Game::showReport()
 void Game::addItem(Item::Item * item)
 {
 	assert(item);
+	// YootTower tenants idle in their slot order (T2TenantArray::DispatchIdle): a loaded item
+	// keeps its saved ordinal, a new one takes the next.
+	if (item->prototype->yoot) {
+		if (item->yootSlot < 0) item->yootSlot = yootSlotCounter;
+		yootSlotCounter = std::max(yootSlotCounter, item->yootSlot + 1);
+		if (Item::YootTenant * t = dynamic_cast<Item::YootTenant *>(item)) t->idlePhase = Yoot::idlePhase(item->yootSlot);
+		else if (Item::YootVenue * v = dynamic_cast<Item::YootVenue *>(item)) v->idlePhase = Yoot::idlePhase(item->yootSlot);
+	}
 	items.insert(item);
 	itemsByType[item->prototype->id].insert(item);
 	rebuildVenueLists();
