@@ -61,6 +61,7 @@ def cpp_rows(fx, seed):
     log = open(os.path.join(d, "log.txt")).read()
     real = re.search(r"real\s+(\S+)", log); real = real.group(1) if real else None
     rows, prev_f, lo_abs = [], f0, t0
+    stay_prev = {}  # room -> yootStayStatus in the previous dump (stale stays are not new check-ins)
     for k in (1, 2, 3):
         cand = [x for x in dumps if x["time"]["absolute"] - t0 >= k] if k < 3 else []
         src = cand[0] if cand else final
@@ -71,7 +72,14 @@ def cpp_rows(fx, seed):
         for x in in_win:
             try: t = open(x["_tower"]).read()
             except OSError: continue
-            for m in re.finditer(r'<item type="(hotel_\w+)" x="(-?\d+)" y="(-?\d+)"[^>]*?yootStayStatus="(\d+)"', t): seen.add((m.group(2), m.group(3)))
+            # A check-in is a room that newly holds a guest party (stay 32..34) since the previous dump.
+            # Rooms carrying a stale 35 (checked out, still dirty) or the same stay again are not recounted.
+            cur = {}
+            for m in re.finditer(r'<item type="(hotel_\w+)" x="(-?\d+)" y="(-?\d+)"[^>]*?yootStayStatus="(\d+)"', t):
+                cur[(m.group(2), m.group(3))] = int(m.group(4))
+            for room, st in cur.items():
+                if 32 <= st <= 34 and not (32 <= stay_prev.get(room, 0) <= 34): seen.add(room)
+            stay_prev = cur
             if re.search(r'powerBlackout="[1-9]', t): black += 1
         pl = re.match(r"pool: called (\d+) entered (\d+)", pools[k - 1]) if k - 1 < len(pools) else None
         items = {i: n for i, n in src["items"].items() if i not in AGG}

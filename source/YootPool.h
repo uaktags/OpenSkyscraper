@@ -228,6 +228,12 @@ namespace OT
 			void duplicate(const PeopleType & t, const PoolRng & rng);
 		};
 
+		/// The YootTower population (Game.cpp:1178-1187): the tenants' own
+		/// populations plus the pool's visitors (T2Pool +0x14, called today and
+		/// not yet subtracted at midnight). It is a full recount, not the
+		/// SimTower incremental CountT global (countT.population).
+		inline int towerPopulation(int tenantPopulation, int poolVisitors) { return tenantPopulation + poolVisitors; }
+
 		/// Hotel stay party saved on a room (yootStayParty): one "demand
 		/// timeZone silhouette econo life transport" group per member, members
 		/// separated by ';'. The party is the room's pool people (they are

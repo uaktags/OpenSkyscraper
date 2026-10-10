@@ -7830,6 +7830,45 @@ static void testYootRoomEstimateHourly()
     EXPECT(Y::residentialEstimate(in) == 270);
 }
 
+// YootTower population rule (Game.cpp:1178-1187, T2Pool +0x14): the tower population is the
+// tenants' populations plus the pool's visitors, recounted in full. RecoverPeople
+// (0x10050790, every T2Pool::Call) adds one, ShrinkPeople (0x10050870) defers the subtraction
+// to DayChanged (0x100504a0), so a day's departures stay in the figure until midnight.
+// Synthetic tower: 3 offices of 6 workers, and a fresh grade-2 Tokyo pool (the pool a new
+// two-star tower owns: 300 types in the 06:00-12:00 zone, grade 1 gives 200).
+static void testYootPopulationRule()
+{
+    using namespace OT;
+    namespace Y = OT::Yoot;
+    const PluginManager & pm = yootTestPlugins();
+    Y::PoolDef tokyo;
+    const AbstractPlugin * tp = pm.get("Tokyo.t2p");
+    EXPECT(tp && tp->ensureLoaded() && Y::loadPoolDef(*tp, tokyo));
+    if (!tokyo.valid) return;
+
+    Y::Pool g1, g2;
+    g1.create(tokyo, 1, 0);
+    g2.create(tokyo, 2, 0);
+    EXPECT(g1.demands[0].zones[1].count() == 200 && g2.demands[0].zones[1].count() == 300);
+    EXPECT(Y::towerPopulation(18, g2.population) == 18);
+
+    for (int h = 1; h <= 6; ++h) g2.incHour(h);
+    MemberDef any;
+    any.demandType = 0;
+    any.startSilhouetteType = -1;
+    auto rng = []() { return 7; };
+    Y::PeopleType t;
+    for (int i = 0; i < 40; ++i) EXPECT(g2.call(any, -1, Y::kRouteLobby, t, rng));
+    EXPECT(g2.population == 40 && Y::towerPopulation(18, g2.population) == 58);
+    // Departures are deferred: the figure keeps them until the midnight DayChanged.
+    for (int i = 0; i < 25; ++i) g2.deadVIP();
+    EXPECT(g2.shrinkCount == 25 && Y::towerPopulation(18, g2.population) == 58);
+    g2.incHour(0);  // midnight: T2Pool::DayChanged
+    EXPECT(g2.shrinkCount == 0 && g2.population == 15 && Y::towerPopulation(18, g2.population) == 33);
+    // The result is the sum, never a SimTower countT value, and a tenant-only tower is unchanged.
+    EXPECT(Y::towerPopulation(0, 0) == 0 && Y::towerPopulation(282, 0) == 282);
+}
+
 static void testYootHotelStaySaveReload()
 {
     OT::Yoot::PeopleType a, b;
@@ -8021,6 +8060,7 @@ int main()
 	testSimLessContainers();
 	testYootOnlyPrototypeGate();
 	testYootHotelStaySaveReload();
+	testYootPopulationRule();
 	testYootHotelCallOdds();
 	testYootRoomEstimateHourly();
 	testOspDibValidation();

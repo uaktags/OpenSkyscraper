@@ -1182,8 +1182,8 @@ void Game::advanceSimTick(double dt)
 			for (ItemSet::iterator i = items.begin(); i != items.end(); i++) {
 				p += (*i)->population;
 			}
-			p += eventSystem.people.visitorPopulation(); // YootTower: the pool's visitors
-			setPopulation(p);
+			// YootTower: tenants + the pool's visitors (not the SimTower CountT global).
+			setPopulation(Yoot::towerPopulation(p, eventSystem.people.visitorPopulation()));
 		} else {
 			// CountT is incremental (batch 5 T14): the global is countT.population.
 			setPopulation(countT.population);
