@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Downscale pulled screenshots to max 640x400 and prune to at most 48 images.
+"""Downscale pulled screenshots to max 640x400 and prune to at most 48 images (keeping the comparison hours).
 
 Usage:
     python3 downscale_pull.py <directory> [max_images] [max_width] [max_height]
@@ -22,13 +22,21 @@ def process_dir(directory, max_images=48, max_w=640, max_h=400):
 
     print(f"Found {len(images)} screenshots in {directory}")
 
-    # Prune if more than max_images
+    # Prune if more than max_images. The comparison hours (07, 08, 12, 18, 23 of every day)
+    # are always kept first; the remaining budget is filled with evenly spaced shots.
     if len(images) > max_images:
-        print(f"Pruning to {max_images} evenly distributed screenshots...")
-        step = len(images) / max_images
-        keep_indices = {int(i * step) for i in range(max_images)}
-        for idx, img_path in enumerate(images):
-            if idx not in keep_indices:
+        import re
+        key = re.compile(r"_(?:h|hr)(07|08|12|18|23)\.png$")
+        keep = [p for p in images if key.search(p)][:max_images]
+        rest = [p for p in images if p not in set(keep)]
+        room = max_images - len(keep)
+        if room > 0 and rest:
+            step = len(rest) / room
+            keep += [rest[int(i * step)] for i in range(room)]
+        keep = set(keep)
+        print(f"Pruning to {len(keep)} screenshots (comparison hours kept first)...")
+        for img_path in images:
+            if img_path not in keep:
                 try:
                     os.remove(img_path)
                 except OSError as e:

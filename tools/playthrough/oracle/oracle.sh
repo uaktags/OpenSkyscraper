@@ -2,6 +2,11 @@
 # SimTower 16-bit Oracle Headless Container Harness
 # Runs original 16-bit SIMTOWER.EXE under 32-bit Wine on Unraid server
 set -eo pipefail
+# Metric method: oracle_sim.py only captures hourly PNGs (+ day*.TDT saves). Fund / pop / date are
+# read from the 1024x768 SimTower HUD by tools/playthrough/ocr.py (digit-template OCR; run
+# `python3 ocr.py run oracle <shot_dir> <evidence_dir> <out.json>`); day*.TDT headers (balance
+# int32 @4 x $100) are the independent cross-check. oracle_sim.py's built-in extract_oracle_metrics
+# (hand-drawn glyphs, metrics.json) is SUPERSEDED and unreliable - do not use its numbers.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLAY_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"

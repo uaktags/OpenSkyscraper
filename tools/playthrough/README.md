@@ -177,3 +177,44 @@ In OpenSkyWeb (`src/main.js`), the engine attaches internal handles to the globa
   - `openSkyScraper.unlocked`: Boolean check.
 - **URL Parameters**:
   - `?edition=opensky`: Automatically unlocks and switches to the OpenSkyScraper edition on page load.
+
+---
+
+## Metric method
+
+| Source | Where the numbers come from |
+|---|---|
+| C++ headless (`play.sh cpp`) | SimHarness summary JSON (`funds`, `population`, `rating` 0-based => stars = rating+1, `time`). Hourly state: `--sim 3d --sim-dump-every 40 <dir>` then `cpp_hourly.py` (40 ticks = 1 game hour at speed 3). |
+| C++ GUI (`play.sh cpp-shots`) | `extract_cpp_metrics.py` -> `ocr.py` on the time window (1280x800). `dismiss_dialog.sh` closes the modal Financial Report so the sim keeps running. |
+| Web (`play.sh web`) | `web_drive.mjs` writes `hourly.json` per elapsed game hour: game state, plus the HUD DOM text and element boxes. `ocr.py train/validate web` OCRs the HUD pixels against the DOM text. `.TDT` saves are fed to the web port's own importer (`src/core/tdt-parser.js`). |
+| Oracle (`oracle/oracle.sh run`) | HUD OCR with `ocr.py` (1024x768 SimTower window). `oracle_sim.py`'s own `metrics.json` is superseded. `day*.TDT` headers cross-check. |
+
+`ocr.py` = fixed HUD regions -> binarise -> split glyphs on empty columns -> look up bitmap templates in `ocr_templates.json`
+(exact, else nearest within +/-1 px and a Hamming budget, else `?`). Dates are matched as whole strings. Templates come from
+screenshots with known values (oracle/C++: clusters labelled once from a contact sheet and checked by `ocr_validate.py`;
+web: trained from the DOM text). Evidence (region crops, validation JSON, glyph sheets) is in `out/compare/ocr/`.
+`make_report.py` builds `out/compare/tables.md`; `montage_compare.py` the day-1 montages; see `out/compare/REPORT.md`.
+
+## Known findings (SCHMITT.TDT, 3 game days, art branches with the TDT import fix)
+
+* TDT import is now exact in both ports: freshly loaded HUD / state reads $93,560,900, pop 15,401, 5 stars, 2nd WD / 2Q / year 13.
+* The oracle clock cannot be read digitally (analog watch only), and the oracle advances ~1 game day per 17-24 shots, so
+  the tables key shots by index and also align by in-game date. The oracle starts one day later than the save (WE/2Q).
+* Oracle stalls from day 3 hour 06: the "Congratulations ... Tower" rating dialog is modal and `oracle_sim.py` never clicks OK
+  (OK button at about (502,233)); day3.TDT is therefore a copy of day2.TDT. HUD frozen at $110,445,900 / pop 15,025.
+* Population: oracle stays ~15,0-16,2k; both ports drop to 12,720 within ~3 game hours of the load and settle ~13.2k.
+* Quarter rollover (3Q) income: oracle +$14.2M ($94.6M -> $108.8M), C++ +$15.8M ($94.46M -> $110.25M), web +$18.2M (-> $112.9M).
+  C++ is the closer port (+1.4% vs oracle after the rollover, web +3.8%). Web and C++ agree to the dollar before the rollover.
+* Web performance bug: `Parking.advance()` calls `recomputeAllChains()` (src/game/items/parking.js) for each of the 264 parking
+  items every tick and again per car arrival; each call is ~0.36 s, so one `game.advance(0.05)` takes ~95 s on this tower
+  (profile: 99.9 % in recomputeAllChains). `web_drive.mjs` serves a memoised parking.js through `page.route` (per item count and
+  game hour; identical for an unedited tower). `--no-parking-shim` measures the raw port.
+* Web HUD after a TDT import is stale until later events: FUND shows $2,000,000 and the rating stars show 1 star at load
+  although state is $93,560,900 / 5 stars; the stars render as outline boxes in the container's fonts (likely a font fallback).
+  HUD panels also reflow, so the OCR crops use the logged DOM boxes.
+* C++ GUI: the quarterly Financial Report modal pauses the sim (fixed in the harness by `dismiss_dialog.sh`); after the
+  dialog the GUI run still advances only ~2 game days in 72 shots, so use the headless run for per-day numbers.
+* `play.sh web` used to kill its own shell (`pkill -f server.js`) and silently stop after the build; fixed (`pkill -x bun`, detached server).
+* `downscale_pull.py` pruning used to drop arbitrary shots; it now keeps hours 07/08/12/18/23 first.
+* The C++ camera is parked at the top of the tower, so cathedral/lobby are not in the hourly shots; `cpp_view.sh` scrolls down
+  (`out/compare/cpp_scroll_views.png`) but 56 wheel clicks still do not reach the lobby.

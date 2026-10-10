@@ -10,11 +10,13 @@ function parseArgs() {
     tower: "",
     days: 1,
     out: "./out/web",
+    parkingShim: true,
   };
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--url" && args[i + 1]) opts.url = args[++i];
     else if (args[i] === "--tower" && args[i + 1]) opts.tower = args[++i];
     else if (args[i] === "--days" && args[i + 1]) opts.days = parseInt(args[++i], 10);
+    else if (args[i] === "--no-parking-shim") opts.parkingShim = false;
     else if (args[i] === "--out" && args[i + 1]) opts.out = args[++i];
   }
   return opts;
@@ -37,6 +39,28 @@ async function main() {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
 
   try {
+    // PERF SHIM (see README "Known findings"): the web port's Parking.advance() and every
+    // car arrival call recomputeAllChains(), an O(parking^2 x items) scan costing ~95 s per
+    // call on this tower (264 parking items, ~6000 items). The harness never edits the tower,
+    // so the harness serves parking.js with that function memoised per (item count, game hour).
+    // The result is identical for an unedited tower. Pass --no-parking-shim to measure the raw port.
+    if (opts.parkingShim) {
+      await page.route(/\/src\/game\/items\/parking\.js/, async (route) => {
+        const resp = await route.fetch();
+        let body = await resp.text();
+        body = body.replace("export function recomputeAllChains(game) {", "function recomputeAllChainsRaw(game) {");
+        body += `
+export function recomputeAllChains(game) {
+  const key = game.items.size + ":" + Math.floor(game.time.absolute * 24);
+  if (game.__chainKey === key) return;
+  game.__chainKey = key;
+  recomputeAllChainsRaw(game);
+}
+`;
+        await route.fulfill({ response: resp, body });
+      });
+    }
+
     console.log("[web_drive] Navigating to page...");
     await page.goto(opts.url, { waitUntil: "domcontentloaded", timeout: 30000 });
 
@@ -53,16 +77,24 @@ async function main() {
       }
     } catch (_) {}
 
-    // Load tower file or start new game
+    // Load tower file or start new game. .TDT saves are fed to the web port's own
+    // TDT importer (src/core/tdt-parser.js, served by server.js), so the run uses the
+    // fixed importer instead of a stale pre-converted .tower.
     let towerContent = null;
+    let tdtB64 = null;
     if (opts.tower && fs.existsSync(opts.tower)) {
       console.log(`[web_drive] Loading tower file from ${opts.tower}`);
-      towerContent = fs.readFileSync(opts.tower, "utf8");
+      if (/\.tdt$/i.test(opts.tower)) tdtB64 = fs.readFileSync(opts.tower).toString("base64");
+      else towerContent = fs.readFileSync(opts.tower, "utf8");
     }
 
-    await page.evaluate((xml) => {
+    await page.evaluate(async ({ xml, b64 }) => {
       const game = window.__game;
-      if (xml && xml.trim().startsWith("<")) {
+      if (b64) {
+        const bin = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+        const mod = await import("/src/core/tdt-parser.js");
+        mod.parseTdt(bin.buffer, game);
+      } else if (xml && xml.trim().startsWith("<")) {
         game.decodeXML(xml);
       } else {
         game.seedNewTower();
@@ -71,7 +103,7 @@ async function main() {
       // Close menu if present
       const mm = document.getElementById("mainmenu");
       if (mm) mm.style.display = "none";
-    }, towerContent);
+    }, { xml: towerContent, b64: tdtB64 });
 
     // Initial render and screenshot
     await page.waitForTimeout(500);
@@ -81,6 +113,7 @@ async function main() {
 
     // Simulation loop: advance hour by hour, capture screenshots and metrics
     const dailyMetrics = [];
+    const hourly = [];
     const targetDays = opts.days;
     console.log(`[web_drive] Running simulation for ${targetDays} day(s)...`);
 
@@ -88,23 +121,39 @@ async function main() {
       console.log(`[web_drive] --- Simulating Day ${day}/${targetDays} ---`);
 
       for (let hour = 0; hour < 24; hour++) {
-        // Advance simulation ~1 in-game hour
-        // Speed 3 is ~40 ticks/hour, advance in discrete steps
-        await page.evaluate(() => {
+        // Advance exactly one in-game hour (1/24 of a game day on game.time.absolute).
+        // Hour labels count hours elapsed since load (same convention as the oracle and
+        // C++ shot names); the real in-game clock is logged in hourly.json.
+        const hourIdx = (day - 1) * 24 + hour;
+        const snap = await page.evaluate(({ hourIdx }) => {
           const game = window.__game;
-          // Step game clock 1 hour (dt in seconds)
-          // 1 game hour is ~0.5s at speed 3, run ~35 advance ticks
-          for (let i = 0; i < 35; i++) {
-            game.advance(0.016);
-          }
-          if (window.__renderer) {
-            window.__renderer.frame(game);
-          }
-        });
+          if (window.__abs0 === undefined) window.__abs0 = game.time.absolute;
+          const target = window.__abs0 + hourIdx / 24;
+          let guard = 0;
+          while (game.time.absolute < target && guard++ < 200000) game.advance(0.05);
+          if (window.__renderer) window.__renderer.frame(game);
+          const t = game.time;
+          // HUD element boxes + the text the DOM shows, so the OCR crops follow the reflowing
+          // layout and have an independent per-shot truth (what the HUD displays, not game state).
+          const box = (el) => { if (!el) return null; const r = el.getBoundingClientRect(); return [Math.floor(r.left), Math.floor(r.top), Math.ceil(r.right), Math.ceil(r.bottom)]; };
+          const vals = document.querySelectorAll("#timewindow .tw-value");
+          const q = (sel) => document.querySelector("#timewindow " + sel);
+          const hud = {
+            fund: { box: box(vals[0]), text: vals[0] && vals[0].textContent },
+            pop: { box: box(vals[1]), text: vals[1] && vals[1].textContent },
+            date: { box: box(q(".tw-date")), text: q(".tw-date") && q(".tw-date").textContent },
+            clock: { box: box(q(".tw-clock")), text: q(".tw-clock") && q(".tw-clock").textContent },
+            stars: { box: box(q(".tw-stars")), text: q(".tw-stars") && q(".tw-stars").textContent },
+          };
+          return { hud, hourIdx, absolute: t.absolute, hour: t.hour, day: t.day, quarter: t.quarter, year: t.year,
+                   funds: game.funds, population: game.population, rating: game.rating + 1 };
+        }, { hourIdx });
+        hourly.push(snap);
+        await page.waitForTimeout(150);
 
         // Screenshot each hour
-        const shotPath = path.join(opts.out, `shot_day${day}_hr${String(hour).padStart(2, "0")}.png`);
-        await page.screenshot({ path: shotPath });
+        const compatShotPath = path.join(opts.out, `shot_d${day}_h${String(hour).padStart(2, "0")}.png`);
+        await page.screenshot({ path: compatShotPath });
       }
 
       // Collect end-of-day metrics
@@ -154,6 +203,8 @@ async function main() {
       console.log(`[web_drive] Day ${day} metrics: funds=${metrics.funds} pop=${metrics.population} rating=${metrics.rating} stressed=${metrics.stressed_people} avg_wait=${metrics.elevator_avg_wait}`);
       dailyMetrics.push(metrics);
     }
+
+    fs.writeFileSync(path.join(opts.out, "hourly.json"), JSON.stringify(hourly, null, 1), "utf8");
 
     // Save metrics.json and metrics.csv
     const jsonPath = path.join(opts.out, "metrics.json");
