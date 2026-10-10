@@ -266,12 +266,7 @@ void TimeWindow::updateTime() {
 	
 	timestring.append(" / " + std::to_string(t.quarter) + "Q");
 
-	const char * suffix = "th Yr";
-	int yl = (t.year % 10);
-	if (yl == 1) suffix = "st Yr";
-	if (yl == 2) suffix = "nd Yr";
-	if (yl == 3) suffix = "rd Yr";
-	timestring.append(" / " + std::to_string(t.year) + suffix);
+	timestring.append(" / " + formatYearOrdinal(t.year));
 
     lblDate->setText(timestring);    
 }
@@ -401,6 +396,20 @@ void TimeWindow::renderWatch() {
 
     watch->draw(lines);
     watch->display();
+}
+
+std::string TimeWindow::formatYearOrdinal(int year)
+{
+	// 11th, 12th and 13th are the English exceptions to the last-digit rule.
+	const int teen = year % 100;
+	const int yl = year % 10;
+	const char * suffix = "th Yr";
+	if (teen < 11 || teen > 13) {
+		if (yl == 1) suffix = "st Yr";
+		else if (yl == 2) suffix = "nd Yr";
+		else if (yl == 3) suffix = "rd Yr";
+	}
+	return std::to_string(year) + suffix;
 }
 
 std::string TimeWindow::formatMoney(int64_t amount)

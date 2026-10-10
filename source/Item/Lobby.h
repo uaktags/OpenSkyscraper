@@ -33,6 +33,14 @@ namespace OT {
 			virtual void removePerson(Person * p);
 			virtual bool isLobby() const override { return true; }
 
+			/// Rendering-only grouping of imported 1-story lobby slices: the
+			/// TDT stores a grand lobby as one record per story. Returns this
+			/// slice's story `index` (0 = lowest) inside a stack of identical-
+			/// extent slices on consecutive floors, and the stack's story
+			/// `total` (at most 3). A natively built tall lobby reports
+			/// (0, size.y). Routing and simulation keep the slices separate.
+			void stackPosition(int & index, int & total) const;
+
 			/// Per-person atrium walk timer (see advance); mirrors Stairlike.
 			std::map<Person *, double, SimLess> transitionTimes;
 		};

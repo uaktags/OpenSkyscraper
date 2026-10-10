@@ -1624,6 +1624,10 @@ void Game::addItem(Item::Item * item)
 				f->interval.insert(f->getRect().maxX());
 				f->updateSprite();
 				addItem(f);
+			} else if (i > 0) {
+				// A slab loaded before this tall tenant: its fire escapes must
+				// now yield to the stacked story (Floor::isStackedStory).
+				decorations.updateFloor(item->position.y + i);
 			}
 			if (!item->canHaulPeople()) {
 				FloorItems::iterator fi = floorItems.find(item->position.y + i);

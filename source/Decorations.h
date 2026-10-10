@@ -15,6 +15,8 @@ namespace OT {
 
 		void reset();
 		void updateFloor(int y);
+		/// True when floor y currently carries its pair of fire escapes.
+		bool hasFireStairs(int y) const { return fireStairs.count(y) != 0; }
 		void updateCrane();
 		void updateTracks();
 		void reloadTextures();
