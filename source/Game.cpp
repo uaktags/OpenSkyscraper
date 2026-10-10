@@ -2084,6 +2084,32 @@ int Game::lobbyToolHeight() const
 	return lobbyHeightFromKeys();
 }
 
+/// WP7b: first already-added item whose footprint overlaps a freshly decoded
+/// one on a shared floor, when at least one of the two is a type whose
+/// footprint was re-sized to the SIMTOWER.EXE values. Floors and people
+/// movers are never clashes (they legitimately share cells).
+Item::Item * Game::legacyFootprintClash(Item::Item * item)
+{
+	static const char * const kMigrated[] = {"parking", "hotel_suite", "medicalcenter",
+		"parkingramp", "housekeeping", "cathedral"};
+	auto migrated = [](const Item::Item * i) {
+		for (const char * id : kMigrated) if (i->prototype->id == id) return true;
+		return false;
+	};
+	if (item->prototype->icon == ICON_FLOOR || item->canHaulPeople()) return NULL;
+	const int minX = item->position.x, maxX = item->position.x + item->size.x;
+	for (int i = 0; i < item->size.y; i++) {
+		ItemSetByInt::const_iterator row = itemsByFloor.find(item->position.y + i);
+		if (row == itemsByFloor.end()) continue;
+		for (Item::Item * other : row->second) {
+			if (other->prototype->icon == ICON_FLOOR || other->canHaulPeople()) continue;
+			if (!migrated(item) && !migrated(other)) continue;
+			if (other->position.x < maxX && other->position.x + other->size.x > minX) return other;
+		}
+	}
+	return NULL;
+}
+
 void Game::encodeXML(tinyxml2::XMLPrinter & xml)
 {
 	xml.OpenElement("tower");
@@ -2308,7 +2334,23 @@ void Game::decodeXML(tinyxml2::XMLDocument & xml)
 		Item::Item * item = itemFactory.make(*e);
 		// YootTower-only types in a save loaded under another ruleset are
 		// rejected by the factory (NULL) and skipped here.
-		if (item) addItem(item);
+		if (item) {
+			// WP7b: footprints changed to the SIMTOWER.EXE values, so an old
+			// save can overlap once migrated. Keep the earlier-decoded item,
+			// drop this later one and refund its price once.
+			if (Item::Item * clash = legacyFootprintClash(item)) {
+				const int refund = item->prototype->price;
+				LOG(WARNING, "save migration: dropped overlapping '%s' at (%d,%d) (clashes with '%s' at (%d,%d)); refunded $%d",
+				    item->prototype->id.c_str(), item->position.x, item->position.y,
+				    clash->prototype->id.c_str(), clash->position.x, clash->position.y, refund);
+				const long long cap = 9999999900LL;
+				money.balance = std::min<long long>(cap, (long long)money.balance + refund);
+				setFunds(money.balance);
+				delete item;
+			} else {
+				addItem(item);
+			}
+		}
 		e = e->NextSiblingElement("item");
 	}
 	if (savedCountT) {

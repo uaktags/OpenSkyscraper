@@ -359,6 +359,7 @@ namespace OT {
 		/// Lobby height for a placement: Ctrl = 2, Ctrl+Shift = 3, otherwise
 		/// the profile default (1, or the YootTower world's lobby height).
 		int lobbyToolHeight() const;
+		Item::Item * legacyFootprintClash(Item::Item * item);
 		/// Grand-lobby height locked by the first ground-lobby build click
 		/// (0 = still open). Saved with the tower.
 		int lobbyHeightLock = 0;

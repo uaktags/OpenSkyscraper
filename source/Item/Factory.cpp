@@ -165,8 +165,19 @@ OT::Item::Item * Factory::make(tinyxml2::XMLElement & xml)
 	// Fixed-size rooms did not serialize dimensions in older native saves.
 	// Reconstruct legacy 48x4 cathedrals as 28x5 before init()/addItem(), so
 	// the sprite and spatial indexes share the preserved bottom-left anchor.
-	if (type == "cathedral")
-		position.x = game->activeRules.clampHorizontalPosition(position.x, prototypesById.at(type)->size.x);
+	// WP7b: generalised. Any fixed-size type (its element carries no "width",
+	// so the footprint always comes from the current prototype) is rebuilt at
+	// the prototype size with its bottom-left anchor kept, clamped to the lot.
+	// Variable-width items (floor, lobby, sky bridge...) save their width and
+	// are left alone; YootTower saves keep their own footprints, except the
+	// cathedral which is always migrated.
+	{
+		auto proto = prototypesById.find(type);
+		const bool migrate = type == "cathedral" ||
+			(!game->activeRules.profile().yootWorld && !xml.Attribute("width"));
+		if (proto != prototypesById.end() && migrate)
+			position.x = game->activeRules.clampHorizontalPosition(position.x, proto->second->size.x);
+	}
 	// YootTower-only prototypes stay registered for every ruleset (the
 	// build UI hides them via minRatingToBuild), but a save from another
 	// ruleset must not resurrect them: their advance()/decode paths run

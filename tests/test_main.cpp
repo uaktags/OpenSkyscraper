@@ -4753,6 +4753,27 @@ static void testBatch6Placement(OT::Game &g)
  church=static_cast<Item::Cathedral *>(*g.itemsByType["cathedral"].begin());
  EXPECT(church->position==int2(180,100) && church->size==int2(28,5));
  g.setRules(BuildRules(BuildRules::Ruleset::SimTower));
+ // WP7b: a synthetic pre-parity save (fixed-size items carry no width). The
+ // parking space (new width 4) and suite (10) now sit side by side; the
+ // medical center (26) at x=10 overlaps the earlier suite, so the later one is
+ // dropped and its $500,000 price refunded exactly once.
+ reset();
+ {
+  const long long fundsBefore=1000000;
+  tinyxml2::XMLDocument oldSave;
+  EXPECT(oldSave.Parse("<tower ruleset=\"simtower\" funds=\"1000000\" rating=\"4\" tool=\"inspector\">"
+   "<item type=\"parking\" x=\"0\" y=\"5\"/><item type=\"hotel_suite\" x=\"4\" y=\"5\"/>"
+   "<item type=\"medicalcenter\" x=\"10\" y=\"5\"/></tower>")==tinyxml2::XML_SUCCESS);
+  g.decodeXML(oldSave);
+  EXPECT(g.itemsByType["parking"].size()==1 && g.itemsByType["hotel_suite"].size()==1);
+  EXPECT(g.itemsByType["medicalcenter"].empty());
+  EXPECT((*g.itemsByType["parking"].begin())->size==int2(4,1));
+  EXPECT((*g.itemsByType["hotel_suite"].begin())->size==int2(10,1));
+  EXPECT(g.funds==fundsBefore+500000 && g.money.balance==fundsBefore+500000);
+  tinyxml2::XMLPrinter resaved;g.encodeXML(resaved);tinyxml2::XMLDocument again;
+  EXPECT(again.Parse(resaved.CStr())==tinyxml2::XML_SUCCESS);g.decodeXML(again);
+  EXPECT(g.itemsByType["medicalcenter"].empty() && g.funds==fundsBefore+500000);
+ }
  // Real TDT cathedral rows decode to a single canonical building at the
  // original file anchor (file 109 -> 99); native placement remains F100.
  reset(); Tdt::TdtData cathedralTdt={}; cathedralTdt.level=5;cathedralTdt.balance=2000000000;
