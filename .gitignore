@@ -56,3 +56,4 @@ tools/playthrough/out/
 tools/playthrough/oracle/*.DLL
 tools/playthrough/oracle/*.dll
 tools/playthrough/oracle/*.INI
+tools/playthrough/yoot/out/
