@@ -197,6 +197,16 @@ def tokyo_g3_venues(time=0.020833, security=False):
     return t
 
 
+def tokyo_g3_evening():
+    """tokyo_g3_venues with the Event Center booked for Rock Live (PlConcert: 18:00-21:00, every
+    month) instead of the Art Exhibition, to measure the evening events' audience (WP8b)."""
+    t = tokyo_g3_venues()
+    for i, (typ, x, y, extra) in enumerate(t.items):
+        if typ == 'eventcenter':
+            t.items[i] = (typ, x, y, ' event="PlConcert.t2p" startDay="0" span="3" today="PlConcert.t2p"')
+    return t
+
+
 def tokyo_g3_reggae():
     """tokyo_g3_venues with a Security Room, starting on day 12 (Y1 Dec.), the day the 3-star
     MAEV events (Mr. Maru every 20 days, Uncle Reggae every 25) and Santa begin."""
@@ -321,7 +331,7 @@ def tokyo_g1_promo():
     return t
 
 
-TOWERS = [tokyo_g1_promo, tokyo_g2_hotel_subway, tokyo_g3_venues, tokyo_g3_reggae, tokyo_g4_blackout, tokyo_g5_large_elevator,
+TOWERS = [tokyo_g1_promo, tokyo_g2_hotel_subway, tokyo_g3_venues, tokyo_g3_evening, tokyo_g3_reggae, tokyo_g4_blackout, tokyo_g5_large_elevator,
           hawaii_g2_resort, hawaii_g3_boatdeck]
 
 

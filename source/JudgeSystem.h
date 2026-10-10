@@ -88,6 +88,12 @@ namespace OT
 		void forget(const Person * p);
 		void forget(const Item::Item * item);
 
+		/// YootTower 1..300 estimate (plan step 8, J1-J3); 0 when the item
+		/// is not a YootTower-evaluated tenant.
+		/// `residents` replaces the item's people as the belong list (hotel
+		/// rooms keep their guests in the pool layer, not in item->people).
+		int yootEstimate(Game * game, Item::Item * item, const std::vector<int> * residents = nullptr);
+
 	private:
 		bool moveOut(Game * game, Item::Item * item, const std::vector<Item::Item *> & floorTenants);
 
@@ -98,9 +104,6 @@ namespace OT
 		double scoreHotel(Game * game, Item::Item * item);
 		double scoreCommercial(Game * game, Item::Item * item);
 
-		/// YootTower 1..300 estimate (plan step 8, J1-J3); 0 when the item
-		/// is not a YootTower-evaluated tenant.
-		int yootEstimate(Game * game, Item::Item * item);
 		/// T2TrafficInfo::GetRange stand-in (0..3) at a tenant's entrance.
 		static int yootTrafficRange(Game * game, Item::Item * item);
 

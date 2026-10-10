@@ -201,7 +201,7 @@ namespace OT
 		{
 			if (!(value > 0.0f)) return 0;
 			const int whole = (int)value;
-			const int tenths = (int)((value - (float)whole) * 10.0f);
+			const int tenths = (int)(((double)value - (double)whole) * 10.0); // x87 double, see float2IntRng
 			int r = roll % 10;
 			if (r < 0) r += 10;
 			return whole + ((tenths != 0 && r < tenths) ? 1 : 0);
@@ -217,7 +217,8 @@ namespace OT
 		float memberRate(uint32_t percent, float units)
 		{
 			if (!(units > 0.0f) || percent == 0) return 0.0f;
-			return (float)percent * units * 0.01f;
+			// T2TenantMemberDef::Initialize 0x63000: ((float)percent x units) x 0.01 on the x87 stack, one store.
+			return (float)((double)percent * (double)units * (double)0.01f);
 		}
 
 		int commercialPattern(int status, int inside, int capacity)

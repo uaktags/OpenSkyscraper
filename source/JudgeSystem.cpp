@@ -480,7 +480,7 @@ int JudgeSystem::yootTrafficRange(Game * game, Item::Item * item)
 	return std::min(3, count / 5);
 }
 
-int JudgeSystem::yootEstimate(Game * game, Item::Item * item)
+int JudgeSystem::yootEstimate(Game * game, Item::Item * item, const std::vector<int> * residents)
 {
 	const YootItemStats *stats = item->prototype->yoot;
 	if (!stats) return 0;
@@ -492,8 +492,11 @@ int JudgeSystem::yootEstimate(Game * game, Item::Item * item)
 
 	// T2Tenant::UpdateResidencialEstimate 0x10060e20.
 	Yoot::ResidentialInputs in;
-	for (Item::Item::People::const_iterator p = item->people.begin(); p != item->people.end(); ++p)
-		in.peopleEstimates.push_back((*p)->yootCurrentEstimate());
+	if (residents)
+		in.peopleEstimates = *residents;
+	else
+		for (Item::Item::People::const_iterator p = item->people.begin(); p != item->people.end(); ++p)
+			in.peopleEstimates.push_back((*p)->yootCurrentEstimate());
 	in.previousPeopleEstimate = item->yootPeopleEstimate;
 	in.senseOfNoise = stats->senseOfNoise;
 	in.trafficRange = in.senseOfNoise ? yootTrafficRange(game, item) : 0;

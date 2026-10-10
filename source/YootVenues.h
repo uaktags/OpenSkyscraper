@@ -128,6 +128,11 @@ namespace OT
 		/// open; Event Center 09:00-17:00), so the evening events (Rock Live,
 		/// Fashion Show) draw nobody.
 		bool hallEventCollects(int minute, int tenantOpen, int tenantClose, int customerUnit);
+		/// EventCenter.t2p FUN_1000dc70: CollectCustomer runs only while target - walking -
+		/// inside > 0; the pool call then takes up to capacity - inside - walking
+		/// (CollectCustomerFromPool 0x5ef70), so the target gates but never caps. The first
+		/// run's target is the sub-plugin's +0xdc (unkDC, 1000 for PlArt).
+		int hallCollectRoom(int target, int capacity, int inside, int walking);
 
 		// ================================================= ads (Billboard)
 

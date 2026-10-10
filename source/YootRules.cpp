@@ -128,6 +128,21 @@ namespace Yoot
 		return clampEstimate(e);
 	}
 
+	int roomNightBonus(int currentEstimate)
+	{
+		return currentEstimate >= kEstimateMoveOut ? 20 : 5;
+	}
+
+	int incPeopleEstimate(int peopleEstimate, int delta)
+	{
+		return std::max(0, std::min(kEstimateMax, peopleEstimate + delta));
+	}
+
+	bool roomEstimateDue(int status, int minuteOfDay)
+	{
+		return (status == 30 || status == 32 || status == 33) && ((minuteOfDay % 60) + 60) % 60 < kTenantIdleMinutes;
+	}
+
 	Decision decideResidential(int estimate, int & counter)
 	{
 		if (estimate < kEstimateMoveOut) return Decision::MoveOut;

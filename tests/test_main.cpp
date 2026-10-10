@@ -5983,10 +5983,16 @@ static void testBldShippedSaves()
 		EXPECT(back && back->equipType == 1812 && back->modules.modules.size() == 8 && back->extra.size() == 120);
 	}
 	// --- Event Center booking: export -> import keeps the event -------------
+	// The exporter writes the booked id in all 12 month slots; the import maps the coming
+	// month's slot back to the plugin: closed on the load day, then open for bookingDays
+	// days from the next one. Oracle (tokyo_g3_venues, 4 days, wp8b-ev3): the Art Exhibition
+	// (3 days) was open on days 1, 2 and 3 (visitors 70, 143, 251 cumulative); Rock Live
+	// (PlConcert, 1 day, tokyo_g3_evening) on day 1 only, status 30 from 17:00, no visitors,
+	// +15,000 at 21:00 (cost 25,000 - outMoney 10,000).
+	struct Booking { const char * plugin; uint32_t booked; int span; };
+	const Booking bookings[] = {{"PlArt.t2p", 0x41727473u, 3}, {"PlConcert.t2p", 0, 1}};
+	for (const Booking & booking : bookings)
 	{
-		// The exporter writes the booked id in all 12 month slots; the import
-		// maps the coming month's slot back to the plugin, closed on the load
-		// day and open for bookingDays - 1 days from the next one.
 		report = ImportReport();
 		EXPECT(toTowerXml(tokyo, bldTestPrototypes, xml, report, error));
 		TowerState state;
@@ -5998,7 +6004,7 @@ static void testBldShippedSaves()
 				hall.type = "eventcenter";    // 31 x 2 on the slab's row
 				hall.x = it.x;
 				hall.y = it.y;
-				hall.event = "PlArt.t2p";
+				hall.event = booking.plugin;
 			}
 		EXPECT(!hall.type.empty());
 		state.items.push_back(hall);
@@ -6011,16 +6017,17 @@ static void testBldShippedSaves()
 		for (const Tenant & t : reread.tenants)
 			if (t.hdr.used && t.extra.size() >= 64 && t.equipType == 1722) hallTenant = &t;
 		EXPECT(hallTenant && hallTenant->extra.size() == 64 + 9 * 0);
-		if (hallTenant)
+		if (hallTenant && booking.booked)
 		{
 			const uint32_t booked = hallTenant->extra[0] | (hallTenant->extra[1] << 8) | (hallTenant->extra[2] << 16) | ((uint32_t)hallTenant->extra[3] << 24);
-			EXPECT(booked == 0x41727473 && hallTenant->extra[16 + 4 * 11] == 0x73 && hallTenant->extra[16 + 4 * 11 + 1] == 0x74);
+			EXPECT(booked == booking.booked && hallTenant->extra[16 + 4 * 11] == 0x73 && hallTenant->extra[16 + 4 * 11 + 1] == 0x74);
 		}
 		std::string back;
 		ImportReport backReport;
 		EXPECT(toTowerXml(reread, bldTestPrototypes, back, backReport, error, SubPluginLookup(), hallEventLookup(yootTestPlugins())));
 		const int loadDay = (int)std::max<int>(0, (int)tokyo.year - 1) * 12 + (int)(tokyo.month0 % 12);
-		const std::string want = "event=\"PlArt.t2p\" startDay=\"" + std::to_string(loadDay + 1) + "\" span=\"2\"";
+		const std::string want = std::string("event=\"") + booking.plugin + "\" startDay=\"" + std::to_string(loadDay + 1) +
+			"\" span=\"" + std::to_string(booking.span) + "\"";
 		EXPECT(backReport.imported["eventcenter"] == 1);
 		EXPECT(back.find(want) != std::string::npos);
 		// Without a lookup the booking cannot be named, so the hall is imported empty.
@@ -6476,6 +6483,23 @@ static void testYootTenants()
 	EXPECT(Yoot::withinMinutes(5, 300, 300) && Yoot::withinMinutes(1439, 300, 300));  // open == close: all day
 	EXPECT(Yoot::withinMinutes(1436, 1435, 3) && Yoot::withinMinutes(2, -5, 3));       // wraps both ways
 	EXPECT(Yoot::float2Int(0.89f, 7) == 1 && Yoot::float2Int(0.89f, 8) == 0 && Yoot::float2Int(2.0f, 0) == 2);
+	// UT2Utils::Float2Int 0x749f0 multiplies the fraction by 10 on the x87 stack (double
+	// precision, ftol truncates): the rate 0.7f = 0.69999999 has 6 tenths, 0.9f has 8. The
+	// coffee shop's DPDF weekday pool rate (70) is therefore a 60% roll, not 70%. (A rate of
+	// 30 is 0.29999998 on both sides: a 20% roll.)
+	{
+		int yes7 = 0, yes9 = 0, yes3 = 0;
+		for (int r = 0; r < 10; ++r)
+		{
+			yes7 += Yoot::float2Int((float)70 * 0.01f, r) != 0;
+			yes9 += Yoot::float2Int((float)90 * 0.01f, r) != 0;
+			yes3 += Yoot::float2Int((float)30 * 0.01f, r) != 0;
+			const Yoot::PoolRng rng = [r]() { return r; };
+			EXPECT((Yoot::float2IntRng((float)70 * 0.01f, rng) != 0) == (r < 6));
+			EXPECT((Yoot::float2IntRng((float)90 * 0.01f, rng) != 0) == (r < 8));
+		}
+		EXPECT(yes7 == 6 && yes9 == 8 && yes3 == 2);
+	}
 	EXPECT(std::fabs(Yoot::customerUnits(15, 20) - 6.0f) < 1e-4f && Yoot::customerUnits(5, 8) == 5.0f);
 	EXPECT(Yoot::commercialPattern(Yoot::kStatusOpen, 0, 15) == 1 && Yoot::commercialPattern(Yoot::kStatusOpen, 1, 15) == 2);
 	EXPECT(Yoot::commercialPattern(Yoot::kStatusOpen, 7, 15) == 3 && Yoot::commercialPattern(Yoot::kStatusClosed2, 0, 15) == 0);
@@ -7120,6 +7144,11 @@ static void testYootVenues()
 	EXPECT(Y::hallEventNextValue(art, 10, 10, 0) == 1000 && Y::hallEventNextValue(art, 60, 50, 10) == 110);
 	EXPECT(Y::hallEventCollects(540, 540, 1080, 0) && Y::hallEventCollects(1019, 540, 1080, 0));
 	EXPECT(!Y::hallEventCollects(1020, 540, 1080, 0)); // evening events draw nobody
+	// FUN_1000dc70 / CollectCustomerFromPool 0x5ef70: the target (first run 1000 = PlArt unkDC)
+	// only gates; the room asked of the pool is capacity - inside - walking. Oracle hkC2-ec3
+	// (tokyo_g3_venues): 70 visitors on day 1 and 143 on day 2, OpenSky 68 and 141 (6 seeds).
+	EXPECT(Y::hallCollectRoom(1000, 80, 10, 5) == 65 && Y::hallCollectRoom(1000, 80, 80, 0) == 0);
+	EXPECT(Y::hallCollectRoom(50, 80, 20, 20) == 40 && Y::hallCollectRoom(50, 80, 30, 20) == 0);
 	// Event Center status machine, EventCenter.t2p EnterTenant 0x1000bba0 / LeaveTenant
 	// 0x1000bcb0 (disassembled; capacity 80 -> half = 40) and the idle FUN_1000bec0.
 	// Oracle hkC2-ec3 day 1/2: 30 with the first visitors, 31 while some are inside,
@@ -7488,6 +7517,49 @@ static void testYootHotelCallOdds()
     EXPECT(OT::Yoot::hotelCallChance(0) == 0.0);
 }
 
+// Guest-room estimate (Singleroom.t2p 0x100136b0, Twinroom / Suiteroom 0x1000d0d0): the room
+// re-evaluates (UpdateResidencialEstimate 0x10060e20) in the first 8 minutes of every hour in
+// statuses 30, 32 and 33 (call sites 0x1001374c, 0x100138fd, 0x10013978) instead of once a
+// day, and a clean room adds 20 (5 below an estimate of 70) to its own people estimate in the
+// first 8 minutes of the day (0x10013733, IncPeopleEstimate 0x609e0). Oracle (gp2-hotel-hawaii,
+// 1 snapshot per 40 min): hotel_suite@-10,5 reads 150 from 18:39 on day 0 and hotel_double@14,5
+// 150 from 11:46 on day 1 (people 300, noise 150 x traffic range 1); 248..276 once guests stayed.
+static void testYootRoomEstimateHourly()
+{
+    namespace Y = OT::Yoot;
+    EXPECT(Y::roomNightBonus(300) == 20 && Y::roomNightBonus(70) == 20 && Y::roomNightBonus(69) == 5);
+    EXPECT(Y::incPeopleEstimate(290, 20) == 300 && Y::incPeopleEstimate(10, -20) == 0 && Y::incPeopleEstimate(100, 5) == 105);
+    // Due: once per hour (the first 8 minutes), clean or in, never while asleep-up/out (34, 35).
+    for (int status : {30, 32, 33})
+        for (int minute = 0; minute < 1440; ++minute)
+            EXPECT(Y::roomEstimateDue(status, minute) == (minute % 60 < 8));
+    EXPECT(!Y::roomEstimateDue(31, 3) && !Y::roomEstimateDue(34, 3) && !Y::roomEstimateDue(35, 3));
+    // With the 8-minute idle every hour has exactly one idle in its first 8 minutes.
+    for (int phase = 0; phase < 8; ++phase)
+    {
+        int idles = 0;
+        for (int minute = 0; minute < 1440; ++minute)
+            if (minute % Y::kTenantIdleMinutes == phase && Y::roomEstimateDue(30, minute)) ++idles;
+        EXPECT(idles == 24);
+    }
+    Y::ResidentialInputs in;
+    in.previousPeopleEstimate = 300;          // no guests: tenant+0x8c is kept
+    in.senseOfNoise = 150;
+    in.priceIndex = 3;                        // (3 - 3) x 30
+    in.trafficRange = 1;
+    EXPECT(Y::residentialEstimate(in) == 150);
+    in.trafficRange = 0;
+    EXPECT(Y::residentialEstimate(in) == 300);
+    in.peopleEstimates = {262, 238};          // a stay: the mean of the guests' estimates
+    int people = 0;
+    EXPECT(Y::residentialEstimate(in, &people) == 250 && people == 250);
+    in.peopleEstimates.clear();               // checked out: the mean stays for the next night
+    in.previousPeopleEstimate = people;
+    EXPECT(Y::residentialEstimate(in) == 250);
+    in.previousPeopleEstimate = Y::incPeopleEstimate(people, Y::roomNightBonus(250));
+    EXPECT(Y::residentialEstimate(in) == 270);
+}
+
 static void testYootHotelStaySaveReload()
 {
     OT::Yoot::PeopleType a, b;
@@ -7679,6 +7751,7 @@ int main()
 	testYootOnlyPrototypeGate();
 	testYootHotelStaySaveReload();
 	testYootHotelCallOdds();
+	testYootRoomEstimateHourly();
 	testOspDibValidation();
     if (g_failures > 0)
     {
