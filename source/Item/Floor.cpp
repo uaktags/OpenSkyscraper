@@ -6,6 +6,7 @@
 #include <string>
 #include "../Game.h"
 #include "Floor.h"
+#include "Lobby.h"
 
 using namespace OT;
 using namespace Item;
@@ -113,8 +114,39 @@ void Floor::decodeXML(tinyxml2::XMLElement &xml)
 
 void Floor::updateSprite() {}
 
+bool Floor::isStackedStory() const
+{
+	if (!game) return false;
+	Game::ItemSetByInt::const_iterator on = game->itemsByFloor.find(position.y);
+	if (on == game->itemsByFloor.end()) return false;
+	std::vector<std::pair<int, int> > spans;
+	for (Game::ItemSet::const_iterator it = on->second.begin(); it != on->second.end(); ++it)
+	{
+		const Item * item = *it;
+		if (item == this || item->canHaulPeople()) continue;
+		bool upperStory = item->size.y > 1 && item->position.y < position.y;
+		if (!upperStory && item->isLobby()) {
+			// Upper slices of an imported grand lobby (1-story records).
+			int index = 0, total = 1;
+			static_cast<const Lobby *>(item)->stackPosition(index, total);
+			upperStory = index > 0;
+		}
+		if (upperStory)
+			spans.push_back(std::make_pair(item->getRect().minX(), item->getRect().maxX()));
+	}
+	std::sort(spans.begin(), spans.end());
+	int covered = getRect().minX();
+	const int right = getRect().maxX();
+	for (size_t i = 0; i < spans.size() && covered < right; i++)
+		if (spans[i].first <= covered) covered = std::max(covered, spans[i].second);
+	return covered >= right;
+}
+
 void Floor::render(sf::RenderTarget &target) const
 {
+	// Upper stories of a tall tenant carry no slab line (see isStackedStory).
+	if (!game->yootSkinArt() && isStackedStory())
+		return;
 	Sprite b = background;
 	Sprite c = ceiling;
 	// Compose floor sprites with the global Lighting tint (Phase 3.4).

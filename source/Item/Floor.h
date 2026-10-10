@@ -48,6 +48,12 @@ namespace OT {
 			std::vector<std::pair<int, int> > holes;
 			/// True when cell x is inside the extent and not in a hole.
 			bool coversCell(int x) const;
+			/// True when every cell of this slab lies under the upper stories (row
+			/// above a tenant's base row) of a taller tenant - e.g. the 2nd..5th
+			/// row of the cathedral or the 2nd/3rd row of a grand lobby. The EXE
+			/// keeps no floor record for those rows, so no slab line or fire
+			/// escape is drawn there; the slab only exists for pathing.
+			bool isStackedStory() const;
 			/// Covers [minX, maxX) before the extent grows to include it:
 			/// returns the cells that had no floor, closes the holes it
 			/// overlaps and opens one when the range is detached from the

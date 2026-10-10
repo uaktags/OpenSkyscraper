@@ -38,6 +38,8 @@ namespace OT {
             tgui::ChildWindow::Ptr window = NULL;
 
         private:
+            /// Year with its English ordinal suffix (EXE 1120:0476): 1st 2nd 3rd 4th ... 11th 12th 13th 21st.
+            static std::string formatYearOrdinal(int year);
             static std::string formatMoney(int64_t amount);
             static std::string formatCompactMoney(int64_t amount);
             static std::string formatSignedCompactMoney(int64_t amount);

@@ -31,9 +31,9 @@ namespace OT {
 				p->name  = "Cathedral";
 				p->price = 3000000;
 				p->size  = int2(28, 5); // 224x180 exterior; TDT parts 36..40.
-				// The EXE toolbox has no dedicated cathedral cell; reuse the
-				// party hall button art (the exterior has its own sheet).
-				p->icon  = 15;
+				// Toolbox sheet cell 20 is the green-domed cathedral (cell 15
+				// is the party hall's "Hall" tile).
+				p->icon  = 20;
 			}
 			virtual ~Cathedral();
 			virtual void evacuateForDisaster() override;

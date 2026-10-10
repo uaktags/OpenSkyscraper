@@ -7,7 +7,7 @@ class Housekeeping : public Item {
 public:
  OT_ITEM_CONSTRUCTOR(Housekeeping);
  OT_ITEM_PROTOTYPE(Housekeeping) {
-  p->id="housekeeping"; p->name="Housekeeping"; p->size=int2(15,1); p->price=50000; p->icon=21;
+  p->id="housekeeping"; p->name="Housekeeping"; p->size=int2(15,1); p->price=50000; p->icon=23;
  }
  class Maid : public Person {
  public:

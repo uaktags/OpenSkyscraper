@@ -4786,6 +4786,55 @@ static void testBatch6Placement(OT::Game &g)
  church=static_cast<Item::Cathedral *>(*g.itemsByType["cathedral"].begin());
  EXPECT(church->position==int2(13,99));EXPECT(church->size==int2(28,5));
  EXPECT(g.itemsByFloor[103].count(church)==1);
+ // WP11: rows above the cathedral's base carry no slab line and no fire escapes
+ // (the EXE has no floor record there); the base row keeps both.
+ for(int row=100;row<=103;++row){ EXPECT(g.floorItems.count(row)==1 && g.floorItems[row]->isStackedStory()); EXPECT(!g.decorations.hasFireStairs(row)); }
+ EXPECT(g.floorItems.count(99)==1 && !g.floorItems[99]->isStackedStory() && g.decorations.hasFireStairs(99));
+ g.setRules(previousRules);
+
+ // WP11: the TDT stores one lobby record per story and routing keeps them as
+ // separate 1-story items, but they draw as ONE grand lobby (stacks of <= 3).
+ reset(); { Tdt::TdtData lobbyTdt={}; lobbyTdt.level=5; lobbyTdt.balance=1000000; lobbyTdt.floors.resize(120);
+  for(int f=0;f<120;++f) lobbyTdt.floors[f].index=f;
+  for(int f=10;f<=13;++f) lobbyTdt.floors[f].tenants.push_back({190,290,24,0,0,0});
+  std::vector<std::string> lobbyReport; const std::string lobbyXml=Tdt::toTowerXml(lobbyTdt,lobbyReport);
+  tinyxml2::XMLDocument lobbyDoc; EXPECT(lobbyDoc.Parse(lobbyXml.c_str())==tinyxml2::XML_SUCCESS); g.decodeXML(lobbyDoc);
+  EXPECT(g.itemsByType["lobby"].size()==4);
+  const int wantIndex[4]={0,1,2,0}, wantTotal[4]={3,3,3,1};
+  for(auto *l : g.itemsByType["lobby"]){ int idx=-1,tot=-1; static_cast<Item::Lobby *>(l)->stackPosition(idx,tot);
+   const int row=l->position.y; EXPECT(row>=0 && row<=3); if(row<0||row>3) continue;
+   EXPECT(l->size.y==1 && idx==wantIndex[row] && tot==wantTotal[row]); }
+  for(int row=1;row<=2;++row) EXPECT(g.floorItems.count(row)==1 && g.floorItems[row]->isStackedStory() && !g.decorations.hasFireStairs(row));
+  EXPECT(g.floorItems.count(0)==1 && !g.floorItems[0]->isStackedStory()); }
+
+ // WP11: stairs/escalators have no floor-map record, so an escalator across a
+ // basement parking row must not sever the drive path to the bays beyond it.
+ reset(); { Tdt::TdtData parkTdt={}; parkTdt.level=5; parkTdt.balance=1000000; parkTdt.floors.resize(120);
+  for(int f=0;f<120;++f) parkTdt.floors[f].index=f;
+  parkTdt.floors[9].tenants.push_back({187,203,44,0,0,0});
+  for(int b=0;b<6;++b) parkTdt.floors[9].tenants.push_back({203+4*b,207+4*b,11,0,0,0});
+  parkTdt.stairs.push_back({0,215,9}); parkTdt.stairsValid=true;
+  std::vector<std::string> parkReport; const std::string parkXml=Tdt::toTowerXml(parkTdt,parkReport);
+  tinyxml2::XMLDocument parkDoc; EXPECT(parkDoc.Parse(parkXml.c_str())==tinyxml2::XML_SUCCESS); g.decodeXML(parkDoc);
+  EXPECT(g.itemsByType["parking"].size()==6 && g.itemsByType["escalator"].size()==1);
+  Item::Parking::recomputeAllChains(&g);
+  int parkUsable=0; for(auto *p : g.itemsByType["parking"]) parkUsable+=static_cast<Item::Parking *>(p)->usableSpaces();
+  EXPECT(parkUsable==6); }
+
+ // WP11: toolbox sheet cells (ui/toolbox/items.png, 26 columns) per tool; no two
+ // base tools share a tile and none points past the sheet.
+ { const std::map<std::string,int> expectIcon={{"lobby",0},{"floor",1},{"stairs",2},{"escalator",3},{"elevator-standard",4},{"elevator-service",5},
+   {"elevator-express",6},{"office",7},{"hotel_single",8},{"hotel_double",9},{"hotel_suite",10},{"fastfood",11},{"restaurant",12},{"shop",13},
+   {"cinema",14},{"partyhall",15},{"parkingramp",16},{"parking",17},{"recycling",18},{"metro",19},{"cathedral",20},{"security",21},
+   {"medicalcenter",22},{"housekeeping",23},{"condo",24}};
+  std::set<int> usedCells;
+  for(const auto &kv : expectIcon){ auto pit=g.itemFactory.prototypesById.find(kv.first); EXPECT(pit!=g.itemFactory.prototypesById.end());
+   if(pit==g.itemFactory.prototypesById.end()) continue; EXPECT(pit->second->icon==kv.second && kv.second<26); EXPECT(usedCells.insert(kv.second).second); } }
+
+ // WP11: HUD year ordinals (EXE 1120:0476) - 11th/12th/13th are exceptions.
+ EXPECT(TimeWindow::formatYearOrdinal(1)=="1st Yr" && TimeWindow::formatYearOrdinal(2)=="2nd Yr" && TimeWindow::formatYearOrdinal(3)=="3rd Yr");
+ EXPECT(TimeWindow::formatYearOrdinal(4)=="4th Yr" && TimeWindow::formatYearOrdinal(11)=="11th Yr" && TimeWindow::formatYearOrdinal(12)=="12th Yr");
+ EXPECT(TimeWindow::formatYearOrdinal(13)=="13th Yr" && TimeWindow::formatYearOrdinal(21)=="21st Yr" && TimeWindow::formatYearOrdinal(23)=="23rd Yr" && TimeWindow::formatYearOrdinal(113)=="113th Yr");
  g.setRules(previousRules);
 
  // B3: underground-only / not-underground classes; cinema now allowed above ground.

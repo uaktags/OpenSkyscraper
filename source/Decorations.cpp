@@ -40,8 +40,10 @@ void Decorations::reset()
  * the tower on this floor. */
 void Decorations::updateFloor(int y)
 {
-	// If there is no floor item, remove any existing stairs.
-	if (game->floorItems.count(y) == 0) {
+	// If there is no floor item - or the slab only sits under the upper
+	// stories of a tall tenant, which has no floor record in the original
+	// and so no fire escape - remove any existing stairs.
+	if (game->floorItems.count(y) == 0 || (!game->yootSkinArt() && game->floorItems[y]->isStackedStory())) {
 		FireStairs::iterator i = fireStairs.find(y);
 		if (i != fireStairs.end()) {
 			fireStairs.erase(i);

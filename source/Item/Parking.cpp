@@ -135,7 +135,10 @@ void Parking::recomputeAllChains(Game * game)
 			const Item * item = *it;
 			int kind;
 			if (item->prototype->id == "parking") kind = kCellParking;
-			else if (item->isElevator() || item->prototype->id == "floor")         kind = kCellBare; // shafts: no floor-map record
+			// Shafts, stairs and escalators have no floor-map record (the EXE keeps
+			// them in their own tables), so they never interrupt the parking
+			// records underneath: only a genuinely bare run or another tenant does.
+			else if (item->canHaulPeople() || item->prototype->id == "floor")      kind = kCellBare;
 			else                                 kind = kCellBlocker;
 			for (int cx = item->position.x; cx < item->position.x + item->size.x; ++cx) {
 				std::map<int, int>::iterator k = row.find(cx);
