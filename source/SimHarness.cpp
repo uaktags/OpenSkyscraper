@@ -95,6 +95,12 @@ std::string Sim::summaryJson(const Game & game, const Options & options, long ti
 	j << "  \"rating\": " << game.rating << ",\n";
 	j << "  \"population\": " << game.population << ",\n";
 	j << "  \"people\": " << game.people.size() << ",\n";
+	if (options.dumpEvery > 0 && !profile.yootWorld) {
+		j << "  \"countT\": [";
+		for (int c = 0; c < TenantRules::kCountCategories; ++c)
+			j << (c ? ", " : "") << game.countT.cat[c];
+		j << "],\n  \"retailPeriod\": " << game.sky.retailPeriod() << ",\n";
+	}
 	// Parity dumps need the live people: .tower saves return transient visitors
 	// to the pool. Keep normal summaries (and existing goldens) unchanged.
 	if (options.dumpEvery > 0 && game.eventSystem.people.enabled()) {

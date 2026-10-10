@@ -406,7 +406,7 @@ namespace Tdt {
 		r.skip(12); // otherIncome, constructionCosts, lastQuarterMoney (finance history not imported)
 		out.frameTime = r.u16();
 		out.currentDay = r.i32();
-		r.u16();
+		out.retailRainyDay = r.u16() != 0; // 10d8:0ac4, all.c:12107: bc58
 		out.lobbyHeight = r.u16();
 		r.skip(0x2a - r.offset());
 		out.viewX = r.u16();
@@ -459,6 +459,8 @@ namespace Tdt {
 			"<tower funds=\"%lld\" rating=\"%d\" time=\"%.17g\" speed=\"1\" rainy=\"0\" tool=\"inspector\" x=\"%d\" y=\"%d\">",
 			(long long)funds, rating, absolute, poiX, poiY);
 		std::string xml = head;
+		xml.pop_back();
+		xml += in.retailRainyDay ? " retailRainy=\"1\">" : " retailRainy=\"0\">";
 		if (in.lobbyHeight >= 1 && in.lobbyHeight <= 3) {
 			xml.pop_back();
 			snprintf(head, sizeof(head), " lobbyHeightLock=\"%d\">", in.lobbyHeight);

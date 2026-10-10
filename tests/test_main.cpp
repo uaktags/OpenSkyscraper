@@ -2920,6 +2920,7 @@ static void testTdtLoader()
 	EXPECT(tdt.level == 5);
 	EXPECT(tdt.balance == 946059L);
 	EXPECT(tdt.frameTime == 0 && tdt.currentDay == 150);
+	EXPECT(!tdt.retailRainyDay);
 	EXPECT(tdt.populationValid && tdt.population == 15402);
 	EXPECT(tdt.countT[0] == 12210 && tdt.countT[1] == 65);
 	EXPECT(tdt.elevatorsValid && tdt.stairsValid);
@@ -3031,6 +3032,14 @@ static void testTdtLoader()
 		std::cerr << "xml head: " << xml.substr(0, 300) << "\n";
 	}
 
+	// WP9d: bc58 is a saved demand flag at +0x1a, not the visible rain bit.
+	bytes[0x1a] = 1;
+	{
+		std::ofstream out(path.c_str(), std::ios::binary);
+		out.write((const char *)&bytes[0], (std::streamsize)bytes.size());
+	}
+	EXPECT(OT::Tdt::loadFile(path, tdt, error) && tdt.retailRainyDay);
+	EXPECT(OT::Tdt::toTowerXml(tdt, report).find("retailRainy=\"1\"") != std::string::npos);
 	std::remove(path.c_str());
 }
 
@@ -4601,6 +4610,7 @@ static void testBatch5BRecyclingAndVip()
 
 #ifdef OPENSKY_TRANSPORT_SCENARIOS
 #include "Item/Cinema.h"
+#include "Item/Shop.h"
 // Engine scenarios for the batch-5 fixes (F1-F9); runs in OpenSkyTransportTests.
 static void testBatch5Engine(OT::Game &g)
 {
@@ -4626,6 +4636,55 @@ static void testBatch5Engine(OT::Game &g)
   for (int k=0;k<6;++k) { c->tenant.bank[k].count=1; c->tenant.bank[k].total=(int16_t)total; }
   return c;
  };
+
+ // WP9d: the EXE's bc58 retail period survives the visual rain stop at
+ // 17:00 (1020:0e0d, all.c:4531-4535), midnight and the 04:59 judge.
+ // Opening and arrival grading both use it (11b0:1870, all.c:24403-24417).
+ {
+  reset(4.0+Time::hourToAbsolute(17)); g.rating=3;
+  g.sky.rainyDay=false; g.sky.retailRainyDay=true;
+  auto *food=static_cast<Item::Restaurant *>(make("restaurant",0,0));
+  auto *ff=static_cast<Item::FastFood *>(make("fastfood",30,0));
+  auto *shop=static_cast<Item::Shop *>(make("shop",60,0));
+  food->serviceScore[0]=35; food->serviceScore[2]=25;
+  food->walkinsToday=19; g.addPopulation(TenantRules::kCountRestaurant,7);
+  food->openDay();
+  EXPECT(food->dailyQuota==25 && food->quotaRemaining==25);
+  EXPECT(food->serviceScore[2]==0 && food->serviceScore[0]==35);
+  EXPECT(g.countT.cat[TenantRules::kCountRestaurant]==19);
+  EXPECT(food->walkinsYesterday==19 && food->walkinsToday==0);
+  // An arriving shopper grades the rainy score, even after the sky clears.
+  auto *p=new Person(&g,Person::kMan); p->bankCount=1; p->bankTotal=0;
+  ff->open=true; ff->addPerson(p); ff->removePerson(p);
+  EXPECT(ff->serviceScore[2]==12 && ff->serviceScore[0]==10);
+  shop->let=true; shop->open=true; shop->addPerson(p); shop->removePerson(p);
+  EXPECT(shop->serviceScore[2]==12 && shop->serviceScore[0]==10);
+  food->addPerson(p); food->removePerson(p);
+  EXPECT(food->serviceScore[2]==2 && food->serviceScore[0]==35);
+  delete p;
+  setTime(5.0+Time::hourToAbsolute(5)); g.sky.advanceRetailWeather();
+  EXPECT(g.sky.retailPeriod()==2);
+  // Demand resets before the next day's venues run, independently of render.
+  struct Clock : Time { using Time::set; };
+  Clock clock; clock.set(5.0+Time::hourToAbsolute(6.9)); clock.set(5.0+Time::hourToAbsolute(7.01));
+  g.time=clock; g.sky.advanceRetailWeather();
+  EXPECT(!g.sky.retailRainyDay && g.sky.retailPeriod()==1);
+  // A native save/reload and TDT conversion preserve the independent flag.
+  g.sky.retailRainyDay=true;
+  tinyxml2::XMLPrinter pr; g.encodeXML(pr);
+  tinyxml2::XMLDocument doc; EXPECT(doc.Parse(pr.CStr())==tinyxml2::XML_SUCCESS);
+  g.decodeXML(doc); EXPECT(g.sky.retailRainyDay && !g.sky.rainyDay);
+  Tdt::TdtData tdt={}; tdt.level=4; tdt.currentDay=4; tdt.frameTime=1800;
+  tdt.retailRainyDay=true; std::vector<std::string> report;
+  const std::string xml=Tdt::toTowerXml(tdt,report);
+  EXPECT(doc.Parse(xml.c_str())==tinyxml2::XML_SUCCESS);
+  g.decodeXML(doc); EXPECT(g.sky.retailRainyDay && g.sky.retailPeriod()==2);
+  // Five-star towers never arm rain; rollover retains only the prior latch.
+  setTime(12.0+Time::hourToAbsolute(5)); g.sky.advanceRetailWeather();
+  EXPECT(g.sky.retailRainyDay);
+  g.rating=4; clock.set(12.0+Time::hourToAbsolute(6.9)); clock.set(12.0+Time::hourToAbsolute(7.01));
+  g.time=clock; g.sky.advanceRetailWeather(); EXPECT(!g.sky.retailRainyDay);
+ }
 
  // WP9b: 1230:07cb, all.c:33438-33442 allocates 48, not the
  // 40-person admission cap. At period 5, 1228:466d (all.c:32319-32323)

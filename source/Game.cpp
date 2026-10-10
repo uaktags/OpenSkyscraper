@@ -568,6 +568,7 @@ Game::~Game()
 
 void Game::clearWorld()
 {
+	sky.retailRainyDay = false;
 	inspectorDialog.close();
 	elevatorDialog.close();
 	closeEventChoice();
@@ -1073,6 +1074,7 @@ void Game::advanceSimTick(double dt)
 	// quarter-number transition. The cycle marker makes repeated frames and
 	// large time jumps idempotent.
 	time.advance(dt);
+	sky.advanceRetailWeather();
 	int currentAccountingDay = (int)floor(time.absolute);
 	if (currentAccountingDay > lastAccountingDay) {
 		settleDailyAccounting();
@@ -2129,6 +2131,7 @@ void Game::encodeXML(tinyxml2::XMLPrinter & xml)
 	xml.PushAttribute("time", time.absolute);
 	xml.PushAttribute("speed", speedMode);
 	xml.PushAttribute("rainy", sky.rainyDay);
+	xml.PushAttribute("retailRainy", sky.retailRainyDay);
 	xml.PushAttribute("tool", selectedTool.c_str());
 	xml.PushAttribute("ruleset", activeRules.identifier());
 	if (activeRules.profile().yootWorld) {
@@ -2324,6 +2327,10 @@ void Game::decodeXML(tinyxml2::XMLDocument & xml)
 	yootRentCycle = root->IntAttribute("yootRentCycle", currentCycle - (rentDone ? 0 : 1));
 	setSpeedMode(root->IntAttribute("speed"));
 	sky.rainyDay = root->BoolAttribute("rainy");
+	// Old native saves have no demand flag: reconstruct the last 07:00
+	// decision. TDT imports carry the original serialized bc58 instead.
+	const int rainDay = (int)floor(time.absolute) - (time.hour < 7.0 ? 1 : 0);
+	sky.retailRainyDay = root->BoolAttribute("retailRainy", rainDay % 8 == 4 && rating < 4);
 	selectTool(root->Attribute("tool"));
 
 	poi.x = root->IntAttribute("x");

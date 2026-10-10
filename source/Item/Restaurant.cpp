@@ -155,7 +155,7 @@ void Restaurant::advance(double dt)
 {
 	(void)dt;
 	const int day = static_cast<int>(std::floor(game->time.absolute));
-	const int period = game->sky.rainyDay ? 2 : (game->time.isHoliday() ? 1 : 0);
+	const int period = game->sky.retailPeriod();
 	const int cap = period == 0 ? 35 : period == 1 ? 50 : 25;
 	if (game->time.checkHour(17) && lastDemandDay != day) openDay();
 
@@ -230,7 +230,7 @@ void Restaurant::addPerson(Person *p)
 {
     // Journey::next already banked the final transport leg, so grading reads
     // the updated mean even at a shut door.
-    const int period=game->sky.rainyDay?2:(game->time.isHoliday()?1:0);
+    const int period=game->sky.retailPeriod();
     const int cap=period==0?35:period==1?50:25;
     const int mean=p->bankedMean(), bar2=game->rating<=2?150:200;
     serviceScore[period]=std::min(cap,serviceScore[period]+(mean<80?2:mean<bar2?1:0));
@@ -309,7 +309,7 @@ void Restaurant::evacuateForDisaster()
 void Restaurant::openDay()
 {
     const int day=int(std::floor(game->time.absolute));
-    const int period=game->sky.rainyDay?2:(game->time.isHoliday()?1:0);
+    const int period=game->sky.retailPeriod();
     const int cap=period==0?35:period==1?50:25;
     if (lastDemandDay==day) return;
 

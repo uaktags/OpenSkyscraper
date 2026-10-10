@@ -14,6 +14,7 @@ Sky::Sky(Game *game) : GameObject(game)
 	to = 0;
 	progress = 0;
 	rainyDay = false;
+	retailRainyDay = false;
 	rainAnimation = 0;
 	soundCountdown = 0;
 	thunderOverlay = 0;
@@ -23,6 +24,25 @@ Sky::Sky(Game *game) : GameObject(game)
 	thunderSound.setBuffer(app->sounds["simtower/thunder"]);
 	birdsSound.setBuffer(app->sounds["simtower/birds/day"]);
 	cricketsSound.setBuffer(app->sounds["simtower/crickets"]);
+}
+
+// 1208:0196 ft0 clears bc58 (all.c:28850-28857), then
+// 1020:0dcd sets it on day%8==4 below five stars (all.c:4510-4517).
+// 1020:0e0d clears only the visible flag at 17:00 (all.c:4531-4535).
+void Sky::advanceRetailWeather()
+{
+	if (game->activeRules.profile().rain == RulesProfile::Rain::Random &&
+	    game->time.checkHour(7))
+		retailRainyDay = (static_cast<int>(std::floor(game->time.absolute)) % 8) == 4 && game->rating < 4;
+}
+
+int Sky::retailPeriod() const
+{
+	// 11b0:1870 (all.c:24403-24417) reads bc58 before the weekend byte;
+	// arrival grading and opening quotas must use the same period.
+	const bool rain = game->activeRules.profile().rain == RulesProfile::Rain::Random
+		? retailRainyDay : rainyDay;
+	return rain ? 2 : (game->time.isHoliday() ? 1 : 0);
 }
 
 void Sky::advance(double dt)

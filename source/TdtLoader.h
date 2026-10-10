@@ -84,6 +84,7 @@ namespace Tdt {
 		int level;       ///< 1..5 stars, 6 = TOWER
 		int32_t balance;     ///< stored funds (display dollars are x100)
 		int frameTime;   ///< 0..2599 frames; 0 = 7:00 AM
+		bool retailRainyDay = false; ///< header +0x1a: serialized demand flag bc58
 		int currentDay;  ///< EXE calendar days since WD 1 / Q 1 / Year 1
 		int lobbyHeight = 0; ///< header +0x1c: grand-lobby height [bc5a] (1..3)
 		int population = 0; ///< serialized CountT total (not the live people count)

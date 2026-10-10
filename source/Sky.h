@@ -16,6 +16,10 @@ namespace OT {
 		double progress;
 
 		bool rainyDay;
+		// EXE bc58: retail demand survives the 17:00 visual rain stop.
+		bool retailRainyDay;
+		void advanceRetailWeather();
+		int retailPeriod() const;
 		double rainAnimation;
 		double thunderOverlay;
 
