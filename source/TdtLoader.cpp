@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <utility>
 
@@ -82,6 +83,7 @@ namespace Tdt {
 			case 11: *id = "parking";       return true;
 			case 13: *id = "medicalcenter"; return true;
 			case 14: *id = "security";      return true;
+			case 15: *id = "housekeeping";  return true; // 1180:0bbe bills row 15 ($10,000) per room
 			case 10: *id = "shop";          return true;
 			case 17: *id = "secom";         return true; // cut 1994 feature; closest match
 			case 44: *id = "parkingramp";   return true; // parking ramp (not the metro tunnel; 45 stays skipped)
@@ -153,12 +155,15 @@ namespace Tdt {
 				tn.right = r.u16();
 				tn.type = r.i8();
 				tn.status = r.u8();
-				tn.variant = r.u8(); // byte 6: retail variety (harness-measured)
-				r.skip(9);           // bytes 7-15: reserved
+				tn.variant = r.u8(); // byte 6: index into the retail table (variety is retail +11)
+				r.skip(7);           // bytes 7-13: people offset, index in floor, reserved
+				tn.armed = r.u8();   // byte 14 (+0x14)
+				tn.category = r.u8();// byte 15 (+0x15)
 				tn.rentClass = r.u8(); // byte 16
-				r.skip(1);           // byte 17
+				tn.tenure = r.u8();  // byte 17
 			}
-			r.skip(FLOOR_INDEX_ENTRIES * 2); // per-floor index map; we keep file order
+			fr.indexMap.resize(FLOOR_INDEX_ENTRIES);
+			for (int m = 0; m < FLOOR_INDEX_ENTRIES; m++) fr.indexMap[m] = r.u16(); // tile slot -> tenant index
 		}
 		return true;
 	}
@@ -276,6 +281,58 @@ namespace Tdt {
 		}
 	}
 
+	/// Reads the 512 x 18B retail table and attaches each live record to its
+	/// tenant (record +0 = floor, +1 = index-map slot on that floor; see
+	/// 11b0:0184 and 11b0:02f2, all.c:23492 and 23564).
+	static void linkRetailTable(Reader & r, TdtData & out)
+	{
+		for (int i = 0; i < RETAIL_SLOTS; i++)
+		{
+			int floor = r.i8();
+			int slot = r.u8();
+			int state = r.u8();
+			int s3 = r.u8(), s4 = r.u8(), s5 = r.u8();
+			r.skip(1);
+			int today = r.u8();
+			int yesterday = r.u8();
+			r.skip(2);
+			int variety = r.u8();
+			r.skip(RETAIL_RECORD - 12);
+			if (floor < 0 || floor >= (int)out.floors.size() || slot == 0xff) continue;
+			FloorRec & fr = out.floors[floor];
+			if (slot >= (int)fr.indexMap.size()) continue;
+			int ti = fr.indexMap[slot];
+			if (ti < 0 || ti >= (int)fr.tenants.size()) continue;
+			Tenant & tn = fr.tenants[ti];
+			if (tn.type != 6 && tn.type != 10 && tn.type != 12) continue;
+			tn.hasRetail = true;
+			tn.retailState = state;
+			tn.retailScore[0] = s3; tn.retailScore[1] = s4; tn.retailScore[2] = s5;
+			tn.walkinsToday = today;
+			tn.walkinsYesterday = yesterday;
+			tn.retailVariety = variety;
+		}
+	}
+
+	/// Cinema / party hall table: 16 x 12B just before the three trailing
+	/// blocks of 10d8:0b8c (0x50+0x28, 0x1102, 0x842, 0xca2, then 8 bytes).
+	static void readCinemaTable(const std::vector<uint8_t> & bytes, TdtData & out)
+	{
+		const size_t tail = 8 + 0xca2 + 0x842 + 0x1102 + 0x78;
+		if (bytes.size() < tail + 16 * 12) return;
+		size_t base = bytes.size() - tail - 16 * 12;
+		for (int i = 0; i < 16; i++)
+		{
+			const uint8_t * rec = &bytes[base + (size_t)i * 12];
+			if (rec[0] >= 0x80 || rec[0] >= 120) continue;
+			CinemaRec c;
+			c.floor = rec[0];
+			c.movie = (int8_t)rec[7];
+			c.age = (int8_t)rec[9];
+			out.cinemas.push_back(c);
+		}
+	}
+
 	// ---- Tolerant tail walk -------------------------------------------------
 
 	static void walkTail(const std::vector<uint8_t> & bytes, Reader & r, TdtData & out)
@@ -289,7 +346,7 @@ namespace Tdt {
 
 		// Retail table: 512 x 18B; retail variety comes from the unit records instead.
 		if (!r.canRead(RETAIL_SLOTS * RETAIL_RECORD)) { out.warnings.push_back("Retail table missing or cut short; transport data could not be reached."); return; }
-		r.skip(RETAIL_SLOTS * RETAIL_RECORD);
+		linkRetailTable(r, out);
 
 		// Elevator table: 24 slots; payload layout disambiguated by retry.
 		size_t elevatorStart = r.offset();
@@ -316,6 +373,8 @@ namespace Tdt {
 			r.skip(FINANCE_SIZE - 11 * 4);
 			if (r.canRead(PARKING_SIZE)) r.skip(PARKING_SIZE);
 		}
+
+		readCinemaTable(bytes, out);
 
 		// Stairs: located by record signature (finance/parking sizes drift between saves).
 		locateStairs(bytes, afterElevators, out.stairs);
@@ -347,6 +406,8 @@ namespace Tdt {
 		r.skip(12); // otherIncome, constructionCosts, lastQuarterMoney (finance history not imported)
 		out.frameTime = r.u16();
 		out.currentDay = r.i32();
+		r.u16();
+		out.lobbyHeight = r.u16();
 		r.skip(0x2a - r.offset());
 		out.viewX = r.u16();
 		out.viewY = r.u16();
@@ -365,6 +426,7 @@ namespace Tdt {
 	{
 		const char * family;
 		int left, right, floor;
+		int type;
 	};
 
 	std::string toTowerXml(const TdtData & in, std::vector<std::string> & report)
@@ -397,6 +459,11 @@ namespace Tdt {
 			"<tower funds=\"%lld\" rating=\"%d\" time=\"%.17g\" speed=\"1\" rainy=\"0\" tool=\"inspector\" x=\"%d\" y=\"%d\">",
 			(long long)funds, rating, absolute, poiX, poiY);
 		std::string xml = head;
+		if (in.lobbyHeight >= 1 && in.lobbyHeight <= 3) {
+			xml.pop_back();
+			snprintf(head, sizeof(head), " lobbyHeightLock=\"%d\">", in.lobbyHeight);
+			xml += head;
+		}
 		if (in.populationValid) {
 			xml.pop_back();
 			char counts[256];
@@ -454,7 +521,7 @@ namespace Tdt {
 					if (underConstruction) constructionSites++;
 					if (type == 12 || type == 6) // fastfood / restaurant carry a variety
 					{
-						int variant = clampInt(tn.variant, 0, 4);
+						int variant = clampInt(tn.hasRetail ? tn.retailVariety : tn.variant, 0, 4);
 						int maxVariant = (type == 12) ? 4 : 3; // our Restaurant lacks the 5th (Steak House)
 						if (variant > maxVariant)
 						{
@@ -481,6 +548,26 @@ namespace Tdt {
 						snprintf(buf, sizeof(buf), " hosted=\"%d\" roomState=\"%d\"", hosted, state);
 						room += buf;
 					}
+					if (!underConstruction && (type == 3 || type == 4 || type == 5 || type == 6 || type == 7 ||
+					                           type == 9 || type == 10 || type == 12)) {
+						// EXE tenant record bytes 14-17 (batch 5 T1): armed, judged
+						// category, tenure and the rent-table row (4 = no rate).
+						snprintf(buf, sizeof(buf), " armed=\"%d\" category=\"%d\" tenure=\"%d\"",
+							tn.armed ? 1 : 0, tn.category, tn.tenure);
+						room += buf;
+						if (tn.rentClass >= 0 && tn.rentClass <= 3) {
+							snprintf(buf, sizeof(buf), " rentClass=\"%d\"", tn.rentClass);
+							room += buf;
+						}
+					}
+					if (tn.hasRetail && !underConstruction) {
+						// Retail table record (11b0:02f2): yesterday/today walk-ins feed
+						// CountT at the first opening, the service scores set the quota.
+						snprintf(buf, sizeof(buf), " walkinsToday=\"%d\" walkinsYesterday=\"%d\" serviceScore0=\"%d\" serviceScore1=\"%d\" serviceScore2=\"%d\"",
+							tn.walkinsToday, tn.walkinsYesterday, tn.retailScore[0], tn.retailScore[1], tn.retailScore[2]);
+						room += buf;
+						if (type == 10) room += tn.retailState == 255 ? " let=\"0\"" : " let=\"1\"";
+					}
 					room += "/>";
 					xml += room; xml += "\n"; emittedItems++;
 					continue;
@@ -493,12 +580,12 @@ namespace Tdt {
 					pr.left = tn.left;
 					pr.right = tn.right;
 					pr.floor = fr.index;
+					pr.type = type;
 					parts.push_back(pr);
 					if (underConstruction) constructionSites++;
 					continue;
 				}
 
-				if (type == 15) { noteSkipped(15); continue; }  // housekeeping room: cleaning is automatic here
 				if (type == 45) { noteSkipped(type); continue; } // ground strips / metro tunnel
 				if (type == 48) // burned area: becomes a burned span (rubble) the player bulldozes
 				{
@@ -513,6 +600,39 @@ namespace Tdt {
 		// Multi-story part clusters -> one item each (lowest floor, leftmost
 		// extent). Parts of one family merge when floors are contiguous and
 		// x-ranges overlap or sit flush (the cinema screen adjoins the hall).
+		// Recycling centers are 25x2 units, one type-20 and one type-21 record
+		// each; a tower can stack many of them (SCHMITT.TDT has nine). Pair them
+		// by left edge and adjacent floor instead of merging the whole column,
+		// so the quarterly upkeep (row 20, $50,000 per record, 1180:0bbe) and the
+		// center count behind the recycling ratio (1090:0000) both match.
+		{
+			std::vector<PartRef> recycling, others;
+			for (size_t i = 0; i < parts.size(); i++)
+				(std::string(parts[i].family) == "recycling" ? recycling : others).push_back(parts[i]);
+			std::vector<bool> used(recycling.size(), false);
+			for (size_t i = 0; i < recycling.size(); i++)
+			{
+				if (used[i] || recycling[i].type != 20) continue;
+				int mate = -1;
+				for (size_t j = 0; j < recycling.size(); j++)
+					if (!used[j] && j != i && recycling[j].type == 21 && recycling[j].left == recycling[i].left &&
+					    std::abs(recycling[j].floor - recycling[i].floor) == 1) { mate = (int)j; break; }
+				used[i] = true;
+				int low = recycling[i].floor;
+				if (mate >= 0) { used[mate] = true; low = std::min(low, recycling[mate].floor); }
+				snprintf(buf, sizeof(buf), "<item type=\"recycling\" x=\"%d\" y=\"%d\" evaluation=\"50.0\"/>",
+					recycling[i].left - X_ORIGIN, low - Y_ORIGIN);
+				xml += buf; xml += "\n"; emittedItems++;
+			}
+			for (size_t i = 0; i < recycling.size(); i++)
+			{
+				if (used[i]) continue; // a lone type-21 record still stands for a center
+				snprintf(buf, sizeof(buf), "<item type=\"recycling\" x=\"%d\" y=\"%d\" evaluation=\"50.0\"/>",
+					recycling[i].left - X_ORIGIN, recycling[i].floor - Y_ORIGIN);
+				xml += buf; xml += "\n"; emittedItems++;
+			}
+			parts.swap(others);
+		}
 		std::stable_sort(parts.begin(), parts.end(), [](const PartRef & a, const PartRef & b)
 		{
 			if (a.floor != b.floor) return a.floor < b.floor;
@@ -545,6 +665,20 @@ namespace Tdt {
 			if (std::string(cluster.family) == "cathedral")
 				snprintf(buf, sizeof(buf), "<item type=\"cathedral\" x=\"%d\" y=\"%d\" evaluation=\"50.0\" width=\"28\" height=\"5\"/>",
 					cluster.left - X_ORIGIN, cluster.floor - Y_ORIGIN);
+			else if (std::string(cluster.family) == "cinema")
+			{
+				// Cinema table record (1188:05af): film number and age in days.
+				int movie = -1, age = 0;
+				for (size_t c = 0; c < in.cinemas.size(); c++)
+					if (in.cinemas[c].movie >= 0 && in.cinemas[c].floor >= cluster.floor && in.cinemas[c].floor <= maxFloor)
+					{ movie = in.cinemas[c].movie; age = in.cinemas[c].age; break; }
+				if (movie >= 0 && movie < 14)
+					snprintf(buf, sizeof(buf), "<item type=\"cinema\" x=\"%d\" y=\"%d\" evaluation=\"50.0\" movie=\"%d\" movieAgeDays=\"%d\"/>",
+						cluster.left - X_ORIGIN, cluster.floor - Y_ORIGIN, movie, age);
+				else
+					snprintf(buf, sizeof(buf), "<item type=\"cinema\" x=\"%d\" y=\"%d\" evaluation=\"50.0\"/>",
+						cluster.left - X_ORIGIN, cluster.floor - Y_ORIGIN);
+			}
 			else
 				snprintf(buf, sizeof(buf), "<item type=\"%s\" x=\"%d\" y=\"%d\" evaluation=\"50.0\"/>",
 					cluster.family, cluster.left - X_ORIGIN, cluster.floor - Y_ORIGIN);

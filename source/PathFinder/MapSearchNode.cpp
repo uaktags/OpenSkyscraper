@@ -43,8 +43,12 @@ static bool destinationElevatorMatchesRoute(const MapNode *node, bool serviceRou
 }
 static bool hasTransferSlot(const MapSearchNode *start, const MapNode *dest) {
 	if (!start || !start->mapNode || !dest || !start->mapNode->floorNode) return false;
-	Item::Item *from = start->parent_item && start->parent_item->isElevator()
-		? start->parent_item : elevatorAt(start->mapNode, start->serviceRoute);
+	// The shaft just ridden is remembered while walking along the floor
+	// (lastElevator); see MapSearchNode.h. Without it, a second shaft further
+	// along the lobby than the first node over could never be boarded.
+	Item::Item *from = start->lastElevator ? start->lastElevator
+		: (start->parent_item && start->parent_item->isElevator()
+			? start->parent_item : elevatorAt(start->mapNode, start->serviceRoute));
 	Item::Item *to = elevatorAt(dest, start->serviceRoute);
 	if (!from || !to) return false;
 	const int fromWidth = from->prototype->icon == 6 ? kExpressSlotWidth : kStandardSlotWidth;
@@ -68,7 +72,7 @@ static bool hasTransferSlot(const MapSearchNode *start, const MapNode *dest) {
 }
 }
 
-MapSearchNode::MapSearchNode() : mapNode(NULL), parent_item(NULL),
+MapSearchNode::MapSearchNode() : mapNode(NULL), parent_item(NULL), lastElevator(NULL),
 numStairs(0), numEscalators(0), numElevators(0),
 stairsSinceTransport(0), escalatorsSinceTransport(0),
 walkFloorsSinceTransport(0), walkingHasStairs(false),
@@ -76,7 +80,7 @@ g(0), h(0),
                                  start_point(INT_MIN, INT_MIN), end_point(INT_MIN, INT_MIN),
                                  serviceRoute(false) {}
 
-MapSearchNode::MapSearchNode(const OT::MapNode *mp) : mapNode(mp), parent_item(NULL),
+MapSearchNode::MapSearchNode(const OT::MapNode *mp) : mapNode(mp), parent_item(NULL), lastElevator(NULL),
                                                      numStairs(0), numEscalators(0), numElevators(0),
                                                      stairsSinceTransport(0), escalatorsSinceTransport(0),
                                                      walkFloorsSinceTransport(0), walkingHasStairs(false),
@@ -87,6 +91,8 @@ MapSearchNode::MapSearchNode(const OT::MapNode *mp) : mapNode(mp), parent_item(N
 float MapSearchNode::GetCost(MapSearchNode &successor) {
 	Item::Item *i = getItemOnRoute(&successor);
 	successor.parent_item = i;
+	// Walking keeps the last ridden shaft; stairlikes and lobby hops forget it.
+	successor.lastElevator = i ? (i->isElevator() ? i : NULL) : lastElevator;
 	successor.numStairs = numStairs;
 	successor.numEscalators = numEscalators;
 	successor.numElevators = numElevators;
@@ -234,6 +240,7 @@ bool MapSearchNode::IsGoal(MapSearchNode &nodeGoal) {
 bool MapSearchNode::IsSameState(MapSearchNode &rhs) {
 	return mapNode == rhs.mapNode
 		&& parent_item == rhs.parent_item
+		&& lastElevator == rhs.lastElevator
 		&& stairsSinceTransport == rhs.stairsSinceTransport
 		&& escalatorsSinceTransport == rhs.escalatorsSinceTransport
 		&& walkFloorsSinceTransport == rhs.walkFloorsSinceTransport

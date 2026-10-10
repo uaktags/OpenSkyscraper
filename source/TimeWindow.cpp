@@ -266,11 +266,8 @@ void TimeWindow::updateTime() {
 	
 	timestring.append(" / " + std::to_string(t.quarter) + "Q");
 
-	const char * suffix = "th Yr";
-	int yl = (t.year % 10);
-	if (yl == 1) suffix = "st Yr";
-	if (yl == 2) suffix = "nd Yr";
-	if (yl == 3) suffix = "rd Yr";
+	// FUN_1120_0ee1 (all.c:17744): 10..19 always take "th" (11th, 12th, 13th)
+	const char * suffix = yearOrdinalSuffix(t.year);
 	timestring.append(" / " + std::to_string(t.year) + suffix);
 
     lblDate->setText(timestring);    

@@ -2788,7 +2788,7 @@ static std::vector<uint8_t> buildTdtFixture()
 	put16(b, 0);           // frameTime: 0 = 7:00 AM in TDT terms
 	put32(b, 150);         // 1st WD / 3Q / year 13
 	put16(b, 0);           // unknown
-	put16(b, 0);           // lobbyHeight?
+	put16(b, 3);           // lobbyHeight: grand lobby of three floors
 	putZeros(b, 8);        // unknown x8
 	put16(b, 0); put16(b, 0); // lrPixel, udPixel
 	putZeros(b, 518);      // unknown tail of the header
@@ -2822,16 +2822,29 @@ static std::vector<uint8_t> buildTdtFixture()
 		else if (f == 20) putTenant(tenants, 50, 79, 31, 0); // metro part 1
 		else if (f == 21) putTenant(tenants, 50, 79, 32, 0); // metro part 2
 		else if (f == 22) putTenant(tenants, 50, 79, 33, 0); // metro part 3
+		else if (f == 30 || f == 32) putTenant(tenants, 120, 145, 21, 0); // stacked recycling centers 2 and 3
+		else if (f == 31 || f == 33) putTenant(tenants, 120, 145, 20, 0);
 		else if (f >= 109 && f <= 113) putTenant(tenants, 200, 228, 36 + f - 109, 0); // cathedral: 28x5
 		put16(b, (int)(tenants.size() / 18));
 		put16(b, 0); put16(b, 200);
 		b.insert(b.end(), tenants.begin(), tenants.end());
-		putZeros(b, 94 * 2); // index map
+		for (int m = 0; m < 94; m++) put16(b, (f == 11 && m == 5) ? 1 : 0); // index map: floor 11 slot 5 -> shop
 	}
 	// People block (empty).
 	put32(b, 0);
-	// Retail table (empty slots).
-	putZeros(b, 512 * 18);
+	// Retail table (11b0:00b4 layout): record 0 is the floor-11 shop, the rest are unused (floor 0xff).
+	for (int k = 0; k < 512; k++)
+	{
+		if (k == 0)
+		{
+			put8(b, 11); put8(b, 5); put8(b, 3);          // floor, index-map slot, state
+			put8(b, 35); put8(b, 50); put8(b, 25);        // weekday / weekend / rain scores
+			put8(b, 0); put8(b, 17); put8(b, 21);          // quota, walk-ins today, yesterday
+			put8(b, 0); put8(b, 50); put8(b, 2);           // customers, -, variety
+			putZeros(b, 6);
+		}
+		else { put8(b, 0xff); putZeros(b, 17); }
+	}
 	// Elevator table: slot 0 built standard, floors 10..30, 2 cars, floor 15 skipped.
 	put8(b, 1);      // used
 	put8(b, 1);      // type: standard
@@ -2872,6 +2885,15 @@ static std::vector<uint8_t> buildTdtFixture()
 	put8(b, 1); put8(b, 0); put16(b, 50); put16(b, 11); putZeros(b, 4);
 	put8(b, 1); put8(b, 2); put16(b, 60); put16(b, 30); putZeros(b, 4);
 	for (int s = 3; s < 64; s++) putZeros(b, 10);
+	// Cinema / party-hall table (1188:05af), 16 x 12 bytes, then the trailing blocks of 10d8:0b8c.
+	{
+		const int partyHall[12] = {101, 100, 0, 0, 0, 0, 0, 0xff, 0, 50, 0, 0x27};
+		const int cinema[12] = {13, 3, 0, 0, 4, 16, 0, 8, 0, 4, 0, 100}; // floor 13, film 8, age 4 days
+		for (int i = 0; i < 12; i++) put8(b, partyHall[i]);
+		for (int i = 0; i < 12; i++) put8(b, cinema[i]);
+		for (int k = 2; k < 16; k++) { put8(b, 0xfe); put8(b, 0xfe); putZeros(b, 10); }
+		putZeros(b, 0x78 + 0x1102 + 0x842 + 0xca2 + 8);
+	}
 	return b;
 }
 
@@ -2963,6 +2985,22 @@ static void testTdtLoader()
 		if (report[i].find("Steak House") != std::string::npos) sawSteak = true;
 	EXPECT(sawSteak);
 
+	// WP9: EXE tenant record bytes 14-17 and the retail table reach the tower XML.
+	// Fixture bytes: armed 0, category 0, tenure 0, rentClass 2 (rate row 2 = $5,000 office).
+	EXPECT(xml.find("type=\"office\" x=\"-87\" y=\"1\" evaluation=\"50.0\" occupied=\"1\" armed=\"0\" category=\"0\" tenure=\"0\" rentClass=\"2\"") != std::string::npos);
+	// Shop = retail record 0 (floor 11, index-map slot 5 -> tenant 1): scores 35/50/25, walk-ins 17 today / 21 yesterday, let.
+	EXPECT(xml.find("type=\"shop\" x=\"-37\" y=\"1\" evaluation=\"50.0\" armed=\"0\" category=\"0\" tenure=\"0\" rentClass=\"2\" walkinsToday=\"17\" walkinsYesterday=\"21\" serviceScore0=\"35\" serviceScore1=\"50\" serviceScore2=\"25\" let=\"1\"") != std::string::npos);
+	// Header lobby height (+0x1c) becomes the grand-lobby lock the upkeep exemption reads.
+	EXPECT(tdt.lobbyHeight == 3 && xml.find("lobbyHeightLock=\"3\"") != std::string::npos);
+	// Cinema table record: film 8, 4 days old.
+	EXPECT(xml.find("type=\"cinema\" x=\"-127\" y=\"2\" evaluation=\"50.0\" movie=\"8\" movieAgeDays=\"4\"") != std::string::npos);
+	// Recycling: three stacked 25x2 centers import as three items (1180:0bbe bills each type-20 record).
+	int recyclers = 0;
+	for (size_t at = xml.find("type=\"recycling\""); at != std::string::npos; at = xml.find("type=\"recycling\"", at + 1)) ++recyclers;
+	EXPECT(recyclers == 3);
+	EXPECT(xml.find("type=\"recycling\" x=\"-67\" y=\"20\"") != std::string::npos);
+	EXPECT(xml.find("type=\"recycling\" x=\"-67\" y=\"22\"") != std::string::npos);
+
 	// Batch 6: shop (10), ramp (44), recycling (20/21) import; burned area (48)
 	// becomes a burned span plus rubble tiles; type 45 (ground strips) stays skipped.
 	EXPECT(xml.find("type=\"shop\" x=\"-37\" y=\"1\"") != std::string::npos);
@@ -2972,19 +3010,21 @@ static void testTdtLoader()
 	EXPECT(xml.find("eventRubble=\"100400833 ") != std::string::npos);
 	EXPECT(xml.find("type=\"office\" x=\"-167\" y=\"4\"") == std::string::npos);
 
-	// Fidelity report: construction site imported finished, housekeeping and ground strips skipped.
-	bool sawConstruction = false, sawShop = false, sawHousekeeping = false, saw45 = false, sawBurned = false;
+	// Housekeeping rooms (type 15) import as items: the EXE bills row 15 ($10,000) per room (1180:0bbe).
+	EXPECT(xml.find("type=\"housekeeping\" x=\"-17\" y=\"1\"") != std::string::npos);
+
+	// Fidelity report: construction site imported finished, ground strips skipped.
+	bool sawConstruction = false, sawShop = false, saw45 = false, sawBurned = false;
 	for (size_t i = 0; i < report.size(); i++)
 	{
 		if (report[i].find("under construction") != std::string::npos) sawConstruction = true;
 		if (report[i].find("kind 10") != std::string::npos || report[i].find("kind 44") != std::string::npos ||
 		    report[i].find("kind 48") != std::string::npos) sawShop = true;
-		if (report[i].find("kind 15") != std::string::npos) sawHousekeeping = true;
 		if (report[i].find("kind 45") != std::string::npos) saw45 = true;
 		if (report[i].find("burned area") != std::string::npos) sawBurned = true;
 	}
-	EXPECT(sawConstruction && !sawShop && sawHousekeeping && saw45 && sawBurned);
-	if (!(sawConstruction && !sawShop && sawHousekeeping && saw45 && sawBurned))
+	EXPECT(sawConstruction && !sawShop && saw45 && sawBurned);
+	if (!(sawConstruction && !sawShop && saw45 && sawBurned))
 	{
 		for (size_t i = 0; i < report.size(); i++)
 			std::cerr << "report: " << report[i] << "\n";
@@ -2994,15 +3034,29 @@ static void testTdtLoader()
 	std::remove(path.c_str());
 }
 
+static void testYearOrdinalSuffix()
+{
+	// FUN_1120_0ee1 (all.c:17744): 10..19 always "th"; otherwise year % 10 picks st / nd / rd.
+	EXPECT(std::string(OT::yearOrdinalSuffix(1)) == "st Yr");
+	EXPECT(std::string(OT::yearOrdinalSuffix(2)) == "nd Yr");
+	EXPECT(std::string(OT::yearOrdinalSuffix(3)) == "rd Yr");
+	EXPECT(std::string(OT::yearOrdinalSuffix(4)) == "th Yr");
+	EXPECT(std::string(OT::yearOrdinalSuffix(11)) == "th Yr");
+	EXPECT(std::string(OT::yearOrdinalSuffix(12)) == "th Yr");
+	EXPECT(std::string(OT::yearOrdinalSuffix(13)) == "th Yr");
+	EXPECT(std::string(OT::yearOrdinalSuffix(21)) == "st Yr");
+	EXPECT(std::string(OT::yearOrdinalSuffix(23)) == "rd Yr");
+}
+
 static void testTdtLoaderTruncated()
 {
 	std::vector<uint8_t> bytes = buildTdtFixture();
 	// Cut inside the elevator table's built-shaft payload: the tail walk must
 	// degrade to a warning (no elevators), not crash or fail the load.
-	// Layout: 560 header + 120*194 floor records + 198 tenant bytes + 4 people
-	// count + 9216 retail = 33258 = elevator table start.
-	size_t elevatorTableStart = 560 + 120 * 194 + 198 + 4 + 512 * 18;
-	EXPECT(elevatorTableStart == 33258);
+	// Layout: 560 header + 120*194 floor records + 270 tenant bytes + 4 people
+	// count + 9216 retail = 33330 = elevator table start.
+	size_t elevatorTableStart = 560 + 120 * 194 + 270 + 4 + 512 * 18;
+	EXPECT(elevatorTableStart == 33330);
 	bytes.resize(elevatorTableStart + 200);
 
 	const std::string path = "OpenSkyTests_tdt_truncated.tdt";
@@ -3844,6 +3898,57 @@ static int testDisasterScenarios() {
  resetDisasterScenario(g);makeDisasterItem(g,"lobby",0,0);sec=makeDisasterItem(g,"security",0,2);building=makeDisasterItem(g,"shop",30,2);building->underConstruction=true;g.rating=2;double ignition=g.time.absolute;
  g.eventSystem.startFire();DISASTER_CHECK(g.eventSystem.getActiveType()==EventSystem::Type::Fire);DISASTER_CHECK(!building->underConstruction);DISASTER_CHECK(g.time.absolute==ignition);for(auto *p:g.people)DISASTER_CHECK(!p->at);
  g.closeEventChoice();setDisasterTime(g,83+Time::hourToAbsolute(21));g.eventSystem.advance(0);DISASTER_CHECK(!g.eventSystem.isActive());DISASTER_CHECK(g.time.hour>=21);
+ // WP9 economy (SCHMITT.TDT reconciliation). EXE 1180:0bbe sweep on a hand-built tower at five stars
+ // (lobby word 100 -> $1,000 per cell, 1180:0ae4 all.c:20543): the ground floor and decks from the band
+ // height up pay; decks 11 <= floor < 10 + bc5a (here y 1..2) are exempt (10a8:133b, all.c:9678).
+ resetDisasterScenario(g);g.rating=4;g.lobbyHeightLock=3;
+ { auto *l=makeDisasterItem(g,"lobby",0,0);l->size=int2(20,3);          // ground floor: 20 cells charged
+   auto *d1=makeDisasterItem(g,"lobby",0,1);d1->size=int2(20,1);        // exempt deck
+   auto *d2=makeDisasterItem(g,"lobby",0,2);d2->size=int2(20,1);        // exempt deck
+   auto *sky1=makeDisasterItem(g,"lobby",0,3);sky1->size=int2(4,1);     // first floor above the band: charged
+   auto *sky2=makeDisasterItem(g,"lobby",0,14);sky2->size=int2(12,1);   // sky lobby: charged
+   for (int c=0;c<3;++c) makeDisasterItem(g,"recycling",30*(c+1),-3);   // row 20 = $50,000 per center
+   makeDisasterItem(g,"housekeeping",0,5);                              // row 15 = $10,000
+   makeDisasterItem(g,"security",100,5);                                // row 14 = $20,000
+   DISASTER_CHECK(g.quarterlyUpkeepTotal()==(20+4+12)*1000+3*50000+10000+20000);   // 216,000
+   g.rating=2;                                                          // three stars: word 30 -> $300 per cell
+   DISASTER_CHECK(g.quarterlyUpkeepTotal()==(20+4+12)*300+3*50000+10000+20000);    // 190,800
+   (void)l;(void)d1;(void)d2;(void)sky1;(void)sky2; }
+ // Rent rows come from the imported tenant class (byte 16 of the record), 1180:08ce: type*16 + class*4.
+ { extern int openSkyQuarterlyRent(const std::string &, int);
+   const int classes[3]={0,1,2};int rent=0;
+   for (int c : classes) {
+     resetDisasterScenario(g);auto *o=static_cast<Item::Office *>(makeDisasterItem(g,"office",0,2));
+     tinyxml2::XMLDocument od;char xmlText[96];snprintf(xmlText,sizeof(xmlText),"<item occupied=\"1\" armed=\"1\" category=\"2\" tenure=\"7\" rentClass=\"%d\"/>",c);
+     DISASTER_CHECK(od.Parse(xmlText)==0);o->decodeXML(*od.RootElement());
+     DISASTER_CHECK(o->tenant.rentClass==c&&o->tenant.armed&&o->tenant.category==2&&o->tenant.tenure==7);
+     rent+=openSkyQuarterlyRent("office",o->tenant.rentClass);
+   }
+   DISASTER_CHECK(rent==15000+10000+5000);                              // SCHMITT: 234 x 15,000 + 1,116 x 10,000 + 685 x 5,000 offices = $18,095,000
+   DISASTER_CHECK(openSkyQuarterlyRent("shop",3)==4000);                // SCHMITT shops are mostly class 3: 24 shops = $140,000 in the EXE ledger
+   DISASTER_CHECK(openSkyQuarterlyRent("hotel_single",1)==2000&&openSkyQuarterlyRent("hotel_double",1)==3000&&openSkyQuarterlyRent("hotel_suite",1)==6000); }
+ // WP9 pathfinding: a sky-lobby transfer must survive an escalator at the lobby centre column
+ // (the lobby routing-slot marker is relocated, not overwritten) and a walk past the first
+ // shaft (the ridden express stays the "from" shaft of the 16-slot transfer rule).
+ resetDisasterScenario(g);g.lobbyHeightLock=1;
+ { auto addSized=[&](const char *id,int x,int y,int w,int h,std::set<int> unserviced) {
+     auto *it=g.itemFactory.make(id,int2(x,y));it->size=int2(w,h);
+     if (auto *el=dynamic_cast<Item::Elevator::Elevator *>(it)) el->unservicedFloors=unserviced;
+     g.addItem(it);it->underConstruction=false;return it; };
+   auto *ground=addSized("lobby",-30,0,60,1,{});
+   std::set<int> expressSkips;for(int f=1;f<14;++f)expressSkips.insert(f);
+   addSized("elevator-express",20,0,6,15,expressSkips);                 // stops: ground and the sky lobby
+   addSized("lobby",-30,14,60,1,{});                                    // sky lobby, centre column x=0
+   addSized("escalator",-4,14,8,2,{});                                  // escalator on the lobby centre column
+   addSized("elevator-standard",-20,14,4,5,{});                         // local shaft left of the escalator
+   auto *office=addSized("office",-30,17,9,1,{});
+   DISASTER_CHECK(!g.findRoute(ground,office).empty()); }
+ // Retail table import: yesterday's walk-ins feed CountT at the first 10:00 opening (11b0:02f2, all.c:23564).
+ resetDisasterScenario(g);
+ { auto *sh=static_cast<Item::Shop *>(makeDisasterItem(g,"shop",0,2));tinyxml2::XMLDocument sd;
+   DISASTER_CHECK(sd.Parse("<item let=\"1\" armed=\"1\" category=\"2\" rentClass=\"3\" walkinsToday=\"17\" walkinsYesterday=\"21\" serviceScore0=\"35\" serviceScore1=\"50\" serviceScore2=\"25\"/>")==0);
+   sh->decodeXML(*sd.RootElement());
+   DISASTER_CHECK(sh->let&&sh->walkinsToday==17&&sh->walkinsYesterday==21&&sh->serviceScore[0]==35&&sh->serviceScore[2]==25&&sh->tenant.rentClass==3); }
  std::cout<<"Batch 2 C++ scenarios: "<<disasterChecks<<" checks passed\n";
  g.clearWorld();return 0;
 }
@@ -7505,6 +7610,7 @@ int main()
 	testBldShippedSaves();
 	testTdtLoader();
 	testTdtLoaderTruncated();
+	testYearOrdinalSuffix();
 	testSmoke();
 	testBuildRules();
 	testSkin();
