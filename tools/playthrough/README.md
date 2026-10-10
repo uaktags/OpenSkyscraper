@@ -211,7 +211,7 @@ web: trained from the DOM text). Evidence (region crops, validation JSON, glyph 
   first weekend after the 5-star promotion (seen at d3_h16 and d4_h06 depending on pacing; use `oracle.sh run data/SCHMITT.TDT 4` to be sure to cross it).
   The oracle also moves its own camera (scrollbar thumb drag at x=1007: lobby y=565, floors 330, cathedral 125): hourly shots are lobby views and
   `view_dD_h12_{cathedral,floors,lobby}.png` are taken each day.
-* Population: oracle stays ~15,0-16,2k; both ports drop to 12,720 within ~3 game hours of the load and settle ~13.2k.
+* Population: oracle stays ~15,0-16,2k; both ports drop ~440 (hotel checkout) to ~14.96k within ~5 hourly samples and then track the oracle within ~7% (the earlier 12,720 plateau came from a stale pre-WP9 C++ build; fresh C++ day-1 end 15,537, day-3 end 15,500).
 * Quarter rollover (3Q) income: oracle +$14.2M ($94.6M -> $108.8M), C++ +$15.8M ($94.46M -> $110.25M), web +$18.2M (-> $112.9M).
   C++ is the closer port (+1.4% vs oracle after the rollover, web +3.8%). Web and C++ agree to the dollar before the rollover.
 * Web performance bug: `Parking.advance()` calls `recomputeAllChains()` (src/game/items/parking.js) for each of the 264 parking
