@@ -29,6 +29,8 @@ namespace OT
 			std::string summaryPath; ///< default: outPath + ".json"
 			long dumpEvery = 0;      ///< ticks between snapshots (0 = off)
 			std::string dumpDir;
+			int choice = -1;         ///< --sim-choice N: the multi-button event dialog button to press (fire: 0 helicopter, 1 security, 2 leave)
+			std::string carTrace;    ///< --sim-car-trace FILE: one line per car state change (game minute, car, altitude, state, doors, riders, gear)
 		};
 
 		/// True while a deterministic run is active. Gates the few

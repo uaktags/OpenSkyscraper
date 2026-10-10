@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <map>
 #include <sstream>
 
 #include "Game.h"
@@ -11,6 +12,8 @@
 #include "SimHarness.h"
 #include "PeopleSystem.h"
 #include "Item/Item.h"
+#include "Item/Elevator/Elevator.h"
+#include "Item/Elevator/Car.h"
 
 using namespace OT;
 
@@ -43,6 +46,18 @@ bool Sim::parseArg(int argc, char * argv[], int & i, Options & options)
 	}
 	if (strcmp(arg, "--sim-speed") == 0) {
 		if (i + 1 < argc) options.speed = atoi(argv[++i]);
+		return true;
+	}
+	if (strcmp(arg, "--sim-choice") == 0) {
+		if (i + 1 < argc) options.choice = atoi(argv[++i]);
+		return true;
+	}
+	if (strcmp(arg, "--sim-dt") == 0) {
+		if (i + 1 < argc) options.dt = atof(argv[++i]);
+		return true;
+	}
+	if (strcmp(arg, "--sim-car-trace") == 0) {
+		if (i + 1 < argc) options.carTrace = argv[++i];
 		return true;
 	}
 	if (strcmp(arg, "--sim-dump-every") == 0) {
@@ -191,15 +206,36 @@ int Sim::run(Game & game, const Options & options)
 	}
 	game.simRecording = true;
 	game.setSpeedMode(options.speed);
+	game.headlessChoice = options.choice;
 	const double start = game.time.absolute;
 	// Guard against a stalled clock (speed 0) in day mode.
 	const long maxTicks = options.days > 0 ?
 		(long)std::ceil(options.days / (options.dt * Time::kBaseSpeed)) + 1 : options.ticks;
 	long tick = 0;
+	std::ofstream carTrace;
+	std::map<const Item::Elevator::Car *, std::string> carLast;
+	if (!options.carTrace.empty()) carTrace.open(options.carTrace.c_str());
 	while (tick < maxTicks) {
 		if (options.days > 0 && game.time.absolute - start >= options.days) break;
 		game.advanceHeadless(options.dt);
 		tick++;
+		if (carTrace.is_open()) {
+			// One line whenever a car's altitude, state, door timer or load changes.
+			for (Game::ItemSet::const_iterator it = game.items.begin(); it != game.items.end(); ++it) {
+				if (!(*it)->isElevator()) continue;
+				const Item::Elevator::Elevator * e = static_cast<const Item::Elevator::Elevator *>(*it);
+				for (Item::Elevator::Elevator::Cars::const_iterator ic = e->cars.begin(); ic != e->cars.end(); ++ic) {
+					const Item::Elevator::Car * c = *ic;
+					char row[128];
+					snprintf(row, sizeof(row), "%g %d %d %d %d %d %d", c->altitude, (int)c->state, c->doorTicks,
+					         (int)c->passengers.size(), c->yootGear, c->destinationFloor, c->yootPhase);
+					std::string & last = carLast[c];
+					if (last == row) continue;
+					last = row;
+					carTrace << (game.time.absolute * 1440.0) << ' ' << c->index << ' ' << row << '\n';
+				}
+			}
+		}
 		if (options.dumpEvery > 0 && tick % options.dumpEvery == 0) {
 			char name[64];
 			snprintf(name, sizeof(name), "/tick_%09ld", tick);

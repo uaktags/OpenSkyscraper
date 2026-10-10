@@ -331,7 +331,23 @@ def tokyo_g1_promo():
     return t
 
 
-TOWERS = [tokyo_g1_promo, tokyo_g2_hotel_subway, tokyo_g3_venues, tokyo_g3_evening, tokyo_g3_reggae, tokyo_g4_blackout, tokyo_g5_large_elevator,
+def tokyo_g4_fire():
+    """Tokyo, 4 stars, 11:00 of day 11 (a fire day: FBEV every 60 days, IsBeginDay lapse + 1 - 12,
+    grades 3-4, 12:00-18:00). The original calls T2FireBurning::Start once at the begin minute
+    (T2TowerEvent::Idle drops an event whose Start fails) and Start gives IsBreakoutFire 100 random
+    cells of the whole world grid, so a fire needs a tower that covers a fair share of it: 24
+    full-width rows of restrooms (power 1 each, no blackout) and one Security Room for the guard
+    response. The fire dialog has no default answer; oracle_run.py takes FIRE_CHOICE."""
+    t = Tower('tokyo', 3, time=11.458333, funds=900000000)
+    t.set_lobby(-64, 56, 3)
+    t.floors(range(3, 27), -170, 170)
+    t.row(3, -170, ['security'] + ['restroom'] * 36)
+    for y in range(4, 27):
+        t.row(y, -170, ['restroom'] * 37)
+    return t
+
+
+TOWERS = [tokyo_g1_promo, tokyo_g2_hotel_subway, tokyo_g3_venues, tokyo_g3_evening, tokyo_g3_reggae, tokyo_g4_blackout, tokyo_g5_large_elevator, tokyo_g4_fire,
           hawaii_g2_resort, hawaii_g3_boatdeck]
 
 

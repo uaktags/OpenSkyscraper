@@ -308,6 +308,42 @@ void Game::askEventChoice(const std::string & title, const std::string & text,
 	eventChoiceCallback = onChoice;
 }
 
+void Game::askEventChoices(const std::string & title, const std::string & text,
+                           const std::vector<std::string> & labels,
+                           const std::function<bool(int)> & onChoice)
+{
+	closeEventChoice();
+	eventChoiceSavedSpeed = speedMode;
+	setSpeedMode(0);
+
+	const float rowH = 36 * app.uiScale;
+	const float height = 100 * app.uiScale + rowH * labels.size();
+	tgui::ChildWindow::Ptr window = tgui::ChildWindow::create(title);
+	window->setClientSize({360 * app.uiScale, height});
+	window->setPosition({(app.window.getSize().x - 360 * app.uiScale) / 2.f,
+	                     (app.window.getSize().y - height) / 2.f});
+	window->setResizable(false);
+	window->setTitleButtons(tgui::ChildWindow::TitleButton::None);
+
+	tgui::Label::Ptr label = tgui::Label::create(text);
+	label->setPosition({14 * app.uiScale, 12 * app.uiScale});
+	label->setTextSize(13 * app.uiScale);
+	window->add(label);
+
+	for (size_t i = 0; i < labels.size(); ++i) {
+		tgui::Button::Ptr button = tgui::Button::create(labels[i]);
+		button->setSize({320 * app.uiScale, 30 * app.uiScale});
+		button->setPosition({20 * app.uiScale, 85 * app.uiScale + rowH * (float)i});
+		button->onPress([this, i]() { answerEventChoices((int)i); });
+		window->add(button);
+	}
+
+	app.gui.add(window);
+	eventChoiceWindow = window;
+	eventChoicesCount = (int)labels.size();
+	eventChoicesCallback = onChoice;
+}
+
 void Game::askEventText(const std::string & title, const std::string & text,
                         const std::string & defaultText,
                         const std::function<void(const std::string &)> & onText)
@@ -355,8 +391,27 @@ void Game::answerEventChoice(bool yes)
 	cb(yes);
 }
 
+bool Game::answerEventChoices(int index)
+{
+	if (!eventChoicesCallback) return true;
+	// A refused response leaves the dialog and the pause in place.
+	std::function<bool(int)> cb = eventChoicesCallback;
+	tgui::ChildWindow::Ptr window = eventChoiceWindow;
+	eventChoicesCallback = nullptr;
+	const int saved = eventChoiceSavedSpeed;
+	if (!cb(index)) {
+		if (!eventChoicesCallback && eventChoiceWindow == window) eventChoicesCallback = cb;
+		return false;
+	}
+	(void)saved;
+	if (eventChoiceWindow == window) closeEventChoice();
+	return true;
+}
+
 void Game::closeEventChoice()
 {
+	eventChoicesCallback = nullptr;
+	eventChoicesCount = 0;
 	if (eventChoiceWindow) {
 		app.gui.remove(eventChoiceWindow);
 		eventChoiceWindow.reset();
@@ -1234,6 +1289,21 @@ void Game::advanceHeadless(double dt)
 	if (eventChoiceCallback) {
 		recordSimEvent("event choice answered: yes");
 		answerEventChoice(true);
+	}
+	if (eventChoicesCallback) {
+		// The requested button, else the first accepted one, in the dialog's order.
+		if (headlessChoice >= 0 && headlessChoice < eventChoicesCount) {
+			char note[64];
+			snprintf(note, sizeof(note), "event choice answered: %d", headlessChoice);
+			recordSimEvent(note);
+			answerEventChoices(headlessChoice);
+		}
+		for (int i = 0; i < eventChoicesCount && eventChoicesCallback; ++i) {
+			char note[64];
+			snprintf(note, sizeof(note), "event choice answered: %d", i);
+			recordSimEvent(note);
+			if (answerEventChoices(i)) break;
+		}
 	}
 	const int simTicks = (speedMode == kFastSpeedMode) ? kFastTicksPerFrame : 1;
 	for (int tick = 0; tick < simTicks; tick++)

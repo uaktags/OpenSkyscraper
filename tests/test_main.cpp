@@ -52,6 +52,8 @@
 #include "../source/YootWorld.h"
 #include "../source/YootEvents.h"
 #include "../source/YootCatalog.h"
+#include "../source/YootElevator.h"
+#include "../source/YootFire.h"
 #include "../source/YootRules.h"
 #include "../source/YootBackdrop.h"
 #include "../source/YootFacilities.h"
@@ -7905,6 +7907,230 @@ static void testYootGapClosers()
 	EXPECT(Y::floorCharge(500, 12) == 6000 && Y::floorCharge(500, 0) == 0);
 }
 
+// YootTower elevator door cycle (BigElev FUN_1000c150 / c2c0 / c540). The
+// expected idle-by-idle sequences come from the decompile; the hold of 6 and
+// the 6-counter windows were measured against the original (BigElev, 4
+// oracle runs, doc/yoottower/game-parity.md 7.6.A).
+static void testYootDoorCycle()
+{
+	using OT::Yoot::DoorCycle;
+	DoorCycle c;
+	// A car with nothing to drop and nobody appointed goes straight on.
+	EXPECT(!c.arrive(false, false) && c.phase == DoorCycle::kNone);
+
+	// Unload: riders 5 for this floor. Counter 6 drops one, 5 ticks, 4 drops
+	// one, 3 ticks, 2 drops every remaining rider, 1 ticks, then boarding.
+	EXPECT(c.arrive(true, false) && c.phase == DoorCycle::kUnload && c.counter == 6);
+	DoorCycle::Ctx ctx; ctx.leaving = 5; ctx.riders = 5; ctx.capacity = 40;
+	const int offs[6] = {1, 0, 1, 0, 2, 0};
+	for (int i = 0; i < 6; ++i)
+	{
+		const DoorCycle::Out out = c.step(ctx);
+		EXPECT(out.off == offs[i] && !out.depart && out.on == 0);
+		if (out.off == 1) { --ctx.leaving; --ctx.riders; }
+		if (out.off == 2) { ctx.riders -= ctx.leaving; ctx.leaving = 0; }
+	}
+	EXPECT(c.phase == DoorCycle::kBoard && c.counter == 6 && ctx.riders == 0);
+
+	// A rider-free unload skips to boarding on the first idle.
+	c.arrive(true, false); ctx.leaving = 0;
+	EXPECT(c.step(ctx).off == 0 && c.phase == DoorCycle::kBoard && c.counter == 6);
+
+	// Boarding with a call appointed and 4 waiting: one at 6, tick, one at 4,
+	// tick, the rest at 2, tick, then the hold (6 idles) and departure.
+	c.phase = DoorCycle::kBoard; c.counter = 6;
+	ctx = DoorCycle::Ctx(); ctx.request = true; ctx.waiting = 4; ctx.capacity = 40;
+	const int ons[6] = {1, 0, 1, 0, 2, 0};
+	for (int i = 0; i < 6; ++i)
+	{
+		const DoorCycle::Out out = c.step(ctx);
+		EXPECT(out.on == ons[i] && !out.depart);
+		if (out.on == 1) { --ctx.waiting; ++ctx.riders; }
+		if (out.on == 2) { ctx.riders += ctx.waiting; ctx.waiting = 0; }
+	}
+	EXPECT(c.phase == DoorCycle::kHold && c.counter == DoorCycle::kHoldIdles && ctx.riders == 4);
+	ctx.request = false;
+	for (int i = 0; i < DoorCycle::kHoldIdles - 1; ++i)
+		EXPECT(!c.step(ctx).depart && c.phase == DoorCycle::kHold);
+	EXPECT(c.step(ctx).depart && c.phase == DoorCycle::kNone);
+
+	// Someone appointed during the hold reopens the boarding window.
+	c.phase = DoorCycle::kHold; c.counter = 3;
+	ctx.request = true; ctx.waiting = 1;
+	EXPECT(!c.step(ctx).depart && c.phase == DoorCycle::kBoard && c.counter == 6);
+
+	// A window nobody uses (counter 6, queue empty) leaves at once; later in
+	// the window an empty queue goes to the hold.
+	c.phase = DoorCycle::kBoard; c.counter = 6; ctx.waiting = 0;
+	EXPECT(c.step(ctx).depart);
+	c.phase = DoorCycle::kBoard; c.counter = 4;
+	EXPECT(!c.step(ctx).depart && c.phase == DoorCycle::kHold);
+
+	// The appointment cost (FUN_1000da60) on a 10-position shaft, top 9, next
+	// stop T = 4: parked cars pay the distance; an up car pays p - T for an up
+	// call at or above T and p + 18 - T below it, 18 - T - p for a down call; a
+	// down car pays T - p for a down call at or below T, 18 - p + T above it,
+	// and T + p for an up call. The car's own position never enters.
+	using OT::Yoot::sweepCost;
+	EXPECT(sweepCost(0, 2, 4, 7, false, 9) == 5 && sweepCost(0, 8, 4, 3, true, 9) == 5);
+	EXPECT(sweepCost(1, 0, 4, 6, false, 9) == 2 && sweepCost(1, 3, 4, 4, false, 9) == 0);
+	EXPECT(sweepCost(1, 3, 4, 1, false, 9) == 15 && sweepCost(1, 3, 4, 6, true, 9) == 8);
+	EXPECT(sweepCost(2, 8, 4, 1, true, 9) == 3 && sweepCost(2, 8, 4, 6, true, 9) == 16);
+	EXPECT(sweepCost(2, 8, 4, 6, false, 9) == 10 && sweepCost(2, 8, 4, 0, false, 9) == 4);
+	EXPECT(sweepCost(1, 0, 4, 6, false, 9) == sweepCost(1, 3, 4, 6, false, 9));
+
+	// A full car leaves in either half of the window.
+	ctx.waiting = 3; ctx.riders = 40;
+	c.phase = DoorCycle::kBoard; c.counter = 4;
+	EXPECT(c.step(ctx).depart);
+	c.phase = DoorCycle::kBoard; c.counter = 3;
+	EXPECT(c.step(ctx).depart);
+}
+
+// YootTower fire (T2FireBurning 0x10030d50.., T2Fire 0x10032110..). A mock tower of
+// full-width floors: the rules come from the decompile (game-parity.md 7.6.K).
+namespace {
+	struct MockFireGrid : OT::Yoot::FireGrid
+	{
+		int floors = 4, x0 = 0, x1 = 60;               // tenants on floors 0..floors-1, cells x0..x1
+		std::set<std::pair<int, int> > burnt, proof;
+		int burnCalls = 0;
+		OT::Yoot::FireCell cell(int f, int x) const override
+		{
+			using OT::Yoot::FireCell;
+			if (f < 0 || f >= floors || x < x0 || x >= x1) return FireCell::None;
+			if (burnt.count(std::make_pair(f, x))) return FireCell::Burnt;
+			return proof.count(std::make_pair(f, x)) ? FireCell::Fireproof : FireCell::Tenant;
+		}
+		void burn(int f, int x, int & lo, int & hi) override
+		{
+			++burnCalls;
+			lo = x - x % 6; hi = lo + 6; // 6-cell tenants
+			for (int u = lo; u < hi; ++u) burnt.insert(std::make_pair(f, u));
+		}
+	};
+}
+
+static void testYootFire()
+{
+	using namespace OT::Yoot;
+	EXPECT(FireModel::kWidthCells == 12 && FireModel::kHalfWidth == 48 && FireModel::kMovesPerMinute == 4);
+
+	// MakeFire: a 12-cell run on tenants, one fire each way, every tenant of the run burns.
+	{
+		MockFireGrid g; FireModel m;
+		EXPECT(m.makeFire(g, 30, 0) && m.fires.size() == 2);
+		EXPECT(m.fires[0].dir == 1 && m.fires[1].dir == -1 && m.fires[0].left == m.fires[1].left);
+		EXPECT(m.fires[0].left == (30 - 6) * 8 && g.burnt.count(std::make_pair(0, 24)) && g.burnt.count(std::make_pair(0, 35)));
+		EXPECT(!m.makeFire(g, 30, 0));                 // the tenant there is burnt already
+		EXPECT(!m.makeFire(g, 30, 9));                 // nothing on floor 9
+		// AdjustFirePos slides the run onto tenants: at the left edge it starts at the edge.
+		MockFireGrid e; FireModel n; int lo = 0;
+		EXPECT(n.adjust(e, 0, 2, lo) && lo == 0);
+		EXPECT(n.adjust(e, 0, 58, lo) && lo == 48);
+		e.x1 = 8; EXPECT(!n.adjust(e, 0, 4, lo));      // 8 cells of tenant cannot hold a 12-cell fire
+	}
+
+	// T2Fire::Move: a pixel a move; 8 pixels cross one cell; a cell of rubble or the end of the
+	// floor stops the front, a stopped fire burns out at the first multiple of 48 moves after
+	// its counter passes 48.
+	{
+		MockFireGrid g; g.floors = 1; g.x0 = 20; g.x1 = 44; FireModel m; // a 24-cell floor
+		EXPECT(m.makeFire(g, 32, 0));                  // run 26..38, right fire front at 38*8 + 1
+		EXPECT(m.fires[0].left == 208);
+		for (int i = 0; i < 8; ++i) m.idle(g, false);
+		EXPECT(m.fires[0].left == 216 && m.fires[0].stopped == 0);
+		// The right fire reaches the end of the floor (cell 44) and stops; the left one too.
+		int moves = 8;
+		while (m.fires.size() == 2 && moves < 2000) { m.idle(g, false); ++moves; }
+		EXPECT(m.fires.size() == 0 || m.fires.size() == 1);
+		EXPECT(moves < 600);                           // the floor burns out within 150 game minutes
+		for (int u = 20; u < 44; ++u) EXPECT(g.burnt.count(std::make_pair(0, u)));
+	}
+
+	// The climb: every 48 moves a fire starts a new pair on the floor above.
+	{
+		MockFireGrid g; g.floors = 3; FireModel m;
+		EXPECT(m.makeFire(g, 30, 0));
+		for (int i = 0; i < 47; ++i) m.idle(g, false);
+		bool above = false;
+		for (const Blaze & b : m.fires) above = above || b.floor == 1;
+		EXPECT(!above);
+		m.idle(g, false);                              // move 48
+		for (const Blaze & b : m.fires) above = above || b.floor == 1;
+		EXPECT(above);
+		EXPECT(g.burnt.count(std::make_pair(1, 30)));  // the tenants of the new run burn at once
+	}
+
+	// Fireproof tenants stop a fire and never burn.
+	{
+		MockFireGrid g; g.floors = 1;
+		for (int u = 36; u < 60; ++u) g.proof.insert(std::make_pair(0, u));
+		FireModel m;
+		EXPECT(m.makeFire(g, 30, 0));
+		for (int i = 0; i < 400; ++i) m.idle(g, false);
+		EXPECT(!g.burnt.count(std::make_pair(0, 40)) && g.burnt.count(std::make_pair(0, 20)));
+	}
+
+	// IsBreakoutFire: 100 tries, the cell and the 14 around it must be tenants.
+	{
+		MockFireGrid g; g.floors = 2; g.x0 = 10; g.x1 = 30; FireModel m;
+		int calls = 0, f = 0, x = 0;
+		auto rnd = [&]() { return (calls++ % 2 == 0) ? 20 : 0; }; // x = 20, row 0
+		EXPECT(m.breakout(g, 40, 6, rnd, [](int row) { return row; }, 0, f, x) && x == 20 && f == 0);
+		calls = 0;
+		auto edge = [&]() { return (calls++ % 2 == 0) ? 11 : 0; };  // 11 - 7 < 10: not all tenants
+		EXPECT(!m.breakout(g, 40, 6, edge, [](int row) { return row; }, 0, f, x) && calls == 200);
+	}
+
+	// The dialog: helicopter $300,000 (needs the money), security guards (need a Security
+	// Room), Leave. A refused answer keeps the dialog open.
+	{
+		FireResponse heli = fireResponse(0, 500000, 300000, false);
+		EXPECT(heli.accepted && heli.mode == 1 && heli.cost == 300000);
+		FireResponse poor = fireResponse(0, 299999, 300000, true);
+		EXPECT(!poor.accepted && std::string(poor.message) == "Not enough money.");
+		FireResponse none = fireResponse(1, 0, 300000, false);
+		EXPECT(!none.accepted && std::string(none.message).find("no security room") != std::string::npos);
+		FireResponse guards = fireResponse(1, 0, 300000, true);
+		EXPECT(guards.accepted && guards.mode == 2 && guards.cost == 0);
+		FireResponse leave = fireResponse(2, 0, 300000, false);
+		EXPECT(leave.accepted && leave.mode == 3 && leave.cost == 0);
+	}
+
+	// The three outcomes on the same fire. Nothing: it burns the whole tower within the
+	// event; the helicopter puts a fire out where its water lands; security guards stop
+	// the fires one fireman each, after their walk, and the fireman is free again.
+	{
+		MockFireGrid leave; leave.floors = 3; FireModel a;
+		a.makeFire(leave, 30, 0);
+		int moves = 0;
+		while (!a.fires.empty() && moves < 20000) { a.idle(leave, false); ++moves; }
+		EXPECT(a.fires.empty() && moves < 1440);       // 6 game hours are 1440 moves
+		int burntCells = 0;
+		for (int f = 0; f < 3; ++f) for (int u = 0; u < 60; ++u) burntCells += leave.burnt.count(std::make_pair(f, u));
+		EXPECT(burntCells == 180);                     // every tenant of 3 floors x 60 cells
+
+		MockFireGrid water; water.floors = 3; FireModel b;
+		b.makeFire(water, 30, 0);
+		for (int i = 0; i < 30; ++i) b.idle(water, false);
+		EXPECT(!b.extinguishAt(5000, 0) && !b.extinguishAt(300, 2));
+		const size_t before = b.fires.size();
+		EXPECT(b.extinguishAt(b.fires[0].left + 10, b.fires[0].floor) && b.fires.size() == before - 1);
+
+		MockFireGrid crew; crew.floors = 3; FireModel c;
+		c.firemen = 1;
+		c.travelMoves = [](const Blaze &) { return 40; };
+		c.makeFire(crew, 30, 0);
+		int gone = 0;
+		for (int i = 0; i < 40; ++i) gone += c.idle(crew, true);
+		EXPECT(gone == 0 && c.firemen == 0 && c.fires[0].fireman == 1);
+		for (int i = 0; i < 6; ++i) gone += c.idle(crew, true); // arrival, counter 44 -> 49
+		EXPECT(gone == 1 && c.fires.size() == 1);      // the fire he was sent to is out ...
+		EXPECT(c.firemen == 0 && c.fires[0].fireman > 0); // ... and he is on his way to the other one
+	}
+}
+
 // SimLess orders by creation serial in deterministic --sim runs and by plain
 // pointer otherwise; erasing a tracked key (destruction deregistration) must
 // leave a clean container (leak-review finding: dangling keys were compared
@@ -8225,6 +8451,8 @@ int main()
 	testYootSpecials();
 	testYootItemArt();
 	testYootGapClosers();
+	testYootDoorCycle();
+	testYootFire();
 	testOspAttrCompat();
 	testSimTowerEventClock();
 	testBatch3SecomNeverUnlocks();

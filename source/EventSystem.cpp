@@ -140,6 +140,10 @@ void EventSystem::reset()
 	santaX = 0;
 	santaY = 0;
 
+	yootFire = Yoot::FireModel();
+	yootFireMode = 0;
+	yootFireIdles = 0;
+	yootHeliManual = false;
 	fireLeft.clear();
 	fireRight.clear();
 	fireOriginFloor = 0;
@@ -269,6 +273,7 @@ bool EventSystem::fireFloorIgniting(int floor) const
 void EventSystem::startFire()
 {
 	if (type != Type::None) return;
+	if (yoot) { yootFireStart(); return; } // T2FireBurning, not SimTower's fire
 	const int star = game->rating + 1; // rating is 0-based (0 = 1 star)
 	// YootTower: FBEV's levelBit is the only gate (T2FireBurning::Start
 	// 0x10030d50 just needs IsBreakoutFire to find a burnable tenant).
@@ -890,13 +895,17 @@ void EventSystem::advance(double dt)
 		return;
 	}
 
+	if (yoot && type == Type::Fire) yootFireStep();
+
 	// --- Per-EXE-frame event stepping ---
 	fireFrameAccum += frames;
 	int iterations = 0;
 	while (fireFrameAccum >= 1.0 && type != Type::None && iterations < 4000) {
 		fireFrameAccum -= 1.0;
 		iterations++;
-		if (type == Type::Fire) {
+		if (type == Type::Fire && yoot) {
+			// YootTower fires run on mover idles (yootFireStep below), not EXE frames.
+		} else if (type == Type::Fire) {
 			if (clockFrame() >= fireEndFrame) { endFire(); break; }
 			stepFireFrame();
 			if (type == Type::Fire && fireGuardsActive) stepFireGuards();
@@ -911,6 +920,13 @@ void EventSystem::advance(double dt)
 
 bool EventSystem::handleClick(int2 tile)
 {
+	if (yoot && type == Type::Fire && yootFireMode == 1) {
+		// The player steers the helicopter by the mouse and clicks to spray (T2Helicopter::Move).
+		yootHeliManual = true;
+		yootHeliTargetX = tile.x * 8;
+		yootHeliTargetFloor = tile.y;
+		return true;
+	}
 	if (type == Type::Fire && !fireChopperPending && !fireChopperPaid && chopperX == 0) {
 		// Accept a click within the burning area (the hidden mid-fire
 		// chopper purchase, 10e8:01e2).
@@ -970,7 +986,23 @@ void EventSystem::draw(sf::RenderTarget & target, sf::RenderStates /*states*/) c
 		game->drawnSprites++;
 	}
 
-	if (type == Type::Fire) {
+	if (type == Type::Fire && yoot) {
+		// T2Fire sprites: 96 x 32 px, 4 patterns, pattern = move count & 3.
+		for (const Yoot::Blaze & b : yootFire.fires) {
+			Sprite f = fireSprite;
+			f.setTextureRect(sf::IntRect({(b.frame & 3) * 96, 0}, {96, 36}));
+			f.setPosition({(float)b.left, -b.floor * 36.0f});
+			target.draw(f);
+			game->drawnSprites++;
+		}
+		if (yootFireMode == 1) {
+			Sprite chop = chopperSprite;
+			chop.setTextureRect(sf::IntRect({((int)(yootFire.fires.empty() ? 0 : yootFire.fires[0].frame) & 3) * 96, 0}, {96, 36}));
+			chop.setPosition({yootHeliX, yootHeliY});
+			target.draw(chop);
+			game->drawnSprites++;
+		}
+	} else if (type == Type::Fire) {
 		int frame = (fireFrame / 3) % 4;
 		sf::IntRect fireRect({frame * 96, 0}, {96, 36});
 

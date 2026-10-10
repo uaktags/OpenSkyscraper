@@ -30,13 +30,17 @@ ap.add_argument('days', type=float)
 ap.add_argument('--inst', default='parity')
 ap.add_argument('--keep', type=int, default=1, help='keep every Nth snapshot .bld (0: none)')
 ap.add_argument('--step', type=float, default=0, help='game minutes between saves (0: 45 by day, 90 at night)')
-ap.add_argument('--fine', nargs=3, type=float, metavar=('FROM', 'TO', 'STEP'), help='minute-of-day window of day 0 with its own save step')
+ap.add_argument('--fine', nargs=3, type=float, metavar=('FROM', 'TO', 'STEP'), help='minute-of-day window of the first game day with its own save step')
+ap.add_argument('--fine-day', type=int, default=0, help='game day (0 = the first of the run) the --fine window applies to')
+ap.add_argument('--mindt', type=float, default=0.4, help='shortest real-time run between saves (seconds)')
 a = ap.parse_args()
 ENV = dict(os.environ, YOOT_INSTANCE=a.inst)
 os.makedirs(a.out + '/snaps', exist_ok=True)
 os.makedirs(a.out + '/dialogs', exist_ok=True)
 log = open(a.out + '/oracle.log', 'a')
 frame = None
+FIRE = bool(os.environ.get('FIRE_CHOICE'))  # a fire locks the File menu: shots instead of saves while it burns
+os.makedirs(a.out + '/shots', exist_ok=True)
 
 
 def R(*args, check=True, capture=False):
@@ -84,6 +88,11 @@ def clear_dialogs(tag):
             say('dialog %r %dx%d+%d+%d -> %s' % (title, w, h, x, y, shot))
         if title == 'Plugin Check Error':
             R('click', x + 359, y + 324)       # Continue
+        elif title == 'Event' and os.environ.get('FIRE_CHOICE') and not again and h == 284:
+            # The 3-way fire dialog (Tokyo.t2p T2DLG 8110, 226 x 284 with its frame): Firefighting
+            # team (helicopter), The security guard, Leave. FIRE_CHOICE = heli | guard | leave.
+            row = {'heli': 207, 'guard': 235, 'leave': 261}[os.environ['FIRE_CHOICE']]
+            R('click', x + 113, y + row)
         elif title == 'Event' or again:
             # Event choices (terrorist: "Accept offer" / "Look for"; fire: helicopter /
             # staff) have no default button: take the first, as OpenSky's --sim answers
@@ -114,7 +123,7 @@ def saveas(n):
     mx, my, _, _ = geom(r' - T2$')
     R('click', mx + 13, my + 11); time.sleep(0.8)   # File
     R('click', mx + 37, my + 82)                    # Save As...
-    R('wait-window', '^Save As$', 10)
+    R('wait-window', '^Save As$', 3 if FIRE else 10)
     x, y, _, _ = geom('^Save As$')
     R('click', x + 203, y + 189)
     R('key', 'End', 'shift+Home')
@@ -171,9 +180,9 @@ fails = 0
 while prev - start < a.days * 1440:
     h = (prev % 1440) // 60
     target = a.step or (45 if 6 <= h <= 23 else 90)
-    if a.fine and prev < 1440 and a.fine[0] <= prev % 1440 < a.fine[1]:
+    if a.fine and int((prev - start + (start % 1440)) // 1440) == a.fine_day and a.fine[0] <= prev % 1440 < a.fine[1]:
         target = a.fine[2]
-    dt = max(0.4, min(20.0, target / rate))
+    dt = max(a.mindt, min(20.0, target / rate))
     R('click', *RUN); t0 = time.time(); time.sleep(dt); R('click', *RUN)
     ran = time.time() - t0
     time.sleep(0.4)
@@ -184,11 +193,15 @@ while prev - start < a.days * 1440:
         rec = saveas(n)
     except Exception as e:  # noqa: BLE001
         say('save failed %s: %s' % (n, e))
+        R('key', 'Escape', check=False); time.sleep(1)
+        clear_dialogs(n + 'f')
+        if FIRE:
+            R('shot', '%s/shots/%s_%04d.png' % (a.out, n, int(prev)), check=False)
+            prev += target; idx += 1
+            continue
         fails += 1
         if fails > 5:
             break
-        R('key', 'Escape', check=False); time.sleep(1)
-        clear_dialogs(n + 'f')
         continue
     fails = 0
     rec['dialogs'] = dialogs

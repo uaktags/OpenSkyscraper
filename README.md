@@ -154,16 +154,18 @@ Known gaps
 OpenSky approximates Yoot Tower closely but not exactly, and several subsystems remain
 approximate or missing (see `doc/yoottower/game-parity.md` for the full audit):
 
-- **Elevator mechanics:** the Large Elevator now exports to `.bld` and matches the original's stops and
-  riders per car, but car travel times have not been compared at fine time resolution; on the people tower,
-  holiday (day 2) riders per car run high (9.5 vs 6.0).
+- **Elevator mechanics:** the Large Elevator exports to `.bld`, matches the original's stops and riders per car, and (WP8e) its
+  door cycle and appointment cost follow the BigElev decompile (6-idle unload and boarding windows, a hold of 6 idles) and the fine
+  oracle saves. Gear speeds already matched. On the people tower the holiday (day 2) riders per car still run high (9.2 vs 6.0;
+  weekdays 7.1 / 6.6 against 6.5 / 8.0), and the Large Elevator's schedule table is not modelled
+  (`doc/yoottower/game-parity.md` 7.6.K).
 - **Routing & transit:** People walk along floors and ride movers, but pathing uses OpenSky's A* PathFinder
   rather than original routing score tables; floor underneath Sky Bridges remains walkable in OpenSky routing.
 - **Facilities & services:** Restroom and doctor visits update tenant satisfaction and health, but people
   do not visually walk to restrooms/clinics and back; clinic failure dialogs lack custom popups.
 - **Disaster handling:** Power blackouts follow the original (the tower stays dark until supply is restored;
-  tenants and movers freeze), but per-transformer individual breaker toggles are omitted; fires use SimTower's
-  2-button response dialog rather than YootTower's 3-way response and burn spread model.
+  tenants and movers freeze), but per-transformer individual breaker toggles are omitted; fires use YootTower's 3-way response dialog and burn
+  spread (WP8e, 7.6.K), with a helicopter autopilot instead of mouse control and a constant walk time for the guards.
 - **Media & cosmetics:** Movie theaters play soundtrack audio from `Movie/*.MOV` when present, but Cinepak
   video decoding is not supported (video stills remain static); vehicles (subway trains, parking gate cars)
   lack animated sprites.

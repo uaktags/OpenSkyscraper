@@ -94,6 +94,15 @@ namespace OT {
 				/// inside a floor, 36 units a floor.
 				int yootGear;
 				int yootOffset;
+				/// YootTower door cycle (StdElev/BigElev module states 1-4, FUN_1000c150 /
+				/// c2c0 / c540): 0 none, 1 unload (state 1/2), 2 board (state 3), 3 hold
+				/// (state 4), each with its idle counter (6 on entry, the hold counts
+				/// down from the mover's waitCount, which runs as 6).
+				int yootPhase = 0;
+				int yootCounter = 0;
+				void yootArrive();
+				void yootDoorStep();
+				void yootDepart();
 
 			};
 		}

@@ -86,6 +86,9 @@ namespace OT {
 		void advanceHeadless(double dt);
 		/// Event log for the headless summary; recording is off in play.
 		bool simRecording = false;
+		/// --sim-choice N: the button headless runs press in a multi-button event
+		/// dialog first (the fire dialog: 0 helicopter, 1 security, 2 leave); -1 = first accepted.
+		int headlessChoice = -1;
 		std::vector<std::string> simEvents;
 		void recordSimEvent(const std::string & message);
 
@@ -287,6 +290,14 @@ namespace OT {
 		void askEventChoice(const std::string & title, const std::string & text,
 		                    const std::string & yesLabel, const std::string & noLabel,
 		                    const std::function<void(bool)> & onChoice);
+		/// Modal choice with any number of buttons (YootTower's 3-way fire
+		/// dialog, T2DLG 8110). `onChoice(i)` gets the pressed button and
+		/// returns whether the dialog may close: false keeps it open, as the
+		/// original's DialogHook does when a response is refused. Headless
+		/// runs press the first button that is accepted.
+		void askEventChoices(const std::string & title, const std::string & text,
+		                     const std::vector<std::string> & labels,
+		                     const std::function<bool(int)> & onChoice);
 		/// Modal text entry with one OK button (YootTower T2Baseball dialog
 		/// 12006). OK with an empty text keeps the dialog open (DialogHook
 		/// refuses ""); headless runs accept `defaultText`.
@@ -400,6 +411,7 @@ namespace OT {
 		void autosaveIfDue();
 		/// Answer + teardown for the event choice dialog.
 		void answerEventChoice(bool yes);
+		bool answerEventChoices(int index);
 		/// Validate a generic-room placement without mutating anything
 		/// (mirror of the construction branch's checks for previews).
 bool validateBatchCell(Item::AbstractPrototype * proto, int x, int y, std::string & reason, const std::set<int> & simulatedSlabs = std::set<int>()) const;
@@ -417,6 +429,8 @@ bool validateBatchCell(Item::AbstractPrototype * proto, int x, int y, std::strin
 		// --- Event choice dialog state ---
 		tgui::ChildWindow::Ptr eventChoiceWindow;
 		std::function<void(bool)> eventChoiceCallback;
+		std::function<bool(int)> eventChoicesCallback;
+		int eventChoicesCount = 0;
 		int eventChoiceSavedSpeed = -1;
 		// --- Hidden debug menu (EXE actions 9000-9003) ---
 		// The window only exists when the app was started with

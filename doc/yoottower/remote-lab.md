@@ -65,3 +65,11 @@ Per case (default: Tokyo people, Tokyo visitors, Tokyo bridge, Hawaii, Kegon):
 
 If the original shows a "Plugin Check Error" dialog for the export, the case fails at
 `load` with a screenshot in the case directory.
+
+## Fine saves and the fire dialog (WP8e)
+
+`oracle_run.py` also takes `--mindt SECONDS` (shortest run between saves; the game runs 10 game minutes a second, so saves land
+about 3 game minutes apart), `--fine-day N` (the `--fine FROM TO STEP` window on game day N of the run) and the environment variable
+`FIRE_CHOICE=heli|guard|leave`, which clicks that button of the 3-way fire dialog. While a fire burns the File menu is locked: the
+harness then takes screenshots (`shots/`) instead of saves. The OpenSky side has `--sim-dt`, `--sim-car-trace` and `--sim-choice`
+(`doc/headless-sim.md`).

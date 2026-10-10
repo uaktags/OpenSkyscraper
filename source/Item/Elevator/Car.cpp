@@ -3,6 +3,7 @@
 #include <cmath>
 #include "../../Game.h"
 #include "../../YootCatalog.h"
+#include "../../YootElevator.h"
 #include "Car.h"
 #include "Queue.h"
 #include "../Lobby.h"
@@ -46,6 +47,8 @@ void Car::init()
 	moveTicks = 0;
 	yootGear = 0;
 	yootOffset = 0;
+	yootPhase = 0;
+	yootCounter = 0;
 	state = kIdle;
 }
 
@@ -243,6 +246,11 @@ void Car::advance(double dt)
 	if (steps > (yoot ? 1024 : 64)) steps = yoot ? 1024 : 64; // hitches cannot starve the door state machine
 	for (int tick = 0; tick < steps; ++tick)
 	{
+		if (yoot && yootPhase != 0)
+		{
+			yootDoorStep();
+			continue;
+		}
 		if (doorTicks > 0)
 		{
 			if (doorTicks == 5)
@@ -337,8 +345,7 @@ void Car::advance(double dt)
 			// A moving car sent to the floor it stands on (respondToCalls on
 			// a car that has just set off) would wait there forever with its
 			// passengers: YootTower opens the doors instead.
-			doorTicks = 5;
-			setState(kHauling);
+			yootArrive();
 			continue;
 		}
 		if (state == kMoving && destinationFloor != (int)std::lround(altitude))
@@ -457,8 +464,7 @@ void Car::yootDrive()
 	if (left == 0)
 	{
 		yootGear = 0;
-		doorTicks = 5;
-		setState(kHauling);
+		yootArrive();
 		return;
 	}
 	if (yootGear == 0 && speed[1] > 0 && left >= threshold(2)) yootGear = 1;
@@ -481,6 +487,10 @@ void Car::moveTo(int floor)
 		departingPlayed = false;
 		direction = floor > altitude ? Elevator::kUp : Elevator::kDown;
 		setState(kMoving);
+	}
+	else if (elevator->prototype->yoot)
+	{
+		yootArrive();
 	}
 	else
 	{
@@ -513,22 +523,17 @@ Queue *Car::yootServedQueue()
 
 /**
  * YootTower: the cost for this car to serve a call at `floor` going `dir`
- * (StdElev FUN_1000d070). A stopped car pays the plain distance. A moving
- * car pays the plain distance only when the call continues its sweep past
- * the current destination; otherwise it pays the full turnaround through
- * the destination, which keeps idle cars competitive and spreads the cars
- * over the calls (the original's formulas scale the non-ahead cases by
- * the sweep extent, making them strictly larger).
+ * (Yoot::sweepCost: BigElev FUN_1000da60, the same cost function as StdElev's
+ * FUN_1000d070). The next stop is the car's destination floor.
  */
 int Car::yootSweepCost(int floor, Elevator::Direction dir) const
 {
-	const int cur = (int)std::lround(altitude);
-	if (state != kMoving || direction == Elevator::kNone)
-		return std::abs(floor - cur);
-	const int s = direction == Elevator::kUp ? 1 : -1;
-	if (dir == direction && (floor - destinationFloor) * s >= 0)
-		return std::abs(floor - destinationFloor);
-	return std::abs(destinationFloor - cur) + std::abs(floor - destinationFloor);
+	const int base = elevator->position.y;
+	const int top = std::max(0, elevator->size.y - 1);
+	const int p = floor - base;
+	const int T = destinationFloor - base;
+	const int carDir = direction == Elevator::kUp ? 1 : direction == Elevator::kDown ? 2 : 0;
+	return Yoot::sweepCost(carDir, (int)std::lround(altitude) - base, T, p, dir == Elevator::kDown, top);
 }
 
 /**
@@ -580,6 +585,104 @@ void Car::yootDecide()
 		direction = Elevator::kNone;
 		setState(kIdle);
 	}
+}
+
+/**
+ * YootTower: the car has reached its target floor (FUN_1000cbd0 in StdElev /
+ * BigElev). Someone riding to this floor starts the unload state (state 1/2,
+ * counter 6); otherwise a call appointed to this car starts the boarding
+ * state (state 3, counter 6); otherwise the car goes on (FUN_1000cb00).
+ */
+void Car::yootArrive()
+{
+	const int floor = (int)std::lround(altitude);
+	destinationFloor = floor;
+	bool off = false;
+	for (Item::People::iterator ip = passengers.begin(); ip != passengers.end(); ++ip)
+		if ((*ip)->journey.toFloor == floor) { off = true; break; }
+	Queue *q = yootServedQueue();
+	const bool on = (q && !q->people.empty()) || yootPickups.count(floor);
+	Yoot::DoorCycle cycle;
+	if (!cycle.arrive(off, on))
+	{
+		yootEndStop();
+		yootPhase = 0;
+		yootCounter = 0;
+		doorTicks = 0;
+		yootDecide();
+		return;
+	}
+	yootPhase = (int)cycle.phase;
+	yootCounter = cycle.counter;
+	doorTicks = yootCounter;
+	setState(kHauling);
+	arrivingSound.Play(game);
+	elevator->reassignCalls(this);
+}
+
+/// Leaves the stop (FUN_1000cb00): ends the boarding window and sweeps on.
+void Car::yootDepart()
+{
+	yootPhase = 0;
+	yootCounter = 0;
+	doorTicks = 0;
+	holdTicks = 0;
+	elevator->finishStop(this);
+	yootEndStop();
+	yootDecide();
+}
+
+/**
+ * One mover idle of the YootTower door cycle (BigElev FUN_1000c150 unload,
+ * FUN_1000c2c0 boarding, FUN_1000c540 hold; StdElev has the same code). The
+ * counters and the hold are Yoot::DoorCycle; this applies its decisions to
+ * the riders and the appointed call.
+ */
+void Car::yootDoorStep()
+{
+	Yoot::DoorCycle cycle;
+	cycle.phase = (Yoot::DoorCycle::Phase)yootPhase;
+	cycle.counter = yootCounter;
+	Queue *q = yootServedQueue();
+	Yoot::DoorCycle::Ctx ctx;
+	for (Item::People::iterator ip = passengers.begin(); ip != passengers.end(); ++ip)
+		if ((*ip)->journey.toFloor == destinationFloor) ++ctx.leaving;
+	ctx.request = q != NULL;
+	ctx.waiting = q ? (int)q->people.size() : 0;
+	ctx.riders = (int)passengers.size();
+	ctx.capacity = elevator->maxCarCapacity;
+	const Yoot::DoorCycle::Out out = cycle.step(ctx);
+	if (out.off == 1)
+	{
+		Person *p = nextPassengerToUnmount();
+		passengers.erase(p);
+		p->journey.next();
+	}
+	else if (out.off == 2)
+	{
+		while (Person *p = nextPassengerToUnmount())
+		{
+			passengers.erase(p);
+			p->journey.next();
+		}
+	}
+	if (q && out.on > 0)
+	{
+		passengers.insert(q->popPerson());
+		if (out.on == 2)
+			while (!isFull() && !q->people.empty()) passengers.insert(q->popPerson());
+	}
+	if (q && q->people.empty())
+	{
+		q->steppingInside = false;
+		q->called = false;
+		q->answered = false;
+	}
+	yootPhase = (int)cycle.phase;
+	yootCounter = cycle.counter;
+	doorTicks = std::max(1, yootCounter);
+	if (out.endStop && !out.depart) yootEndStop();
+	if (out.depart) yootDepart();
 }
 
 /**

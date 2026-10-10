@@ -128,7 +128,7 @@ void EventSystem::yootBegin(int index)
 	const YootEventSpec & e = scheduler.events()[index];
 	if (extras.begin(e, index)) return; // DOEV, TOEV, MAEV 128 (Mr. Maru)
 	if (e.type == "FBEV") {
-		startFire();
+		yootFireStart();
 	} else if (e.type == "TREV") {
 		offerBomb();
 	} else if (e.type == "BOEV") {
@@ -159,6 +159,200 @@ void EventSystem::yootBegin(int index)
 	} else {
 		LOG(DEBUG, "%s begins: world X-event hook", e.type.c_str());
 	}
+}
+
+// -------------------------------------------------------------------- fire
+// T2FireBurning (Tokyo.t2p 0x10030d50..0x10032590), see game-parity.md 7.6.K.
+
+namespace
+{
+	const char * ordinal(int n)
+	{
+		const int t = n % 100;
+		if (t >= 11 && t <= 13) return "th";
+		switch (n % 10) { case 1: return "st"; case 2: return "nd"; case 3: return "rd"; default: return "th"; }
+	}
+
+	/// The tower the fire reads: any tenant (not a floor, the lobby or a mover) covers a cell.
+	class TowerFireGrid : public Yoot::FireGrid
+	{
+	public:
+		TowerFireGrid(EventSystem & e) : es(e) {}
+		Yoot::FireCell cell(int floor, int x) const override { return es.yootFireCell(floor, x); }
+		void burn(int floor, int x, int & lo, int & hi) override { es.yootFireBurn(floor, x, lo, hi); }
+	private:
+		EventSystem & es;
+	};
+
+	Item::Item * tenantAt(Game * game, int floor, int x)
+	{
+		Game::ItemSetByInt::const_iterator it = game->itemsByFloor.find(floor);
+		if (it == game->itemsByFloor.end()) return nullptr;
+		for (Item::Item * item : it->second) {
+			if (item->isElevator() || item->isStairlike() || item->isLobby() || item->canHaulPeople()) continue;
+			if (item->prototype->id == "floor") continue;
+			const recti r = item->getRect();
+			if (x >= r.minX() && x < r.maxX() && floor >= r.minY() && floor < r.maxY()) return item;
+		}
+		return nullptr;
+	}
+}
+
+Yoot::FireCell EventSystem::yootFireCell(int floor, int x) const
+{
+	if (hasRubble(floor, x)) return Yoot::FireCell::Burnt;
+	Item::Item * item = tenantAt(game, floor, x);
+	if (!item) return Yoot::FireCell::None;
+	return item->survivesDisaster() ? Yoot::FireCell::Fireproof : Yoot::FireCell::Tenant;
+}
+
+void EventSystem::yootFireBurn(int floor, int x, int & lo, int & hi)
+{
+	Item::Item * item = tenantAt(game, floor, x);
+	if (!item) { lo = x; hi = x + 1; addRubble(floor, x); return; }
+	const recti r = item->getRect();
+	lo = r.minX();
+	hi = r.maxX();
+	game->destroyItemByDisaster(item); // T2Tenant::BurntDown: the tenant stays as rubble
+}
+
+void EventSystem::yootFireStart()
+{
+	if (type != Type::None) return;
+	// T2TowerEvent::Idle calls Start once, at the begin minute; an event whose Start
+	// fails is dropped for the day. IsBreakoutFire gets 100 random cells of the world.
+	const RulesProfile & profile = game->activeRules.profile();
+	const int width = profile.worldWidth > 0 ? profile.worldWidth : 368;
+	const int rows = profile.buildBottomRow != INT_MAX ? profile.buildBottomRow : profile.groundRow + 11;
+	TowerFireGrid grid(*this);
+	int floor = 0, x = 0;
+	// The random column is a world unit (0 .. width); items are in OpenSky x.
+	const bool found = yootFire.breakout(grid, width, rows, [] { return rand(); },
+		[&](int row) { return profile.groundRow - 1 - row; }, profile.unitOriginX, floor, x);
+	if (!found) {
+		LOG(IMPORTANT, "Yoot fire: no breakout cell, no fire today");
+		return;
+	}
+	yootFire = Yoot::FireModel();
+	yootFire.travelMoves = [](const Yoot::Blaze &) { return 40; };
+	if (!yootFire.makeFire(grid, x, floor)) return;
+
+	type = Type::Fire;
+	yootFireMode = 0;
+	yootFireStartFloor = floor;
+	yootHeliManual = false;
+	yootFireIdles = (long long)std::floor(game->time.absolute * 1440.0 * 4.0);
+	fireFrameAccum = 0;
+	game->evacuateForDisaster();
+
+	char buf[320];
+	char label[16];
+	if (floor < 0) snprintf(label, sizeof(label), "B%d", -floor);
+	else snprintf(label, sizeof(label), "%d%s", floor + 1, ordinal(floor + 1));
+	snprintf(buf, sizeof(buf), "Fire has broken out on the %s floor. The residents are escaping through the "
+	         "emergency stairs. Please put the fire out immediately!", label);
+	LOG(IMPORTANT, "Yoot fire on floor %d at x %d", floor, x);
+	// Two dialogs in the original: the notice, then T2DLG 8110 with the three responses.
+	game->askEventChoice("Event", buf, "OK", "", [this](bool) {
+		if (type != Type::Fire) return;
+		const std::vector<std::string> labels = {"Firefighting team", "The security guard", "Leave"};
+		char text[160];
+		snprintf(text, sizeof(text), "Please select a way to put the fire out.\n(helicopter: $%d)", chopperCost);
+		game->askEventChoices("Event", text, labels, [this](int i) { return yootFireChoose(i); });
+	});
+}
+
+bool EventSystem::yootFireChoose(int index)
+{
+	if (type != Type::Fire || yootFireMode != 0) return true;
+	// GetTenantByPID('IBEK'): the Security Room itself, not the Fire Department.
+	Game::ItemSetByString::const_iterator sec = game->itemsByType.find("security");
+	const bool securityRoom = sec != game->itemsByType.end() && !sec->second.empty();
+	const Yoot::FireResponse r = Yoot::fireResponse(index, game->funds, chopperCost, securityRoom);
+	if (!r.accepted) {
+		game->timeWindow.showMessage(r.message);
+		return false;
+	}
+	yootFireMode = r.mode;
+	if (r.mode == 1) {
+		game->transferFunds(-(int)r.cost, "emergency", "Fire helicopter dispatched");
+		const Yoot::Blaze & b = yootFire.fires.front();
+		yootHeliX = (float)(b.left + 80);
+		yootHeliY = -b.floor * 36.0f - 5 * 36.0f;
+		game->timeWindow.showMessage(r.message);
+		LOG(IMPORTANT, "Yoot fire: helicopter ($%d)", (int)r.cost);
+	} else if (r.mode == 2) {
+		// CallFireman 0x10031ed0: six people in all from the registry-5 tenants.
+		int sent = 0;
+		const std::vector<std::pair<Item::Item *, int> > crew = specials.firemen();
+		for (size_t i = 0; i < crew.size(); ++i) sent += crew[i].second;
+		yootFire.firemen = std::min(6, sent);
+		LOG(IMPORTANT, "Yoot fire: %d firemen", yootFire.firemen);
+	}
+	yootFireIdles = (long long)std::floor(game->time.absolute * 1440.0 * 4.0);
+	return true;
+}
+
+void EventSystem::yootHeliMove()
+{
+	// T2Helicopter::Move: it flies towards the cursor, easing in; here towards the last click,
+	// else the nearest fire, and a fire under the water goes out (DoExtinguish).
+	const std::vector<Yoot::Blaze> & fires = yootFire.fires;
+	if (fires.empty()) return;
+	float tx, ty;
+	int floor;
+	if (yootHeliManual) {
+		tx = (float)yootHeliTargetX; floor = yootHeliTargetFloor;
+	} else {
+		size_t best = 0;
+		float bestD = 1e30f;
+		for (size_t i = 0; i < fires.size(); ++i) {
+			const float d = std::fabs((fires[i].left + 48) - yootHeliX) + 200.0f * std::abs((int)(-fires[i].floor * 36.0f - yootHeliY) / 36);
+			if (d < bestD) { bestD = d; best = i; }
+		}
+		tx = (float)(fires[best].left + 48); floor = fires[best].floor;
+	}
+	ty = -floor * 36.0f;
+	const float dx = tx - yootHeliX, dy = ty - yootHeliY;
+	const float dist = std::sqrt(dx * dx + dy * dy);
+	const float speed = 24.0f; // px per idle
+	if (dist > speed) { yootHeliX += dx / dist * speed; yootHeliY += dy / dist * speed; }
+	else { yootHeliX = tx; yootHeliY = ty; }
+	if (dist <= 8.0f || dist <= speed) {
+		if (yootFire.extinguishAt((int)tx, floor)) yootHeliManual = false;
+		else if (yootHeliManual) yootHeliManual = false;
+	}
+}
+
+void EventSystem::yootFireStep()
+{
+	if (yootFireMode == 0) return; // the dialogs hold the fire
+	const long long now = (long long)std::floor(game->time.absolute * 1440.0 * 4.0 + 1e-9);
+	long long steps = now - yootFireIdles;
+	if (steps <= 0) return;
+	if (steps > 4000) steps = 4000;
+	yootFireIdles = now;
+	TowerFireGrid grid(*this);
+	const int endMinute = yootFireIdx >= 0 ? scheduler.events()[yootFireIdx].endMin : 1080;
+	for (long long i = 0; i < steps && type == Type::Fire; ++i) {
+		if (yootFireMode == 1) yootHeliMove();
+		yootFire.idle(grid, yootFireMode == 2);
+		// Exec: carry on while fires remain and the clock is not at the end time.
+		const int minute = (int)std::floor(game->time.hour * 60.0);
+		if (yootFire.fires.empty() || minute >= endMinute) { yootFireEnd("Fire has been put out."); return; }
+	}
+}
+
+void EventSystem::yootFireEnd(const char * message)
+{
+	// StopEvent 0x10031810: every fire goes out, the game goes back to its speed.
+	yootFire.fires.clear();
+	yootFireMode = 0;
+	yootHeliManual = false;
+	type = Type::None;
+	game->timeWindow.showMessage(message);
+	LOG(IMPORTANT, "Yoot fire over: %s", message);
+	prevAbsolute = game->time.absolute;
 }
 
 void EventSystem::yootAdvanceSanta(double frames)
