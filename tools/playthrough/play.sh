@@ -358,7 +358,7 @@ cmd_pull() {
   local dest="$SCRIPT_DIR/out/$name"
   mkdir -p "$dest"
   echo "[play] Pulling results for '$name' to $dest..."
-  rsync -avz -e "$LAB_RSH" "$LAB_USER@$LAB_HOST:$LAB_DIR/out/$name/" "$dest/"
+  rsync -avz -e "$LAB_RSH" "$LAB_USER@$LAB_HOST:$LAB_DIR/out/$name/" "$dest/" || true   # out/<name> only exists after oracle/web runs; cpp-shots writes <name>-shots only
   
   # Also check if shots directory exists
   if $LAB_SSH "[ -d '$LAB_DIR/out/${name}-shots' ]"; then
