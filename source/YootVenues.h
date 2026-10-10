@@ -133,6 +133,10 @@ namespace OT
 		/// (CollectCustomerFromPool 0x5ef70), so the target gates but never caps. The first
 		/// run's target is the sub-plugin's +0xdc (unkDC, 1000 for PlArt).
 		int hallCollectRoom(int target, int capacity, int inside, int walking);
+		/// EventCenter.t2p EnterTenant hook 0x1000bba0: EnterCustomer(person, bindTime of the
+		/// booked event + now). The hall's own tenant bind (0) is not added, so a PlArt visitor
+		/// stays 60 minutes (oracle: leave times of the inside people are at most 60 ahead).
+		int hallStay(int eventBindTime);
 
 		// ================================================= ads (Billboard)
 

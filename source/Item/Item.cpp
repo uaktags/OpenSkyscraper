@@ -343,6 +343,8 @@ void Item::encodeXML(tinyxml2::XMLPrinter &xml)
 	{
 		if (yootEstimate != 0)
 			xml.PushAttribute("yootEstimate", yootEstimate);
+		if (yootSlot >= 0)
+			xml.PushAttribute("yootSlot", yootSlot);
 		if (yootBuildDay >= 0)
 			xml.PushAttribute("buildDay", yootBuildDay);
 		if (yootPeopleEstimate != 300)
@@ -376,6 +378,7 @@ void Item::decodeXML(tinyxml2::XMLElement &xml)
 		}
 	}
 	yootEstimate = xml.IntAttribute("yootEstimate", 0);
+	yootSlot = xml.IntAttribute("yootSlot", -1);
 	yootBuildDay = xml.IntAttribute("buildDay", -1);
 	yootPeopleEstimate = xml.IntAttribute("yootPeopleEstimate", 300);
 	// Saved state wins over the Factory's "fresh placement" default so a

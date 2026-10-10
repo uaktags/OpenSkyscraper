@@ -192,6 +192,11 @@ namespace OT
 			return std::max(0, capacity - inside - walking);
 		}
 
+		int hallStay(int eventBindTime)
+		{
+			return std::max(1, eventBindTime);
+		}
+
 		bool hallEventCollects(int minute, int tenantOpen, int tenantClose, int customerUnit)
 		{
 			return minute >= tenantOpen && minute < tenantClose - customerUnit - 60;

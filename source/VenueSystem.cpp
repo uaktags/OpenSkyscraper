@@ -341,7 +341,8 @@ void VenueSystem::enter(Item::YootVenue * v, YootVisitor * p)
 		HallEventDef def;
 		AbstractPlugin * hp = e->today.empty() ? nullptr : game->app.pluginManager.get(e->today);
 		admitted = admitted && hp && hp->ensureLoaded() && hp->getHallEventDef(def);
-		if (admitted) stay = std::max(0, def.bindTime) + stay;
+		// Hook 0x1000bba0: the booked event's bindTime only, not the hall's own bind on top.
+		if (admitted) stay = Yoot::hallStay(def.bindTime);
 	}
 	else if (id == "stadium")
 		stay = v->closeMinute() - minute;  // the leave minute is the close

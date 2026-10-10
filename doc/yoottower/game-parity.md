@@ -1515,3 +1515,71 @@ One real arithmetic difference was found in that roll:
   (15 at 09:20) is in the early tail; a larger oracle sample of one shop's first-customer minute would be needed to
   say more. Goldens `sim_people_yoottower` and `sim_visitors_yoottower` were regenerated (`UPDATE_GOLDEN=ON`, 2000
   ticks): the roll probabilities and the room estimate draws changed the random sequence.
+
+#### 7.6.J WP8d third round on the two measured gaps
+
+Lab tree `wp8d` (runs `wp8d-*` under `/lab/out/parity/`; oracle instances `wp8d-hw`, `wp8d-k2`, `wp8d-ec1`). The
+original is deterministic: `wp8d-or1`, a rerun of `wp8b-ev3` from the same input, reads 70 / 143 / 251 again, so one oracle
+run is the original's value and a rerun adds no variance information. `oracle_run.py --fine FROM TO STEP` (new) saves every
+STEP game minutes inside a day-0 minute window (5 minutes around the Hawaii hire, 4 minutes for the Tokyo morning).
+
+**J1 Event Center day 3 (target 2): closed.** First divergence: the visitors' stay. The hook `FUN_1000bba0` (EventCenter.t2p
+`EnterTenant`) calls `EnterCustomer(person, subPlugin+0xe8 + now)`, the booked event's bindTime and nothing else (PlArt: 60).
+`VenueSystem::enter` used `bindTime + stayOf(hall)`, and the hall's own tenant bind is 0, so `stayOf` returned its fallback 60:
+OpenSky kept every visitor 120 minutes. Evidence in the oracle snapshots (`wp8b-ev3`, snap_092..098): the `startTime` of the
+people inside the hall minus the snapshot minute is between 0 and 60 in all seven snapshots read (snap_092..098, 8-51
+people inside, maximum 60). The error is invisible while the hall is below its capacity (days 1 and 2 are arrival-limited), and shows on day 3:
+the original holds 51 inside with status 32 and about 28 walking (at 12:05, 12:52), OpenSky held more people for longer and
+drew at 0.55 per minute against the original's 0.75. The earlier candidates (target slot +4, collect window, midnight pool
+shrink) are not the cause: the pool is the same size in both games (types in the pool at 08:10 of day 3: original 2571, OpenSky
+2495-2535), and the target only gates. A side finding from the same snapshots: the +282 pool types the original gains between
+03:31 and 05:03 of day 3 are `DuplicateBelongPeople` of the 45 offices (`T2Tenant::DecideResidencialEstimation` 0x61380, estimate >
+200, 6 residents each) and happen at other times on days 1 and 2; OpenSky duplicates the same way.
+- **Fix:** `Yoot::hallStay(bindTime)` = bindTime (at least 1); `VenueSystem::enter` uses it. Test in the hall block.
+- **Result, `tokyo_g3_venues`, 6 seeds, 4 days, audience per day (original 70 / 143 / 251):** before 62-77 (mean 68) /
+  131-160 (141) / 195-223 (207); stay fix alone 60-82 (69) / 117-154 (138) / 212-264 (237); with J2's slot schedule 57-77 (68) /
+  125-157 (141) / 221-287 (249), i.e. day 3 is within 1% of the original.
+
+**J2 Hawaii condos, 55 against 54 (target 1): first divergence found, rule implemented, outcome stays random.** Method: an
+oracle run of `hawaii_g3_boatdeck` saving every 5 minutes from 18:20 to 20:40 (`wp8d-hw`), diffing the people list (new people
+by owner, destination and `T2PeopleType`) and the zone-5 array of demand list 3 between snapshots; OpenSky traced every
+`Pool::call` with its caller and game time (temporary `YOOT_POOLTRACE` instrumentation, not kept).
+- *Original, new people per window (all demand 3, life 127):* 19:56 none; 20:03: 29 people, all condos (8 condos with the
+  ordinals 83..92 hired; the sil-25 types taken: 5 of econo 4 and 3 of econo 5); 20:09: 22 people, 12 condos plus **the
+  Cocktail: one (silhouette 25, econo 4) and one (35, econo 4)**; the condos left with a partial table are the ones of ordinal
+  68..82; 20:24 the Front desk (hotel guests, (34, 4) and (35, 4)); 20:37 the Steak house (34, 4) x2, (35, 4) x2. The zone holds 15
+  types of silhouette 25 with econo 4 or 5, so any caller that takes one before the 20th condo hires leaves one condo with two
+  residents: the Cocktail's draw is the whole 55 -> 54.
+- *Why the Cocktail comes first in the original (the rule).* `T2TenantArray::DispatchIdle` 0x10061730 idles a tenant when its
+  ordinal among the used slots of its 128-slot array, `& 31`, equals the counter of `T2TenantArrayList::DispatchIdle`
+  0x10061c70 (one step per 15 game seconds, wrapping at 32: one idle per tenant per 8 minutes, four steps per minute).
+  The condos' hire order is the evidence for the counter: in the 20:03 snapshot exactly the condos with ordinal & 31 =
+  19..28 (ordinals 83..92) are hired (status 13), at 20:09 the ones with 4..18 (68..82), none of 19..28 later, i.e. the counter
+  was 19 at 20:00 and ran on from there; Aloha (ordinal 93, tick 10: closes in 19:56..20:03) and Duty Free (ordinal 44, tick
+  25: 20:03..20:09) close inside the predicted windows. With the counter `(19 + 4 x minute) mod 32` a tenant idles at
+  tick `(ordinal & 31) - 19 mod 32`: condo 83 at 20:00:00, condo 92 at 20:02:15, the Cocktail (ordinal 41, tick 22) at
+  20:05:30, with 12 of the 20 condos already hired and the other 8 after it. The offset 19 is measured (Hawaii input loaded at
+  00:30, harness clock; the counter's origin is not derived), and the Tokyo morning run `wp8d-k2` (4-minute saves, 156
+  idle-driven status changes) is consistent with it but too coarse to pin it independently. The previous round's schedule
+  had the right formula and the wrong frame: it counted from the load minute and (in the sim step) hired all condos on the
+  first tick.
+- *OpenSky before:* all 20 condos hire at 20:00-20:01 in the first frame; the Cocktail's idle phase was
+  `(x * 31 + y * 17) % 8`, so it first reaches the pool at 20:13 or later, after the condos took all 15 types of silhouette
+  25 (36 of 36 seeds at 15 / 5, 55 residents).
+- **Change:** `Item::yootSlot` (the ordinal; `BldLoader` writes it from the file's slot order per 128-slot block, `Game::addItem`
+  gives a new item the next one), `Yoot::idleTick` / `idlePhase` / `idleSub`, applied to shops (`YootTenant`), venues, hotel rooms
+  and desks, and the condo hire (`YootCondo::advance`: the one idle of the first 8 minutes of the hour, with minute
+  catch-up). Tests: the tick arithmetic, the 12-of-20 order against the Cocktail, and the importer's `yootSlot`.
+- **Result (36 seeds, 1 day):** 2 runs end at 14 x 3 + 6 x 2 = 54 (seeds 16 and 23: the Cocktail takes `(25, 4)` at 20:05
+  through its member 19-25 / any demand / female, between the condo hires, exactly the original's draw), 34 at 55. Before: 0 of 36.
+  The Cocktail needs three things to line up (the 40% pool place roll x the weekday 70%, the 30% member, a sil-25 type still
+  in the zone), roughly 6-12% per run, so the original's single deterministic outcome is one draw of its own `rand()`
+  stream; the remaining difference is that draw, not a rule. Mean residents 54.94 against 54.
+- **No regression elsewhere** (3 seeds, 3 days, against the existing oracle runs; baseline = HEAD, `wp8d-cmpA`, vs this tree,
+  `wp8d-cmpB`): customers within tolerance, `hawaii_g3_boatdeck` 53 / 53 / 51 of ~59 -> 51 / 50 / 52; `tokyo_g2_hotel_subway`
+  45 / 44 / 54 of ~67 -> 52 / 53 / 52; `tokyo_g3_venues` 24 / 29 / 26 of ~43 -> 32 / 24 / 27; funds, population and grade checks
+  unchanged within noise.
+- **Open:** the sub-minute order across item types inside one sim step (a step spans about 1.5 game minutes at the harness
+  speed, items run their own catch-up in item order; with `--sim-speed 1` the result is the same, 0 of 12), the counter offset for
+  loads at another minute (19 is the harness value at 00:30), and slot reuse after demolition (a new item takes the next
+  ordinal instead of the first free slot).

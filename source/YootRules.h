@@ -31,6 +31,18 @@ namespace OT
 		const int kPeopleIdleMinutes = 2;   ///< one T2People::Idle per 2 game minutes
 		const int kTenantIdleMinutes = 8;   ///< one tenant ChangeStatusOnIdle per 8 game minutes
 
+		/// T2TenantArray::DispatchIdle 0x10061730 / T2TenantArrayList::DispatchIdle 0x10061c70:
+		/// the list calls every array once per 15 game-second tick with a counter 0..31, and a
+		/// tenant idles when (its ordinal among the used slots of its 128-slot array) & 31 equals
+		/// the counter. The counter is 19 + 4 x minute-of-day (mod 32) in the oracle runs
+		/// (Hawaii, load at 00:30; the condos' hire order and the shops' close order at 20:00).
+		/// idleTick is the tick (0..31) of the 8-minute cycle that starts at minute 0 mod 8,
+		/// idlePhase its minute, idleSub the 15-second step inside that minute.
+		const int kIdleTickBias = 19;
+		int idleTick(int ordinal);
+		int idlePhase(int ordinal);
+		int idleSub(int ordinal);
+
 		/// Absolute game minute (day * 1440 + minute) of an OpenSky absolute
 		/// time on the YootTower minute-linear clock.
 		long long absoluteMinute(double absolute);

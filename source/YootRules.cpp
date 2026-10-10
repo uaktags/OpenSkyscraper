@@ -10,6 +10,21 @@ namespace OT
 {
 namespace Yoot
 {
+	int idleTick(int ordinal)
+	{
+		return ((ordinal & 31) - kIdleTickBias) & 31;
+	}
+
+	int idlePhase(int ordinal)
+	{
+		return idleTick(ordinal) >> 2;
+	}
+
+	int idleSub(int ordinal)
+	{
+		return idleTick(ordinal) & 3;
+	}
+
 	long long absoluteMinute(double absolute)
 	{
 		// Round to the nearest 1/4 minute first so values that are exact

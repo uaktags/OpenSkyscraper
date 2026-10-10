@@ -1040,8 +1040,17 @@ namespace Bld {
 		int nonDefaultRent = 0;
 		// The clock's day (the absolute clock below, floored): one YootTower month per day.
 		const int loadDay = (int)std::max<int>(0, (int)in.year - 1) * 12 + (int)(in.month0 % 12);
-		for (const Tenant & t : in.tenants)
+		// T2TenantArray::DispatchIdle: a tenant idles by its ordinal among the used slots of its
+		// 128-slot array, so the file's slot order sets the 8-minute round robin (Item::yootSlot).
+		std::vector<int> ordinals(in.tenants.size(), -1);
+		for (size_t i = 0, ord = 0; i < in.tenants.size(); i++)
 		{
+			if (i % 128 == 0) ord = 0;
+			if (in.tenants[i].hdr.used) ordinals[i] = (int)ord++;
+		}
+		for (size_t slotIndex = 0; slotIndex < in.tenants.size(); slotIndex++)
+		{
+			const Tenant & t = in.tenants[slotIndex];
 			if (!t.hdr.used) continue;
 			const PluginInfo * p = in.pluginForItemType(t.equipType);
 			const std::string stem = p ? pluginStem(*p) : "";
@@ -1177,6 +1186,8 @@ namespace Bld {
 				else if (id && b.plugin.empty())
 					report.notes.push_back("An Event Center's booked hall event has no installed plugin; imported without one.");
 			}
+			snprintf(buf, sizeof(buf), " yootSlot=\"%d\"", ordinals[slotIndex]);
+			attrs += buf;
 			out.xml += attrs + "/>\n";
 			out.grow(x, y, w, h);
 			report.imported[proto]++;

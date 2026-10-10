@@ -6248,6 +6248,8 @@ static void testBldShippedSaves()
 	EXPECT(toTowerXml(tokyo, bldTestPrototypes, xml, report, error));
 	EXPECT(xml.find("<tower funds=\"7877000\" rating=\"0\" time=\"0.398611\"") != std::string::npos);
 	EXPECT(xml.find("ruleset=\"yoottower\" world=\"tokyo\"") != std::string::npos);
+	// Every imported tenant carries its slot ordinal (the DispatchIdle round-robin position).
+	EXPECT(countOf(xml, " yootSlot=\"") > 0 && xml.find(" yootSlot=\"0\"") != std::string::npos);
 	EXPECT(xml.find("lastQuarterBalance=\"10000000\" quarterIncome=\"0\" quarterExpenses=\"2123000\"") != std::string::npos);
 	// 3-storey atrium lobby (Floor.t2p variation 1) on 1F; unit 147 -> x -37.
 	EXPECT(xml.find("type=\"lobby\" x=\"-37\" y=\"0\" evaluation=\"50.0\" width=\"46\" height=\"3\"") != std::string::npos);
@@ -6436,9 +6438,12 @@ static void testBldShippedSaves()
 		EXPECT(at != std::string::npos);
 		if (at != std::string::npos) expected.replace(at, iceStatus.size() + 3, iceStatus + "9\"");
 		// The visitor pool comes back with the exporter's population 0.
+		// A re-export renumbers the slots, so the importer's yootSlot ordinals are not compared either.
 		auto stripPool = [](std::string x) {
 			const size_t p = x.find(" yootPool=\"");
 			if (p != std::string::npos) x.erase(p, x.find('"', p + 11) + 1 - p);
+			for (size_t q = x.find(" yootSlot=\""); q != std::string::npos; q = x.find(" yootSlot=\"", q))
+				x.erase(q, x.find('"', q + 11) + 1 - q);
 			return x;
 		};
 		EXPECT(again.find(" yootPool=\"1 1 ") != std::string::npos);
@@ -7507,6 +7512,25 @@ static void testYootVenues()
 	// (tokyo_g3_venues): 70 visitors on day 1 and 143 on day 2, OpenSky 68 and 141 (6 seeds).
 	EXPECT(Y::hallCollectRoom(1000, 80, 10, 5) == 65 && Y::hallCollectRoom(1000, 80, 80, 0) == 0);
 	EXPECT(Y::hallCollectRoom(50, 80, 20, 20) == 40 && Y::hallCollectRoom(50, 80, 30, 20) == 0);
+	// A PlArt visitor stays its bindTime (60), not bindTime + the tenant's fallback 60 (oracle wp8b-ev3:
+	// inside people leave within 60 minutes of any snapshot, so the day-3 hall held 51 not 80+).
+	EXPECT(Y::hallStay(60) == 60 && Y::hallStay(0) == 1 && Y::hallStay(-5) == 1);
+	// T2TenantArray::DispatchIdle: ordinal & 31 against a counter that is 19 at 00:00 (oracle wp8d-hw,
+	// Hawaii 20:00: the condos of ordinal 83..92 (& 31 = 19..28) hired by 20:03, ordinals 68..82 after, the
+	// Cocktail (41 -> tick 22, 20:05:30) between them).
+	EXPECT(Y::idleTick(83) == 0 && Y::idleTick(92) == 9 && Y::idleTick(68) == 17 && Y::idleTick(82) == 31);
+	EXPECT(Y::idlePhase(41) == 5 && Y::idleSub(41) == 2 && Y::idlePhase(83) == 0 && Y::idlePhase(82) == 7);
+	{
+		bool before = true;
+		for (int condo : {83, 84, 86, 87, 88, 89, 91, 92})
+			for (int late : {68, 69, 71, 72, 73, 74, 76, 77, 78, 79, 81, 82}) before = before && Y::idleTick(condo) < Y::idleTick(late);
+		EXPECT(before);
+		int ahead = 0; // condos that idle before the Cocktail (ordinal 41): 12 of the 20
+		for (int condo : {68, 69, 71, 72, 73, 74, 76, 77, 78, 79, 81, 82, 83, 84, 86, 87, 88, 89, 91, 92})
+			ahead += Y::idleTick(condo) < Y::idleTick(41) ? 1 : 0;
+		EXPECT(ahead == 12);
+		for (int o = 0; o < 128; ++o) EXPECT(Y::idleTick(o) == Y::idleTick(o + 128) && Y::idlePhase(o) * 4 + Y::idleSub(o) == Y::idleTick(o));
+	}
 	// Event Center status machine, EventCenter.t2p EnterTenant 0x1000bba0 / LeaveTenant
 	// 0x1000bcb0 (disassembled; capacity 80 -> half = 40) and the idle FUN_1000bec0.
 	// Oracle hkC2-ec3 day 1/2: 30 with the first visitors, 31 while some are inside,

@@ -133,6 +133,8 @@ namespace OT {
 		int rating;
 		int population;
 		bool populationNeedsUpdate;
+		/// Next YootTower tenant ordinal (Item::yootSlot).
+		int yootSlotCounter = 0;
 		void transferFunds(int64_t f, std::string category = "misc", std::string message = std::string());
 		void setFunds(int64_t f);
 		void setRating(int r);

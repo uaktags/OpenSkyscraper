@@ -59,7 +59,7 @@ void YootTenant::init()
 	lastMinute = -1;
 	// Spread the idles over the 8-minute round robin like the 32 dispatch
 	// slots of T2TenantArray do.
-	idlePhase = (int)(((unsigned)(position.x * 31 + position.y * 17)) % Yoot::kTenantIdleMinutes);
+	idlePhase = (int)(((unsigned)(position.x * 31 + position.y * 17)) % Yoot::kTenantIdleMinutes); // until addItem gives the slot
 	if (const YootPluginView * v = yootPluginView(game->app, def().plugin)) {
 		view = &v->texture;
 		bands = &v->bands;

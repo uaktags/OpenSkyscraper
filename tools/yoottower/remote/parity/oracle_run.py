@@ -30,6 +30,7 @@ ap.add_argument('days', type=float)
 ap.add_argument('--inst', default='parity')
 ap.add_argument('--keep', type=int, default=1, help='keep every Nth snapshot .bld (0: none)')
 ap.add_argument('--step', type=float, default=0, help='game minutes between saves (0: 45 by day, 90 at night)')
+ap.add_argument('--fine', nargs=3, type=float, metavar=('FROM', 'TO', 'STEP'), help='minute-of-day window of day 0 with its own save step')
 a = ap.parse_args()
 ENV = dict(os.environ, YOOT_INSTANCE=a.inst)
 os.makedirs(a.out + '/snaps', exist_ok=True)
@@ -170,6 +171,8 @@ fails = 0
 while prev - start < a.days * 1440:
     h = (prev % 1440) // 60
     target = a.step or (45 if 6 <= h <= 23 else 90)
+    if a.fine and prev < 1440 and a.fine[0] <= prev % 1440 < a.fine[1]:
+        target = a.fine[2]
     dt = max(0.4, min(20.0, target / rate))
     R('click', *RUN); t0 = time.time(); time.sleep(dt); R('click', *RUN)
     ran = time.time() - t0
