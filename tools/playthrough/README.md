@@ -15,7 +15,10 @@ tools/playthrough/
 ├── Dockerfile             # Container definition (Fedora 44, Chromium, Bun, Playwright, ImageMagick)
 ├── play.sh                # Main CLI harness script controlling the lab container and workflows
 ├── oracle_probe.sh        # Wine 16-bit executable probe and diagnostic screen capture
-├── web_drive.mjs          # Playwright headless driver for OpenSkyWeb (speed 3, screenshots, metrics)
+├── web_drive.mjs          # Playwright headless driver for OpenSkyWeb (OpenSkyScraper edition, camera views, speed 3, screenshots, metrics)
+├── cpp_view.sh            # C++ GUI camera helper (goto lobby/floors/cathedral via keys + minimap click)
+├── dismiss_dialog.sh      # closes the C++ GUI's modal Financial Report
+├── oracle/                # Wine oracle: oracle.sh, oracle_sim.py (dialog watchdog, scroll camera)
 ├── compare.py             # Day-by-day metrics aligner and delta diff generator
 ├── parse_tower_metrics.py # Metric extractor combining SimHarness JSON and .tower XML attributes
 ├── downscale_pull.py      # Downscales pulled screenshots to 640x400 and caps total archive size (<50MB)
@@ -187,7 +190,7 @@ In OpenSkyWeb (`src/main.js`), the engine attaches internal handles to the globa
 | C++ headless (`play.sh cpp`) | SimHarness summary JSON (`funds`, `population`, `rating` 0-based => stars = rating+1, `time`). Hourly state: `--sim 3d --sim-dump-every 40 <dir>` then `cpp_hourly.py` (40 ticks = 1 game hour at speed 3). |
 | C++ GUI (`play.sh cpp-shots`) | `extract_cpp_metrics.py` -> `ocr.py` on the time window (1280x800). `dismiss_dialog.sh` closes the modal Financial Report so the sim keeps running. |
 | Web (`play.sh web`) | `web_drive.mjs` writes `hourly.json` per elapsed game hour: game state, plus the HUD DOM text and element boxes. `ocr.py train/validate web` OCRs the HUD pixels against the DOM text. `.TDT` saves are fed to the web port's own importer (`src/core/tdt-parser.js`). |
-| Oracle (`oracle/oracle.sh run`) | HUD OCR with `ocr.py` (1024x768 SimTower window). `oracle_sim.py`'s own `metrics.json` is superseded. `day*.TDT` headers cross-check. |
+| Oracle (`oracle/oracle.sh run`) | HUD OCR with `ocr.py` (1024x768 SimTower window); `dialogs.log` lists dismissed modals. `oracle_sim.py`'s own `metrics.json` is superseded. `day*.TDT` headers cross-check. |
 
 `ocr.py` = fixed HUD regions -> binarise -> split glyphs on empty columns -> look up bitmap templates in `ocr_templates.json`
 (exact, else nearest within +/-1 px and a Hamming budget, else `?`). Dates are matched as whole strings. Templates come from
@@ -200,8 +203,14 @@ web: trained from the DOM text). Evidence (region crops, validation JSON, glyph 
 * TDT import is now exact in both ports: freshly loaded HUD / state reads $93,560,900, pop 15,401, 5 stars, 2nd WD / 2Q / year 13.
 * The oracle clock cannot be read digitally (analog watch only), and the oracle advances ~1 game day per 17-24 shots, so
   the tables key shots by index and also align by in-game date. The oracle starts one day later than the save (WE/2Q).
-* Oracle stalls from day 3 hour 06: the "Congratulations ... Tower" rating dialog is modal and `oracle_sim.py` never clicks OK
-  (OK button at about (502,233)); day3.TDT is therefore a copy of day2.TDT. HUD frozen at $110,445,900 / pop 15,025.
+* Oracle modal dialogs: the "Congratulations ... Tower" rating dialog (and any other modal: VIP, disaster, quarterly report) froze the sim and the
+  old run stalled at day 3 hour 06. `oracle_sim.py` now runs a `DialogWatchdog`: Wine's desktop mode exposes every Win16 window as an X window, so it diffs
+  `xdotool search --onlyvisible --name ""` against the main-window baseline taken at start, presses Return (default OK), falls back to a click at (502,233) and
+  Escape, and writes `dialogs.log` + `dialog_NNN_<tag>_before/after.png` into the run dir. It runs every shot, around the end-of-day save and before camera drags.
+  `ORACLE_SHOT_INTERVAL` (default 1.6 s) sets the wall-clock gap between shots; the oracle advances ~1 game day per 22-27 shots, and the Tower dialog fires on the
+  first weekend after the 5-star promotion (seen at d3_h16 and d4_h06 depending on pacing; use `oracle.sh run data/SCHMITT.TDT 4` to be sure to cross it).
+  The oracle also moves its own camera (scrollbar thumb drag at x=1007: lobby y=565, floors 330, cathedral 125): hourly shots are lobby views and
+  `view_dD_h12_{cathedral,floors,lobby}.png` are taken each day.
 * Population: oracle stays ~15,0-16,2k; both ports drop to 12,720 within ~3 game hours of the load and settle ~13.2k.
 * Quarter rollover (3Q) income: oracle +$14.2M ($94.6M -> $108.8M), C++ +$15.8M ($94.46M -> $110.25M), web +$18.2M (-> $112.9M).
   C++ is the closer port (+1.4% vs oracle after the rollover, web +3.8%). Web and C++ agree to the dollar before the rollover.
@@ -209,12 +218,17 @@ web: trained from the DOM text). Evidence (region crops, validation JSON, glyph 
   items every tick and again per car arrival; each call is ~0.36 s, so one `game.advance(0.05)` takes ~95 s on this tower
   (profile: 99.9 % in recomputeAllChains). `web_drive.mjs` serves a memoised parking.js through `page.route` (per item count and
   game hour; identical for an unedited tower). `--no-parking-shim` measures the raw port.
-* Web HUD after a TDT import is stale until later events: FUND shows $2,000,000 and the rating stars show 1 star at load
-  although state is $93,560,900 / 5 stars; the stars render as outline boxes in the container's fonts (likely a font fallback).
+* Web edition: `?edition=opensky` only unlocks the dev flag; the edition is active once the menu button `[data-mode=opensky]` has been clicked and
+  `game.ownership.mode === "opensky"` (art sheets registered). `web_drive.mjs` now waits for that (and network idle) before loading the tower; previously a 500 ms sleep
+  let the first frames use the procedural fallbacks. It also sets the camera through `game.poi` (`window.__setView('lobby'|'cathedral'|'floors')`, world px x=cell*8, y=floor*36):
+  hourly shots are lobby views, `view_dD_h12_*` / `view_dD_h23_*` add cathedral and hotel floors.
+* Web HUD after a TDT import was stale (FUND $2,000,000, 1 star): harness ordering, fixed by calling the same `game.ui.update*` / `reloadToolbox` / `renderMap` / `refreshFinance`
+  as `refreshAll()` in src/main.js. The `★` rating glyphs still render as boxes in this container (missing font), a harness-environment issue.
   HUD panels also reflow, so the OCR crops use the logged DOM boxes.
 * C++ GUI: the quarterly Financial Report modal pauses the sim (fixed in the harness by `dismiss_dialog.sh`); after the
   dialog the GUI run still advances only ~2 game days in 72 shots, so use the headless run for per-day numbers.
 * `play.sh web` used to kill its own shell (`pkill -f server.js`) and silently stop after the build; fixed (`pkill -x bun`, detached server).
 * `downscale_pull.py` pruning used to drop arbitrary shots; it now keeps hours 07/08/12/18/23 first.
-* The C++ camera is parked at the top of the tower, so cathedral/lobby are not in the hourly shots; `cpp_view.sh` scrolls down
-  (`out/compare/cpp_scroll_views.png`) but 56 wheel clicks still do not reach the lobby.
+* C++ GUI camera: the game starts at the top of the tower. `cpp_view.sh goto <lobby|floors|cathedral>` uses the game's own keys (Up/Down = 20 px per press, clamped at the
+  world bottom) plus a minimap click for the horizontal centre; lobby = bottom clamp + 13 Up presses, floors 172, cathedral 193 (SCHMITT.TDT, 1280x800).
+  `play.sh cpp-shots` puts the camera on the lobby for the hourly shots and takes `view_dD_h12_{floors,cathedral,lobby}.png` every day.

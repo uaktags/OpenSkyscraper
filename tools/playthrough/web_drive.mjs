@@ -68,14 +68,36 @@ export function recomputeAllChains(game) {
     await page.waitForFunction(() => typeof window.__game !== "undefined", { timeout: 15000 });
     console.log("[web_drive] window.__game initialized.");
 
-    // Select OpenSky edition button if present
+    // Select the OpenSkyScraper (first-party community art) edition BEFORE loading the tower.
+    // How the web port gates editions (src/main.js createMenu, src/core/ownership.js GAME_MODES):
+    //  - the "opensky" mode is dev-locked until localStorage "openskyweb.unlocked.opensky" = "1"
+    //    (?edition=opensky or window.openSkyScraper.unlock() set it),
+    //  - clicking button[data-mode=opensky] runs prepareOpenSky(): verifyGameOwnership("opensky"),
+    //    then onVerified -> loadOpenSkyMedia() registers the art sheets in the BitmapRegistry and
+    //    finally sets game.ownership = { mode: "opensky" }.
+    // The old harness clicked the button and slept 500 ms; the sheets were still loading, so the
+    // renderer drew its procedural fallbacks (blue strips, red diamonds, plain toolbox).
+    page.on("console", (m) => {
+      const t = m.text();
+      if (/OpenSkyScraper|sheet|missing|edition|404/i.test(t)) console.log(`[web_drive][page] ${t}`);
+    });
+    page.on("requestfailed", (r) => console.log(`[web_drive][page] request failed: ${r.url()}`));
+    page.on("response", (r) => { if (r.status() >= 400) console.log(`[web_drive][page] HTTP ${r.status()} ${r.url()}`); });
+    await page.evaluate(() => { try { window.openSkyScraper?.unlock(); } catch (_) {} });
+    const openskyBtn = page.locator('button[data-mode="opensky"]');
+    await openskyBtn.waitFor({ state: "visible", timeout: 20000 });
+    await openskyBtn.click();
     try {
-      const openskyBtn = page.locator('button[data-mode="opensky"]');
-      if (await openskyBtn.isVisible({ timeout: 2000 })) {
-        await openskyBtn.click();
-        await page.waitForTimeout(500);
-      }
-    } catch (_) {}
+      await page.waitForFunction(() => window.__game && window.__game.ownership && window.__game.ownership.mode === "opensky", { timeout: 90000 });
+    } catch (e) {
+      const status = await page.evaluate(() => (document.querySelector(".mm-ownership-status") || {}).textContent);
+      throw new Error("OpenSkyScraper edition did not become active: " + status);
+    }
+    const editionStatus = await page.evaluate(() => (document.querySelector(".mm-ownership-status") || {}).textContent);
+    console.log(`[web_drive] Edition active: opensky (${editionStatus})`);
+    // 4x twin sheets stream in after the edition is verified; let them land before the first frame.
+    await page.waitForLoadState("networkidle", { timeout: 60000 }).catch(() => {});
+    await page.waitForTimeout(2000);
 
     // Load tower file or start new game. .TDT saves are fed to the web port's own
     // TDT importer (src/core/tdt-parser.js, served by server.js), so the run uses the
@@ -103,7 +125,42 @@ export function recomputeAllChains(game) {
       // Close menu if present
       const mm = document.getElementById("mainmenu");
       if (mm) mm.style.display = "none";
-    }, { xml: towerContent, b64: tdtB64 });
+      // Same HUD refresh the real UI runs after a load (src/main.js refreshAll): without it the HUD
+      // keeps showing the new-game values (FUND $2,000,000, 1 star) until later events.
+      const ui = game.ui;
+      for (const fn of ["updateFunds", "updateRating", "updatePopulation", "updateMoneyStats", "updateSpeed",
+                        "updateTool", "updateTooltip", "updateTime", "reloadToolbox", "renderMap", "refreshFinance"]) {
+        try { ui[fn] && ui[fn](); } catch (e) { console.warn("HUD refresh " + fn + ": " + e); }
+      }
+      // Camera targets (world px: x = cell*8, y = floor*36): ground lobby, cathedral, hotel floors.
+      const typeOf = (it) => String((it.prototype && (it.prototype.id || it.prototype.name)) || it.type || "");
+      const items = [...game.items];
+      const counts = {};
+      for (const it of items) counts[typeOf(it)] = (counts[typeOf(it)] || 0) + 1;
+      const pick = (re, pred = () => true) => items.filter((it) => re.test(typeOf(it)) && pred(it));
+      const xs = items.map((it) => it.position.x * 8), xe = items.map((it) => (it.position.x + it.size.x) * 8);
+      const towerCx = (Math.min(...xs) + Math.max(...xe)) / 2;
+      const cath = pick(/cathedral|church/i)[0];
+      const lobbies = pick(/^lobby$|lobby/i, (it) => it.position.y === 0);
+      const hotel = pick(/hotel|suite|single|double/i, (it) => it.position.y > 0);
+      const cx = (it) => (it.position.x + it.size.x / 2) * 8;
+      const lobby = lobbies.sort((a, b) => Math.abs(cx(a) - (cath ? cx(cath) : towerCx)) - Math.abs(cx(b) - (cath ? cx(cath) : towerCx)))[0];
+      window.__views = {
+        lobby: { x: lobby ? cx(lobby) : towerCx, y: 36 * 4 },
+        cathedral: cath ? { x: cx(cath), y: (cath.position.y + cath.size.y / 2) * 36 } : null,
+        floors: hotel[0] ? { x: cx(hotel[0]), y: (hotel[0].position.y + 1) * 36 } : null,
+      };
+      window.__setView = (name) => {
+        const v = window.__views[name];
+        if (!v) return false;
+        game.poi.x = v.x; game.poi.y = v.y;
+        const halfH = ((game.app.window.height || 800) * 0.5) * game.zoom;
+        game.poi.y = Math.max(Math.min(game.poi.y, 360 * 12 - halfH), -360 + halfH);
+        window.__renderer.frame(game);
+        return true;
+      };
+      return { counts, views: window.__views, zoom: game.zoom, mode: game.ownership && game.ownership.mode };
+    }, { xml: towerContent, b64: tdtB64 }).then((info) => console.log("[web_drive] imported; item types/views:", JSON.stringify(info)));
 
     // Initial render and screenshot
     await page.waitForTimeout(500);
@@ -151,9 +208,21 @@ export function recomputeAllChains(game) {
         hourly.push(snap);
         await page.waitForTimeout(150);
 
-        // Screenshot each hour
-        const compatShotPath = path.join(opts.out, `shot_d${day}_h${String(hour).padStart(2, "0")}.png`);
-        await page.screenshot({ path: compatShotPath });
+        // Screenshot each hour with the camera on the ground lobby (shot_dD_hHH.png)
+        const hh = String(hour).padStart(2, "0");
+        await page.evaluate(() => window.__setView("lobby"));
+        await page.waitForTimeout(100);
+        await page.screenshot({ path: path.join(opts.out, `shot_d${day}_h${hh}.png`) });
+        // Per-day camera views at midday and 23:00: ground lobby, cathedral, hotel floors
+        if (hour === 12 || hour === 23) {
+          for (const v of ["lobby", "cathedral", "floors"]) {
+            const ok = await page.evaluate((n) => window.__setView(n), v);
+            if (!ok) { console.log(`[web_drive] view ${v} unavailable (no such item)`); continue; }
+            await page.waitForTimeout(100);
+            await page.screenshot({ path: path.join(opts.out, `view_d${day}_h${hh}_${v}.png`) });
+          }
+          await page.evaluate(() => window.__setView("lobby"));
+        }
       }
 
       // Collect end-of-day metrics

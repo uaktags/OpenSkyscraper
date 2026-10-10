@@ -27,7 +27,11 @@ def process_dir(directory, max_images=48, max_w=640, max_h=400):
     if len(images) > max_images:
         import re
         key = re.compile(r"_(?:h|hr)(07|08|12|18|23)\.png$")
-        keep = [p for p in images if key.search(p)][:max_images]
+        # per-day camera views (view_*.png) and oracle dialog-watchdog evidence (dialog_*.png) are always kept
+        evid = re.compile(r"(?:^|/)(?:view|dialog)_[^/]*\.png$")
+        keep = [p for p in images if key.search(p) or evid.search(p)]
+        keep = [p for p in keep if evid.search(p)] + [p for p in keep if not evid.search(p)]
+        keep = keep[:max_images + 12]
         rest = [p for p in images if p not in set(keep)]
         room = max_images - len(keep)
         if room > 0 and rest:

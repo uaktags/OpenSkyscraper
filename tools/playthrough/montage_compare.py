@@ -44,6 +44,28 @@ def make_montage(oracle_path, web_path, cpp_path, out_path, title):
     canvas.save(out_path, optimize=True)
     print(f"[montage] Created {out_path} ({total_w}x{total_h})")
 
+def make_views(o_dir, w_dir, c_dir, out_path, day):
+    """One sheet per day: rows = cathedral / hotel floors / ground lobby at hour 12, columns = oracle | web | C++."""
+    W, H, head = 560, 350, 24
+    rows = ("cathedral", "floors", "lobby")
+    cols = (("oracle", o_dir), ("web", w_dir), ("C++", c_dir))
+    canvas = Image.new("RGB", (W * 3 + 40, (H + head) * 3 + 10), (24, 26, 30))
+    draw = ImageDraw.Draw(canvas)
+    for r, view in enumerate(rows):
+        for c, (label, d) in enumerate(cols):
+            x, y = 10 + c * (W + 10), 5 + r * (H + head)
+            draw.text((x + 4, y + 5), f"{label}: {view} (day {day}, 12:00 shot)", fill=(240, 240, 240))
+            p = os.path.join(d, f"view_d{day}_h12_{view}.png")
+            if os.path.exists(p):
+                img = Image.open(p).convert("RGB")
+                canvas.paste(img.resize((W, H), Image.Resampling.LANCZOS), (x, y + head))
+            else:
+                draw.rectangle([x, y + head, x + W, y + head + H], fill=(40, 44, 52))
+                draw.text((x + 20, y + head + 150), f"not found: {os.path.basename(p)}", fill=(180, 180, 180))
+    canvas.save(out_path, optimize=True)
+    print(f"[montage] Created {out_path}")
+
+
 def main():
     """usage: montage_compare.py [oracle_dir web_dir cpp_dir]  (defaults: the pulled out/ dirs;
     pass the full-resolution dirs for sharper montages)."""
@@ -60,6 +82,8 @@ def main():
         cpp_shot = os.path.join(c_dir, f"shot_d1_h{hr}.png")
         out_shot = os.path.join(out_dir, f"compare_d1_h{hr}.png")
         make_montage(oracle_shot, web_shot, cpp_shot, out_shot, f"Day 1 Hour {hr} Parity Comparison")
+    for day in (1, 2, 3):
+        make_views(o_dir, w_dir, c_dir, os.path.join(out_dir, f"views_d{day}.png"), day)
 
 if __name__ == "__main__":
     main()

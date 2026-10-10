@@ -156,6 +156,124 @@ def extract_oracle_metrics(out_dir, days):
     print(f"[oracle] Wrote {csv_path}")
     return metrics
 
+
+# ---- modal dialog watchdog ---------------------------------------------------------------------
+# SimTower pops modal dialogs (the "Congratulations ... Tower" rating promotion, VIP visits,
+# disasters, the quarterly report, ...). While one is open the sim is frozen, so the run used to
+# stall (day 3 hour 06). Under `wine explorer /desktop=` every Win16 window is a real X window, so
+# a dialog shows up as a NEW visible X window next to the fixed set of main windows (desktop,
+# tool/time/map windows, the "SimTower - ACTIVE" frame). The watchdog diffs that set, presses Enter
+# (the default button is OK), falls back to clicking the known OK position and Escape, and logs
+# every dismissal with a screenshot (dialog_NNN_*.png) into the run dir.
+class DialogWatchdog:
+    OK_FALLBACKS = [(502, 233)]          # "Tower" congratulations dialog OK button (1024x768)
+
+    def __init__(self, env, out_dir):
+        self.env = env
+        self.out_dir = out_dir
+        self.baseline = set()
+        self.ignored = set()             # windows that survived every dismissal attempt
+        self.count = 0
+        self.log_path = os.path.join(out_dir, "dialogs.log")
+
+    def _windows(self):
+        r = subprocess.run(["xdotool", "search", "--onlyvisible", "--name", ""], env=self.env,
+                           capture_output=True, text=True)
+        return set(r.stdout.split())
+
+    def _describe(self, wid):
+        name = subprocess.run(["xdotool", "getwindowname", wid], env=self.env, capture_output=True, text=True).stdout.strip()
+        geo = subprocess.run(["xdotool", "getwindowgeometry", wid], env=self.env, capture_output=True, text=True).stdout.replace("\n", " ")
+        return f"{wid} name={name!r} {geo.strip()}"
+
+    def _log(self, msg):
+        line = time.strftime("%H:%M:%S ") + msg
+        print("[oracle] " + line, flush=True)
+        with open(self.log_path, "a") as f:
+            f.write(line + "\n")
+
+    def arm(self):
+        """Record the main-window set (call once the game is on the main screen)."""
+        self.baseline = self._windows()
+        self._log(f"watchdog armed, {len(self.baseline)} baseline windows: {sorted(self.baseline)}")
+
+    def check(self, tag=""):
+        """Dismiss any modal dialog now open. Returns the number of dialogs dismissed."""
+        dismissed = 0
+        for _ in range(6):               # a dialog can be followed by another one
+            new = self._windows() - self.baseline - self.ignored
+            if not new:
+                break
+            self.count += 1
+            n = self.count
+            desc = "; ".join(self._describe(w) for w in sorted(new))
+            shot = os.path.join(self.out_dir, f"dialog_{n:03d}_{tag}_before.png")
+            subprocess.run(["import", "-window", "root", shot], env=self.env)
+            self._log(f"dialog #{n} ({tag}): new windows: {desc}")
+            gone = False
+            for action in ("Return", "click", "Escape"):
+                if action == "Return":
+                    subprocess.run(["xdotool", "key", "Return"], env=self.env)
+                elif action == "click":
+                    for (x, y) in self.OK_FALLBACKS:
+                        subprocess.run(["xdotool", "mousemove", str(x), str(y), "click", "1"], env=self.env)
+                else:
+                    subprocess.run(["xdotool", "key", "Escape"], env=self.env)
+                time.sleep(1.0)
+                if not (self._windows() & new):
+                    gone = True
+                    self._log(f"dialog #{n} dismissed with {action}")
+                    break
+            subprocess.run(["import", "-window", "root", os.path.join(self.out_dir, f"dialog_{n:03d}_{tag}_after.png")], env=self.env)
+            if gone:
+                dismissed += 1
+            else:
+                self._log(f"dialog #{n} NOT dismissed; ignoring windows {sorted(new)}")
+                self.ignored |= new
+        return dismissed
+
+    def wait(self, seconds, tag=""):
+        """sleep(seconds) in 1 s slices, checking for dialogs between slices."""
+        end = time.time() + seconds
+        while True:
+            self.check(tag)
+            left = end - time.time()
+            if left <= 0:
+                break
+            time.sleep(min(1.0, left))
+
+
+# ---- camera: drag the vertical scrollbar thumb of the "SimTower - ACTIVE" window ----------------
+# (x=1007; thumb centre ~y=125 at the top of the tower). Calibrated on SCHMITT.TDT at 1024x768:
+# 565 = ground lobby row in view with hotel floors above it, 330 = mid hotel floors, 125 = roof /
+# cathedral. The sim keeps the camera where it is put, so the hourly shots are taken in the lobby view.
+SCROLL_X = 1007
+# The oracle advances by wall clock (~1 game day per 20 shots at 1.0 s); a longer interval lets a
+# 3x24-shot run reach the later game days (and the Tower promotion dialog on the weekend).
+SHOT_INTERVAL = float(os.environ.get("ORACLE_SHOT_INTERVAL", "1.6"))
+VIEW_Y = {"cathedral": 125, "floors": 330, "lobby": 565}
+
+class Camera:
+    def __init__(self, env, wd):
+        self.env, self.wd, self.y = env, wd, 125
+
+    def go(self, name):
+        target = VIEW_Y[name]
+        if abs(target - self.y) < 4:
+            return
+        self.wd.check("camera")          # a modal dialog would swallow the drag
+        e = self.env
+        subprocess.run(["xdotool", "mousemove", str(SCROLL_X), str(self.y), "mousedown", "1"], env=e)
+        time.sleep(0.3)
+        mid = (self.y + target) // 2
+        subprocess.run(["xdotool", "mousemove", str(SCROLL_X), str(mid)], env=e)
+        time.sleep(0.3)
+        subprocess.run(["xdotool", "mousemove", str(SCROLL_X), str(target)], env=e)
+        time.sleep(0.3)
+        subprocess.run(["xdotool", "mouseup", "1"], env=e)
+        time.sleep(0.8)
+        self.y = target
+
 def start_xvfb(display=":99"):
     lock_file = f"/tmp/.X{display[1:]}-lock"
     if os.path.exists(lock_file):
@@ -243,25 +361,38 @@ def run_simulation(tdt_path, days, out_dir):
         subprocess.run(["xdotool", "mousemove", "512", "384", "click", "1"], env=env)
         time.sleep(4.0)
 
+        wd = DialogWatchdog(env, out_dir)
+        wd.arm()
+        cam = Camera(env, wd)
+
         # Click Fast Speed button (x=299, y=504)
         print("[oracle] Activating Fast Speed simulation...")
         subprocess.run(["xdotool", "mousemove", "299", "504", "click", "1"], env=env)
         time.sleep(1.0)
+        cam.go("lobby")
 
         for d in range(1, days + 1):
             print(f"[oracle] Simulating Day {d}/{days} (24 hourly captures)...")
             for h in range(24):
+                wd.check(f"d{d}h{h:02d}")
                 shot_name = os.path.join(out_dir, f"shot_d{d}_h{h:02d}.png")
                 subprocess.run(["import", "-window", "root", shot_name], env=env)
-                time.sleep(1.0)
+                wd.wait(SHOT_INTERVAL, f"d{d}h{h:02d}")
+                if h == 12:
+                    # per-day camera views: cathedral (roof), hotel floors, ground lobby
+                    for view in ("cathedral", "floors", "lobby"):
+                        cam.go(view)
+                        subprocess.run(["import", "-window", "root", os.path.join(out_dir, f"view_d{d}_h12_{view}.png")], env=env)
             
             # Save state at end of day
             print(f"[oracle] Saving tower state at end of day {d}...")
+            wd.check(f"d{d}save")
             subprocess.run(["xdotool", "key", "alt+f"], env=env)
             time.sleep(0.5)
             subprocess.run(["xdotool", "key", "s"], env=env)
             time.sleep(2.0)
-            
+            wd.check(f"d{d}saved")
+
             day_tdt = os.path.join(out_dir, f"day{d}.TDT")
             shutil.copyfile(c_active, day_tdt)
             print(f"[oracle] Wrote {day_tdt} ({os.path.getsize(day_tdt)} bytes).")

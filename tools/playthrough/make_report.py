@@ -57,7 +57,7 @@ for day in (1, 2, 3):
         cd = f"{WD[c['day']]}/Q{c['quarter']}"
         L.append(f"| d{day} {hr:02d}:00 | {m(o['funds'])} | {m(o['population'])} | {o_date(o['date'])} | {m(w['funds'])} | {m(w['population'])} | {wd} | "
                  f"{m(c['funds'])} | {m(c['population'])} | {cd} | {d(w['funds'], o['funds'])} | {d(c['funds'], o['funds'])} | {d(w['population'], o['population'])} | {d(c['population'], o['population'])} |")
-L.append("\nRating: oracle 5 stars throughout (the Tower promotion dialog fires in day 3), web 5, C++ 5 (all runs).\n")
+L.append("\nRating: oracle 5 stars, then TOWER after the weekend promotion dialog (shot d4_h06 of the 4-day watchdog run, dismissed by oracle_sim.py), web 5, C++ 5 (all runs).\n")
 
 L.append("### Date-aligned comparison (the three runs do not tick at the same speed, so compare by in-game date)\n")
 L.append("First and last sample of every in-game date per source: funds / population.\n")
@@ -67,7 +67,7 @@ order = ["WE/Q2", "1st WD/Q3", "2nd WD/Q3", "WE/Q3"]
 def collect():
     S = {"o": {}, "w": {}, "c": {}}
     for (dd, hh), r in oracle.items():
-        key = o_date(r["date"]).replace("/3Q", "/Q3").replace("/2Q", "/Q2")
+        key = o_date(r["date"]).replace("/4Q", "/Q4").replace("/3Q", "/Q3").replace("/2Q", "/Q2")
         S["o"].setdefault(key, []).append((r["funds"], r["population"]))
     for i, w in enumerate(webh):
         key = f"{WEBD['Hol' if w['day']==2 else 'D%d' % w['day']]}/Q{w['quarter']}"

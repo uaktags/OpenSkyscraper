@@ -43,6 +43,7 @@ sync_tools() {
     "$SCRIPT_DIR/ocr_templates.json" \
     "$SCRIPT_DIR/cpp_hourly.py" \
     "$SCRIPT_DIR/dismiss_dialog.sh" \
+    "$SCRIPT_DIR/cpp_view.sh" \
     "$SCRIPT_DIR/oracle_probe.sh" \
     "$LAB_USER@$LAB_HOST:$LAB_DIR/tools/"
   # Also sync SIMTOWER.EXE if present
@@ -246,6 +247,8 @@ cmd_cpp_shots() {
 
     # Send key 3 to ensure speed is max
     xdotool key 3 || true
+    # Camera on the ground lobby (cpp_view.sh: minimap click + Down clamp + Up presses)
+    bash /lab/tools/cpp_view.sh goto lobby || true
 
     total_hours=\$(( $days * 24 ))
     echo \"Capturing \$total_hours hourly screenshots...\"
@@ -256,6 +259,14 @@ cmd_cpp_shots() {
       # Dismiss the modal Financial Report / rating dialog (Close button) so the sim keeps running
       bash /lab/tools/dismiss_dialog.sh
       import -window root \"\$out/\$shot_name\" || xwd -root -silent | convert xwd:- \"\$out/\$shot_name\" || true
+      if [ \$hr -eq 12 ]; then
+        # per-day views: hotel floors, cathedral, ground lobby (hourly shots stay on the lobby)
+        for v in floors cathedral lobby; do
+          bash /lab/tools/cpp_view.sh goto \$v
+          bash /lab/tools/dismiss_dialog.sh
+          import -window root \"\$out/view_d\${d}_h12_\$v.png\" || true
+        done
+      fi
       sleep 1.8
     done
 
@@ -309,7 +320,7 @@ cmd_web() {
   if [ -n "$tower" ]; then
     tower_param="--tower $tower"
   fi
-  in_ctr "mkdir -p /lab/out/$name && rm -f /lab/out/$name/shot_*.png"
+  in_ctr "mkdir -p /lab/out/$name && rm -f /lab/out/$name/shot_*.png /lab/out/$name/view_*.png"
   in_ctr "bun /lab/tools/web_drive.mjs --url http://localhost:3000/?edition=opensky $tower_param --days $days --out /lab/out/$name"
   echo "[play] Web playthrough complete."
 }
