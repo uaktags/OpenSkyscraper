@@ -1,3 +1,4 @@
+#include <climits>
 #include <cmath>
 #include "../Item/Item.h"
 #include "../Route.h"
@@ -13,11 +14,100 @@ using namespace OT;
 // such limit.
 static const int kMaxSearchNodes = 20000;
 
-PathFinder::PathFinder() : astarsearch(new AStarSearch< MapSearchNode >(kMaxSearchNodes)), SearchState(AStarSearch< MapSearchNode >::SEARCH_STATE_NOT_INITIALISED) {}
+PathFinder::PathFinder() : astarsearch(new IndexedAStarSearch< MapSearchNode >(kMaxSearchNodes)), SearchState(IndexedAStarSearch< MapSearchNode >::SEARCH_STATE_NOT_INITIALISED) {}
 
 PathFinder::~PathFinder() { clear(); }
 
-Route PathFinder::findRoute(const MapNode *start_mapnode, const MapNode *end_mapnode, Item::Item *start_item, Item::Item *end_item, bool serviceRoute) {
+static const size_t kMaxCachedRoutes = 60000;
+
+Route PathFinder::findRoute(const MapNode *start_mapnode, const MapNode *end_mapnode, Item::Item *start_item, Item::Item *end_item, bool serviceRoute, unsigned graphVersion, bool cacheable) {
+	if(!cacheable) return materialise(search(start_mapnode, end_mapnode, start_item, end_item, serviceRoute), start_item, end_item);
+	if(graphVersion != cacheVersion) {
+		cache.clear();
+		reachCache.clear();
+		cacheVersion = graphVersion;
+	}
+	const CacheKey key = { start_item, start_mapnode, end_mapnode, serviceRoute };
+	std::unordered_map<CacheKey, CacheEntry, CacheKeyHash>::iterator hit = cache.find(key);
+	if(hit != cache.end() && MapSearchNode::queueDepsHold(hit->second.deps)) {
+		stats.hits++;
+		return materialise(hit->second.raw, start_item, end_item);
+	}
+	stats.misses++;
+	CacheEntry entry;
+	MapSearchNode::recordQueueDeps(&entry.deps);
+	entry.raw = search(start_mapnode, end_mapnode, start_item, end_item, serviceRoute);
+	MapSearchNode::recordQueueDeps(NULL);
+	if(cache.size() >= kMaxCachedRoutes) cache.clear();
+	Route result = materialise(entry.raw, start_item, end_item);
+	cache[key] = std::move(entry);
+	return result;
+}
+
+const PathFinder::Reach &PathFinder::reach(const MapNode *start_mapnode, Item::Item *start_item, bool serviceRoute) {
+	MapSearchNode nodeStart(start_mapnode);
+	nodeStart.parent_item = start_item;
+	nodeStart.start_point = MapNode::Point(start_item->position.x + start_item->size.x/2, start_mapnode->position.y);
+	nodeStart.end_point = MapNode::Point(0, INT_MIN);
+	nodeStart.serviceRoute = serviceRoute;
+	ReachKey key = { start_item, start_mapnode, NULL, NULL, serviceRoute };
+	if(!start_mapnode->floorNode) {
+		// Floor-node start: only the two first-expansion seeds depend on the start item.
+		key.start = NULL;
+		nodeStart.firstExpansionSeeds(key.left, key.right);
+	}
+	std::unordered_map<ReachKey, Reach, ReachKeyHash>::iterator it = reachCache.find(key);
+	if(it != reachCache.end()) return it->second;
+	if(reachCache.size() >= kMaxCachedRoutes) reachCache.clear();
+	Reach &out = reachCache[key];
+
+	// Exhaustive exploration: no goal can match (NULL node) and the goal-floor cut-over
+	// never fires (end_point.y = INT_MIN), so the search closes every reachable state.
+	MapSearchNode nodeEnd((const MapNode *)NULL);
+	nodeEnd.end_point = nodeStart.end_point;
+	std::function<void(const MapSearchNode &)> observer = [&out](const MapSearchNode &s) {
+		if(out.nodes.insert(s.mapNode).second) out.floors.insert(s.mapNode->position.y);
+	};
+	astarsearch->SetExpandObserver(&observer);
+	astarsearch->SetStartAndGoalStates(nodeStart, nodeEnd);
+	do {
+		SearchState = astarsearch->SearchStep();
+	} while(SearchState == IndexedAStarSearch< MapSearchNode >::SEARCH_STATE_SEARCHING);
+	astarsearch->SetExpandObserver(NULL);
+	// Exhausted (not out of memory) and small enough that the real search, which only
+	// ever holds a subset of these states (twice over at worst), cannot run dry either.
+	out.trusted = SearchState == IndexedAStarSearch< MapSearchNode >::SEARCH_STATE_FAILED
+		&& astarsearch->GetPeakNodeCount() * 2 + 16 <= kMaxSearchNodes;
+	clear();
+	return out;
+}
+
+bool PathFinder::routeExists(const MapNode *start_mapnode, const MapNode *end_mapnode, Item::Item *start_item, Item::Item *end_item, bool serviceRoute, unsigned graphVersion, bool cacheable) {
+	if(cacheable && start_item && end_item) {
+		if(graphVersion != cacheVersion) {
+			cache.clear();
+			reachCache.clear();
+			cacheVersion = graphVersion;
+		}
+		const Reach &r = reach(start_mapnode, start_item, serviceRoute);
+		if(r.trusted) {
+			stats.existenceHits++;
+			return end_mapnode->floorNode ? r.nodes.count(end_mapnode) != 0 : r.floors.count(end_mapnode->position.y) != 0;
+		}
+	}
+	return !findRoute(start_mapnode, end_mapnode, start_item, end_item, serviceRoute, graphVersion, cacheable).empty();
+}
+
+Route PathFinder::materialise(const Raw &raw, Item::Item *start_item, Item::Item *end_item) {
+	Route r;
+	if(!raw.found || !start_item || !end_item) return r;
+	for(std::vector<Route::Node>::const_iterator n = raw.prefix.begin(); n != raw.prefix.end(); ++n) r.add(n->item, n->toFloor);
+	r.add(end_item, raw.endFloor);
+	r.updateScore(raw.score);
+	return r;
+}
+
+PathFinder::Raw PathFinder::search(const MapNode *start_mapnode, const MapNode *end_mapnode, Item::Item *start_item, Item::Item *end_item, bool serviceRoute) {
 	MapNode::Point start_point(start_item->position.x + start_item->size.x/2, start_mapnode->position.y);
 	MapNode::Point end_point(end_item->position.x + end_item->size.x/2, end_mapnode->position.y);
 
@@ -33,50 +123,57 @@ Route PathFinder::findRoute(const MapNode *start_mapnode, const MapNode *end_map
 	do {
 		SearchState = astarsearch->SearchStep();
 		SearchSteps++;
-	} while(SearchState == AStarSearch< MapSearchNode >::SEARCH_STATE_SEARCHING);
+	} while(SearchState == IndexedAStarSearch< MapSearchNode >::SEARCH_STATE_SEARCHING);
 
-	Route r;
-	buildRoute(r, start_item, end_item);
+	Raw raw;
+	const int peak = astarsearch->GetPeakNodeCount();
+	const bool oom = SearchState == IndexedAStarSearch< MapSearchNode >::SEARCH_STATE_OUT_OF_MEMORY;
+	buildRaw(raw, start_item, end_item);
+	raw.peakNodes = peak;
+	raw.oom = oom;
 	clear();
 
-	return r;
+	return raw;
 }
 
 
 void PathFinder::clear() {
-	if(SearchState == AStarSearch< MapSearchNode >::SEARCH_STATE_SUCCEEDED) astarsearch->FreeSolutionNodes();
-	if(SearchState == AStarSearch< MapSearchNode >::SEARCH_STATE_OUT_OF_MEMORY)
-		astarsearch.reset(new AStarSearch< MapSearchNode >(kMaxSearchNodes));
+	if(SearchState == IndexedAStarSearch< MapSearchNode >::SEARCH_STATE_SUCCEEDED) astarsearch->FreeSolutionNodes();
+	if(SearchState == IndexedAStarSearch< MapSearchNode >::SEARCH_STATE_OUT_OF_MEMORY)
+		astarsearch.reset(new IndexedAStarSearch< MapSearchNode >(kMaxSearchNodes));
 	astarsearch->EnsureMemoryFreed();
-	SearchState = AStarSearch< MapSearchNode >::SEARCH_STATE_NOT_INITIALISED;
+	SearchState = IndexedAStarSearch< MapSearchNode >::SEARCH_STATE_NOT_INITIALISED;
 }
 
-void PathFinder::buildRoute(Route &r, Item::Item *start_item, Item::Item *end_item) {
-	if(SearchState != AStarSearch< MapSearchNode >::SEARCH_STATE_SUCCEEDED) {
-		r.clear();
-		return;
-	}
-
-	if(!start_item || !end_item) {
-		r.clear();
-		return;
-	}
+void PathFinder::buildRaw(Raw &raw, Item::Item *start_item, Item::Item *end_item) {
+	raw = Raw();
+	if(SearchState != IndexedAStarSearch< MapSearchNode >::SEARCH_STATE_SUCCEEDED) return;
+	if(!start_item || !end_item) return;
 
 	MapSearchNode *end_node = astarsearch->GetSolutionEnd();
 	MapSearchNode *start_node = astarsearch->GetSolutionStart();
+	std::vector<Route::Node> &nodes = raw.prefix;
+	struct Push {
+		static void add(std::vector<Route::Node> &v, Item::Item *item, int floor) {
+			Route::Node n;
+			n.item = item;
+			n.toFloor = floor;
+			v.push_back(n);
+		}
+	};
 
 	// IsGoal() matches on the map node alone, so a search whose start node
 	// already sits on the goal's map node succeeds with a one-node solution
 	// even though IsSameState() differs (the start carries parent_item).
 	// That solution has no child links; walking it would dereference null.
-	if(start_node->IsSameState(*end_node) || start_node->mapNode == end_node->mapNode) {		r.add(start_item, start_node->mapNode->position.y);
-		r.add(end_item, end_node->mapNode->position.y);
+	if(start_node->IsSameState(*end_node) || start_node->mapNode == end_node->mapNode) {
+		Push::add(nodes, start_item, start_node->mapNode->position.y);
 	}
 
 	else {
 		MapSearchNode *n = start_node;
 		MapSearchNode *n_child;
-		r.add(start_item, n->mapNode->position.y);
+		Push::add(nodes, start_item, n->mapNode->position.y);
 		n = astarsearch->GetSolutionNext();
 		while(n && n != end_node) {
 			n_child = astarsearch->GetSolutionNext();
@@ -91,17 +188,17 @@ void PathFinder::buildRoute(Route &r, Item::Item *start_item, Item::Item *end_it
 				if(i->canHaulPeople() || i->isLobby()) toFloor = n_child->mapNode->position.y;
 				else				                   toFloor = n->mapNode->position.y;
 
-				Route::Node &rn_prev = r.nodes.back();
+				Route::Node &rn_prev = nodes.back();
 				if(i->isElevator() && rn_prev.item->isElevator() && i == rn_prev.item) {
 					// Moving along same elevator
 					rn_prev.toFloor = toFloor;
-				} else r.add(i, toFloor);
+				} else Push::add(nodes, i, toFloor);
 			}
 
 			n = n_child;
 		};
-		r.add(end_item, end_node->mapNode->position.y);
 	}
-
-	r.updateScore((int)std::abs(end_node->g + end_node->h));
+	raw.endFloor = end_node->mapNode->position.y;
+	raw.score = (int)std::abs(end_node->g + end_node->h);
+	raw.found = true;
 }

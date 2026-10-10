@@ -134,7 +134,7 @@ bool FacilitySystem::reachable(Item::Item * from, Item::Item * to)
 	if (c != routeCache.end()) return c->second;
 	// T2RouteNavigator::CheckRoute: a route exists (the score cap is not
 	// modelled; OpenSky routes are already bounded by the A* search).
-	const bool ok = !game->findRoute(from, to).empty();
+	const bool ok = game->routeExists(from, to);
 	routeCache[key] = ok;
 	return ok;
 }

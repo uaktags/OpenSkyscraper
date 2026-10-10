@@ -287,7 +287,7 @@ Parking *Parking::claim(Game *game, Item *destination, Person *driver, CarCatego
  std::vector<Parking*> candidates;
  for (auto *item : game->itemsByType["parking"]) if (auto *p=dynamic_cast<Parking*>(item)) {
   if (!p->underConstruction && p->hasSpace() && game->mainLobby &&
-      !game->findRoute(p,game->mainLobby).empty() && !game->findRoute(p,destination).empty()) candidates.push_back(p);
+      game->routeExists(p,game->mainLobby) && game->routeExists(p,destination)) candidates.push_back(p);
  }
  if (candidates.empty()) return nullptr;
  Parking *p=candidates[rand()%candidates.size()];

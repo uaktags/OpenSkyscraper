@@ -139,7 +139,7 @@ OT::Item::Item * Metro::pickDestination()
 	const std::vector<OT::Item::Item *> & list = game->venueLists[0][rand() % 3];
 	if (list.empty()) return NULL;
 	OT::Item::Item * dest = list[rand() % list.size()];
-	if (!game->items.count(dest) || game->findRoute(this, dest).empty()) return NULL;
+	if (!game->items.count(dest) || !game->routeExists(this, dest)) return NULL;
 	return dest;
 }
 
