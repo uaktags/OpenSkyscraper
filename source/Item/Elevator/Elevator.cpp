@@ -396,16 +396,23 @@ void Elevator::render(sf::RenderTarget &target) const
 			continue;
 		}
 
+		// Shaft labels count floors from 1 at the lobby (y 0), as the Yoot
+		// branch above and the original shaft display do. Basements read
+		// "b" + depth: the sheet has no B glyph (cell 10 is a "1" strip, which
+		// made B1/B2 read "11"/"12"), so the b is the 6 cell minus its top bar
+		// (7-segment b = c,d,e,f,g).
 		char c[8];
-		int len = snprintf(c, 8, "%i", flr);
-		int x = size.x * 4 - (len - 1) * 6;
-		for (int i = 0; i < len; i++)
+		const bool basement = flr < 0;
+		int len = snprintf(c, 8, "%i", basement ? -flr : flr + 1);
+		const int glyphs = len + (basement ? 1 : 0);
+		int x = size.x * 4 - (glyphs - 1) * 6;
+		for (int i = 0; i < glyphs; i++)
 		{
-			int p = 10;
-			if (c[i] >= '0' && c[i] <= '9')
-				p = c[i] - '0';
-			d.setTextureRect(sf::IntRect({p * 11, digitRow * 17}, {11, 17}));
-			d.setPosition({static_cast<float>(position.x * 8 + x), static_cast<float>(-y * 36.f - 10.f)});
+			const bool bGlyph = basement && i == 0;
+			const int p = bGlyph ? 6 : c[i - (basement ? 1 : 0)] - '0';
+			const int cut = bGlyph ? 5 : 0; // rows trimmed from the top of the b
+			d.setTextureRect(sf::IntRect({p * 11, digitRow * 17 + cut}, {11, 17 - cut}));
+			d.setPosition({static_cast<float>(position.x * 8 + x), static_cast<float>(-y * 36.f - 10.f + cut)});
 			target.draw(d);
 			x += 12;
 		}

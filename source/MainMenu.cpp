@@ -1,6 +1,7 @@
 #include "MainMenu.h"
 #include "YootWorldArt.h"
 #include "Game.h"
+#include "MenuBackground.h"
 
 using namespace OT;
 
@@ -45,7 +46,8 @@ void MainMenu::reloadGUI()
 
     tgui::Texture bgTx = tgui::Texture();
     {
-        const sf::Texture &bgTex = app.bitmaps["splashscreen"];
+        const sf::Vector2u mb = app.bitmaps["simtower/ui/menubg"].getSize();
+        const sf::Texture &bgTex = app.bitmaps[menuBackgroundKey(mb.x, mb.y)];
         bgTx.loadFromPixelData(bgTex.getSize(), bgTex.copyToImage().getPixelsPtr());
     }
     bgPicture = tgui::Picture::create(bgTx);

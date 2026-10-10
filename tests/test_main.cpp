@@ -26,6 +26,8 @@
 #include "../source/TimeWindowStyle.h"
 #include "../source/WindowsPEExecutable.h"
 #include "../source/Lighting.h"
+#include "../source/MapSky.h"
+#include "../source/MenuBackground.h"
 #include "../source/JudgeSystem.h"
 #include "../source/TenantRules.h"
 #include "../source/LevelUp.h"
@@ -418,6 +420,39 @@ static void testLightingColorMath()
 	sf::Color quarter = Lighting::multiply(Lighting::multiply(white, half), half);
 	EXPECT(quarter.r == (128 * 128) / 255);
 	EXPECT(quarter.r > 60 && quarter.r < 70);
+}
+
+// Minimap sky strip: frame 0 day, 1 dusk/dawn, 2 night, 3 overcast. The frame
+// must follow the hour (night at 23:00, not the day-blue frame).
+static void testMapSkyFrames()
+{
+	using namespace OT;
+	EXPECT(mapSkyFrameForHour(12.0, false) == 0);
+	EXPECT(mapSkyFrameForHour(23.0, false) == 2);
+	EXPECT(mapSkyFrameForHour(2.0, false) == 2);
+	EXPECT(mapSkyFrameForHour(4.99, false) == 2);
+	EXPECT(mapSkyFrameForHour(19.0, false) == 2);
+	EXPECT(mapSkyFrameForHour(5.2, false) == 2);   // dawn, still mostly night
+	EXPECT(mapSkyFrameForHour(5.8, false) == 1);
+	EXPECT(mapSkyFrameForHour(6.8, false) == 0);
+	EXPECT(mapSkyFrameForHour(17.2, false) == 0);
+	EXPECT(mapSkyFrameForHour(17.8, false) == 1);
+	EXPECT(mapSkyFrameForHour(18.8, false) == 2);
+	EXPECT(mapSkyFrameForHour(12.0, true) == 3);
+	EXPECT(mapSkyFrameForHour(23.0, true) == 2);
+	const MapSkyPhase dusk = mapSkyPhaseForHour(17.5, false);
+	EXPECT(dusk.from == 0 && dusk.to == 1 && dusk.progress > 0.49 && dusk.progress < 0.51);
+	for (int h = 0; h < 24; h++) {
+		EXPECT(mapSkyFrameForHour(h + 0.5, false) >= 0 && mapSkyFrameForHour(h + 0.5, false) <= 3);
+	}
+}
+
+// Main menu backdrop: ui/menubg (640x480) when available, else splashscreen.
+static void testMenuBackgroundChoice()
+{
+	EXPECT(std::string(OT::menuBackgroundKey(640, 480)) == "simtower/ui/menubg");
+	EXPECT(std::string(OT::menuBackgroundKey(0, 0)) == "splashscreen");
+	EXPECT(std::string(OT::menuBackgroundKey(64, 64)) == "splashscreen");
 }
 
 // LevelUp seam: the rating progression rules are pure static functions
@@ -8174,6 +8209,8 @@ int main()
 	testTimeWindowModernLayout();
 	testNameManager();
 	testLightingColorMath();
+	testMapSkyFrames();
+	testMenuBackgroundChoice();
 	testLevelUpRules();
 	testLevelUpPromotionHelpers();
 	testSaveHash();

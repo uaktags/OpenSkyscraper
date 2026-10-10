@@ -4,6 +4,7 @@
 #include "Item/Hotel.h"
 #include "Item/Item.h"
 #include "MapWindow.h"
+#include "MapSky.h"
 
 #include <algorithm>
 #include <cmath>
@@ -113,6 +114,9 @@ void MapWindow::reload()
 	window->onClose([this] { setVisible(false); });
 
 	app->gui.add(window);
+	// Paint immediately so a paused game (no 0.25 s refresh tick) never shows
+	// the stale/blank day-blue canvas.
+	renderMap();
 }
 
 void MapWindow::setVisible(bool visible)
@@ -290,22 +294,29 @@ void MapWindow::renderMap()
 
 	sf::Texture &skyTexture = app->bitmaps["simtower/ui/map/sky"];
 	sf::Texture &groundTexture = app->bitmaps["simtower/ui/map/ground"];
-	int skyFrame = std::max(0, std::min(3, game->sky.from));
+	const MapSkyPhase skyPhase = mapSkyPhaseForHour(game->time.hour, game->sky.rainyDay);
 	int skyOffset = static_cast<int>(std::floor(std::fmod(game->time.absolute * 200.0, 200.0)));
 	if (skyOffset < 0) skyOffset += 200;
 
-	Sprite sky;
-	sky.setTexture(skyTexture);
-	sky.setScale({app->uiScale, app->uiScale});
-	int firstSkyWidth = 200 - skyOffset;
-	sky.setTextureRect(sf::IntRect({skyFrame * 200 + skyOffset, 0}, {firstSkyWidth, kMapSkyH}));
-	sky.setPosition({0.f, 0.f});
-	canvas->draw(sky);
-	if (skyOffset > 0)
+	// Draw the 'from' frame, then cross-fade 'to' over it during dawn/dusk.
+	for (int layer = 0; layer < 2; layer++)
 	{
-		sky.setTextureRect(sf::IntRect({skyFrame * 200, 0}, {skyOffset, kMapSkyH}));
-		sky.setPosition({firstSkyWidth * app->uiScale, 0.f});
+		if (layer == 1 && skyPhase.progress <= 0.0) break;
+		const int skyFrame = layer == 0 ? skyPhase.from : skyPhase.to;
+		Sprite sky;
+		sky.setTexture(skyTexture);
+		sky.setScale({app->uiScale, app->uiScale});
+		sky.setColor(sf::Color(255, 255, 255, layer == 0 ? 255 : static_cast<uint8_t>(255 * skyPhase.progress)));
+		int firstSkyWidth = 200 - skyOffset;
+		sky.setTextureRect(sf::IntRect({skyFrame * 200 + skyOffset, 0}, {firstSkyWidth, kMapSkyH}));
+		sky.setPosition({0.f, 0.f});
 		canvas->draw(sky);
+		if (skyOffset > 0)
+		{
+			sky.setTextureRect(sf::IntRect({skyFrame * 200, 0}, {skyOffset, kMapSkyH}));
+			sky.setPosition({firstSkyWidth * app->uiScale, 0.f});
+			canvas->draw(sky);
+		}
 	}
 
 	Sprite ground;
