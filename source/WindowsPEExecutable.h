@@ -45,6 +45,10 @@ namespace OT
 		typedef std::map<std::string, Resources> ResourceTable;
 		
 		ResourceTable resources;
+
+		/// Container the resources were loaded from (set by loadPE/loadSP).
+		enum class Format { None, PE, SP };
+		Format format = Format::None;
 		
 		bool load(Path path);
 		bool loadPE(Path path);

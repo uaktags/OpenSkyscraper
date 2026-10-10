@@ -17,7 +17,6 @@ namespace OT {
 			}
 			
 			virtual void init();
-			virtual int dailyMaintenanceCost() const override { return 100; }
 		};
 	}
 }

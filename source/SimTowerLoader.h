@@ -62,6 +62,7 @@ namespace OT
 		void applyReplacementPalette(int palette, Blob & raw);
 		void loadSky(int id, sf::Image & img);
 		void loadLobbies();
+		void loadSpiralStairs();
 
 		void loadBitmap(int id, sf::Image & img);
 		void loadAnimatedBitmap(int id, sf::Image img[3]);

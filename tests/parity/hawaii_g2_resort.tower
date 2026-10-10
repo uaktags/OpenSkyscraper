@@ -1,0 +1,115 @@
+<tower funds="5000000" rating="1" time="0.020833" speed="1" rainy="0" tool="inspector" ruleset="yoottower" world="hawaii" yootVipFlags="0" x="-112" y="180">
+<money todayIncome="0" todayExpenses="0" yesterdayIncome="0" yesterdayExpenses="0" lastQuarterBalance="5000000" quarterIncome="0" quarterExpenses="0"/>
+<item type="lobby" x="-60" y="0" evaluation="50.0" width="136" height="2"/>
+<item type="floor" x="-60" y="2" evaluation="50.0" width="136"/>
+<item type="floor" x="-60" y="3" evaluation="50.0" width="136"/>
+<item type="floor" x="-60" y="4" evaluation="50.0" width="136"/>
+<item type="floor" x="-60" y="5" evaluation="50.0" width="136"/>
+<item type="floor" x="-60" y="6" evaluation="50.0" width="136"/>
+<item type="floor" x="-60" y="7" evaluation="50.0" width="136"/>
+<item type="floor" x="-60" y="8" evaluation="50.0" width="136"/>
+<item type="floor" x="-60" y="9" evaluation="50.0" width="136"/>
+<item type="floor" x="-60" y="10" evaluation="50.0" width="136"/>
+<item type="floor" x="-60" y="11" evaluation="50.0" width="136"/>
+<item type="floor" x="-60" y="12" evaluation="50.0" width="136"/>
+<item type="floor" x="-60" y="13" evaluation="50.0" width="136"/>
+<item type="yt_aloha" x="-60" y="2" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_surfshop" x="-45" y="2" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_burger" x="-32" y="2" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_coffee" x="0" y="2" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_icecream" x="12" y="2" evaluation="50.0" tenantStatus="9"/>
+<item type="restroom" x="24" y="2" evaluation="50.0"/>
+<item type="yt_flower" x="44" y="2" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_cigar" x="56" y="2" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_drink" x="59" y="2" evaluation="50.0" tenantStatus="9"/>
+<item type="frontdesk" x="-60" y="3" evaluation="50.0"/>
+<item type="housekeeping" x="-45" y="3" evaluation="50.0"/>
+<item type="yt_seafood" x="0" y="3" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_drink" x="24" y="3" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_steak" x="44" y="3" evaluation="50.0" tenantStatus="9"/>
+<item type="restroom" x="60" y="3" evaluation="50.0"/>
+<item type="hotel_suite" x="-60" y="4" evaluation="50.0"/>
+<item type="hotel_double" x="-44" y="4" evaluation="50.0"/>
+<item type="hotel_double" x="-38" y="4" evaluation="50.0"/>
+<item type="hotel_double" x="-32" y="4" evaluation="50.0"/>
+<item type="hotel_double" x="-26" y="4" evaluation="50.0"/>
+<item type="hotel_double" x="0" y="4" evaluation="50.0"/>
+<item type="hotel_double" x="6" y="4" evaluation="50.0"/>
+<item type="hotel_double" x="12" y="4" evaluation="50.0"/>
+<item type="hotel_double" x="18" y="4" evaluation="50.0"/>
+<item type="hotel_double" x="24" y="4" evaluation="50.0"/>
+<item type="hotel_double" x="30" y="4" evaluation="50.0"/>
+<item type="hotel_suite" x="44" y="4" evaluation="50.0"/>
+<item type="hotel_double" x="60" y="4" evaluation="50.0"/>
+<item type="hotel_double" x="66" y="4" evaluation="50.0"/>
+<item type="hotel_suite" x="-60" y="5" evaluation="50.0"/>
+<item type="hotel_double" x="-44" y="5" evaluation="50.0"/>
+<item type="hotel_double" x="-38" y="5" evaluation="50.0"/>
+<item type="hotel_double" x="-32" y="5" evaluation="50.0"/>
+<item type="hotel_double" x="-26" y="5" evaluation="50.0"/>
+<item type="hotel_double" x="0" y="5" evaluation="50.0"/>
+<item type="hotel_double" x="6" y="5" evaluation="50.0"/>
+<item type="hotel_double" x="12" y="5" evaluation="50.0"/>
+<item type="hotel_double" x="18" y="5" evaluation="50.0"/>
+<item type="hotel_double" x="24" y="5" evaluation="50.0"/>
+<item type="hotel_double" x="30" y="5" evaluation="50.0"/>
+<item type="hotel_suite" x="44" y="5" evaluation="50.0"/>
+<item type="hotel_double" x="60" y="5" evaluation="50.0"/>
+<item type="hotel_double" x="66" y="5" evaluation="50.0"/>
+<item type="condo" x="-60" y="6" evaluation="50.0"/>
+<item type="condo" x="-44" y="6" evaluation="50.0"/>
+<item type="condo" x="-28" y="6" evaluation="50.0"/>
+<item type="condo" x="0" y="6" evaluation="50.0"/>
+<item type="condo" x="16" y="6" evaluation="50.0"/>
+<item type="condo" x="44" y="6" evaluation="50.0"/>
+<item type="condo" x="60" y="6" evaluation="50.0"/>
+<item type="condo" x="-60" y="7" evaluation="50.0"/>
+<item type="condo" x="-44" y="7" evaluation="50.0"/>
+<item type="condo" x="-28" y="7" evaluation="50.0"/>
+<item type="condo" x="0" y="7" evaluation="50.0"/>
+<item type="condo" x="16" y="7" evaluation="50.0"/>
+<item type="condo" x="44" y="7" evaluation="50.0"/>
+<item type="condo" x="60" y="7" evaluation="50.0"/>
+<item type="condo" x="-60" y="8" evaluation="50.0"/>
+<item type="condo" x="-44" y="8" evaluation="50.0"/>
+<item type="condo" x="-28" y="8" evaluation="50.0"/>
+<item type="condo" x="0" y="8" evaluation="50.0"/>
+<item type="condo" x="16" y="8" evaluation="50.0"/>
+<item type="condo" x="44" y="8" evaluation="50.0"/>
+<item type="condo" x="60" y="8" evaluation="50.0"/>
+<item type="condo" x="-60" y="9" evaluation="50.0"/>
+<item type="condo" x="-44" y="9" evaluation="50.0"/>
+<item type="condo" x="-28" y="9" evaluation="50.0"/>
+<item type="condo" x="0" y="9" evaluation="50.0"/>
+<item type="condo" x="16" y="9" evaluation="50.0"/>
+<item type="condo" x="44" y="9" evaluation="50.0"/>
+<item type="condo" x="60" y="9" evaluation="50.0"/>
+<item type="condo" x="-60" y="10" evaluation="50.0"/>
+<item type="condo" x="-44" y="10" evaluation="50.0"/>
+<item type="condo" x="-28" y="10" evaluation="50.0"/>
+<item type="condo" x="0" y="10" evaluation="50.0"/>
+<item type="condo" x="16" y="10" evaluation="50.0"/>
+<item type="condo" x="44" y="10" evaluation="50.0"/>
+<item type="condo" x="60" y="10" evaluation="50.0"/>
+<item type="condo" x="-60" y="11" evaluation="50.0"/>
+<item type="condo" x="-44" y="11" evaluation="50.0"/>
+<item type="condo" x="-28" y="11" evaluation="50.0"/>
+<item type="condo" x="0" y="11" evaluation="50.0"/>
+<item type="condo" x="16" y="11" evaluation="50.0"/>
+<item type="condo" x="44" y="11" evaluation="50.0"/>
+<item type="condo" x="60" y="11" evaluation="50.0"/>
+<item type="yt_jennys" x="-60" y="12" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_record" x="-30" y="12" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_burger" x="0" y="12" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_coffee" x="16" y="12" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_aloha" x="44" y="12" evaluation="50.0" tenantStatus="9"/>
+<item type="restroom" x="59" y="12" evaluation="50.0"/>
+<item type="yt_seafood" x="-60" y="13" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_surfshop" x="-36" y="13" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_steak" x="0" y="13" evaluation="50.0" tenantStatus="9"/>
+<item type="restroom" x="16" y="13" evaluation="50.0"/>
+<item type="yt_icecream" x="44" y="13" evaluation="50.0" tenantStatus="9"/>
+<item type="yt_flower" x="56" y="13" evaluation="50.0" tenantStatus="9"/>
+<item type="elevator-standard" x="-4" y="0" evaluation="50.0" height="14" showShaft="1"><unserviced floor="1"/><car altitude="0.0" homeFloor="0"/><car altitude="3.0" homeFloor="3"/><car altitude="5.0" homeFloor="5"/><car altitude="7.0" homeFloor="7"/><car altitude="9.0" homeFloor="9"/><car altitude="11.0" homeFloor="11"/></item>
+<item type="elevator-standard" x="40" y="0" evaluation="50.0" height="14" showShaft="1"><unserviced floor="1"/><car altitude="0.0" homeFloor="0"/><car altitude="4.0" homeFloor="4"/><car altitude="7.0" homeFloor="7"/><car altitude="10.0" homeFloor="10"/></item>
+</tower>

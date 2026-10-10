@@ -19,6 +19,9 @@ namespace OT {
             Application & app;
             
             tgui::Panel::Ptr panel = NULL;
+            tgui::Button::Ptr modeButton = NULL;
+            tgui::Button::Ptr skinButton = NULL;
+            tgui::Label::Ptr skinWarningLabel = NULL;
             tgui::Button::Ptr newButton = NULL;
             tgui::Button::Ptr loadButton = NULL;
             tgui::Button::Ptr settingsButton = NULL;

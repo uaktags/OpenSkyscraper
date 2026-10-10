@@ -1,0 +1,30 @@
+DefParts	Name	Csr
+		ID	100
+		List	Rect 0,0,220,30 Halftone
+
+DefParts	Name	View
+		ID	1000
+		Pattern	100
+		List	Rect 0,0,44,30 Transparent
+
+DefParts	Name	View
+		ID	1000
+		Pattern	101
+		List	Rect 44,0,88,30 Transparent
+
+DefParts	Name	View
+		ID	1000
+		Pattern	102
+		List	Rect 88,0,132,30 Transparent
+
+DefParts	Name	View
+		ID	1000
+		Pattern	103
+		List	Rect 132,0,176,30 Transparent
+
+DefParts	Name	View
+		ID	1000
+		Pattern	104
+		List	Rect 176,0,220,30 Transparent
+
+End

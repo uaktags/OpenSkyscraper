@@ -1,0 +1,33 @@
+{
+  "format": "openskyscraper-plugin",
+  "formatVersion": 1,
+  "sourceFormat": "scratch",
+  "class": "Tenant",
+  "attr": {
+    "itemType": "PSOH",
+    "name": "Medical Center",
+    "gameLevel": 1,
+    "id": 1,
+    "marker": "****",
+    "attrib": 1,
+    "mustItem": 0,
+    "dependID": 0,
+    "secretItem": 0
+  },
+  "bitmaps": {
+    "ingame": {
+      "present": true,
+      "width": 624,
+      "height": 24,
+      "transparentColor": null,
+      "maskDiscovery": "none",
+      "downscale": {
+        "toW": 624,
+        "toH": 24
+      }
+    }
+  },
+  "spriteLayout": {
+    "ingame": "meta/objmap_1000.txt"
+  }
+}

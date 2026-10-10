@@ -1,0 +1,33 @@
+{
+  "format": "openskyscraper-plugin",
+  "formatVersion": 1,
+  "sourceFormat": "scratch",
+  "class": "Tenant",
+  "attr": {
+    "itemType": "TRPA",
+    "name": "Condo",
+    "gameLevel": 1,
+    "id": 1,
+    "marker": "****",
+    "attrib": 1,
+    "mustItem": 0,
+    "dependID": 0,
+    "secretItem": 0
+  },
+  "bitmaps": {
+    "ingame": {
+      "present": true,
+      "width": 640,
+      "height": 72,
+      "transparentColor": null,
+      "maskDiscovery": "none",
+      "downscale": {
+        "toW": 640,
+        "toH": 72
+      }
+    }
+  },
+  "spriteLayout": {
+    "ingame": "meta/objmap_1000.txt"
+  }
+}

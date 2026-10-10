@@ -12,6 +12,13 @@ namespace OT
 		typedef std::vector<Path> Paths;
 		
 		Paths paths(Path resource) const;
+		bool exists(Path resource) const;
+		void addSearchPath(Path dir, bool front = true);
+
+		/// Read-only view of the currently-configured base search dirs.
+		/// Exposed so PluginManager can scan each base dir's Plugins/
+		/// subdirectory without being coupled to DataManager internals.
+		const Paths & searchDirs() const { return dirs; }
 		
 	protected:
 		friend class Application;

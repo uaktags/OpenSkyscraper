@@ -1,4 +1,5 @@
 #pragma once
+#include <set>
 #include "../../GameObject.h"
 #include "../../Sound.h"
 #include "Elevator.h"
@@ -40,6 +41,9 @@ namespace OT {
 				Elevator::Direction direction;
 				int destinationFloor;
 				int homeFloor;
+				int index = 0; // stable creation order for dispatch ties
+				int shuttleMode = 0;
+				bool shuttleReturning = false;
 
 				typedef enum {
 					kIdle,
@@ -54,6 +58,11 @@ namespace OT {
 				double startAltitude;
 				double journeyTime;
 
+				/// Returns the raw tail delay and the number of floors to
+				/// advance for one simulation tick (CalcMoveSpeed).
+				static int CalcMoveSpeed(bool express, int distanceToTarget,
+				                         int distanceFromStart, int *stride);
+
 				Sound arrivingSound;
 				Sound departingSound;
 				bool arrivingPlayed;
@@ -62,7 +71,39 @@ namespace OT {
 				bool isFull();
 				Person * nextPassengerToUnmount() const;
 
-				void moveTo(int floor);
+			void moveTo(int floor);
+			void yootDrive();
+			/// YootTower dispatch (StdElev FUN_1000cf90/cda0/d070): the
+			/// floors this car is appointed to pick up (SetOnStop), the
+			/// sweep cost of serving a call, the sweep decision
+			/// (SetNextStop/ChangeTurnPos) and the end-of-window unappoint
+			/// (ClearOnStop).
+			std::set<int> yootPickups;
+			int yootSweepCost(int floor, Elevator::Direction dir) const;
+			void yootDecide();
+			void yootEndStop();
+			Queue *yootServedQueue();
+
+				/// Door timer is the authentic five-tick countdown. The
+				/// legacy State values remain serialized-compatible.
+				int doorTicks;
+				int holdTicks;
+				int moveTicks;
+				/// YootTower StdElev/BigElev drive (FUN_1000c200/c3b0/c590):
+				/// the gear 0..2 (MVDF speed index) and the car's offset
+				/// inside a floor, 36 units a floor.
+				int yootGear;
+				int yootOffset;
+				/// YootTower door cycle (StdElev/BigElev module states 1-4, FUN_1000c150 /
+				/// c2c0 / c540): 0 none, 1 unload (state 1/2), 2 board (state 3), 3 hold
+				/// (state 4), each with its idle counter (6 on entry, the hold counts
+				/// down from the mover's waitCount, which runs as 6).
+				int yootPhase = 0;
+				int yootCounter = 0;
+				void yootArrive();
+				void yootDoorStep();
+				void yootDepart();
+
 			};
 		}
 	}

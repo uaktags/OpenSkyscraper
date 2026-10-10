@@ -15,8 +15,11 @@ namespace OT {
 
 		void reset();
 		void updateFloor(int y);
+		/// True when floor y currently carries its pair of fire escapes.
+		bool hasFireStairs(int y) const { return fireStairs.count(y) != 0; }
 		void updateCrane();
 		void updateTracks();
+		void reloadTextures();
 
 		void draw(sf::RenderTarget & target, sf::RenderStates states) const;
 		virtual void render(sf::RenderTarget & target) const;
@@ -31,6 +34,16 @@ namespace OT {
 
 		Sprite crane;
 		bool craneVisible;
+		// OverlayT crane state (UpdateCrane 11c0:024a): crane_x is captured
+		// only when the top-floor NUMBER changes and then stays put even if
+		// the floor widens — the original's famous stuck crane. Draw gate
+		// (11c0:0000): hidden at/above displayed floor 100 or under the
+		// cathedral crown.
+		static const int kNoCraneFloor = -1000; // sentinel; basements are negative
+		static const int kCraneMinCells = 7;    // top floor must span >= 7 cells
+		static const int kCraneMaxFloor = 100;  // floor-100 cap hides the crane
+		int craneFloor;
+		int craneX;
 
 		Sprite track;
 		bool tracksVisible;

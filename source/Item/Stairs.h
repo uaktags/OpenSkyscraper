@@ -3,7 +3,7 @@
 
 namespace OT {
 	namespace Item {
-		
+
 		class Stairs : public Stairlike
 		{
 		public:
@@ -15,9 +15,13 @@ namespace OT {
 				p->size  = int2(8,2);
 				p->icon  = 2;
 			}
-			
+
 			virtual void init();
-			virtual int dailyMaintenanceCost() const override { return 25; }
+			virtual void encodeXML(tinyxml2::XMLPrinter & xml);
+			virtual void decodeXML(tinyxml2::XMLElement & xml);
+
+		private:
+			void configureForLobby();
 		};
 	}
 }

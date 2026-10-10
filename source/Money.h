@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <map>
 #include <string>
 #include <vector>
@@ -11,19 +12,20 @@ namespace OT {
 	public:
 		struct DaySummary
 		{
-			int income;
-			int expenses;
-			std::map<std::string, int> totalsByCategory;
+			int64_t income;
+			int64_t expenses;
+			std::map<std::string, int64_t> totalsByCategory;
 
-			int net() const { return income - expenses; }
+			int64_t net() const { return income - expenses; }
 		};
 
 		Money()
-		: balance(0), todayIncome(0), todayExpenses(0), yesterdayIncome(0), yesterdayExpenses(0)
+		: balance(0), todayIncome(0), todayExpenses(0), yesterdayIncome(0), yesterdayExpenses(0),
+		  quarterStartBalance(0), lastQuarterBalance(0), quarterIncome(0), quarterExpenses(0)
 		{
 		}
 
-		void clear(int newBalance = 0)
+		void clear(int64_t newBalance = 0)
 		{
 			balance = newBalance;
 			todayIncome = 0;
@@ -33,21 +35,30 @@ namespace OT {
 			todayTotalsByCategory.clear();
 			yesterdayTotalsByCategory.clear();
 			recentDays.clear();
+			quarterStartBalance = newBalance;
+			lastQuarterBalance = newBalance;
+			quarterIncome = 0;
+			quarterExpenses = 0;
+			quarterTotalsByCategory.clear();
 		}
 
-		void setBalance(int newBalance)
+		void setBalance(int64_t newBalance)
 		{
 			balance = newBalance;
 		}
 
-		void record(int amount, const std::string & category)
+		void record(int64_t amount, const std::string & category)
 		{
 			balance += amount;
 			todayTotalsByCategory[category] += amount;
-			if (amount >= 0)
+			quarterTotalsByCategory[category] += amount;
+			if (amount >= 0) {
 				todayIncome += amount;
-			else
+				quarterIncome += amount;
+			} else {
 				todayExpenses -= amount;
+				quarterExpenses -= amount;
+			}
 		}
 
 		void finalizeDay()
@@ -69,38 +80,62 @@ namespace OT {
 			todayTotalsByCategory.clear();
 		}
 
-		int todayNet() const { return todayIncome - todayExpenses; }
-		int yesterdayNet() const { return yesterdayIncome - yesterdayExpenses; }
-
-		int recentIncome() const
+		/// Snapshot the quarter and start a fresh one. Called by Game when
+		/// the time quarter rolls over. The balance at the moment of the
+		/// rollover is the "last quarter balance" shown in the finance
+		/// window, and becomes the starting balance for the new quarter.
+		void finalizeQuarter()
 		{
-			int total = todayIncome;
+			lastQuarterBalance = balance;
+			quarterStartBalance = balance;
+			quarterIncome = 0;
+			quarterExpenses = 0;
+			quarterTotalsByCategory.clear();
+		}
+
+		int64_t todayNet() const { return todayIncome - todayExpenses; }
+		int64_t yesterdayNet() const { return yesterdayIncome - yesterdayExpenses; }
+		int64_t quarterNet() const { return quarterIncome - quarterExpenses; }
+
+		int64_t recentIncome() const
+		{
+			int64_t total = todayIncome;
 			for (std::vector<DaySummary>::const_iterator i = recentDays.begin(); i != recentDays.end(); i++)
 				total += i->income;
 			return total;
 		}
 
-		int recentExpenses() const
+		int64_t recentExpenses() const
 		{
-			int total = todayExpenses;
+			int64_t total = todayExpenses;
 			for (std::vector<DaySummary>::const_iterator i = recentDays.begin(); i != recentDays.end(); i++)
 				total += i->expenses;
 			return total;
 		}
 
-		int recentNet() const { return recentIncome() - recentExpenses(); }
+		int64_t recentNet() const { return recentIncome() - recentExpenses(); }
 
 		static const unsigned int kRecentDayLimit = 7;
 
-		int balance;
-		int todayIncome;
-		int todayExpenses;
-		std::map<std::string, int> todayTotalsByCategory;
+		int64_t balance;
+		int64_t todayIncome;
+		int64_t todayExpenses;
+		std::map<std::string, int64_t> todayTotalsByCategory;
 
-		int yesterdayIncome;
-		int yesterdayExpenses;
-		std::map<std::string, int> yesterdayTotalsByCategory;
+		int64_t yesterdayIncome;
+		int64_t yesterdayExpenses;
+		std::map<std::string, int64_t> yesterdayTotalsByCategory;
 
 		std::vector<DaySummary> recentDays;
+
+		/// Accumulators for the current quarter (reset on quarter rollover).
+		/// Read by the Finance window; quarterStartBalance is the balance at
+		/// the moment the quarter began (i.e. lastQuarterBalance of the
+		/// previous quarter).
+		int64_t quarterStartBalance;
+		int64_t lastQuarterBalance;
+		int64_t quarterIncome;
+		int64_t quarterExpenses;
+		std::map<std::string, int64_t> quarterTotalsByCategory;
 	};
 }

@@ -11,6 +11,7 @@ namespace OT {
 	namespace Item {
 		namespace Elevator {
 			class Elevator;
+			class Car;
 			class Queue : public GameObject, public sf::Drawable
 			{
 			public:
@@ -23,14 +24,23 @@ namespace OT {
 				Elevator::Direction direction;
 				int width;
 
+				static const int kQueueCapacity = 40;
+				static const int kQueueFullPenalty = 5;
+				static const int kQueueFullRetryFrames = 16;
+				static const int kQueueWatchdogFrames = 300;
+
 				bool called;
 				double callTime;
 				bool answered;
+				Car *assignedCar = nullptr;
+				/// YootTower: the car this call is appointed to (T2Request
+				/// +0x24; StdElev FUN_1000cf90 appoints one car per call).
+				Car *appointed = nullptr;
 				double getWaitDuration();
 
 				typedef std::list<Person *> People;
 				People people;
-				void addPerson(Person * p);
+				bool addPerson(Person * p);
 				void removePerson(Person * p);
 				Person * popPerson();
 				void callElevator();
@@ -40,6 +50,15 @@ namespace OT {
 				virtual void advance(double dt);
 				void draw(sf::RenderTarget & target, sf::RenderStates states) const;
 				virtual void render(sf::RenderTarget & target) const;
+
+			private:
+				void bankWait(Person *p);
+				double fullRetryFrame;
+				double waitStartFrame;
+				/// YootTower: last people-idle tick (absolute minute / 2) that
+				/// charged wait stress.
+				long long yootIdleTick = -1;
+				void applyWatchdog();
 			};
 		}
 	}

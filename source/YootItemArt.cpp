@@ -1,0 +1,177 @@
+/* Copyright (c) 2026 OpenSkyscraper contributors */
+#include "YootItemArt.h"
+
+#include "Application.h"
+#include "PluginObjmap.h"
+
+#include <algorithm>
+#include <cmath>
+#include <SFML/Graphics/Sprite.hpp>
+#include <map>
+#include <memory>
+#include <tuple>
+
+namespace OT
+{
+	namespace
+	{
+		typedef std::tuple<std::string, uint32_t, int, int, std::string> Key;
+		std::map<Key, std::unique_ptr<YootPluginView> > & viewCache()
+		{
+			static std::map<Key, std::unique_ptr<YootPluginView> > cache;
+			return cache;
+		}
+
+		struct PaletteState
+		{
+			std::vector<YootRgb> palette;
+			int start = 0, count = 0;
+		};
+		PaletteState & currentPalette()
+		{
+			static PaletteState s;
+			return s;
+		}
+
+		void recolour(YootPluginView & v, const PaletteState & p)
+		{
+			if (v.indices.empty()) return;
+			std::vector<YootRgb> colours;
+			// The game blits every sheet by index into the tower palette, so
+			// the static entries below the animated range come from the world
+			// too: sheets whose own colour table is shifted (Office.t2p's
+			// Outside view, 172..176 green curtains in Tokyo) draw in its colours.
+			const int end = std::min(p.start + p.count, (int)p.palette.size());
+			if (!p.palette.empty())
+				for (int index : v.usedIndices)
+					if (index < end)
+						colours.push_back(p.palette[index]);
+			if (colours == v.applied) return;
+			v.applied = colours;
+			std::vector<uint8_t> rgba = v.baseRgba;
+			if (!p.palette.empty())
+			{
+				for (size_t i = 0; i < v.indices.size(); ++i)
+				{
+					const int index = v.indices[i];
+					if (index >= p.start || index >= (int)p.palette.size() || rgba[i * 4 + 3] == 0) continue;
+					rgba[i * 4 + 0] = p.palette[index].r;
+					rgba[i * 4 + 1] = p.palette[index].g;
+					rgba[i * 4 + 2] = p.palette[index].b;
+				}
+				yootPaintAnimatedIndices(v.indices, p.palette, p.start, p.count, rgba);
+			}
+			v.texture.update(rgba.data());
+		}
+	}
+
+	sf::IntRect YootPluginView::band(int index) const
+	{
+		if (bands.empty())
+			return sf::IntRect({0, 0}, {static_cast<int>(texture.getSize().x), static_cast<int>(texture.getSize().y)});
+		return bands[std::max(0, std::min((int)bands.size() - 1, index))];
+	}
+
+	int YootPluginView::findSpan(int span, int pattern) const
+	{
+		int first = -1;
+		for (size_t i = 0; i < bands.size(); ++i)
+		{
+			if (spans[i] != span) continue;
+			if (patterns[i] == pattern || pattern < 0) return (int)i;
+			if (first < 0) first = (int)i;
+		}
+		return first;
+	}
+
+	const YootPluginView * yootPluginView(Application & app, const std::string & plugin,
+		const sf::Color & mask, int bitmapId, int objmapId, const std::string & part)
+	{
+		static std::map<Key, bool> missing;
+		std::map<Key, std::unique_ptr<YootPluginView> > & cache = viewCache();
+		const Key key(plugin, mask.toInteger(), bitmapId, objmapId, part);
+		auto hit = cache.find(key);
+		if (hit != cache.end()) return hit->second.get();
+		if (missing.count(key)) return nullptr;
+
+		std::unique_ptr<YootPluginView> v(new YootPluginView);
+		if (!app.pluginManager.has(plugin) || !app.bitmaps.loadFromPlugin(plugin, bitmapId, v->texture, mask))
+		{
+			missing[key] = true;
+			return nullptr;
+		}
+		AbstractPlugin * p = app.pluginManager.get(plugin);
+		const WindowsPEExecutable::Resource * om = (p && p->ensureLoaded()) ? p->getResource("OBJMAP", objmapId) : nullptr;
+		std::vector<ObjmapBlock> blocks;
+		bool transparent = false;
+		if (om && parsePluginObjmap(om->data, om->length, blocks))
+		{
+			std::vector<const ObjmapBlock *> parts;
+			for (const ObjmapBlock & b : blocks)
+				if (b.name == part && b.rect.width() > 0 && b.rect.height() > 0)
+				{
+					parts.push_back(&b);
+					transparent = transparent || std::find(b.flags.begin(), b.flags.end(), "Transparent") != b.flags.end();
+				}
+			std::stable_sort(parts.begin(), parts.end(),
+				[](const ObjmapBlock * a, const ObjmapBlock * b) { return a->pattern < b->pattern; });
+			for (const ObjmapBlock * b : parts)
+			{
+				v->patterns.push_back(b->pattern);
+				v->spans.push_back(b->span);
+				v->bands.push_back(sf::IntRect({b->rect.left, b->rect.top}, {b->rect.width(), b->rect.height()}));
+			}
+		}
+
+		// Keep the palette indices for the tower-palette animation.
+		const WindowsPEExecutable::Resource * bmp = p ? p->getResource("2", bitmapId) : nullptr;
+		YootIndexedImage img;
+		if (bmp && decodeYootIndexedDib(bmp->data, bmp->length, img) &&
+			img.width == (int)v->texture.getSize().x && img.height == (int)v->texture.getSize().y)
+		{
+			const sf::Image base = v->texture.copyToImage();
+			v->baseRgba.assign(base.getPixelsPtr(), base.getPixelsPtr() + img.pixels.size() * 4);
+			v->indices = img.pixels;
+			if (transparent)
+			{
+				for (size_t i = 0; i < img.pixels.size(); ++i)
+					if (img.pixels[i] == 0) v->baseRgba[i * 4 + 3] = 0;
+				v->texture.update(v->baseRgba.data());
+			}
+			bool used[256] = {false};
+			for (uint8_t i : img.pixels) used[i] = true;
+			for (int i = 0; i < 256; ++i)
+				if (used[i]) v->usedIndices.push_back(i);
+			recolour(*v, currentPalette());
+		}
+
+		YootPluginView * out = v.get();
+		cache[key] = std::move(v);
+		return out;
+	}
+
+	void yootDrawLoop(sf::RenderTarget & target, const YootPluginView & view, const sf::IntRect & band,
+		float x, float y, float width, sf::Color color)
+	{
+		if (band.size.x <= 0 || band.size.y <= 0) return;
+		sf::Sprite s(view.texture);
+		s.setColor(color);
+		for (float dx = 0; dx < width; dx += band.size.x)
+		{
+			const int w = std::min(band.size.x, (int)std::ceil(width - dx));
+			s.setTextureRect(sf::IntRect(band.position, {w, band.size.y}));
+			s.setPosition({x + dx, y});
+			target.draw(s);
+		}
+	}
+
+	void yootRecolourPluginViews(const std::vector<YootRgb> & palette, int start, int count)
+	{
+		PaletteState & s = currentPalette();
+		s.palette = palette;
+		s.start = start;
+		s.count = count;
+		for (auto & entry : viewCache())
+			recolour(*entry.second, s);
+	}
+}

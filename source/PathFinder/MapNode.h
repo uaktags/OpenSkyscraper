@@ -1,4 +1,5 @@
 #pragma once
+#include <functional>
 #include <list>
 
 
@@ -37,6 +38,11 @@ namespace OT {
 		
 		FloorNode *floorNode; // NULL if MapNode is actually a FloorNode, otherwise is points to the corresponding FloorNode
 		std::list<MapNode *> *nodesOnFloor;
+
+		/// YootTower floor holes: optional coverage test (points at
+		/// GameMap::horizontalWalkable) used to sever same-floor links
+		/// across a gap; NULL = everything walkable.
+		const std::function<bool(int, int, int)> *walkableBetween;
 
 		explicit MapNode(FloorNode *floor);
 

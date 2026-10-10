@@ -1,6 +1,7 @@
 /* Copyright (c) 2026 OpenSkyscraper contributors */
 #pragma once
 #include "GameObject.h"
+#include "YootTenants.h"
 #include <TGUI/Widget.hpp>
 #include <TGUI/Texture.hpp>
 #include <TGUI/Widgets/ChildWindow.hpp>
@@ -8,9 +9,13 @@
 #include <map>
 #include <set>
 #include <string>
+#include <vector>
+#include <chrono>
 
 
 namespace OT {
+    namespace Item { class AbstractPrototype; }
+
     class ToolboxWindow : public GameObject {
         public:
             ToolboxWindow(Game * game);
@@ -19,6 +24,7 @@ namespace OT {
             void close();
             void reload();
 
+            void update();         ///< per-frame: drives the press-and-hold overlay
             void updateTool();
             void updateSpeed();
 
@@ -31,7 +37,7 @@ namespace OT {
                 tgui::Texture checked;
             };
 
-            tgui::Button::Ptr makeButton(int width, int height, sf::Texture textureMap, int index, ButtonState & state);
+            tgui::Button::Ptr makeButton(int width, int height, sf::Texture textureMap, int index, ButtonState & state, int cellW = 0, int cellH = 0);
 
             tgui::ChildWindow::Ptr window = NULL;
 
@@ -44,9 +50,54 @@ namespace OT {
             typedef std::map<int, tgui::Button::Ptr> SpeedButtonMap;
             SpeedButtonMap speedButtons;
 
+            tgui::Button::Ptr mapButton    = nullptr; ///< minimap toggle (mirrors the M keybind)
+            tgui::Button::Ptr statusButton = nullptr; ///< cycles status overlay mode (mirrors the O keybind)
+            tgui::Button::Ptr financeButton = nullptr; ///< finance window toggle (mirrors the F keybind)
+            tgui::Button::Ptr skinButton = nullptr; ///< cycles the art-set skin (mirrors the K keybind)
+
             std::map<tgui::Button::Ptr, ButtonState> buttonStates;
 
             int lastSpeedMode = 1;
 
+            bool isChildTool(const std::string& toolId, std::string& outParentId) const;
+            bool isCategoryParent(const std::string& toolId) const;
+
+        private:
+            tgui::Button::Ptr makeItemButton(Item::AbstractPrototype* proto, ButtonState& state);
+
+            // YootTower layout (ToolboxWindowYoot.cpp): category buttons over
+            // the selected category's items, as in the original Tools window.
+            bool yootLayoutActive() const;
+            std::vector<YootToolboxGroup> collectYootGroups() const;
+            int yootLayoutHeight(const std::vector<YootToolboxGroup>& groups) const;
+            void addYootItems(const std::vector<YootToolboxGroup>& groups);
+            bool makePluginIconButton(const std::string& plugin, int pattern, ButtonState& state, tgui::Button::Ptr& out);
+            void followYootTool(const std::string& protoId);  ///< show the selected item's category
+            int yootCategory = -1;           ///< selected ToolDef category
+            bool yootReloadPending = false;  ///< a category was picked; rebuild next frame
+            void showOverlayFor(const std::string& parentId);
+            void hideOverlay();
+            void rebuildSlotTexture(const std::string& parentId, const std::string& displayedProtoId);
+
+            // Press-and-hold overlay state. While a category parent button is
+            // held down its children pop up over the neighbouring grid slots;
+            // releasing over a child selects it. Release is detected by
+            // polling the mouse button in update() rather than relying on
+            // TGUI mouse capture (which is unreliable with stacked widgets).
+            std::string holdingParent;                          ///< proto id of the parent being held, or empty
+            std::chrono::steady_clock::time_point holdPressTime;
+            bool overlayVisible = false;
+            std::vector<tgui::Button::Ptr> overlayButtons;
+            std::map<tgui::Button::Ptr, ButtonState> overlayButtonStates;
+            std::map<tgui::Button::Ptr, std::string> overlayToolFor;   ///< overlay button -> "item-<protoId>"
+            std::map<std::string, int> parentSlotIndex;                ///< parent proto id -> grid slot
+
+            // Slot substitution. When a category child is selected via the
+            // overlay, the parent slot's icon is replaced with the child's
+            // (e.g. picking Floor replaces Lobby's icon with Floor's). The
+            // slot stays in toolButtons under the parent's id but its
+            // ButtonState is swapped to the child's textures. Empty value
+            // means the slot is showing its parent (the default).
+            std::map<std::string, std::string> parentActiveChild;       ///< parent proto id -> displayed child proto id
     };
 }

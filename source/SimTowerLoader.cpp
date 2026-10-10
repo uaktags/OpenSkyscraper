@@ -10,6 +10,8 @@
 #include <fstream>
 #include <sys/stat.h>
 #include <cstring>
+#include <algorithm>
+#include <cctype>
 #include <stdarg.h>
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -96,8 +98,25 @@ bool SimTowerLoader::load()
 {
 	LOG(DEBUG, "loading SimTower resources");
 
-	//Find the possible paths to the SimTower executable and use the first that works.
-	DataManager::Paths paths = app->data.paths("SIMTOWER.EXE");
+	// An explicit user selection bypasses automatic discovery, including when
+	// its filename casing differs on a case-sensitive filesystem.
+	const std::string overridePath = app->simTowerExecutablePath();
+	std::string overrideLower = overridePath;
+	std::transform(overrideLower.begin(), overrideLower.end(), overrideLower.begin(),
+	               [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+	const bool overrideCompressed = overrideLower.size() >= 4 &&
+	                                overrideLower.substr(overrideLower.size() - 4) == ".ex_";
+
+	// Find the possible paths to the SimTower executable and use the first that works.
+	DataManager::Paths paths;
+	if (overridePath.empty()) {
+		paths = app->data.paths("SIMTOWER.EXE");
+		// Case-sensitive filesystems: probe the common lowercase names too.
+		DataManager::Paths lowerPaths = app->data.paths("simtower.exe");
+		paths.insert(paths.end(), lowerPaths.begin(), lowerPaths.end());
+	}
+	else if (!overrideCompressed)
+		paths.push_back(Path(overridePath));
 	bool success = false;
 	for (int i = 0; i < paths.size() && !success; i++) {
 		success = exe.load(paths[i]);
@@ -125,33 +144,76 @@ bool SimTowerLoader::load()
 		tmp.append("SIMTOWER.EXE");
 		Path decompressedPath(tmp);
 
-		//Iterate through the possible locations and try to decompress each, until one is found.
-		compressedPaths = app->data.paths("SIMTOWER.EX_");
-		mskwaj_decompressor * d = mspack_create_kwaj_decompressor(NULL);
-		if (d) {
-			for (int i = 0; i < compressedPaths.size() && !success; i++) {
-				const Path &path = compressedPaths[i];
-				if (!fileExists(path)) continue;
+		//Iterate through the possible locations and try to find a cached/decompressed version, or decompress if not found.
+		if (overrideCompressed)
+			compressedPaths.push_back(Path(overridePath));
+		else if (overridePath.empty()) {
+			compressedPaths = app->data.paths("SIMTOWER.EX_");
+			DataManager::Paths lowerCompressed = app->data.paths("simtower.ex_");
+			compressedPaths.insert(compressedPaths.end(), lowerCompressed.begin(), lowerCompressed.end());
+		}
+		mskwaj_decompressor * d = NULL;
+		for (int i = 0; i < compressedPaths.size() && !success; i++) {
+			const Path &path = compressedPaths[i];
+			if (!fileExists(path)) continue;
 
-				LOG(INFO, "Decompressing %s to %s", path.c_str(), decompressedPath.c_str());
-				int result = d->decompress(d, path.c_str(), decompressedPath.c_str());
-				if (result != MSPACK_ERR_OK) {
-					LOG(ERROR, "Unable to decompress file %s.", path.c_str());
-				} else {
+			Path siblingPath = path.up().down("SIMTOWER.EXE");
+
+			// Check if sibling EXE already exists and loads successfully.
+			if (fileExists(siblingPath)) {
+				if (exe.load(siblingPath)) {
+					LOG(INFO, "Using existing sibling decompressed file %s", siblingPath.c_str());
 					success = true;
+					break;
 				}
 			}
-			mspack_destroy_kwaj_decompressor(d);
-		} else {
-			LOG(WARNING, "Unable to initialize mskwaj_decompressor. Decompressing SIMROWER.EX_ is therefore not possible.");
+
+			// Check if temp EXE already exists and loads successfully.
+			if (fileExists(decompressedPath)) {
+				if (exe.load(decompressedPath)) {
+					LOG(INFO, "Using existing temp decompressed file %s", decompressedPath.c_str());
+					success = true;
+					break;
+				}
+			}
+
+			// Decompression is needed.
+			if (!d) {
+				d = mspack_create_kwaj_decompressor(NULL);
+			}
+
+			if (d) {
+				// Try sibling first.
+				LOG(INFO, "Decompressing %s to sibling path %s", path.c_str(), siblingPath.c_str());
+				int result = d->decompress(d, path.c_str(), siblingPath.c_str());
+				if (result == MSPACK_ERR_OK) {
+					if (exe.load(siblingPath)) {
+						success = true;
+					} else {
+						LOG(WARNING, "Unable to load decompressed file %s.", siblingPath.c_str());
+					}
+				} else {
+					LOG(WARNING, "Unable to decompress to sibling path %s. Trying temp path...", siblingPath.c_str());
+					// Fall back to the temp path.
+					LOG(INFO, "Decompressing %s to temp path %s", path.c_str(), decompressedPath.c_str());
+					result = d->decompress(d, path.c_str(), decompressedPath.c_str());
+					if (result == MSPACK_ERR_OK) {
+						if (exe.load(decompressedPath)) {
+							success = true;
+						} else {
+							LOG(WARNING, "Unable to load decompressed file %s.", decompressedPath.c_str());
+						}
+					} else {
+						LOG(ERROR, "Unable to decompress file %s to temp path %s.", path.c_str(), decompressedPath.c_str());
+					}
+				}
+			} else {
+				LOG(WARNING, "Unable to initialize mskwaj_decompressor. Decompressing SIMTOWER.EX_ is therefore not possible.");
+			}
 		}
 
-		//If the decompression was successful, try to load the resources from there.
-		if (success) {
-			success = exe.load(decompressedPath);
-			if (!success) {
-				LOG(WARNING, "Unable to load previously decompressed file %s.", decompressedPath.c_str());
-			}
+		if (d) {
+			mspack_destroy_kwaj_decompressor(d);
 		}
 	}
 #endif
@@ -419,9 +481,11 @@ void SimTowerLoader::loadBitmaps()
 		fastfoods.copy(fastfood, toVector2u(0, i * 24));
 	}
 
-	//Restaurants
+	//Restaurants - all five variants. Each row is four 192px state
+	//frames merged from the 0x8568+2*i / 0x8568+2*i+1 pair; the old
+	//4*24 buffer clipped row 4 (the fifth restaurant) off the bottom.
 	sf::Image & restaurants = images["simtower/restaurant"];
-	restaurants.resize(toVector2u(4 * 192, 4 * 24));
+	restaurants.resize(toVector2u(4 * 192, 5 * 24));
 	for (int i = 0; i < 5; i++) {
 		sf::Image restaurant;
 		loadFood(0x8568 + i*2, restaurant);
@@ -451,6 +515,11 @@ void SimTowerLoader::loadBitmaps()
 	loadMergedByID(suiteRooms[0], 'x', 0x8528, 0x8529, NULL);
 	loadMergedByID(suiteRooms[1], 'x', 0x852A, 0x852B, NULL);
 	loadMerged(images["simtower/suite"], 'y', &suiteRooms[0], &suiteRooms[1], NULL);
+	//loadHotel masks the two sky colors out of the single/double
+	//window panes; this merge path bypasses it, and all four suite
+	//sheets (0x8528..0x852B) do carry those pixels.
+	images["simtower/suite"].createMaskFromColor(sf::Color(0x8C, 0xD6, 0xFF));
+	images["simtower/suite"].createMaskFromColor(sf::Color(0x4A, 0xB4, 0xFF));
 
 	//Stairs
 	sf::Image stairs[2];
@@ -458,6 +527,9 @@ void SimTowerLoader::loadBitmaps()
 	loadMergedByID(stairs[1], 'y', 0x8969, 0x89A9, NULL);
 	loadMerged(images["simtower/stairs"], 'x', &stairs[0], &stairs[1], NULL);
 	images["simtower/stairs"].createMaskFromColor(sf::Color(0xFF, 0xFF, 0xFF));
+
+	//Multi-story spiral stairs (used inside 2- and 3-story lobbies)
+	loadSpiralStairs();
 
 	//Escalator
 	loadMergedByID(images["simtower/escalator"], 'y', 0x8AA8, 0x8AE8, 0);
@@ -690,11 +762,48 @@ void SimTowerLoader::loadBitmaps()
 		{0x8E29, "construction/solid"},
 		{0x85EA, "construction/worker", sf::Color::White},
 
+		// AnimPeple occupant strips (16x24 frames, white-keyed). Each strip
+		// is one venue's slice of the shared frame-code space, checked by DIB
+		// width and identical to the band split in concilia's game.h:
+		//   office 0x00-0x1D (480px), condo 0x1E-0x38 (432px),
+		//   construction 0x39-0x3E (96px), fast food 0x3F-0x48 (160px),
+		//   restaurant 0x49-0x4F (112px), hotel 0x50-0x5F (256px),
+		//   in-room maid 0x60-0x62 (48px).
+		// 0x85EB was misfiled as the hotel strip; it is 160px = 10 fast-food
+		// staff frames. The hotel-guest band is 0x85ED (16 frames), keyed
+		// animpeple/event for existing consumers, with animpeple/hotel kept
+		// as a corrected alias of it.
+		{0x85E8, "animpeple/office",       sf::Color::White},
+		{0x85E9, "animpeple/condo",        sf::Color::White},
+		{0x85EA, "animpeple/construction", sf::Color::White},
+		{0x85EB, "animpeple/fastfood",     sf::Color::White},
+		{0x85EC, "animpeple/restaurant",   sf::Color::White},
+		{0x85ED, "animpeple/event",        sf::Color::White},
+		{0x85ED, "animpeple/hotel",        sf::Color::White},
+		{0x85EE, "animpeple/housekeeper",  sf::Color::White},
+		{0x8469, "animpeple/guard",        sf::Color::White},
+
 		{0x87A8, "housekeeping"},
 
 		{0x8F6C, "fire/small"},
 		{0x8F6D, "fire/chopper"},
 		{0x8FA8, "fire/destroyed"},
+		//0x8FA8 is also the burned-out rubble sheet the fire and bomb
+		//waves lay down: same DIB, second key.
+		{0x8FA8, "fire/rubble"},
+
+		//ChurchT wedding art. 0x8828 is the 128x36 procession sheet: eight
+		//16px cells, 0 bride walk / 1 groom walk / 2..6 ceremony / 7 held
+		//pose. The six 224x36 ceremony strips stack above the cathedral
+		//(ceremony0 topmost); strips 0-3 key their sky border out, while 4
+		//and 5 are opaque congregation interior (no sky pixels in the DIB).
+		{0x8828, "church/couple",    sf::Color::White},
+		{0x8CE9, "church/ceremony0", sf::Color(0x4A, 0xB4, 0xFF)},
+		{0x8D29, "church/ceremony1", sf::Color(0x4A, 0xB4, 0xFF)},
+		{0x8D69, "church/ceremony2", sf::Color(0x4A, 0xB4, 0xFF)},
+		{0x8DA9, "church/ceremony3", sf::Color(0x4A, 0xB4, 0xFF)},
+		{0x8DE9, "church/ceremony4"},
+		{0x8DEA, "church/ceremony5"},
 
 		{0x8F28, "metro/tracks"},
 
@@ -710,6 +819,10 @@ void SimTowerLoader::loadBitmaps()
 		{0xA713, "alerts/treasure",  sf::Color::White},
 		{0xA714, "alerts/fire",      sf::Color::White},
 		{0xA716, "alerts/starup",    sf::Color(0xCC, 0xCC, 0xCC)},
+		//0x81F4 is the quarterly financial report backdrop: the EXE pops
+		//its report on it right after each 4:59AM settlement (Wave U
+		//row 49). White-keyed like the other UI sheets.
+		{0x81F4, "ui/report", sf::Color::White},
 		{0, ""}
 	};
 	for (int i = 0; namedBitmaps[i].id != 0; i++) {
@@ -720,9 +833,48 @@ void SimTowerLoader::loadBitmaps()
 		}
 	}
 
-	// Convert the images we just loaded to textures.
-	LOG(DEBUG, "Converting loaded images to textures");
+	//The EXE's AnimPeple band: the seven 16x24 strips 0x85E8..0x85EE
+	//joined in id order into one sheet of 99 frames (30+27+6+10+7+16+3,
+	//widths 480/432/96/160/112/256/48 px = 1584 px = 0x63 * 16).
+	//Occupant band tables index it directly with the EXE's global frame
+	//codes 0x00-0x62 instead of chasing the seven per-venue keys.
+	{
+		sf::Image bandStrips[7];
+		for (int i = 0; i < 7; i++) {
+			loadBitmap(0x85E8 + i, bandStrips[i]);
+			bandStrips[i].createMaskFromColor(sf::Color::White);
+		}
+		loadMerged(images["simtower/animpeple/band"], 'x',
+			&bandStrips[0], &bandStrips[1], &bandStrips[2], &bandStrips[3],
+			&bandStrips[4], &bandStrips[5], &bandStrips[6], NULL);
+	}
+
+	// Convert the loaded images to textures. The skin decides which EXE
+	// sheets are installed:
+	//   Classic  — everything: the classic look is canonical EXE art
+	//              end-to-end, first-party files included.
+	//   OpenSky  — only keys with no first-party data/bitmaps art AND no
+	//              cataloged OpenTower plugin sheet, so the plugin art
+	//              wins instead of a cached EXE sheet.
+	//   Yoot     — only keys with neither YootTower t2p art (condo today)
+	//              nor first-party files; classic fallback where Yoot has
+	//              nothing.
+	const Skin skin = app->bitmaps.skin();
+	LOG(DEBUG, "Converting loaded images to textures (skin %s)", skinIdentifier(skin));
 	for (Images::const_iterator it = images.begin(); it != images.end(); ++it) {
+		bool firstParty = app->bitmaps.hasFirstPartyArt(it->first);
+		switch (skin) {
+			case Skin::Classic:
+				break;  // install unconditionally
+			case Skin::OpenSky:
+				if (firstParty || app->bitmaps.editionProvidesKey(it->first))
+					continue;
+				break;
+			case Skin::Yoot:
+				if (firstParty || it->first.str() == "simtower/condo")
+					continue;
+				break;
+		}
 		app->bitmaps.getResources()[it->first].loadFromImage(it->second);
 	}
 }
@@ -892,7 +1044,11 @@ void SimTowerLoader::loadElevators()
 	shaft_wide.copy(extension, toVector2u(0, 0), toIntRect(0, 0, 8, 36));
 	shaft_wide.copy(extension, toVector2u(40, 0), toIntRect(8, 0, 8, 36));
 
-	//Render the shaft digits.
+	//Render the shaft digits. Row 0 is the plain 0x87e9/0x87ea atlas,
+	//row 1 the red plate bank 0x87ec/0x87ed (lit color 153,87,76 over
+	//the 25,25,25 shaft plate), which Elevator::render picks while a car
+	//of the group stands on the floor (IsCarOnFloor 10a8:367). Both
+	//atlases share geometry: glyphs at x = 1+16*i, y = 16, 11x17 px.
 	sf::Image rawDigits[2];
 	loadBitmap(0x87e9, rawDigits[0]);
 	loadBitmap(0x87ec, rawDigits[1]);
@@ -1064,6 +1220,82 @@ void SimTowerLoader::loadBitmap(int id, sf::Image & img)
 		LOG(ERROR, "unable to load bitmap 0x%x from memory", id);
 	}
 	// rawBitmaps.erase(id);
+}
+
+/** Build the 2- and 3-story spiral staircase sprite sheets from the custom
+ *  0xFF02-type resources 0x8fe9 (4416x36 strip) and 0x8fea (5888x36 strip).
+ *
+ *  Each strip is a horizontal row of 64x36 "slots" where each slot holds one
+ *  floor of one animation frame. A multi-story frame is built by stacking
+ *  N slots vertically; the per-strip slot order differs and was determined
+ *  empirically (visual validation against the original game):
+ *
+ *    2-story frame N = slot[22+N] (top floor) + slot[11+N] (bottom floor)
+ *    3-story frame N = slot[11+N] (top floor) + slot[22+N] (middle)
+ *                                            + slot[33+N] (bottom floor)
+ *
+ *  Producing:
+ *    simtower/stairs/spiral_2  = 11 frames x 64x72 (one frame per animation step)
+ *    simtower/stairs/spiral_3  = 11 frames x 64x108
+ *
+ *  See scratch/stair_analysis.py for an offline verifier. */
+void SimTowerLoader::loadSpiralStairs()
+{
+	const int kSpiralFrames = 11;
+	const int kSlotOffset   = 11;
+	const int kSlotW        = 64;
+	const int kSlotH        = 36;
+	const unsigned int kStripH = 36;
+
+	sf::Image strip2;
+	loadBitmap(0x8fe9, strip2);
+	if (strip2.getSize() == sf::Vector2u{0, 0}) {
+		LOG(WARNING, "8fe9 (2-story spiral stair source) missing; spiral_2 will fall back");
+	} else if (strip2.getSize().y == kStripH &&
+	           strip2.getSize().x >= (22u + kSpiralFrames) * kSlotW) {
+		sf::Image & spiral2 = images["simtower/stairs/spiral_2"];
+		spiral2.resize(toVector2u(kSlotW * kSpiralFrames, kSlotH * 2));
+		for (int n = 0; n < kSpiralFrames; n++) {
+			spiral2.copy(strip2, toVector2u(n * kSlotW, 0),
+			             toIntRect((22 + n) * kSlotW, 0, kSlotW, kSlotH));
+			spiral2.copy(strip2, toVector2u(n * kSlotW, kSlotH),
+			             toIntRect((11 + n) * kSlotW, 0, kSlotW, kSlotH));
+		}
+		spiral2.createMaskFromColor(sf::Color(0xFF, 0xFF, 0xFF));
+		LOG(INFO, "loaded simtower/stairs/spiral_2 (%ux%u, %d frames)",
+		    spiral2.getSize().x, spiral2.getSize().y, kSpiralFrames);
+	} else {
+		LOG(WARNING, "8fe9 has unexpected size %ux%u; spiral_2 will fall back",
+		    strip2.getSize().x, strip2.getSize().y);
+	}
+
+	sf::Image strip3;
+	loadBitmap(0x8fea, strip3);
+	if (strip3.getSize() == sf::Vector2u{0, 0}) {
+		LOG(WARNING, "8fea (3-story spiral stair source) missing; spiral_3 will fall back");
+	} else if (strip3.getSize().y == kStripH &&
+	           strip3.getSize().x >= (33u + kSpiralFrames) * kSlotW) {
+		sf::Image & spiral3 = images["simtower/stairs/spiral_3"];
+		spiral3.resize(toVector2u(kSlotW * kSpiralFrames, kSlotH * 3));
+		for (int n = 0; n < kSpiralFrames; n++) {
+			// Top-down order is floor 3 / 2 / 1 (top floor at top of sprite).
+			// Within 8fea, slot index increases from top to bottom of the
+			// rendered stair, so we reverse the y placement relative to the
+			// 2-story layout below.
+			spiral3.copy(strip3, toVector2u(n * kSlotW, 0),
+			             toIntRect((11 + n) * kSlotW, 0, kSlotW, kSlotH));
+			spiral3.copy(strip3, toVector2u(n * kSlotW, kSlotH),
+			             toIntRect((22 + n) * kSlotW, 0, kSlotW, kSlotH));
+			spiral3.copy(strip3, toVector2u(n * kSlotW, 2 * kSlotH),
+			             toIntRect((33 + n) * kSlotW, 0, kSlotW, kSlotH));
+		}
+		spiral3.createMaskFromColor(sf::Color(0xFF, 0xFF, 0xFF));
+		LOG(INFO, "loaded simtower/stairs/spiral_3 (%ux%u, %d frames)",
+		    spiral3.getSize().x, spiral3.getSize().y, kSpiralFrames);
+	} else {
+		LOG(WARNING, "8fea has unexpected size %ux%u; spiral_3 will fall back",
+		    strip3.getSize().x, strip3.getSize().y);
+	}
 }
 
 /** Certain bitmaps in SimTower are animated by swapping colors in the color table. The following colors are rotated to achieve animation:

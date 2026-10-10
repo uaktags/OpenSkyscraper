@@ -8,6 +8,7 @@
 #include "../Math/Rect.h"
 #include "../Person.h"
 #include "../Route.h"
+#include "../TenantRules.h"
 #include "../Sprite.h"
 #include "../Path.h"
 #include "Prototype.h"
@@ -18,9 +19,13 @@ namespace OT {
 		class Item : public GameObject, public sf::Drawable
 		{
 		public:
+			/// Optional per-instance display name overriding
+			/// prototype->name (e.g. authentic tenant name variants,
+			/// OpenSkyWeb ISSUE-035). Empty = use the prototype name.
+			std::string displayName;
 			int layer;
 			AbstractPrototype * const prototype;
-			Item(Game * game, AbstractPrototype * prototype) : GameObject(game), sf::Drawable(), prototype(prototype), size(prototype->size) { layer = 0; population = 0; }
+			Item(Game * game, AbstractPrototype * prototype) : GameObject(game), sf::Drawable(), prototype(prototype), size(prototype->size) { layer = 0; population = 0; evaluation = 50; underConstruction = false; constructionEndTime = 0; }
 			virtual ~Item();
 			virtual void init() {}
 
@@ -39,10 +44,23 @@ namespace OT {
 
 			void draw(sf::RenderTarget & target, sf::RenderStates states) const;
 			virtual void render(sf::RenderTarget & target) const;
+
+			/// Render the occupant AnimPeple sprites with the web-port
+			/// pacing and suppression rules (multi-second activity cycles,
+			/// per-persona condo frames, waitstaff caps, sleeping filters).
+			void renderPeople(sf::RenderTarget & target, const sf::Color & statusTint, bool tinted) const;
 			sf::Vector2u getSize() const { return sf::Vector2u(size.x, size.y); }
 			sf::Vector2u getSizePixels() const { return sf::Vector2u(size.x*8, size.y*36); }
 
 			virtual rectd getMouseRegion(); //in world pixel
+
+		/// Fine-grained hit test in world-pixel coordinates. Defaults to a
+		/// simple rect check against getMouseRegion(); transport items
+		/// (stairs, escalators, elevators) override this so clicks pass
+		/// through the empty parts of their tile footprint to the tenant
+		/// behind. In SimTower you click directly on the stair sprite or
+		/// the elevator's motor gearbox, not the whole bounding box.
+		virtual bool containsPoint(const double2 & pt);
 
 			virtual void encodeXML(tinyxml2::XMLPrinter & xml);
 			virtual void decodeXML(tinyxml2::XMLElement & xml);
@@ -53,10 +71,88 @@ namespace OT {
 				return c;
 			}
 
-			virtual void advance(double dt) {}
-			virtual int dailyMaintenanceCost() const { return 0; }
+		virtual void advance(double dt) {}
+		/// Number of EXE "visits" (ft % period == phase) crossed by the last
+		/// clock advance, capped at 8. Venues and tenants roll their per-visit
+		/// dice that many times per tick (batch 5 T26/T32/T36).
+		static int visitsThisTick(Game * game, int period = 16, int phase = 0);
+		virtual void evacuateForDisaster() {}
+		virtual int disasterSaleReversal() const { return 0; }
+		/// Owner buyout debited when the bulldozer demolishes this unit (occupied condos).
+		virtual int demolitionBuyout() const { return 0; }
+		bool survivesDisaster() const;
 
-			typedef std::set<Person *> People;
+		/// Satisfaction score in [0, 100] maintained by JudgeSystem. Defaults
+		/// to 50 (neutral) so unevaluated items remain attractive. Office and
+		/// Condo::isAttractive() consult this when deciding move-in/vacation.
+		double evaluation;
+		virtual double getEvaluation() const { return evaluation; }
+		/// YootTower tenant estimate on the 1..300 scale (T2Tenant +0x90,
+		/// plan step 8); 0 = not evaluated yet / not YootTower.
+		int yootEstimate = 0;
+		/// YootTower: this tenant's ordinal among the used slots of its 128-slot array (a .bld
+		/// load keeps the file's; a new item takes the next free one). It sets the 8-minute
+		/// idle slot (Yoot::idlePhase), -1 until Game::addItem assigns it.
+		int yootSlot = -1;
+		/// YootTower T2Equip +0x4c: CalcTotalDays when built (-1 = unknown,
+		/// age 0). The residential estimate loses one point per year (J2).
+		int yootBuildDay = -1;
+		/// YootTower T2Tenant +0x8c: the residents' mean estimate, kept
+		/// while nobody is in (UpdateResidencialEstimate; 300 at InitTenant).
+		int yootPeopleEstimate = 300;
+		/// YootTower J3 (T2Tenant::DecideResidencialEstimation 0x10061380):
+		/// let tenants stay while the estimate is >= 70; a vacant tenant
+		/// fills only above 200. Unevaluated (0) passes.
+		bool yootKeepsTenants(bool occupied) const
+		{
+			if (yootEstimate == 0) return true;
+			return occupied ? yootEstimate >= 70 : yootEstimate > 200;
+		}
+
+		/// EXE tenant record (batch 5 T1): armed/category/tenure/class/redraw
+		/// plus six per-member banked-wait counters. The rent class of
+		/// office, condo, shop and hotel lives only here.
+		struct TenantRecord
+		{
+			bool    armed = false;
+			uint8_t category = 255;  ///< 0 stressed, 1 OK, 2 happy, 255 unjudged (food: 3)
+			uint8_t tenure = 0;      ///< 0..120
+			uint8_t rentClass = 1;   ///< 0 high .. 3 very low
+			bool    redraw = false;
+			TenantRules::Bank bank[6];
+		};
+		TenantRecord tenant;
+		/// True for office, condo, hotel rooms, shop, restaurant, fast food.
+		bool hasTenantRecord() const;
+		/// Change the rent class (clamped 0..3); office/condo/shop rejudge at once.
+		virtual void setRentClass(int c);
+		/// Derived display score from the tenant category.
+		void refreshEvaluation() { evaluation = TenantRules::evaluationFor(tenant.category); }
+		void resetTenantBanks();
+		/// Reset the record banks and the owner persons' own counters.
+		virtual void resetMemberBanks() { resetTenantBanks(); }
+		/// CountT category and current contribution subtracted on demolition
+		/// (-1 / 0 = none). Overridden by office and condo.
+		virtual int populationCategory() const { return -1; }
+		virtual int populationContribution() const { return 0; }
+
+		/// Per-item daily upkeep (YootTower venue income only; the
+		/// SimTower/OpenSky rulesets use the quarterly EXE charge in
+		/// Game::quarterlyMaintenanceCost and never call this).
+		virtual int dailyMaintenanceCost() const { return 0; }
+
+		/// Construction animation state. Set by Factory::make on fresh
+		/// placement; cleared by Game::advance once time.absolute reaches
+		/// constructionEndTime. While true, the item renders a placeholder
+		/// overlay instead of its real sprites, does not advance, and does
+		/// not contribute to daily maintenance. See Phase 4.4.
+		bool   underConstruction;
+		double constructionEndTime;
+		/// Default construction duration for an item of this prototype's
+		/// size, in absolute-time units. Subclasses may override.
+		virtual double constructionDuration() const;
+
+		typedef std::set<Person *, SimLess> People;
 			People people;
 			virtual void addPerson(Person * p);
 			virtual void removePerson(Person * p);
@@ -64,13 +160,22 @@ namespace OT {
 			int population;
 
 			Route lobbyRoute;
+			bool lobbyRouteComputed = false; ///< false while the lazy route build queue hasn't reached this item
 			Route metroRoute;
 			virtual void updateRoutes();
+			void computeLobbyRoute();
 
+			virtual bool isOccupied() const { return false; }
 			virtual bool canHaulPeople() const { return false; }
 			virtual bool connectsFloor(int floor) const { return false; }
 			virtual bool isStairlike() const { return false; }
 			virtual bool isElevator()  const { return false; }
+			virtual bool isLobby()     const { return false; }
+			/// Skin::Yoot: how much of the floor under the item stays bare
+			/// (the backdrop shows through transparent art). 0: roof and
+			/// strips as usual; 1: none (the art fills the unit rect);
+			/// 2: none but the bottom row's floor strip.
+			virtual int yootFloorCover() const { return 0; }
 
 			virtual Path getRandomBackgroundSoundPath() { return ""; }
 		};
