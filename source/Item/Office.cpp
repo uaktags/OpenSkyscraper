@@ -166,7 +166,7 @@ void Office::sendHome(Worker *w)
 	w->state = Person::kReturning;
 	// The car stays in its bay while the driver is still inside the tower;
 	// advance() frees it when the driver reaches the parking item.
-	if (w->parkingUsed && game->findRoute(this, w->parkingUsed).empty())
+	if (w->parkingUsed && !game->routeExists(this, w->parkingUsed))
 		releaseCar(w); // no way to the car: the worker leaves via the lobby on foot
 	w->goingTo = w->parkingUsed ? "Parking Space" : "Lobby to go home";
 	w->journey.set(r);

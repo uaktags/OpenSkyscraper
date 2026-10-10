@@ -13,6 +13,7 @@ GameMap::~GameMap() {
 }
 
 void GameMap::clear() {
+	++graphVersion;
 	for(std::map<MapNode::Point, MapNode *>::iterator i = gameMap.begin(); i != gameMap.end(); i++)
 		delete i->second;
 	gameMap.clear();
@@ -35,6 +36,7 @@ static bool slotPointTaken(const MapNode *n) {
 
 MapNode* GameMap::addNode(const MapNode::Point &p, Item::Item *item) {
 	if(!item) return NULL;
+	++graphVersion;
 	//LOG(DEBUG, "Adding map node at %dx%d", p.x, p.y);
 
 	// Create corresponding FloorNode if not available
@@ -277,6 +279,7 @@ void GameMap::unlinkLobbyAtrium(const MapNode::Point &p, Item::Item *lobby) {
 }
 
 void GameMap::removeNode(const MapNode::Point &p, Item::Item *item) {
+	++graphVersion;
 	if(!item) return;
 	if(!item->canHaulPeople()) {
 		if(item->isLobby() && p.y == item->position.y) {
@@ -370,6 +373,7 @@ void GameMap::removeNode(const MapNode::Point &p, Item::Item *item) {
 /// link only when horizontalWalkable covers the span between them. Without
 /// a test installed this reproduces the previous link-everything graph.
 void GameMap::revalidateFloorLinks(int floor) {
+	++graphVersion;
 	std::map<int, std::list<MapNode*> >::iterator fi = mapNodesByFloor.find(floor);
 	if(fi == mapNodesByFloor.end()) return;
 	std::list<MapNode *> &nodes = fi->second;
@@ -389,6 +393,7 @@ void GameMap::revalidateFloorLinks(int floor) {
 }
 
 void GameMap::revalidateAllFloorLinks() {
+	++graphVersion;
 	for(std::map<int, std::list<MapNode*> >::iterator i = mapNodesByFloor.begin(); i != mapNodesByFloor.end(); ++i)
 		revalidateFloorLinks(i->first);
 }
@@ -413,6 +418,7 @@ MapNode* GameMap::findNode(const MapNode::Point &p, Item::Item *item) {
 }
 
 void GameMap::handleElevatorResize(Item::Elevator::Elevator *draggingElevator, bool draggingElevatorLower, int &draggingElevatorStart) {
+	++graphVersion;
 	MapNode::Point p(draggingElevator->getPosition().x + draggingElevator->getSize().x/2, 0);
 	if (draggingElevatorLower) {
 		if (draggingElevatorStart <= draggingElevator->position.y) {

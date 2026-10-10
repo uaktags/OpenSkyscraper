@@ -26,6 +26,7 @@ static Item::Item *elevatorAt(const MapNode *node, bool serviceRoute) {
 	}
 	return NULL;
 }
+static std::vector<MapSearchNode::QueueDep> *g_queueDeps = NULL;
 static int elevatorQueueLength(const Item::Item *item, int floor, Item::Elevator::Elevator::Direction direction) {
 	const Item::Elevator::Elevator *e = static_cast<const Item::Elevator::Elevator *>(item);
 	for (Item::Elevator::Elevator::Queues::const_iterator q = e->queues.begin(); q != e->queues.end(); ++q)
@@ -137,6 +138,12 @@ float MapSearchNode::GetCost(MapSearchNode &successor) {
 				? Item::Elevator::Elevator::kUp : Item::Elevator::Elevator::kDown;
 			const int queue_length = elevatorQueueLength(i, floor, direction);
 			const bool full = queue_length >= ELEVATOR_QUEUE_CAPACITY;
+			if (g_queueDeps) {
+				// Only express shafts price the exact length; the rest read the full flag.
+				const bool exact = i->prototype->icon == 6;
+				QueueDep dep = { i, floor, (int)direction, exact ? queue_length : (full ? 1 : 0), exact };
+				if (g_queueDeps->empty() || !g_queueDeps->back().sameKey(dep)) g_queueDeps->push_back(dep);
+			}
 			const int origin_x = mapNode->floorNode ? start_point.x : mapNode->position.x;
 			const int elevator_x = i->position.x + i->size.x / 2;
 			const int distance = std::abs(origin_x - elevator_x);
@@ -185,20 +192,16 @@ float MapSearchNode::GoalDistanceEstimate(MapSearchNode &nodeGoal) {
 	return h;
 }
 
-bool MapSearchNode::GetSuccessors(AStarSearch< MapSearchNode > *astarsearch, MapSearchNode *parent_node) {
+bool MapSearchNode::GetSuccessors(IndexedAStarSearch< MapSearchNode > *astarsearch, MapSearchNode *parent_node) {
 	MapSearchNode n;
 	MapNode *left = NULL;
 	MapNode *right = NULL;
 	bool ret;
 	if (!parent_node && !mapNode->floorNode) {
-		std::list<MapNode *> *nodesOnFloor = mapNode->nodesOnFloor;
-		assert(nodesOnFloor != NULL);
-		for (std::list<MapNode *>::const_iterator i = nodesOnFloor->begin(); i != nodesOnFloor->end(); ++i) {
-			MapNode *node = *i;
-			if (!spanReachable(mapNode, start_point.x, node->position.x)) continue;
-			if (node->position.x <= start_point.x && canTransfer(this, node, MapNode::LEFT)) left = node;
-			else if (canTransfer(this, node, MapNode::RIGHT)) { right = node; break; }
-		}
+		const MapNode *seedLeft = NULL, *seedRight = NULL;
+		firstExpansionSeeds(seedLeft, seedRight);
+		left = const_cast<MapNode *>(seedLeft);
+		right = const_cast<MapNode *>(seedRight);
 		if (left) { createNode(n, left); ret = astarsearch->AddSuccessor(n); if (!ret) return false; }
 		if (right) { createNode(n, right); ret = astarsearch->AddSuccessor(n); if (!ret) return false; }
 		return true;
@@ -229,6 +232,19 @@ bool MapSearchNode::GetSuccessors(AStarSearch< MapSearchNode > *astarsearch, Map
 	return true;
 }
 
+void MapSearchNode::firstExpansionSeeds(const OT::MapNode *&left, const OT::MapNode *&right) const {
+	left = NULL;
+	right = NULL;
+	std::list<MapNode *> *nodesOnFloor = mapNode->nodesOnFloor;
+	assert(nodesOnFloor != NULL);
+	for (std::list<MapNode *>::const_iterator i = nodesOnFloor->begin(); i != nodesOnFloor->end(); ++i) {
+		MapNode *node = *i;
+		if (!spanReachable(mapNode, start_point.x, node->position.x)) continue;
+		if (node->position.x <= start_point.x && canTransfer(this, node, MapNode::LEFT)) left = node;
+		else if (canTransfer(this, node, MapNode::RIGHT)) { right = node; break; }
+	}
+}
+
 bool MapSearchNode::IsGoal(MapSearchNode &nodeGoal) {
 	if(mapNode == nodeGoal.mapNode) {
 		nodeGoal.g = g;
@@ -246,6 +262,29 @@ bool MapSearchNode::IsSameState(MapSearchNode &rhs) {
 		&& walkFloorsSinceTransport == rhs.walkFloorsSinceTransport
 		&& walkingHasStairs == rhs.walkingHasStairs
 		&& numElevators == rhs.numElevators;
+}
+
+void MapSearchNode::recordQueueDeps(std::vector<QueueDep> *deps) { g_queueDeps = deps; }
+
+bool MapSearchNode::queueDepsHold(const std::vector<QueueDep> &deps) {
+	for (std::vector<QueueDep>::const_iterator d = deps.begin(); d != deps.end(); ++d) {
+		const int len = elevatorQueueLength(d->elevator, d->floor, (Item::Elevator::Elevator::Direction)d->direction);
+		if ((d->exact ? len : (len >= ELEVATOR_QUEUE_CAPACITY ? 1 : 0)) != d->value) return false;
+	}
+	return true;
+}
+
+size_t MapSearchNode::StateHash() const {
+	size_t h = std::hash<const void *>()(mapNode);
+	auto mix = [&h](size_t v) { h ^= v + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2); };
+	mix(std::hash<const void *>()(parent_item));
+	mix(std::hash<const void *>()(lastElevator));
+	mix((size_t)(unsigned)stairsSinceTransport);
+	mix((size_t)(unsigned)escalatorsSinceTransport);
+	mix((size_t)(unsigned)walkFloorsSinceTransport);
+	mix(walkingHasStairs ? 1 : 0);
+	mix((size_t)(unsigned)numElevators);
+	return h;
 }
 
 OT::Item::Item * MapSearchNode::getItemOnRoute(const MapSearchNode *successor) {

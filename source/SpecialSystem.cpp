@@ -106,7 +106,7 @@ bool SpecialSystem::reachable(Item::Item * from, Item::Item * to, bool service)
 	if (c != routeCache.end()) return c->second;
 	// T2RouteNavigator::CheckRoute within the customer search score (the
 	// score cap is not modelled; OpenSky routes are A*-bounded).
-	const bool ok = !game->findRoute(from, to, service).empty();
+	const bool ok = game->routeExists(from, to, service);
 	routeCache[key] = ok;
 	return ok;
 }

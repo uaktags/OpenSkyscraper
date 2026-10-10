@@ -3942,7 +3942,36 @@ static int testDisasterScenarios() {
    addSized("escalator",-4,14,8,2,{});                                  // escalator on the lobby centre column
    addSized("elevator-standard",-20,14,4,5,{});                         // local shaft left of the escalator
    auto *office=addSized("office",-30,17,9,1,{});
-   DISASTER_CHECK(!g.findRoute(ground,office).empty()); }
+   DISASTER_CHECK(!g.findRoute(ground,office).empty());
+   // WP16 route cache: a hit returns exactly the route a fresh search finds, before and after a graph edit.
+   auto sameRoute=[&](const Route &x,const Route &y) {
+     if (x.nodes.size()!=y.nodes.size()||x.score()!=y.score()||x.numStairs!=y.numStairs||x.numEscalators!=y.numEscalators||x.numElevators!=y.numElevators) return false;
+     for (size_t k=0;k<x.nodes.size();++k) if (x.nodes[k].item!=y.nodes[k].item||x.nodes[k].toFloor!=y.nodes[k].toFloor) return false;
+     return true; };
+   auto office2=addSized("office",10,16,9,1,{});
+   auto *officeB=addSized("office",-12,17,9,1,{});                       // same floor as office: shares its cached search
+   std::vector<Item::Item *> ends={ground,office,office2,officeB};
+   auto checkAllPairs=[&]() {
+     for (auto *from:ends) for (auto *to:ends) for (int service=0;service<2;++service) {
+       g.pathFinder.clearCache();
+       Route fresh=g.findRoute(from,to,service!=0);
+       auto before=g.pathFinder.stats.hits;
+       Route hit=g.findRoute(from,to,service!=0);
+       DISASTER_CHECK(g.pathFinder.stats.hits==before+1);
+       DISASTER_CHECK(sameRoute(fresh,hit));
+       DISASTER_CHECK(g.routeExists(from,to,service!=0)==!fresh.empty());
+       DISASTER_CHECK(g.pathFinder.stats.existenceHits>0);
+       g.pathFinder.clearCache();
+       DISASTER_CHECK(sameRoute(fresh,g.findRoute(from,to,service!=0)));
+     } };
+   checkAllPairs();
+   g.findRoute(ground,office);
+   auto cachedBefore=g.findRoute(office,ground);
+   auto *office3=addSized("office",-30,18,9,1,{});ends.push_back(office3);   // graph edit: cache must not serve stale routes
+   checkAllPairs();
+   g.updateRoutes();
+   DISASTER_CHECK(sameRoute(cachedBefore,g.findRoute(office,ground)));
+ }
  // Retail table import: yesterday's walk-ins feed CountT at the first 10:00 opening (11b0:02f2, all.c:23564).
  resetDisasterScenario(g);
  { auto *sh=static_cast<Item::Shop *>(makeDisasterItem(g,"shop",0,2));tinyxml2::XMLDocument sd;

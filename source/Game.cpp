@@ -1684,6 +1684,7 @@ void Game::removeItem(Item::Item * item)
     if (draggingElevator == item) { draggingElevator = NULL; draggingMotor = 0; }
     if (item->prototype->id != "floor") cancelTransientVip();
     // Cached owner routes also contain raw item pointers.
+    pathFinder.clearCache();
     for (Item::Item *other : items) {
         for (const Route::Node &node : other->lobbyRoute.nodes)
             if (node.item == item) { other->lobbyRoute.clear(); break; }
@@ -3921,6 +3922,8 @@ void Game::updateRoutes()
 	// full-lot tower).
 	visualizeRoute.clear();
 	routeBuildQueue.clear();
+	gameMap.touch();
+	pathFinder.clearCache();
 	for (ItemSet::iterator i = items.begin(); i != items.end(); i++) {
 		(*i)->updateRoutes();
 		routeBuildQueue.push_back(*i);
@@ -3962,10 +3965,29 @@ void Game::pumpRouteBuilds()
  *  route is empty(), no path was found through the tower. */
 Route Game::findRoute(Item::Item * start, Item::Item * destination, bool serviceRoute)
 {
-    if (!start || !destination || !items.count(start) || !items.count(destination)) return Route();
+	MapNode *start_mapnode = NULL, *destination_mapnode = NULL;
+	if (!routeEndpoints(start, destination, start_mapnode, destination_mapnode)) return Route();
+	// YootTower floor-hole tests (slab coverage) are live state the search consults
+	// directly, so YootTower worlds always search fresh; SimTower/OpenSky cache.
+	return pathFinder.findRoute(start_mapnode, destination_mapnode, start, destination, serviceRoute,
+		gameMap.version(), !activeRules.profile().yootWorld);
+}
+
+bool Game::routeExists(Item::Item * start, Item::Item * destination, bool serviceRoute)
+{
+	MapNode *start_mapnode = NULL, *destination_mapnode = NULL;
+	if (!routeEndpoints(start, destination, start_mapnode, destination_mapnode)) return false;
+	return pathFinder.routeExists(start_mapnode, destination_mapnode, start, destination, serviceRoute,
+		gameMap.version(), !activeRules.profile().yootWorld);
+}
+
+bool Game::routeEndpoints(Item::Item * start, Item::Item * destination, MapNode *& start_mapnode, MapNode *& destination_mapnode)
+{
+    if (!start || !destination || !items.count(start) || !items.count(destination)) return false;
 	// T2BlackOut::Exec: the end minute triggers escape, not power recovery.
 	if (activeRules.profile().yootWorld && eventSystem.power.isBlackOut())
-		return Route();	MapNode::Point start_point(start->position.x + start->size.x/2, start->position.y + start->prototype->exit_offset);
+		return false;
+	MapNode::Point start_point(start->position.x + start->size.x/2, start->position.y + start->prototype->exit_offset);
 	MapNode::Point end_point(destination->position.x + destination->size.x/2, destination->position.y + destination->prototype->entrance_offset);
 
 	// For the special case of Metro, passengers can enter/exit from the middle floor if their destination is on that floor
@@ -3974,10 +3996,9 @@ Route Game::findRoute(Item::Item * start, Item::Item * destination, bool service
 	else if (destination->prototype->icon == ICON_METRO && (start_point.y == end_point.y - 1))
 		end_point.y = start_point.y;
 
-	MapNode *start_mapnode = gameMap.findNode(start_point, start);
-	MapNode *destination_mapnode = gameMap.findNode(end_point, destination);
-	if (!start_mapnode || !destination_mapnode) return Route();
-	return pathFinder.findRoute(start_mapnode, destination_mapnode, start, destination, serviceRoute);
+	start_mapnode = gameMap.findNode(start_point, start);
+	destination_mapnode = gameMap.findNode(end_point, destination);
+	return start_mapnode && destination_mapnode;
 }
 
 void Game::cancelTransientVip()

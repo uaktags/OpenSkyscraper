@@ -1,5 +1,6 @@
 #pragma once
-#include <stlastar.h>
+#include "IndexedAStar.h"
+#include <vector>
 #include "GameMap.h"
 #include "MapNode.h"
 
@@ -39,9 +40,30 @@ public:
 
 	float GetCost(MapSearchNode &successor);
 	float GoalDistanceEstimate(MapSearchNode &nodeGoal);
-	bool GetSuccessors(AStarSearch<MapSearchNode> *astarsearch, MapSearchNode *parent_node);
+	bool GetSuccessors(IndexedAStarSearch<MapSearchNode> *astarsearch, MapSearchNode *parent_node);
 	bool IsGoal(MapSearchNode &nodeGoal);
 	bool IsSameState(MapSearchNode &rhs);
+	/// Hash over exactly the fields IsSameState compares (stlastar index).
+	size_t StateHash() const;
+
+	/// A live elevator-queue reading the search consumed. A cached route stays
+	/// valid only while every reading still holds, so it equals a fresh search.
+	struct QueueDep {
+		const OT::Item::Item *elevator;
+		int floor;
+		int direction;
+		int value;   ///< exact queue length (express) or 0/1 "full" flag
+		bool exact;
+		bool sameKey(const QueueDep &o) const { return elevator == o.elevator && floor == o.floor && direction == o.direction; }
+	};
+	/// Routes subsequent searches' queue readings into *deps (NULL stops).
+	static void recordQueueDeps(std::vector<QueueDep> *deps);
+	/// True when every recorded reading still reads the same.
+	static bool queueDepsHold(const std::vector<QueueDep> &deps);
+
+	/// The nearest enterable nodes either side of start_point on a floor-node start's
+	/// floor (the first expansion's two successors); NULL when none.
+	void firstExpansionSeeds(const OT::MapNode *&left, const OT::MapNode *&right) const;
 
 	OT::Item::Item * getItemOnRoute(const MapSearchNode *successor);
 	bool canTransfer(const MapSearchNode *start, const OT::MapNode *dest, const OT::MapNode::Direction dir) const;

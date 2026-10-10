@@ -258,6 +258,12 @@ namespace OT {
 
 		void updateRoutes();
 		Route findRoute(Item::Item * start, Item::Item * destination, bool serviceRoute = false);
+		/// Same answer as !findRoute(start, destination, serviceRoute).empty(), but a cached
+		/// search answers it while the layout is unchanged (existence does not depend on live
+		/// elevator-queue lengths), so reachability gates in per-tick loops stay cheap.
+		bool routeExists(Item::Item * start, Item::Item * destination, bool serviceRoute = false);
+		/// Resolves the map nodes findRoute searches between; false when no route can exist.
+		bool routeEndpoints(Item::Item * start, Item::Item * destination, MapNode *& startNode, MapNode *& destinationNode);
 		void seedOfficeLunchQa();
 		void seedNewTower();
 
