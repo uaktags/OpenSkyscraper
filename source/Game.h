@@ -349,6 +349,12 @@ namespace OT {
 		void forgetTracking(const Person * p);
 		void forgetTracking(const Item::Item * item);
 
+		/// Grand-lobby height [bc5a]: floors 1..band-1 above the ground floor are
+		/// exempt from lobby upkeep (EXE 10a8:133b, exempt iff 11 <= floor < 10 + bc5a).
+		/// Total quarterly upkeep the 04:59 settlement would charge right now.
+		int quarterlyUpkeepTotal() const;
+		int groundLobbyBand() const { return lobbyHeightLock > 0 ? lobbyHeightLock : lobbyToolHeight(); }
+
 	private:
 		void clearWorld();
 		/// New-tower funds, rating and clock from the active profile.

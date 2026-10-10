@@ -182,8 +182,10 @@ OT::Item::Item * Factory::make(tinyxml2::XMLElement & xml)
 	// build UI hides them via minRatingToBuild), but a save from another
 	// ruleset must not resurrect them: their advance()/decode paths run
 	// ungated YootTower logic. Reject and let the caller skip the element.
+	// Housekeeping is the exception: SimTower owns the type-15 rooms (maid pool,
+	// 1180:0bbe bills row 15 per room), so a SimTower save or .TDT import keeps it.
 	if (game->activeRules.ruleset() != BuildRules::Ruleset::YootTower &&
-	    BuildRules::isYootOnlyPrototype(type))
+	    type != "housekeeping" && BuildRules::isYootOnlyPrototype(type))
 	{
 		LOG(WARNING, "skipping YootTower-only item '%s' in a %s save",
 		    type.c_str(), game->activeRules.displayName());

@@ -83,9 +83,12 @@ static int quarterlyMaintenanceCost(const Game *game)
 		const std::string &id = item->prototype->id;
 		if (id == "lobby")
 		{
-			// EXE 1180:0ae4: only sky lobbies (y > 0) are charged, per cell;
-			// the ground grand-lobby band is exempt (10a8:133b).
-			if (item->position.y > 0)
+			// EXE 1180:0ae4 (all.c:20543): charged per cell unless 10a8:133b
+			// (all.c:9678) says exempt, which holds only for floors 11 <=
+			// floor < 10 + bc5a, i.e. the grand-lobby decks ABOVE the ground
+			// floor. The ground floor itself and sky lobbies pay.
+			const int y = item->position.y;
+			if (!(y >= 1 && y < game->groundLobbyBand()))
 			{
 				if (game->rating >= 3) total += item->size.x * 1000;
 				else if (game->rating >= 2) total += item->size.x * 300;
@@ -121,6 +124,8 @@ static int quarterlyMaintenanceCost(const Game *game)
 	}
 	return total;
 }
+
+int Game::quarterlyUpkeepTotal() const { return quarterlyMaintenanceCost(this); }
 
 static void settleQuarterlyAccounting(Game *game)
 {

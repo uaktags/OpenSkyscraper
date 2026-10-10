@@ -7,7 +7,13 @@
 using namespace OT;
 
 
-PathFinder::PathFinder() : astarsearch(new AStarSearch< MapSearchNode >()), SearchState(AStarSearch< MapSearchNode >::SEARCH_STATE_NOT_INITIALISED) {}
+// stlastar's default allocator holds 1000 search nodes. Large imported towers
+// (eight express shafts, two-ride transfers, one state per ridden shaft) need
+// more than that, and an exhausted allocator reports "no route"; the EXE has no
+// such limit.
+static const int kMaxSearchNodes = 20000;
+
+PathFinder::PathFinder() : astarsearch(new AStarSearch< MapSearchNode >(kMaxSearchNodes)), SearchState(AStarSearch< MapSearchNode >::SEARCH_STATE_NOT_INITIALISED) {}
 
 PathFinder::~PathFinder() { clear(); }
 
@@ -40,7 +46,7 @@ Route PathFinder::findRoute(const MapNode *start_mapnode, const MapNode *end_map
 void PathFinder::clear() {
 	if(SearchState == AStarSearch< MapSearchNode >::SEARCH_STATE_SUCCEEDED) astarsearch->FreeSolutionNodes();
 	if(SearchState == AStarSearch< MapSearchNode >::SEARCH_STATE_OUT_OF_MEMORY)
-		astarsearch.reset(new AStarSearch< MapSearchNode >());
+		astarsearch.reset(new AStarSearch< MapSearchNode >(kMaxSearchNodes));
 	astarsearch->EnsureMemoryFreed();
 	SearchState = AStarSearch< MapSearchNode >::SEARCH_STATE_NOT_INITIALISED;
 }

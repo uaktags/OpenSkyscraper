@@ -12,6 +12,10 @@ class MapSearchNode {
 public:
 	const OT::MapNode *mapNode;
 	OT::Item::Item *parent_item;
+	// The shaft last ridden, kept while walking along a floor so a transfer to
+	// a shaft that is not the next node over is still judged against the
+	// elevator the rider arrived on (hasTransferSlot).
+	OT::Item::Item *lastElevator;
 	int numStairs;
 	int numEscalators;
 	// Stairlike usage since the last elevator/lobby contact (OpenSkyWeb

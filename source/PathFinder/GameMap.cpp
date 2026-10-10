@@ -22,6 +22,17 @@ void GameMap::clear() {
 	floorNodes.clear();
 }
 
+/// True when a node cannot carry a lobby routing-slot marker: elevator columns,
+/// stairs and their pair nodes own the transport slots there.
+static bool slotPointTaken(const MapNode *n) {
+	if(n->hasElevator) return true;
+	for(int d = 0; d < 2; d++) {
+		Item::Item *t = n->transportItems[d == 0 ? MapNode::UP : MapNode::DOWN];
+		if(t && !t->isLobby()) return true;
+	}
+	return n->neighbours[MapNode::UP] || n->neighbours[MapNode::DOWN];
+}
+
 MapNode* GameMap::addNode(const MapNode::Point &p, Item::Item *item) {
 	if(!item) return NULL;
 	//LOG(DEBUG, "Adding map node at %dx%d", p.x, p.y);
@@ -41,7 +52,7 @@ MapNode* GameMap::addNode(const MapNode::Point &p, Item::Item *item) {
 		// the EXE's 16-slot overlapping-shaft transfer table.
 		if(item->isLobby() && p.y == item->position.y) {
 			MapNode::Point slotPoint(p.x, p.y);
-			while (gameMap.count(slotPoint) && gameMap[slotPoint]->hasElevator)
+			while (gameMap.count(slotPoint) && slotPointTaken(gameMap[slotPoint]))
 				slotPoint.x++;
 			MapNode *slot = ensureNode(slotPoint);
 			if (!slot->transportItems[MapNode::UP] || slot->transportItems[MapNode::UP]->isLobby())
@@ -69,6 +80,21 @@ MapNode* GameMap::addNode(const MapNode::Point &p, Item::Item *item) {
 		// gamemap.js resolves the overlap the same way: last writer wins).
 		assert(n->transportItems[MapNode::UP] == NULL ||
 		       n->transportItems[MapNode::UP]->isLobby());
+		// WP9: a lobby routing-slot marker sitting on this node must survive.
+		// The EXE's 16-slot transfer table (MapSearchNode::hasTransferSlot)
+		// is independent of stairs; overwriting the marker (a stair at a
+		// lobby's centre column, as in SCHMITT.TDT) disabled every
+		// express-to-local transfer on that floor. Move it to the next free column.
+		if (n->transportItems[MapNode::UP] && n->transportItems[MapNode::UP]->isLobby() &&
+		    !n->neighbours[MapNode::UP]) {
+			Item::Item *lobby = n->transportItems[MapNode::UP];
+			MapNode::Point slotPoint(p.x + 1, p.y);
+			while (gameMap.count(slotPoint) && slotPointTaken(gameMap[slotPoint]))
+				slotPoint.x++;
+			MapNode *slot = ensureNode(slotPoint);
+			if (!slot->transportItems[MapNode::UP]) slot->transportItems[MapNode::UP] = lobby;
+			n->transportItems[MapNode::UP] = NULL;
+		}
 		MapNode *n_upper = addNode(MapNode::Point(p.x, upper_y), item);
 
 		n->neighbours[MapNode::UP] = n_upper;

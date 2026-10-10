@@ -266,7 +266,9 @@ void TimeWindow::updateTime() {
 	
 	timestring.append(" / " + std::to_string(t.quarter) + "Q");
 
-	timestring.append(" / " + formatYearOrdinal(t.year));
+	// FUN_1120_0ee1 (all.c:17744): 10..19 always take "th" (11th, 12th, 13th)
+	const char * suffix = yearOrdinalSuffix(t.year);
+	timestring.append(" / " + std::to_string(t.year) + suffix);
 
     lblDate->setText(timestring);    
 }
